@@ -6,6 +6,8 @@ set "PREVIEW=C:\GameNetManager-Preview"
 set "DOWNLOAD=%TEMP%\gamenet-manager-main.zip"
 set "EXTRACT=%TEMP%\gamenet-manager-main"
 set "SOURCE="
+set "DOTNET_EXE="
+set "NPM_EXE="
 
 echo.
 echo ==========================================
@@ -20,13 +22,10 @@ if not exist "%PS%" (
   exit /b 1
 )
 
-rem Make common local tool installations visible to Explorer-launched BAT files.
-if exist "C:\dotnet\dotnet.exe" set "PATH=C:\dotnet;%PATH%"
-if exist "%ProgramFiles%\dotnet\dotnet.exe" set "PATH=%ProgramFiles%\dotnet;%PATH%"
-if exist "%ProgramFiles%\nodejs\npm.cmd" set "PATH=%ProgramFiles%\nodejs;%PATH%"
-if exist "%APPDATA%\npm\npm.cmd" set "PATH=%APPDATA%\npm;%PATH%"
-
-if not exist "C:\dotnet\dotnet.exe" if not exist "%ProgramFiles%\dotnet\dotnet.exe" (
+rem Resolve .NET.
+if exist "C:\dotnet\dotnet.exe" set "DOTNET_EXE=C:\dotnet\dotnet.exe"
+if not defined DOTNET_EXE if exist "%ProgramFiles%\dotnet\dotnet.exe" set "DOTNET_EXE=%ProgramFiles%\dotnet\dotnet.exe"
+if not defined DOTNET_EXE (
   echo [ERROR] .NET SDK not found.
   echo Checked:
   echo   C:\dotnet\dotnet.exe
@@ -34,15 +33,33 @@ if not exist "C:\dotnet\dotnet.exe" if not exist "%ProgramFiles%\dotnet\dotnet.e
   pause
   exit /b 1
 )
+for %%D in ("%DOTNET_EXE%") do set "PATH=%%~dpD;%PATH%"
 
-if not exist "%ProgramFiles%\nodejs\npm.cmd" if not exist "%APPDATA%\npm\npm.cmd" (
-  echo [ERROR] npm not found.
+rem Resolve npm from a normal Node installation first.
+if exist "%ProgramFiles%\nodejs\npm.cmd" set "NPM_EXE=%ProgramFiles%\nodejs\npm.cmd"
+if not defined NPM_EXE if exist "%APPDATA%\npm\npm.cmd" set "NPM_EXE=%APPDATA%\npm\npm.cmd"
+
+rem The self-hosted GitHub runner may have Node in its tool cache instead of the system PATH.
+if not defined NPM_EXE if exist "C:\actions-runner-2\_work\_tool\node" (
+  for /f "delims=" %%V in ('dir /b /ad /o-n "C:\actions-runner-2\_work\_tool\node" 2^>nul') do (
+    if not defined NPM_EXE if exist "C:\actions-runner-2\_work\_tool\node\%%V\x64\npm.cmd" set "NPM_EXE=C:\actions-runner-2\_work\_tool\node\%%V\x64\npm.cmd"
+  )
+)
+
+if not defined NPM_EXE (
+  echo [ERROR] npm was not found.
   echo Checked:
   echo   %ProgramFiles%\nodejs\npm.cmd
   echo   %APPDATA%\npm\npm.cmd
+  echo   C:\actions-runner-2\_work\_tool\node\*\x64\npm.cmd
   pause
   exit /b 1
 )
+for %%N in ("%NPM_EXE%") do set "NODE_HOME=%%~dpN"
+set "PATH=%NODE_HOME%;%PATH%"
+
+echo [OK] .NET: %DOTNET_EXE%
+echo [OK] npm  : %NPM_EXE%
 
 "%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-NetTCPConnection -LocalPort 5080 -State Listen -ErrorAction SilentlyContinue; if($p){Write-Host '[ERROR] Port 5080 is already in use. Close the previous GameNet Server window first.'; exit 1}"
 if errorlevel 1 (
@@ -102,7 +119,7 @@ if %ROBOCODE% GEQ 8 (
 if not exist "%PREVIEW%\src\Dashboard\node_modules" (
   echo [4/5] Installing Dashboard dependencies...
   pushd "%PREVIEW%\src\Dashboard"
-  call npm.cmd ci
+  call "%NPM_EXE%" ci
   if errorlevel 1 (
     popd
     echo [ERROR] npm ci failed.
@@ -115,8 +132,8 @@ if not exist "%PREVIEW%\src\Dashboard\node_modules" (
 )
 
 echo [5/5] Starting Server and Dashboard...
-start "GameNet Server" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Server"" && dotnet run --project ""%PREVIEW%\src\Server\GameNetManager.Server.csproj"""
-start "GameNet Dashboard" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Dashboard"" && npm.cmd run dev -- --host 0.0.0.0"
+start "GameNet Server" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Server"" && "%DOTNET_EXE%" run --project ""%PREVIEW%\src\Server\GameNetManager.Server.csproj"""
+start "GameNet Dashboard" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Dashboard"" && "%NPM_EXE%" run dev -- --host 0.0.0.0"
 
 echo Waiting for services...
 "%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5080 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
