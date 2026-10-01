@@ -556,13 +556,20 @@ button:focus-visible {
 }
 
 .customer-row {
-  display: flex;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) 150px;
   align-items: center;
   gap: 10px;
-  padding: 9px 14px;
+  padding: 10px 14px;
+  border: 0;
   border-bottom: 1px solid #16203a;
   cursor: pointer;
+  background: transparent;
+  color: var(--txt);
+  text-align: right;
 }
+.customer-row:hover { background: #111b30; }
 
 .customer-row.active {
   background: linear-gradient(90deg, #152036, #141c31);
@@ -595,16 +602,30 @@ button:focus-visible {
   font-size: 13px;
 }
 
-.customer-row .main span {
+.customer-row .main span,
+.customer-row .main small {
+  display: block;
   font-size: 10.5px;
   color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+.customer-row .main small { margin-top: 2px; color: #7382a3; }
 
 .customer-row .fin {
-  font-size: 11px;
-  text-align: left;
-  line-height: 1.7;
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  font-size: 10px;
+  text-align: right;
+  line-height: 1.45;
 }
+.customer-row-wallet { color: var(--green); font-size: 11px; }
+.customer-row-debt { color: var(--red); font-size: 9.5px; }
+.customer-state { font-size: 9px; color: var(--dim); }
+.customer-state.warning { color: var(--orange); }
+.customer-state.locked { color: var(--red); }
 
 .vip-tag {
   font-size: 9px;
@@ -697,6 +718,56 @@ button:focus-visible {
 
 .profile-section {
   margin-bottom: 12px;
+}
+.profile-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.profile-section-head h4 { margin: 0; }
+.profile-section-head > span { color: var(--dim); font-size: 9px; }
+.customer-history-list {
+  display: grid;
+  gap: 6px;
+}
+.customer-history-item {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid #19243c;
+  border-radius: 9px;
+  background: #0d1526;
+}
+.customer-history-item strong {
+  display: block;
+  color: var(--txt);
+  font-size: 10.5px;
+}
+.customer-history-item small {
+  display: block;
+  margin-top: 2px;
+  color: var(--dim);
+  font-size: 9px;
+}
+.customer-history-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 7px rgba(58,169,255,.35);
+}
+.single-person-note {
+  padding: 8px 10px;
+  border: 1px solid rgba(58,169,255,.25);
+  border-radius: 9px;
+  background: rgba(58,169,255,.08);
+  color: #a7cfff;
+  font-size: 10.5px;
 }
 
 .profile-section h4 {
@@ -1109,6 +1180,10 @@ button:focus-visible {
 
   .customer-layout {
     grid-template-columns: 1fr;
+  }
+
+  .customer-row {
+    grid-template-columns: 36px minmax(0, 1fr) 118px;
   }
 
   .page-header {
