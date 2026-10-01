@@ -76,30 +76,26 @@ app.Run();
 
 static async Task InitializeDatabaseAsync(IServiceProvider services, string databasePath, ILogger logger)
 {
+    await using var scope = services.CreateAsyncScope();
+    var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
+
     try
     {
-        await using var scope = services.CreateAsyncScope();
-        var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
         await database.Database.MigrateAsync();
         await DatabaseSeeder.SeedAsync(database);
-        return;
     }
     catch (Exception exception) when (IsMigrationRecoveryCandidate(exception))
     {
-        logger.LogWarning(exception, "Detected a stale SQLite database state; recreating database at {DatabasePath}", databasePath);
+        logger.LogCritical(
+            exception,
+            "خطای مهاجرت دیتابیس در {DatabasePath} رخ داد. حذف خودکار دیتابیس غیرفعال است؛ قبل از ادامه، فایل پشتیبان/Recovery بررسی شود.",
+            databasePath);
 
-        if (File.Exists(databasePath))
-        {
-            File.Delete(databasePath);
-        }
-
-        await using var scope = services.CreateAsyncScope();
-        var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
-        await database.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(database);
+        throw new InvalidOperationException(
+            "مهاجرت دیتابیس ناموفق بود. برای جلوگیری از از دست رفتن اطلاعات، دیتابیس حذف یا بازسازی خودکار نشد. ابتدا Recovery/Backup را بررسی کنید.",
+            exception);
     }
 }
-
 static bool IsMigrationRecoveryCandidate(Exception exception)
 {
     return exception is SqliteException or AggregateException { InnerException: SqliteException }
