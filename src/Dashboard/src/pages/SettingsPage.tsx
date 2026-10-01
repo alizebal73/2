@@ -15,8 +15,8 @@ export function SettingsPage(){
  const [settings,setSettings]=useState<AppSettings>(()=>read('gamenet-settings-v1',defaults));
  const [hotkeys,setHotkeys]=useState<Record<string,string>>(()=>read('gamenet-hotkeys-v1',hotkeyDefaults));
  const [notice,setNotice]=useState('');
- useEffect(()=>{localStorage.setItem('gamenet-settings-v1',JSON.stringify(settings))},[settings]);
- useEffect(()=>{localStorage.setItem('gamenet-hotkeys-v1',JSON.stringify(hotkeys))},[hotkeys]);
+ useEffect(()=>{localStorage.setItem('gamenet-settings-v1',JSON.stringify(settings));window.dispatchEvent(new CustomEvent('gamenet-settings-changed',{detail:settings}))},[settings]);
+ useEffect(()=>{localStorage.setItem('gamenet-hotkeys-v1',JSON.stringify(hotkeys));window.dispatchEvent(new CustomEvent('gamenet-hotkeys-changed',{detail:hotkeys}))},[hotkeys]);
  function update<K extends keyof AppSettings>(key:K,value:AppSettings[K]){setSettings(current=>({...current,[key]:value}))}
  function changeHotkey(key:string){const next=window.prompt('کلید جدید را وارد کنید',hotkeys[key]);if(next?.trim())setHotkeys(current=>({...current,[key]:next.trim()}))}
  function backupNow(){void mockService.createBackup().then(payload=>{const blob=new Blob([JSON.stringify({settings,hotkeys,payload},null,2)],{type:'application/json'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='gamenet-backup.json';link.click();URL.revokeObjectURL(link.href);setNotice('نسخه پشتیبان ایجاد شد')})}
