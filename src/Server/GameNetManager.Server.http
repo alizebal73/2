@@ -1,0 +1,9 @@
+@GameNetManager.Server_HostAddress = http://localhost:5080
+
+GET {{GameNetManager.Server_HostAddress}}/api/health
+Accept: application/json
+
+###
+
+GET {{GameNetManager.Server_HostAddress}}/api/dashboard
+Accept: application/json

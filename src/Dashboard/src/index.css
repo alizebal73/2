@@ -1,0 +1,6 @@
+:root{font-family:Tahoma,'Segoe UI',sans-serif;color:#e9eef8;background:#070a14;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;letter-spacing:0}
+*{box-sizing:border-box}
+body{margin:0;min-width:320px;min-height:100vh;background:radial-gradient(1000px 450px at 75% -15%,#16274766,transparent),#070a14}
+button{font:inherit}
+button:focus-visible{outline:2px solid #22e58a;outline-offset:2px}
+#root{min-height:100vh}

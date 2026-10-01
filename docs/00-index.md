@@ -13,7 +13,9 @@
 - ✅ پالت قلنک کلاینت (Ctrl+K) + سه حالت نمایش بازی + زوم
 
 ## وضعیت فعلی پروژه
-- **مرحله:** UI پروتوتایپ تایید شد (۶ صفحه کامل) — قدم بعدی طبق سند ۰۵: React با MockService، بعد اتصال به هسته بدون بازنویسی
+- **مرحله:** اسکلت واقعی مرحله ۱ ساخته و اجرا شد: Solution .NET 10، Server، Dashboard React/TypeScript، Client SignalR، Shared DTO، SQLite/EF Core و migration اولیه
+- **تأیید مرحله ۱:** startup سرور migration را اعمال می‌کند؛ ۶۱ ایستگاه seed می‌شوند؛ `/api/dashboard` DTO می‌دهد؛ داشبورد API و SignalR را وصل می‌کند؛ کلاینت .NET پیام `ServerReady` می‌گیرد
+- **قدم بعد:** vertical slice شروع/پایان Session با تست موتور هزینه؛ کلاینت فعلی console smoke client است و WPF/Windows Agent در فاز ۳ می‌آید
 - **قرار مهم:** prototype/index.html = سند طراحی تاییدشده؛ بازنویسی ممنوع؛ کد آینده عیناً همین طراحی را پیاده می‌کند
 - **تکنولوژی تاییدشده:** ASP.NET Core + SignalR + SQLite + React (RTL) + WPF (کلاینت فاز ۳)
 - **مجموعه کاربر:** ۴۰ کیس + ۱۰ PS5 + ۶ PS4 + ۵ فوتبال‌دستی = ۶۱ ایستگاه

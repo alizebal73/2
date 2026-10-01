@@ -1,34 +1,77 @@
 # گیم‌نت منیجر
 
-این مخزن شامل مستندات طراحی و دو prototype تعاملی HTML است:
+پروژه از prototype به ساختار اجرایی مرحله‌ی ۱ منتقل شده است:
 
-- داشبورد مدیریت: `prototype/index.html`
-- پوسته‌ی مشتری: `prototype/client.html`
-
-## اجرا
-
-برای همگام‌سازی اطلاعات دمو بین داشبورد و کلاینت، هر دو صفحه را از یک origin باز کنید:
-
-```bash
-python3 -m http.server 8000
+```text
+GameNetManager.sln
+src/Server     ASP.NET Core 10, EF Core, SQLite, SignalR
+src/Dashboard  React, TypeScript, Vite
+src/Client     .NET 10 SignalR console client
+src/Shared     DTO contracts مشترک
+tests          xUnit
+docs           اسناد دامنه و معماری
+prototype      طرح‌های HTML قبلی
 ```
 
-سپس این نشانی‌ها را باز کنید:
+## نیازمندی‌ها
 
-- `http://localhost:8000/prototype/index.html`
-- `http://localhost:8000/prototype/client.html`
+- .NET SDK 10
+- Node.js 22 یا جدیدتر و npm
 
-بازکردن مستقیم فایل‌ها با `file://` ممکن است فضای ذخیره‌سازی مرورگر را بین دو صفحه جدا کند.
+## اجرای Development
 
-## ورود دمو
+یک بار restore و نصب ابزار EF:
 
-- مشتری: کد `1050`، رمز `2020`
-- مهمان: شناسه‌ی `guest`، بدون رمز
-- اپراتور کلاینت: رمز `2468`
-- آزادسازی مدیر در کلاینت: رمز `2020`
+```bash
+dotnet restore GameNetManager.sln
+dotnet tool restore
+npm install --prefix src/Dashboard
+```
 
-اطلاعات prototype در `localStorage` همان مرورگر ذخیره می‌شود. بخش‌های عملیاتی مانند جلسات، کیف پول، بوفه، گزارش، بازی‌ها و صف درخواست‌ها در همین داده‌ی محلی دمو کار می‌کنند.
+ترمینال اول، سرور را اجرا می‌کند. در اولین اجرا migration اعمال می‌شود، SQLite در `src/Server/App_Data/gamenet.development.db` ساخته می‌شود و ۶۱ ایستگاه seed می‌شوند.
 
-این صفحات backend ندارند. اجرای فایل‌های بازی، کنترل واقعی شبکه، Wake-on-LAN، screenshot، خاموش/ری‌استارت و قفل Windows فقط به‌صورت درخواست در صف دمو ثبت می‌شوند؛ اجرای آن‌ها به ASP.NET Core، دیتابیس و Windows Agent/Client نیاز دارد. رمزها و داده‌های محلی این prototype برای استفاده‌ی واقعی یا امنیت production مناسب نیستند.
+```bash
+dotnet run --project src/Server
+```
 
-برای تصمیم‌های معماری و دامنه، از [ایندکس مستندات](docs/00-index.md) شروع کنید.
+ترمینال دوم، داشبورد React را اجرا می‌کند:
+
+```bash
+npm run dev --prefix src/Dashboard
+```
+
+آدرس dashboard: `http://localhost:5173`؛ درخواست‌های `/api` و `/hubs` از proxy Vite به سرور روی پورت `5080` می‌روند. APIها: `/api/health` و `/api/dashboard`؛ SignalR Hub: `/hubs/dashboard`.
+
+برای اتصال کلاینت .NET در ترمینال سوم:
+
+```bash
+dotnet run --project src/Client
+```
+
+آدرس سرور کلاینت را می‌توان با متغیر `GAMENET_SERVER_URL` تغییر داد.
+
+## Production و Migration
+
+خروجی React به `src/Server/wwwroot` ساخته می‌شود و در Production توسط ASP.NET Core سرو می‌شود:
+
+```bash
+npm run build --prefix src/Dashboard
+ASPNETCORE_ENVIRONMENT=Production dotnet run --no-launch-profile --project src/Server
+```
+
+سرور migrationهای موجود را هنگام startup اعمال می‌کند. برای ساخت migration بعدی:
+
+```bash
+dotnet tool run dotnet-ef migrations add MigrationName --project src/Server --startup-project src/Server --output-dir Data/Migrations
+```
+
+Development و Production از فایل‌های SQLite جدا استفاده می‌کنند. از رمزها یا داده‌های prototype برای محیط واقعی استفاده نکنید.
+
+## بررسی
+
+```bash
+dotnet test GameNetManager.sln
+npm run build --prefix src/Dashboard
+```
+
+صفحه‌های prototype برای مقایسه‌ی طراحی همچنان در `prototype/index.html` و `prototype/client.html` موجودند.

@@ -1,0 +1,15 @@
+# .NET build output
+**/bin/
+**/obj/
+.vs/
+
+# Dashboard packages and build output
+src/Dashboard/node_modules/
+src/Dashboard/dist/
+src/Server/wwwroot/
+
+# Local databases and logs
+src/Server/App_Data/*.db
+src/Server/App_Data/*.db-shm
+src/Server/App_Data/*.db-wal
+*.log
