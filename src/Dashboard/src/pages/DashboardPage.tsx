@@ -295,11 +295,15 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
     setModal(null);
   }
-  function showContext(event: MouseEvent<HTMLElement>, station: StationDto) {
-    event.preventDefault();
+  function openContextAt(x: number, y: number, station: StationDto) {
     const width = 280;
     const height = 430;
-    setContext({ x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)), station });
+    setContext({ x: Math.max(8, Math.min(x, window.innerWidth - width - 8)), y: Math.max(8, Math.min(y, window.innerHeight - height - 8)), station });
+  }
+
+  function showContext(event: MouseEvent<HTMLElement>, station: StationDto) {
+    event.preventDefault();
+    openContextAt(event.clientX, event.clientY, station);
   }
   function contextAction(action: string) {
     const station = context?.station;
@@ -334,6 +338,22 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       <div className="price">{station.state === 'busy' ? `هزینه ${money(elapsedCost)} تومان` : `از ${money(station.ratePerHour)} تومان / ساعت`}</div>
       {station.state === 'busy' && <><div className="person-dots">{'● '.repeat(station.persons ?? 1)}</div><div className="progress-bar"><span style={{ width: `${Math.min(100, minutes % 60 / 60 * 100)}%` }} /></div><span className="pulse" /></>}
       {station.state === 'off' && <small>{station.outOfServiceReason ?? 'در تعمیر'}</small>}
+      <div className="station-hover-actions" onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
+        {station.state === 'free' && <button type="button" className="quick primary" onClick={() => open('start', station)}>▶ شروع</button>}
+        {station.state === 'busy' && <button type="button" className="quick" onClick={() => { setActiveStation(station); pauseSession(); }}>⏸ مکث</button>}
+        {station.state === 'paused' && <button type="button" className="quick primary" onClick={() => { setActiveStation(station); resumeSession(); }}>▶ ادامه</button>}
+        {(station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => open('settle', station)}>🧾 تسویه</button>}
+        {(station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => open('extend', station)}>⏱ تمدید</button>}
+        <button
+          type="button"
+          className="quick more"
+          aria-label={`عملیات بیشتر برای ${station.name}`}
+          onClick={event => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            openContextAt(rect.left + rect.width / 2, rect.bottom + 6, station);
+          }}
+        >•••</button>
+      </div>
     </article>;
   }
 
