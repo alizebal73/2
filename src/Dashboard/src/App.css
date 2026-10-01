@@ -1662,3 +1662,53 @@ button:focus-visible {
 .station-card.paused { border-color: rgba(255, 180, 84, 0.42); }
 .station-card.paused .time { color: var(--orange); }
 .status-badge.paused { background: rgba(255, 180, 84, 0.12); color: var(--orange); border: 1px solid rgba(255, 180, 84, 0.3); }
+
+.station-hover-actions{
+  position:absolute;
+  inset:auto 8px 8px 8px;
+  display:flex;
+  align-items:center;
+  gap:5px;
+  padding:5px;
+  background:rgba(7,10,20,.94);
+  border:1px solid var(--line);
+  border-radius:10px;
+  box-shadow:0 12px 28px rgba(0,0,0,.28);
+  opacity:0;
+  transform:translateY(5px);
+  pointer-events:none;
+  transition:opacity .14s ease,transform .14s ease;
+  z-index:3;
+}
+.station-card:hover .station-hover-actions,
+.station-hover-actions:focus-within{
+  opacity:1;
+  transform:translateY(0);
+  pointer-events:auto;
+}
+.station-hover-actions .quick{
+  min-width:0;
+  flex:1;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#0d1526;
+  color:var(--txt);
+  padding:5px 7px;
+  font:inherit;
+  font-size:9.5px;
+  white-space:nowrap;
+}
+.station-hover-actions .quick:hover{
+  border-color:#2a3b63;
+  background:#152036;
+}
+.station-hover-actions .quick.primary{
+  border-color:rgba(34,229,138,.35);
+  color:var(--green);
+  background:rgba(34,229,138,.08);
+}
+.station-hover-actions .quick.more{
+  flex:0 0 34px;
+  font-weight:900;
+  letter-spacing:1px;
+}
