@@ -32,6 +32,7 @@ export type StationDto = {
   pausedAt?: string;
   pausedMinutes?: number;
   sessionCredit?: number;
+  prepaidEndsAt?: string;
   network?: 1 | 2;
   outOfServiceReason?: string;
 };
