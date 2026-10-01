@@ -9,6 +9,12 @@ import type {
   SettingGroup,
   TariffRecord,
   UserRecord,
+  AuditLogRecord,
+  ManagementInvoiceRecord,
+  ReservationRecord,
+  StationManagementRecord,
+  VipPackageRecord,
+  ExpenseRecord as TypedExpenseRecord,
 } from '../types';
 
 const customers: CustomerRecord[] = [
@@ -96,7 +102,7 @@ const sessions = new Map<string, { startedAt: number; input: StartSessionInput; 
 const invoices: SessionInvoice[] = [];
 
 
-type ExpenseRecord = { id: string; title: string; amount: number; createdAt: string; operator: string };
+type ExpenseRecord = TypedExpenseRecord;
 type ReportRow = { id: string; station: string; timeAmount: number; buffet: number; packageAmount: number; amount: number; method: 'cash' | 'card' | 'wallet'; operator: string; type: 'time' | 'buffet' | 'package'; closedAt: string };
 type ShiftRecord = { id: string; operator: string; openedAt: string; closedAt?: string; expectedCash?: number; countedCash?: number; difference?: number; sales?: number };
 
@@ -116,9 +122,57 @@ const shifts: ShiftRecord[] = [
   { id: 'shift-2', operator: 'سارا احمدی', openedAt: new Date(Date.now() - 2 * 86400000 - 8 * 3600000).toISOString(), closedAt: new Date(Date.now() - 2 * 86400000).toISOString(), expectedCash: 1850000, countedCash: 1850000, difference: 0, sales: 2850000 },
 ];
 const permissionStore: Record<string, boolean> = {};
+const managedStations: StationManagementRecord[] = Array.from({ length: 61 }, (_, index) => {
+  const number = index + 1;
+  const zone: 'pc' | 'console' | 'table' = number <= 40 ? 'pc' : number <= 56 ? 'console' : 'table';
+  const type = zone === 'pc' ? 'PC' : number <= 50 ? 'PS5' : number <= 56 ? 'PS4' : 'فوتبال‌دستی';
+  return { id: `station-${number}`, name: zone === 'pc' ? `PC ${String(number).padStart(2, '۰')}` : `${type} ${String(number).padStart(2, '۰')}`, zone, type, ratePerHour: type === 'PC' ? 95000 : type === 'PS5' ? 150000 : type === 'PS4' ? 110000 : 60000, status: number % 17 === 0 ? 'off' : 'active', ip: zone === 'pc' ? `192.168.1.${number + 20}` : '', note: '' };
+});
+const reservations: ReservationRecord[] = [
+  { id: 'res-1', stationId: 'station-4', stationName: 'PC ۰۴', customerCode: '1050', customerName: 'رضا محمدی', reservedAt: new Date(Date.now() + 45 * 60000).toISOString(), durationMinutes: 120, status: 'confirmed', note: 'مسابقه دوستانه' },
+  { id: 'res-2', stationId: 'station-43', stationName: 'PS5 ۰۳', customerCode: '2020', customerName: 'سروش نیک‌پور', reservedAt: new Date(Date.now() + 90 * 60000).toISOString(), durationMinutes: 90, status: 'pending' },
+];
+const vipPackages: VipPackageRecord[] = [
+  { id: 'vip-1', name: 'Bronze روزانه', tier: 'bronze', price: 450000, dailyMinutes: 120, totalMinutes: 3000, discount: 5, active: true },
+  { id: 'vip-2', name: 'Silver روزانه', tier: 'silver', price: 850000, dailyMinutes: 180, totalMinutes: 6000, discount: 10, active: true },
+  { id: 'vip-3', name: 'Gold ۲۴ ساعته', tier: 'gold', price: 1600000, dailyMinutes: 1440, totalMinutes: 14400, discount: 15, active: true },
+];
+const auditLogs: AuditLogRecord[] = [
+  { id: 'audit-1', createdAt: new Date(Date.now() - 12 * 60000).toISOString(), operator: 'علی محمدی', action: 'تسویه جلسه', target: 'PC ۰۴', details: '۲۷۰٬۰۰۰ تومان · نقدی' },
+  { id: 'audit-2', createdAt: new Date(Date.now() - 35 * 60000).toISOString(), operator: 'سارا احمدی', action: 'تغییر تعرفه', target: 'PS5 عادی', details: '۱۵۰٬۰۰۰ تومان / ساعت' },
+];
 
 export const mockService = {
   getStations: async (stations: import('../types').StationDto[]) => stations,
+  getManagedStations: async () => [...managedStations],
+  saveManagedStation: async (record: StationManagementRecord) => {
+    const index = managedStations.findIndex(item => item.id === record.id);
+    if (index < 0) managedStations.push(record); else managedStations[index] = record;
+    auditLogs.unshift({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), operator: 'علی محمدی', action: 'ویرایش ایستگاه', target: record.name, details: record.status });
+    return record;
+  },
+  toggleStationOutOfService: async (id: string, reason = 'خارج از سرویس') => {
+    const station = managedStations.find(item => item.id === id);
+    if (!station) return null;
+    station.status = station.status === 'off' ? 'active' : 'off';
+    station.note = station.status === 'off' ? reason : '';
+    auditLogs.unshift({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), operator: 'علی محمدی', action: station.status === 'off' ? 'خارج از سرویس' : 'فعال‌سازی ایستگاه', target: station.name, details: station.note || 'فعال شد' });
+    return station;
+  },
+  getReservations: async () => [...reservations],
+  saveReservation: async (record: ReservationRecord) => {
+    const index = reservations.findIndex(item => item.id === record.id);
+    if (index < 0) reservations.push(record); else reservations[index] = record;
+    auditLogs.unshift({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), operator: 'علی محمدی', action: 'رزرو ایستگاه', target: record.stationName, details: record.customerCode });
+    return record;
+  },
+  cancelReservation: async (id: string) => { const item = reservations.find(x => x.id === id); if (item) item.status = 'cancelled'; },
+  getVipPackages: async () => [...vipPackages],
+  saveVipPackage: async (record: VipPackageRecord) => { const index = vipPackages.findIndex(item => item.id === record.id); if (index < 0) vipPackages.push(record); else vipPackages[index] = record; return record; },
+  getAuditLogs: async () => [...auditLogs],
+  addAuditLog: async (entry: Omit<AuditLogRecord, 'id' | 'createdAt'>) => { const row = { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString() }; auditLogs.unshift(row); return row; },
+  getManagementInvoices: async () => invoices.map(item => ({ ...item, status: 'paid', operator: 'علی محمدی' })) as ManagementInvoiceRecord[],
+  getManagementExpenses: async () => [...expenses],
   startSession: async (input: StartSessionInput) => {
     sessions.set(input.stationId, { startedAt: Date.now(), input, buffetAmount: 0 });
     return { ...input, startedAt: new Date().toISOString() };
