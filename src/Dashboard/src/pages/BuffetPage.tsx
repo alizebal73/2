@@ -34,6 +34,7 @@ export function BuffetPage() {
     if (destination === 'session') {
       window.dispatchEvent(new CustomEvent('gamenet-buffet-sale', { detail: { total: cartTotal, items: cartItems.map(item => ({ name: item.name, quantity: cart[item.id] })) } }));
     }
+    void mockService.addReportRow({ id: crypto.randomUUID(), station: destination === 'session' ? 'جلسه فعال' : 'فروش مستقل', timeAmount: 0, buffet: cartTotal, packageAmount: 0, amount: cartTotal, method: 'cash', operator: 'علی محمدی', type: 'buffet', closedAt: new Date().toISOString() });
     setProducts(current => current.map(product => ({ ...product, stock: Math.max(0, product.stock - (cart[product.id] ?? 0)) })));
     setCart({});
     setTarget(destination);
