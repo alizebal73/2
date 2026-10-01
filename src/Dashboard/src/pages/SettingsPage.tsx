@@ -22,7 +22,7 @@ export function SettingsPage(){
  function backupNow(){void mockService.createBackup().then(payload=>{const blob=new Blob([JSON.stringify({settings,hotkeys,payload},null,2)],{type:'application/json'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='gamenet-backup.json';link.click();URL.revokeObjectURL(link.href);setNotice('نسخه پشتیبان ایجاد شد')})}
  function restoreBackup(){const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{try{const file=input.files?.[0];if(!file) return;const backup=JSON.parse((await file.text()).replace(/^\\uFEFF/,''));if(!backup.payload)throw new Error('invalid');await mockService.restoreBackup(backup.payload);if(backup.settings)setSettings(backup.settings);if(backup.hotkeys)setHotkeys(backup.hotkeys);setNotice('پشتیبان بازیابی شد؛ یکبار صفحه را تازه‌سازی کنید')}catch{setNotice('فایل پشتیبان معتبر نیست')}};input.click()}
  function reset(){setSettings(defaults);setHotkeys(hotkeyDefaults);setNotice('تنظیمات به حالت پیش‌فرض بازگشت')}
- const groups=[
+ const groups: Array<[string, Array<[keyof AppSettings,string]>]>=[
   ['🖥 نوع نمایش داشبورد',[['zones','زون‌بندی گرید'],['liveCost','نمایش هزینه لحظه‌ای'],['progress','نمایش نوار پیشرفت'],['largeFont','فونت بزرگ‌تر']]],
   ['🔊 هشدارها و صدا',[['alarmEnd','هشدار پایان وقت'],['alarmFive','هشدار ۵ دقیقه مانده'],['repeatAlarm','تکرار زنگ هر ۳۰ ثانیه'],['sound','صدای هشدار'],['popup','اعلان پاپ‌آپ']]],
   ['🧾 رفتار فاکتور و تسویه',[['autoRound','رند خودکار به ۱۰۰۰ تومان'],['confirmDelete','تأیید دو مرحله‌ای حذف'],['autoPrint','چاپ خودکار فاکتور']]],
