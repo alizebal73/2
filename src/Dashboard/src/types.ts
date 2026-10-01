@@ -8,7 +8,8 @@ export type PageKey =
   | 'tariffs'
   | 'games'
   | 'accounts'
-  | 'client-shell';
+  | 'client-shell'
+  | 'operations';
 
 export type StationState = 'free' | 'busy' | 'reserved' | 'off';
 export type ZoneKey = 'all' | 'pc' | 'console' | 'table';
@@ -178,4 +179,62 @@ export type SettingGroup = {
   title: string;
   description: string;
   enabled: boolean;
+};
+
+
+export type StationManagementRecord = {
+  id: string;
+  name: string;
+  zone: ZoneKey;
+  type: string;
+  ratePerHour: number;
+  status: 'active' | 'reserved' | 'off';
+  ip?: string;
+  note?: string;
+};
+
+export type ReservationRecord = {
+  id: string;
+  stationId: string;
+  stationName: string;
+  customerCode: string;
+  customerName: string;
+  reservedAt: string;
+  durationMinutes: number;
+  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+  note?: string;
+};
+
+export type VipPackageRecord = {
+  id: string;
+  name: string;
+  tier: 'bronze' | 'silver' | 'gold' | 'custom';
+  price: number;
+  dailyMinutes: number;
+  totalMinutes: number;
+  discount: number;
+  active: boolean;
+};
+
+export type AuditLogRecord = {
+  id: string;
+  createdAt: string;
+  operator: string;
+  action: string;
+  target: string;
+  details: string;
+};
+
+export type ManagementInvoiceRecord = SessionInvoice & {
+  status: 'paid' | 'pending' | 'void';
+  operator: string;
+};
+
+export type ExpenseRecord = {
+  id: string;
+  title: string;
+  amount: number;
+  category: string;
+  createdAt: string;
+  operator: string;
 };
