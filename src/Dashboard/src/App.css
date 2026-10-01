@@ -2533,3 +2533,72 @@ button:focus-visible {
   font-size: 10px;
   text-align: center;
 }
+
+
+.user-error-banner {
+  margin: 0 22px 12px;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid rgba(255, 93, 115, 0.34);
+  border-radius: 11px;
+  background: linear-gradient(135deg, rgba(65, 18, 31, 0.82), rgba(34, 18, 31, 0.72));
+}
+
+.user-error-banner.permission {
+  border-color: rgba(255, 180, 84, 0.34);
+  background: rgba(57, 39, 16, 0.62);
+}
+
+.user-error-banner.validation {
+  border-color: rgba(58, 169, 255, 0.34);
+  background: rgba(15, 35, 57, 0.68);
+}
+
+.user-error-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(255, 93, 115, 0.12);
+  color: var(--red);
+  font-weight: 900;
+}
+
+.user-error-copy {
+  min-width: 0;
+}
+
+.user-error-copy strong,
+.user-error-copy span {
+  display: block;
+}
+
+.user-error-copy strong {
+  font-size: 11.5px;
+}
+
+.user-error-copy span {
+  margin-top: 3px;
+  color: #c0c9dc;
+  font-size: 9.5px;
+  line-height: 1.7;
+}
+
+.user-error-banner .btn {
+  white-space: nowrap;
+}
+
+@media (max-width: 700px) {
+  .user-error-banner {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .user-error-banner .btn {
+    grid-column: 2;
+    justify-self: start;
+  }
+}
