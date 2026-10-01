@@ -641,11 +641,11 @@
   <!-- فیلترهای گزارش -->
   <div style="display:flex;gap:8px;margin:10px 20px 0;flex-wrap:wrap;align-items:center">
     <span style="font-size:11px;color:var(--dim)">فیلترها:</span>
-    <select class="mini"><option>همه ایستگاه‌ها</option><option>فقط رایانه‌ها</option><option>فقط کنسول‌ها</option><option>فقط میزها</option><option>انتخاب زون…</option></select>
-    <select class="mini"><option>همه اپراتورها</option><option>علی محمدی</option><option>سارا احمدی</option><option>رضا کاظمی</option></select>
-    <select class="mini"><option>همه روش‌های پرداخت</option><option>نقدی</option><option>کارتخوان</option><option>کیف پول</option></select>
-    <select class="mini"><option>همه تراکنش‌ها</option><option>فقط زمان</option><option>فقط بوفه</option><option>فقط پکیج</option><option>فقط هزینه‌ها</option></select>
-    <label style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:5px"><input type="checkbox" checked style="accent-color:#22e58a"> نمایش نمودار</label>
+    <select class="mini" id="report-station"><option value="all">همه ایستگاه‌ها</option><option value="pc">فقط رایانه‌ها</option><option value="console">فقط کنسول‌ها</option><option value="table">فقط میزها</option></select>
+    <select class="mini" id="report-operator"><option value="all">همه اپراتورها</option><option value="علی محمدی">علی محمدی</option><option value="سارا احمدی">سارا احمدی</option><option value="رضا کاظمی">رضا کاظمی</option></select>
+    <select class="mini" id="report-method"><option value="all">همه روش‌های پرداخت</option><option value="cash">نقدی</option><option value="card">کارتخوان</option><option value="wallet">کیف پول</option></select>
+    <select class="mini" id="report-type"><option value="all">همه تراکنش‌ها</option><option value="time">فقط زمان</option><option value="buffet">فقط بوفه</option><option value="package">فقط پکیج</option><option value="expense">فقط هزینه‌ها</option></select>
+    <label style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:5px"><input id="report-chart-toggle" type="checkbox" checked style="accent-color:#22e58a"> نمایش نمودار</label>
   </div>
   <div class="rep-wrap" id="rep-full">
     <div class="rep-grid">
@@ -2023,16 +2023,38 @@ function downloadText(name,text,type='text/csv;charset=utf-8'){
 function csvCell(value){return '"'+String(value??'').replace(/"/g,'""')+'"'}
 function exportReport(){
   const rows=[['تاریخ','ایستگاه','درآمد زمان','بوفه','مبلغ','روش پرداخت','اپراتور']];
-  demoInvoices.forEach(invoice=>rows.push([new Date(invoice.closedAt).toLocaleString('fa-IR'),invoice.station,invoice.timeAmount||0,invoice.buffet||0,invoice.amount,invoice.method,invoice.operator]));
-  demoExpenses.forEach(expense=>rows.push([new Date(expense.createdAt).toLocaleString('fa-IR'),'هزینه: '+expense.title,0,0,-expense.amount,'expense',expense.operator]));
+  filteredInvoices().forEach(invoice=>rows.push([new Date(invoice.closedAt).toLocaleString('fa-IR'),invoice.station,invoice.timeAmount||0,invoice.buffet||0,invoice.amount,invoice.method,invoice.operator]));
+  filteredExpenses().forEach(expense=>rows.push([new Date(expense.createdAt).toLocaleString('fa-IR'),'هزینه: '+expense.title,0,0,-expense.amount,'expense',expense.operator]));
   downloadText('gamenet-report.csv',rows.map(row=>row.map(csvCell).join(',')).join('\r\n'));
 }
+let reportRange=null;
+function inReportRange(timestamp){return !reportRange||timestamp>=reportRange.start&&timestamp<=reportRange.end}
+function filteredInvoices(){
+  const station=document.getElementById('report-station').value,operator=document.getElementById('report-operator').value;
+  const method=document.getElementById('report-method').value,type=document.getElementById('report-type').value;
+  return demoInvoices.filter(invoice=>{
+    if(!inReportRange(invoice.closedAt)||(operator!=='all'&&invoice.operator!==operator)||(method!=='all'&&invoice.method!==method))return false;
+    const zone=stationFor(invoice.station)?.zone||'standalone';
+    if(station!=='all'&&zone!==station)return false;
+    if(type==='time'&&!(invoice.timeAmount>0))return false;
+    if(type==='buffet'&&!(invoice.buffet>0))return false;
+    if(type==='package')return false;
+    if(type==='expense')return false;
+    return true;
+  });
+}
+function filteredExpenses(){
+  const operator=document.getElementById('report-operator').value,type=document.getElementById('report-type').value;
+  if(type==='time'||type==='buffet'||type==='package')return [];
+  return demoExpenses.filter(expense=>inReportRange(expense.createdAt)&&(operator==='all'||expense.operator===operator));
+}
 function renderReportTotals(){
-  const time=demoInvoices.reduce((sum,invoice)=>sum+(invoice.timeAmount||0),0);
-  const buffet=demoInvoices.reduce((sum,invoice)=>sum+(invoice.buffet||0),0);
-  const expenses=demoExpenses.reduce((sum,expense)=>sum+expense.amount,0);
+  const invoices=filteredInvoices(),expensesList=filteredExpenses();
+  const time=invoices.reduce((sum,invoice)=>sum+(invoice.timeAmount||0),0);
+  const buffet=invoices.reduce((sum,invoice)=>sum+(invoice.buffet||0),0);
+  const expenses=expensesList.reduce((sum,expense)=>sum+expense.amount,0);
   const methods={cash:0,card:0,wallet:0};
-  demoInvoices.forEach(invoice=>{methods[invoice.method]=(methods[invoice.method]||0)+invoice.amount});
+  invoices.forEach(invoice=>{methods[invoice.method]=(methods[invoice.method]||0)+invoice.amount});
   document.getElementById('report-time-total').textContent=fa(time);
   document.getElementById('report-buffet-total').textContent=fa(buffet);
   document.getElementById('report-package-total').textContent=fa(0);
@@ -2056,8 +2078,10 @@ function closeShift(){
   if(!currentShift){notifyQuick('شیفت بازی برای بستن وجود ندارد');return}
   const invoices=demoInvoices.filter(invoice=>invoice.shiftId===currentShift.id);
   const expected=invoices.filter(invoice=>invoice.method==='cash').reduce((sum,invoice)=>sum+invoice.amount,0);
-  const counted=parseAmount(prompt('وجه نقد شمارش‌شده (تومان). مبلغ مورد انتظار: '+fa(expected),String(expected)));
-  if(!counted&&expected!==0)return;
+  const countedInput=prompt('وجه نقد شمارش‌شده (تومان). مبلغ مورد انتظار: '+fa(expected),String(expected));
+  if(countedInput===null)return;
+  const counted=parseAmount(countedInput);
+  if(!counted&&expected!==0){notifyQuick('مبلغ شمارش‌شده معتبر نیست');return}
   const closed={...currentShift,closedAt:Date.now(),expectedCash:expected,countedCash:counted,difference:counted-expected,sales:invoices.reduce((sum,invoice)=>sum+invoice.amount,0)};
   demoShifts.unshift(closed);currentShift=null;saveDemoState();updateShiftButtons();renderReportTotals();
   notifyQuick('شیفت بسته شد؛ اختلاف صندوق: '+fa(closed.difference)+' تومان');
@@ -2077,11 +2101,31 @@ function setReportPreset(name){
   else if(name==='امسال')start.setMonth(0,1);
   const persian=date=>date.toLocaleDateString('fa-IR-u-ca-persian').replaceAll('-','/');
   fields[0].value=persian(start);fields[1].value=persian(end);
+  reportRange={start:new Date(start.setHours(0,0,0,0)).getTime(),end:new Date(end.setHours(23,59,59,999)).getTime()};
+  renderReportTotals();
   document.querySelectorAll('#rep-custom .paybtns button').forEach(button=>button.classList.toggle('active',button.textContent.trim()===name));
 }
 function applyReportRange(){
   const fields=document.querySelectorAll('#rep-custom .field input');
   if(!fields[0].value||!fields[1].value){notifyQuick('بازه‌ی تاریخ را کامل کن');return}
+  const convert=value=>{
+    const parts=value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).split(/[/-]/).map(Number);
+    if(parts.length!==3||parts.some(part=>!Number.isInteger(part)))return null;
+    const formatter=new Intl.DateTimeFormat('en-u-ca-persian-nu-latn',{year:'numeric',month:'numeric',day:'numeric',timeZone:'UTC'});
+    const target=parts.join('/');
+    for(let day=Date.UTC(parts[0]+621,0,1),end=Date.UTC(parts[0]+622,11,31);day<=end;day+=86400000){
+      const date=new Date(day),formatted=formatter.formatToParts(date),found=[Number(formatted.find(p=>p.type==='year').value),Number(formatted.find(p=>p.type==='month').value),Number(formatted.find(p=>p.type==='day').value)].join('/');
+      if(found===target)return date;
+    }
+    return null;
+  };
+  const start=convert(fields[0].value),end=convert(fields[1].value);
+  if(!start||!end||start>end){notifyQuick('بازه‌ی تاریخ شمسی معتبر نیست');return}
+  const times=[fields[2].value||'00:00',fields[3].value||'23:59'];
+  const parseTime=value=>value.split(':').map(Number);
+  const [startHour,startMinute]=parseTime(times[0]),[endHour,endMinute]=parseTime(times[1]);
+  reportRange={start:Date.UTC(start.getUTCFullYear(),start.getUTCMonth(),start.getUTCDate(),startHour,startMinute),end:Date.UTC(end.getUTCFullYear(),end.getUTCMonth(),end.getUTCDate(),endHour,endMinute,59,999)};
+  if(reportRange.start>reportRange.end){reportRange=null;notifyQuick('ساعت پایان باید بعد از ساعت شروع باشد');return}
   renderReportTotals();notifyQuick('بازه‌ی گزارش اعمال شد: '+fields[0].value+' تا '+fields[1].value);
 }
 document.getElementById('export-report').onclick=exportReport;
@@ -2091,6 +2135,8 @@ document.getElementById('add-expense').onclick=registerExpense;
 document.querySelectorAll('#rep-custom > div:first-child .btn').forEach(button=>button.onclick=button.textContent.includes('اعمال')?applyReportRange:()=>setReportPreset('امروز'));
 document.querySelectorAll('#rep-custom > div:last-child .btn').forEach(button=>button.onclick=()=>setReportPreset(button.textContent.trim()));
 document.querySelectorAll('#rep-custom .field input').forEach(input=>input.addEventListener('change',applyReportRange));
+document.querySelectorAll('#report-station, #report-operator, #report-method, #report-type').forEach(select=>select.addEventListener('change',renderReportTotals));
+document.getElementById('report-chart-toggle').addEventListener('change',event=>{document.querySelector('.chart-panel').style.display=event.target.checked?'block':'none'});
 document.querySelector('#page-users .toolbar .btn').onclick=()=>currentShift?notifyQuick('شیفت از '+new Date(currentShift.openedAt).toLocaleTimeString('fa-IR')+' باز است'):startShift();
 document.querySelector('#page-users .toolbar .btn.danger').onclick=closeShift;
 document.querySelector('#page-users .toolbar .btn.primary').onclick=()=>{
@@ -2158,6 +2204,17 @@ restoreDemoState();
 if(!currentShift&&!demoShifts.length)currentShift={id:'shift-demo',operator:'علی محمدی',openedAt:Date.now()};
 renderGrid();renderCustList();renderCustProfile();renderProd();renderCart();renderGames();renderClients();renderTariffs();renderAccounts();renderBuffetTarget();
 renderReportTotals();updateShiftButtons();saveDemoState();
+let lastSeenDemoCommandId=Math.max(0,...demoCommands.map(command=>Number(command.id)||0));
+window.addEventListener('storage',event=>{
+  if(event.key!==stateStorageKey||!event.newValue)return;
+  try{
+    const incoming=JSON.parse(event.newValue),commands=incoming.demoCommands||[];
+    const newCommands=commands.filter(command=>Number(command.id)>lastSeenDemoCommandId);
+    lastSeenDemoCommandId=Math.max(lastSeenDemoCommandId,...commands.map(command=>Number(command.id)||0));
+    restoreDemoState();refreshOperationalViews();renderReportTotals();renderGames();
+    if(newCommands.length)notifyQuick(fa(newCommands.length)+' درخواست جدید از کلاینت دریافت شد');
+  }catch(error){console.warn('Could not sync client state',error)}
+});
 </script>
 </body>
 </html>

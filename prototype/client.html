@@ -310,7 +310,7 @@
     <div class="ttl">پکیج گلد VIP</div>
     <div class="txt">۳۰ روز عضویت • ۴ ساعت بازی روزانه • ۱۰٪ تخفیف بوفه</div>
     <div class="txt" style="color:var(--gold)">فقط ۱٬۸۰۰٬۰۰۰ تومان</div>
-    <button class="cta" onclick="notify('درخواست پکیج به صندوق ارسال شد!')">درخواست فعال‌سازی</button>
+    <button class="cta" onclick="requestPackage()">درخواست فعال‌سازی</button>
   </div>
 </div>
 
@@ -330,7 +330,7 @@
     <div class="bd">
       <div class="ttl" id="ad-ttl">پکیج گلد VIP</div>
       <div class="txt" id="ad-txt">۳۰ روز عضویت • ۴ ساعت روزانه • ۱۰٪ بوفه<br>فقط <b style="color:var(--gold)">۱٬۸۰۰٬۰۰۰ تومان</b></div>
-      <button class="cta" onclick="notify('درخواست پکیج به صندوق ارسال شد!')">درخواست فعال‌سازی</button>
+      <button class="cta" onclick="requestPackage()">درخواست فعال‌سازی</button>
     </div>
   </div>
 </div>
@@ -354,9 +354,9 @@
   <div class="row"><span>اعتبار رایگان</span><b id="acct-gift" style="color:var(--purple)">۰ ت</b></div>
   <div class="row"><span>بدهی</span><b id="acct-debt" style="color:var(--red)">۰ ت</b></div>
   <div class="pkg-box" id="pkg-box" style="display:none">
-    <div class="t"><span>🥇 پکیج گلد — فعال</span><span>۱۲ روز مانده</span></div>
-    <div class="bar"><i style="width:62%"></i></div>
-    <div style="margin-top:6px;color:var(--dim)">امروز: ۲.۵ از ۴ ساعت مصرف شده</div>
+    <div class="t"><span id="pkg-title">پکیج فعال</span><span id="pkg-days">— روز مانده</span></div>
+    <div class="bar"><i id="pkg-progress" style="width:0"></i></div>
+    <div id="pkg-usage" style="margin-top:6px;color:var(--dim)">مصرف امروز: —</div>
   </div>
   <div class="msg">💡 مازاد بر سقف پکیج، نیم‌بها محاسبه می‌شود.</div>
 </div>
@@ -465,6 +465,13 @@ function renderCustomerAccount(){
   document.getElementById('acct-gift').textContent=fa(customer?.gift||0)+' ت';
   document.getElementById('acct-debt').textContent=fa(customer?.debt||0)+' ت';
   document.getElementById('pkg-box').style.display=customer?.pkg?'block':'none';
+  if(customer?.pkg){
+    const used=Number(customer.pkg.used)||0,daily=Number(customer.pkg.dailyHourCap||customer.pkg.daily)||0;
+    document.getElementById('pkg-title').textContent='پکیج '+customer.pkg.title+' — فعال';
+    document.getElementById('pkg-days').textContent=fa(customer.pkg.left||customer.pkg.durationDays||0)+' روز مانده';
+    document.getElementById('pkg-progress').style.width=(daily?Math.min(100,used/daily*100):0)+'%';
+    document.getElementById('pkg-usage').textContent='مصرف امروز: '+fa(used)+' از '+fa(daily)+' ساعت';
+  }
 }
 
 /* ساعت/تایمر زنده دمو */
@@ -531,7 +538,22 @@ function sendMessageToOperator(){
 }
 function launchApp(name){sendToManager('launch-app',{name});notify('درخواست اجرای '+name+' ثبت شد؛ اجرای واقعی به Agent ویندوز نیاز دارد')}
 function showTournaments(){notify('مسابقه‌ی دمو: جام CS2 جمعه‌ها؛ ثبت‌نام از صندوق انجام می‌شود')}
-function showMyGames(){notify(runningGame?'بازی فعال: '+runningGame:'هنوز بازی‌ای در این جلسه اجرا نشده')}
+function showMyGames(){
+  if(!runningGame){notify('هنوز بازی‌ای در این جلسه اجرا نشده');return}
+  if(confirm('بازی فعال '+runningGame+' بسته شود؟'))stopGame();else notify('بازی فعال: '+runningGame);
+}
+function switchCustomer(){
+  sendToManager('customer-switch',{from:customer?.code||'guest'});
+  if(runningGame){sendToManager('stop-game',{game:runningGame});runningGame=''}
+  releasePoolAccount();customer=null;unlimitedTime=false;renderCustomerAccount();saveClientState();returnToLogin();
+  notify('شناسه و رمز مشتری جدید را وارد کن');
+}
+function requestPackage(){
+  const tier=prompt('درخواست پکیج silver یا gold','silver');
+  if(!['silver','gold'].includes((tier||'').toLowerCase())){notify('نوع پکیج نامعتبر است');return}
+  sendToManager('vip-package-request',{tier:tier.toLowerCase(),customerCode:customer?.code||'guest'});
+  notify('درخواست پکیج برای اپراتور ثبت شد');
+}
 function runClientGame(element,name){
   const title=element.querySelector('.info b')?.textContent||name;
   if(runningGame&&runningGame!==title){notify('ابتدا بازی فعال را ببند: '+runningGame);return}
@@ -566,6 +588,7 @@ function releasePoolAccount(){
 function launchClientAccount(mode){
   const game=document.getElementById('ap-game').textContent.replace('🎮 ','');
   closeAccPick();
+  if(runningGame&&runningGame!==game){notify('ابتدا بازی فعال را ببند: '+runningGame);return}
   if(mode==='pool'&&!allocatePoolAccount(game))return;
   document.querySelectorAll('.g-card').forEach(card=>{if(card.querySelector('.info b')?.textContent===game){card.classList.add('running');const tag=card.querySelector('.tag');if(tag){tag.textContent='در حال اجرا';tag.classList.add('on')}}});
   sendToManager('launch-game',{game,account:mode==='pool'?accountPoolId:'own'});
@@ -576,6 +599,27 @@ function stopGame(){
   sendToManager('stop-game',{game:runningGame});
   document.querySelectorAll('.g-card.running').forEach(card=>{card.classList.remove('running');const tag=card.querySelector('.tag');if(tag){tag.textContent='نصب‌شده';tag.classList.remove('on')}});
   runningGame='';releasePoolAccount();saveClientState();notify('درخواست بستن بازی ثبت شد');
+}
+function syncAvailableGames(){
+  sharedDemoState=readStoredJson(sharedStateKey,{});
+  if(!Array.isArray(sharedDemoState.games)||!sharedDemoState.games.length)return;
+  const grid=document.querySelector('.g-grid');grid.replaceChildren();
+  sharedDemoState.games.filter(game=>game.on).forEach(game=>{
+    const card=document.createElement('div');card.className='g-card';
+    const tag=document.createElement('span');tag.className='tag on';tag.textContent='نصب‌شده';card.appendChild(tag);
+    const art=document.createElement('div');art.className='art';art.textContent=game.ic||'🎮';card.appendChild(art);
+    const info=document.createElement('div');info.className='info';
+    const title=document.createElement('b');title.textContent=game.n;info.appendChild(title);
+    const detail=document.createElement('span');detail.textContent=game.cat+' • '+game.net;info.appendChild(detail);card.appendChild(info);
+    card.ondblclick=()=>accountPlatformForGame(game.n)?openAccPick(game.n):run(card,game.n);
+    card.onmouseenter=()=>showPrev(card,game.n,game.cat+' • '+game.net,'بازی در فهرست گیم‌نت',game.ic||'🎮');
+    grid.appendChild(card);
+  });
+}
+function launchGameByName(name){
+  const card=[...document.querySelectorAll('.g-card')].find(item=>item.querySelector('.info b')?.textContent===name);
+  if(!card){notify('این بازی در فهرست سیستم نیست');return}
+  if(accountPlatformForGame(name))openAccPick(name);else run(card,name);
 }
 document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 document.getElementById('login-id').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('login-pass').focus()});
@@ -593,7 +637,7 @@ document.addEventListener('click',e=>{if(!ctx.contains(e.target))ctx.classList.r
 document.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.key.toLowerCase()==='i'){e.preventDefault();toggleInternet()}
   if(e.ctrlKey&&e.key.toLowerCase()==='m'){e.preventDefault();requestMove()}
-  if(e.ctrlKey&&e.key.toLowerCase()==='l'){e.preventDefault();lockNow()}
+  if(e.ctrlKey&&e.key.toLowerCase()==='l'){e.preventDefault();switchCustomer()}
   if(e.ctrlKey&&e.key.toLowerCase()==='r'){e.preventDefault();requestCharge()}
   if(e.ctrlKey&&e.key.toLowerCase()==='p'){e.preventDefault();sendMessageToOperator()}
 });
@@ -666,19 +710,19 @@ function zoomG(d){gzoom=Math.max(-2,Math.min(2,gzoom+d));applyG()}
 
 /* ── پالت قلنک مشتری ── */
 const cCmds=[
-  {ic:'🔫',t:'Counter-Strike 2',s:'بازی — اجرا',a:()=>notify('CS2 اجرا شد (دمو)')},
-  {ic:'🎯',t:'Valorant',s:'بازی — اجرا',a:()=>notify('Valorant اجرا شد (دمو)')},
-  {ic:'⚽',t:'EA FC 26',s:'بازی — اجرا',a:()=>notify('FC 26 اجرا شد (دمو)')},
-  {ic:'🌐',t:'کروم',s:'نرم‌افزار',a:()=>notify('کروم باز شد (دمو)')},
-  {ic:'💬',t:'دیسکورد',s:'نرم‌افزار',a:()=>notify('دیسکورد باز شد (دمو)')},
-  {ic:'🎵',t:'موزیک',s:'نرم‌افزار',a:()=>notify('موزیک باز شد (دمو)')},
+  {ic:'🔫',t:'Counter-Strike 2',s:'بازی — اجرا',a:()=>launchGameByName('Counter-Strike 2')},
+  {ic:'🎯',t:'Valorant',s:'بازی — اجرا',a:()=>launchGameByName('Valorant')},
+  {ic:'⚽',t:'EA FC 26',s:'بازی — اجرا',a:()=>launchGameByName('EA FC 26')},
+  {ic:'🌐',t:'کروم',s:'نرم‌افزار',a:()=>launchApp('Chrome')},
+  {ic:'💬',t:'دیسکورد',s:'نرم‌افزار',a:()=>launchApp('Discord')},
+  {ic:'🎵',t:'موزیک',s:'نرم‌افزار',a:()=>launchApp('Spotify')},
   {ic:'🛒',t:'منوی بوفه',s:'دستور',a:()=>{closeAll();toggleMenu()}},
   {ic:'🧩',t:'نرم‌افزارها',s:'دستور',a:()=>{closeAll();toggleApps()}},
   {ic:'👤',t:'حساب من',s:'دستور',a:()=>{closeAll();toggleAcct()}},
   {ic:'📢',t:'تبلیغات و پلن‌ها',s:'دستور',a:()=>{closeAll();toggleAd()}},
-  {ic:'💳',t:'درخواست شارژ از اپراتور',s:'دستور',a:()=>notify('درخواست شارژ ارسال شد')},
-  {ic:'🔀',t:'جابه‌جایی شناسه به سیستم دیگر',s:'دستور',a:()=>notify('جابه‌جایی شناسه (دمو)')},
-  {ic:'🌐',t:'تغییر اینترنت (آنلاین/آفلاین)',s:'دستور',a:()=>notify('تغییر اینترنت (دمو)')},
+  {ic:'💳',t:'درخواست شارژ از اپراتور',s:'دستور',a:()=>requestCharge()},
+  {ic:'🔀',t:'جابه‌جایی شناسه به سیستم دیگر',s:'دستور',a:()=>requestMove()},
+  {ic:'🌐',t:'تغییر اینترنت (آنلاین/آفلاین)',s:'دستور',a:()=>toggleInternet()},
   {ic:'🔒',t:'قفل کردن سیستم',s:'دستور',a:()=>lockNow()},
 ];
 function openCk(){
@@ -777,11 +821,14 @@ window.addEventListener('storage',event=>{
   if(event.key!==sharedStateKey||!event.newValue)return;
   try{
     sharedDemoState=JSON.parse(event.newValue);
+    if(customer){customer=(sharedDemoState.customers||[]).find(saved=>saved.code===customer.code)||customer;renderCustomerAccount()}
+    syncAvailableGames();
     const messages=(sharedDemoState.demoCommands||[]).filter(command=>(command.target==='PC ۱۲'||Array.isArray(command.target)&&command.target.includes('PC ۱۲'))&&command.action==='پیام به کلاینت');
     const latest=messages[messages.length-1];
     if(latest&&latest.id>(clientInbox[0]?.id||0)){clientInbox.unshift({id:latest.id,type:'message',message:latest.details.message});saveClientState();notify('پیام اپراتور: '+latest.details.message)}
   }catch{}
 });
+syncAvailableGames();
 applyG();
 </script>
 </body>
