@@ -16,6 +16,19 @@ export function ClientShellPage() {
   const [notice, setNotice] = useState('');
 
   useEffect(() => { void mockService.getClients().then(setClients); }, []);
+  useEffect(() => {
+    const onSelect = (event: Event) => {
+      const name = (event as CustomEvent<string>).detail;
+      if (!name) return;
+      setTimeout(() => {
+        const client = clients.find(item => item.name === name);
+        if (client) openSettings([client.id]);
+      }, 0);
+    };
+    window.addEventListener('gamenet-select-client', onSelect);
+    return () => window.removeEventListener('gamenet-select-client', onSelect);
+  }, [clients]);
+
 
   const visible = useMemo(() => clients.filter(client => client.name.toLowerCase().includes(query.toLowerCase()) || client.ip.includes(query)), [clients, query]);
   const onlineCount = clients.filter(client => client.online).length;
