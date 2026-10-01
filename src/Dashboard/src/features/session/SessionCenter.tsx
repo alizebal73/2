@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { CustomerRecord, StationDto } from '../../types';
+import type { CustomerRecord, SessionTimelineEvent, StationDto } from '../../types';
 
 type Props = {
   station: StationDto;
@@ -13,6 +13,7 @@ type Props = {
   onExtend: () => void;
   onReduce: () => void;
   onSettle: () => void;
+  timeline: SessionTimelineEvent[];
 };
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(Math.round(value));
@@ -29,6 +30,7 @@ export function SessionCenter({
   onExtend,
   onReduce,
   onSettle,
+  timeline,
 }: Props) {
   const duration = Math.max(0, durationMinutes);
   const timeAmount = Math.max(0, Math.round((station.sessionRate ?? station.ratePerHour) * duration / 60));
@@ -95,6 +97,29 @@ export function SessionCenter({
             )}
           </section>
         </div>
+
+        <section className="session-timeline-panel">
+          <div className="session-info-panel-head">
+            <strong>آخرین رویدادهای جلسه</strong>
+            <span>{timeline.length.toLocaleString('fa-IR')} مورد</span>
+          </div>
+          {timeline.length === 0 ? (
+            <div className="session-timeline-empty">برای این جلسه هنوز رویداد ثبت‌شده‌ای در رابط فعلی وجود ندارد.</div>
+          ) : (
+            <div className="session-timeline">
+              {timeline.slice(-8).reverse().map(item => (
+                <div className="session-timeline-item" key={item.id}>
+                  <span className={'session-timeline-dot ' + item.kind} />
+                  <div>
+                    <strong>{item.title}</strong>
+                    <small>{item.detail}</small>
+                  </div>
+                  <time>{new Date(item.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</time>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         <section className="session-customer-panel">
           <div>
