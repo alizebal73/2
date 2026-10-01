@@ -11,6 +11,7 @@ const navItems: Array<{ key: PageKey; label: string }> = [
   { key: 'reports', label: 'گزارش‌ها' },
   { key: 'users', label: 'کاربران و شیفت' },
   { key: 'settings', label: 'تنظیمات' },
+  { key: 'operations', label: 'مدیریت' },
 ];
 
 type Props = { activePage: PageKey; onChange: (page: PageKey) => void };
