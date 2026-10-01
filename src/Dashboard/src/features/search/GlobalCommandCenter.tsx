@@ -40,8 +40,8 @@ type Props = {
 const commands: CommandItem[] = [
   { title: 'شروع جلسه جدید', description: 'اولین ایستگاه آزاد را برای شروع جلسه انتخاب می‌کند.', key: 'start-session', page: 'dashboard', keywords: ['جلسه', 'شروع', 'ایستگاه', 'session'] },
   { title: 'شارژ مستقیم جلسه', description: 'پنجره شارژ سریع برای یک جلسه فعال را باز می‌کند.', key: 'quick-charge', page: 'dashboard', keywords: ['شارژ', 'جلسه', 'اعتبار', 'charge'] },
-  { title: 'شارژ + بدهی', description: 'جریان مالی سریع شارژ و ثبت بدهی را باز می‌کند.', key: 'flow', page: 'dashboard', keywords: ['شارژ', 'بدهی', 'مالی'] },
-  { title: 'کسر اعتبار', description: 'کسر مبلغ از کیف پول مشتری را اجرا می‌کند.', key: 'flow', page: 'dashboard', keywords: ['کسر', 'کیف پول', 'اعتبار'] },
+  { title: 'شارژ + بدهی', description: 'جریان مالی سریع شارژ و ثبت بدهی را باز می‌کند.', key: 'charge-debt-flow', page: 'dashboard', keywords: ['شارژ', 'بدهی', 'مالی'] },
+  { title: 'کسر اعتبار', description: 'کسر مبلغ از کیف پول مشتری را اجرا می‌کند.', key: 'deduct-wallet', page: 'dashboard', keywords: ['کسر', 'کیف پول', 'اعتبار'] },
   { title: 'فروش سریع بوفه', description: 'به فروش سریع بوفه می‌رود.', key: 'buffet', page: 'buffet', keywords: ['بوفه', 'فروش', 'کالا'] },
   { title: 'جست‌وجوی مشتری', description: 'صفحه مشتریان را باز می‌کند.', key: 'customers', page: 'customers', keywords: ['مشتری', 'customer', 'شناسه', 'کد'] },
   { title: 'تمدید وقت', description: 'تمدید جلسه فعال را از داشبورد باز می‌کند.', key: 'extend-session', page: 'dashboard', keywords: ['تمدید', 'زمان', 'وقت'] },
