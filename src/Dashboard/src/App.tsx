@@ -86,13 +86,21 @@ function App() {
     }
 
     void loadSnapshot()
-    void connection.start()
-      .then(() => { if (active) setHubState('connected') })
-      .catch(() => { if (active) setHubState('disconnected') })
+    const startTimer = window.setTimeout(() => {
+      startPromise = connection.start()
+        .then(() => { if (active) setHubState('connected') })
+        .catch(() => { if (active) setHubState('disconnected') })
+    }, 0)
+    let startPromise: Promise<void> | undefined
 
     return () => {
       active = false
-      void connection.stop()
+      window.clearTimeout(startTimer)
+      if (startPromise) {
+        void startPromise.finally(() => connection.stop())
+      } else {
+        void connection.stop()
+      }
     }
   }, [retry])
 
