@@ -13,6 +13,7 @@ import { GamesPage } from './pages/GamesPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { ClientShellPage } from './pages/ClientShellPage';
 import { ClientExperience } from './features/client/ClientExperience';
+import { GlobalCommandCenter } from './features/search/GlobalCommandCenter';
 import { OperationsPage } from './pages/OperationsPage';
 import type { DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
@@ -21,16 +22,6 @@ type HubState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 type DemoRole = 'operator' | 'manager' | 'owner';
 
 const roleLabels: Record<DemoRole, string> = { operator: 'اپراتور', manager: 'مدیر', owner: 'صاحب' };
-const commandItems = [
-  { title: 'شروع جلسه جدید', key: 'start-session', page: 'dashboard' as PageKey },
-  { title: 'شارژ مستقیم جلسه', key: 'quick-charge', page: 'dashboard' as PageKey },
-  { title: 'شارژ + بدهی', key: 'flow', page: 'dashboard' as PageKey },
-  { title: 'کسر اعتبار', key: 'flow', page: 'dashboard' as PageKey },
-  { title: 'فروش سریع بوفه', key: 'buffet', page: 'buffet' as PageKey },
-  { title: 'جست‌وجوی مشتری', key: 'customers', page: 'customers' as PageKey },
-  { title: 'تمدید وقت', key: 'extend-session', page: 'dashboard' as PageKey },
-  { title: 'بستن صندوق / پایان شیفت', key: 'close-shift', page: 'users' as PageKey },
-];
 
 function formatTime(dateString: string) {
   const date = new Date(dateString);
@@ -100,11 +91,6 @@ function DashboardApp() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  function runCommand(command: typeof commandItems[number]) {
-    setActivePage(command.page);
-    setCommandOpen(false);
-    window.dispatchEvent(new CustomEvent('gamenet-command', { detail: command.key }));
-  }
 
   useEffect(() => {
     let active = true;
@@ -175,7 +161,7 @@ function DashboardApp() {
           </span>
         </div>
 
-        <button type="button" className="refresh-button command-trigger" onClick={() => setCommandOpen(true)} title="پالت فرمان Ctrl+K">⌘ Ctrl+K</button>
+        <button type="button" className="refresh-button command-trigger" onClick={() => setCommandOpen(true)} title="مرکز جست‌وجو و فرمان · Ctrl+K">⌕ جست‌وجو · Ctrl+K</button>
         <button type="button" className="refresh-button" onClick={() => setRetry((value) => value + 1)}>
           تلاش مجدد
         </button>
@@ -209,7 +195,7 @@ function DashboardApp() {
         <div hidden={activePage !== 'operations'}><OperationsPage /></div>
       </div>
 
-      {commandOpen && <div className="modal-backdrop command-backdrop" onMouseDown={event => event.target === event.currentTarget && setCommandOpen(false)}><section className="command-palette" role="dialog" aria-modal="true"><input autoFocus value={commandQuery} onChange={event => setCommandQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { const first = commandItems.find(item => item.title.toLowerCase().includes(commandQuery.toLowerCase())); if (first) runCommand(first); } }} placeholder="جست‌وجوی فرمان…" /><div className="command-list">{commandItems.filter(item => item.title.toLowerCase().includes(commandQuery.toLowerCase())).map(item => <button key={item.title} onClick={() => runCommand(item)}><span>{item.title}</span><kbd>Enter</kbd></button>)}</div><small>Ctrl+K باز کردن · Esc بستن</small></section></div>}
+      <GlobalCommandCenter open={commandOpen} stations={snapshot?.stations ?? []} onNavigate={setActivePage} onClose={() => setCommandOpen(false)} />
 
       <footer className="status-footer">
         {(snapshot && snapshot.generatedAt ? `آخرین به‌روزرسانی ${formatTime(snapshot.generatedAt)}` : 'در انتظار دریافت داده')} · {serverInfo?.environment ?? 'Development'}
