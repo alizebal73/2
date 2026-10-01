@@ -42,6 +42,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [message, setMessage] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
+  const [hotkeys, setHotkeys] = useState<Record<string,string>>(() => { try { return JSON.parse(localStorage.getItem('gamenet-hotkeys-v1') || '{}'); } catch { return {}; } });
 
   const stations = stationOverrides ?? snapshot?.stations ?? emptyStations;
   const updateStation = useCallback((id: string, update: Partial<StationDto>) => {
@@ -73,7 +74,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     }
     setModal(null);
   }, [amount, customers, customerCode]);
-  useEffect(() => { void mockService.getCustomers().then(setCustomers); }, []);
+  useEffect(() => { void mockService.getCustomers().then(setCustomers); const onHotkeys = (event: Event) => setHotkeys((event as CustomEvent<Record<string,string>>).detail || {}); window.addEventListener('gamenet-hotkeys-changed', onHotkeys); return () => window.removeEventListener('gamenet-hotkeys-changed', onHotkeys); }, []);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -86,15 +87,23 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { setModal(null); setContext(null); }
-      if (event.key === 'F1') { event.preventDefault(); setFlowStep(1); setModal('flow'); }
-      if (modal === 'flow' && flowStep === 2 && ['F5', 'F6', 'F7', 'F8'].includes(event.key)) {
-        event.preventDefault(); applyFlow(event.key);
+      const flowKey = (hotkeys.flow || 'F1').toUpperCase();
+      const amountKey = (hotkeys.amount || 'F4').toUpperCase();
+      const walletAddKey = (hotkeys.walletAdd || 'F5').toUpperCase();
+      const debtAddKey = (hotkeys.debtAdd || 'F6').toUpperCase();
+      const walletDeductKey = (hotkeys.walletDeduct || 'F7').toUpperCase();
+      const walletDebtKey = (hotkeys.walletDebt || 'F8').toUpperCase();
+      if (event.key.toUpperCase() === flowKey) { event.preventDefault(); setFlowStep(1); setModal('flow'); }
+      if (modal === 'flow' && flowStep === 2 && [walletAddKey, debtAddKey, walletDeductKey, walletDebtKey].includes(event.key.toUpperCase())) {
+        event.preventDefault();
+        const action = event.key.toUpperCase() === walletAddKey ? 'F5' : event.key.toUpperCase() === debtAddKey ? 'F6' : event.key.toUpperCase() === walletDeductKey ? 'F7' : 'F8';
+        applyFlow(action);
       }
-      if (modal === 'flow' && event.key === 'F4') document.getElementById('flow-amount')?.focus();
+      if (modal === 'flow' && event.key.toUpperCase() === amountKey) document.getElementById('flow-amount')?.focus();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [modal, flowStep, applyFlow]);
+  }, [modal, flowStep, applyFlow, hotkeys]);
   useEffect(() => {
     const onCommand = (event: Event) => {
       const command = (event as CustomEvent<string>).detail;
@@ -156,7 +165,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     const total = Math.max(0, Math.round(timeCost + (activeStation.buffetTotal ?? 0)));
     const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
     if (method === 'wallet' && (!customer || customer.wallet < total)) { setMessage('موجودی کیف پول کافی نیست'); return; }
-    setInvoices(items => [{ station: activeStation.name, total, payment: method, closedAt: new Date().toISOString() }, ...items]);
+    const closedAt = new Date().toISOString();
+    setInvoices(items => [{ station: activeStation.name, total, payment: method, closedAt }, ...items]);
+    void mockService.addReportRow({ id: crypto.randomUUID(), station: activeStation.name, timeAmount: Math.round(timeCost), buffet: activeStation.buffetTotal ?? 0, packageAmount: 0, amount: total, method: method === 'cash' ? 'cash' : method === 'card' ? 'card' : 'wallet', operator: 'علی محمدی', type: 'time', closedAt });
     if (method === 'wallet' && customer) setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet - total, transactionHistory: ['تسویه کیف پول · ' + money(total) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
     updateStation(activeStation.id, { state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined, customerCode: undefined, persons: undefined, buffetTotal: undefined });
     setModal(null);
