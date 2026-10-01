@@ -2383,3 +2383,153 @@ button:focus-visible {
   font-size: 10px;
   text-align: center;
 }
+
+
+.recent-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 22px 8px;
+}
+
+.recent-actions-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px 10px;
+  background: #0d1526;
+  color: var(--txt);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.recent-actions-trigger:hover {
+  border-color: #2a3b63;
+}
+
+.recent-actions-trigger span {
+  min-width: 19px;
+  padding: 2px 5px;
+  border-radius: 99px;
+  background: #1a2540;
+  color: var(--dim);
+  text-align: center;
+}
+
+.recent-actions-summary {
+  color: var(--dim);
+  font-size: 9.5px;
+}
+
+.recent-actions-panel {
+  margin: 0 22px 10px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(165deg, var(--panel), var(--panel2));
+}
+
+.recent-actions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.recent-actions-head strong {
+  display: block;
+  font-size: 12px;
+}
+
+.recent-actions-head small {
+  display: block;
+  margin-top: 3px;
+  color: var(--dim);
+  font-size: 9.5px;
+}
+
+.recent-actions-list {
+  display: grid;
+  gap: 3px;
+}
+
+.recent-action-item {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+
+.recent-action-item:hover {
+  background: #111b30;
+}
+
+.recent-action-main {
+  min-width: 0;
+}
+
+.recent-action-main strong,
+.recent-action-main small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-action-main strong {
+  font-size: 10.5px;
+}
+
+.recent-action-main small {
+  margin-top: 2px;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.recent-action-item time {
+  color: var(--dim);
+  font-size: 8.5px;
+  white-space: nowrap;
+}
+
+.recent-action-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+
+.recent-action-dot.start,
+.recent-action-dot.resume {
+  background: var(--green);
+}
+
+.recent-action-dot.pause {
+  background: var(--orange);
+}
+
+.recent-action-dot.charge,
+.recent-action-dot.settle {
+  background: var(--gold);
+}
+
+.recent-action-dot.extend,
+.recent-action-dot.reduce {
+  background: var(--purple);
+}
+
+.recent-action-dot.buffet {
+  background: var(--cyan);
+}
+
+.recent-actions-empty {
+  padding: 15px;
+  color: var(--dim);
+  font-size: 10px;
+  text-align: center;
+}
