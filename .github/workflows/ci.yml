@@ -1,0 +1,44 @@
+name: GameNet Manager CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/Dashboard/package-lock.json
+
+      - name: Restore .NET
+        run: dotnet restore GameNetManager.sln
+
+      - name: Build .NET
+        run: dotnet build GameNetManager.sln --no-restore --configuration Release
+
+      - name: Test .NET
+        run: dotnet test GameNetManager.sln --no-build --configuration Release
+
+      - name: Install Dashboard
+        run: npm ci --prefix src/Dashboard
+
+      - name: Lint Dashboard
+        run: npm run lint --prefix src/Dashboard
+
+      - name: Build Dashboard
+        run: npm run build --prefix src/Dashboard
