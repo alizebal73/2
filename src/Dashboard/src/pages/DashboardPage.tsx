@@ -50,6 +50,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [sessionFollowUps, setSessionFollowUps] = useState<SessionFollowUp[]>([]);
   const [sessionTimeline, setSessionTimeline] = useState<SessionTimelineEvent[]>([]);
+  const [recentActionsOpen, setRecentActionsOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
