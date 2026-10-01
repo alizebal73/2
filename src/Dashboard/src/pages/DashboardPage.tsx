@@ -3,6 +3,7 @@ import type { CSSProperties, MouseEvent } from 'react';
 import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, StationDto, StationState, ZoneKey } from '../types';
 import { mockService } from '../services/mockService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
+import { SessionCenter } from '../features/session/SessionCenter';
 
 const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه‌ها (۴۰)', console: 'کنسول‌ها (۱۶)', table: 'میزها (۵)' };
 const stateLabels: Record<StationState, string> = { free: 'آزاد', busy: 'در حال بازی', paused: 'متوقف', reserved: 'رزرو', off: 'خارج از سرویس' };
@@ -36,6 +37,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [now, setNow] = useState(Date.now());
   const [modal, setModal] = useState<ModalKind>(null);
   const [activeStation, setActiveStation] = useState<StationDto | null>(null);
+  const [sessionCenterStation, setSessionCenterStation] = useState<StationDto | null>(null);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [tariffs, setTariffs] = useState<import('../types').TariffRecord[]>([]);
   const [customerCode, setCustomerCode] = useState('');
@@ -59,6 +61,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [hotkeys, setHotkeys] = useState<Record<string,string>>(() => { try { return JSON.parse(localStorage.getItem('gamenet-hotkeys-v1') || '{}'); } catch { return {}; } });
 
   const stations = stationOverrides ?? snapshot?.stations ?? emptyStations;
+  const liveSessionCenterStation = sessionCenterStation ? stations.find(item => item.id === sessionCenterStation.id) ?? null : null;
   const updateStation = useCallback((id: string, update: Partial<StationDto>) => {
     setStationOverrides(items => (items ?? snapshot?.stations ?? emptyStations).map(item => item.id === id ? { ...item, ...update } : item));
   }, [snapshot?.stations]);
@@ -102,7 +105,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   }, [message]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setModal(null); setContext(null); }
+      if (event.key === 'Escape') { setModal(null); setContext(null); setSessionCenterStation(null); }
       const flowKey = (hotkeys.flow || 'F1').toUpperCase();
       const amountKey = (hotkeys.amount || 'F4').toUpperCase();
       const walletAddKey = (hotkeys.walletAdd || 'F5').toUpperCase();
@@ -201,7 +204,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     setQuery(item.station.name);
     window.setTimeout(() => { document.getElementById(`station-${item.station.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80);
     if (item.kind === 'action' && item.station.state === 'paused') { resumeSession(item.station); return; }
-    if (item.kind === 'action' && item.station.state === 'busy' && item.station.prepaidEndsAt) { open('charge', item.station); return; }
+    if (item.kind === 'action' && item.station.state === 'busy' && item.station.prepaidEndsAt) { setSessionCenterStation(item.station); return; }
     if (item.followUpId && item.kind === 'action') { setMessage('پرداخت این مبلغ را از مشتری پیگیری کنید'); return; }
     if (item.kind === 'action' && item.station.state === 'off') { openContextAt(window.innerWidth / 2, Math.min(window.innerHeight - 80, 260), item.station); return; }
     setMessage(item.detail);
@@ -371,6 +374,15 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
     setModal(null);
   }
+  function openSessionCenter(station: StationDto) {
+    if (!['busy', 'paused'].includes(station.state)) {
+      setMessage('این ایستگاه جلسه فعالی ندارد');
+      return;
+    }
+    setSessionCenterStation(station);
+    setContext(null);
+  }
+
   function openContextAt(x: number, y: number, station: StationDto) {
     const width = 280;
     const height = 430;
@@ -385,6 +397,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     const station = context?.station;
     setContext(null);
     if (!station) return;
+    if (action === 'details') { openSessionCenter(station); return; }
     if (action === 'settle') { open('settle', station); return; }
     if (action === 'extend') { open('extend', station); return; }
     if (action === 'pause') { pauseSession(station); return; }
@@ -405,7 +418,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     const style = { '--zoom': zoom / 100 } as CSSProperties;
     return <article id={`station-${station.id}`} key={station.id} style={style} className={`station-card ${station.state} ${view}`} onClick={() => {
       if (station.state === 'free') open('start', station);
-      else if (station.state === 'busy') { setCustomerCode(station.customerCode ?? ''); setActiveStation(station); setFlowStep(1); setModal('flow'); }
+      else if (station.state === 'busy' || station.state === 'paused') openSessionCenter(station);
       else setMessage(station.state === 'reserved' ? 'رزرو ساعت ۱۸:۰۰ — هنوز مشتری وارد نشده' : station.outOfServiceReason ?? 'این دستگاه خارج از سرویس است');
     }} onDoubleClick={() => station.state === 'busy' && open('charge', station)} onContextMenu={event => showContext(event, station)}>
       <div className="top"><div className="name">{station.name}</div><span className={`status-badge ${station.state}`}>{stateLabels[station.state as StationState] ?? station.state}</span></div>
@@ -480,8 +493,22 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       return <section key={key}><div className="section-title">{title} · {items.length}</div><div className={`station-grid ${view}`} style={{ '--card-min': `${(view === 'v-compact' ? 128 : 168) * zoom / 100}px` } as CSSProperties}>{items.map(renderStation)}</div></section>;
     }) : <div className={`station-grid ${view}`} style={{ '--card-min': `${(view === 'v-compact' ? 128 : 168) * zoom / 100}px` } as CSSProperties}>{visibleStations.map(renderStation)}</div>}
 
+    {liveSessionCenterStation && <SessionCenter
+      station={liveSessionCenterStation}
+      customer={customers.find(item => item.code === liveSessionCenterStation.customerCode || item.username === liveSessionCenterStation.customerCode || item.id === liveSessionCenterStation.customerCode)}
+      durationMinutes={duration(liveSessionCenterStation)}
+      now={now}
+      onClose={() => setSessionCenterStation(null)}
+      onPause={() => pauseSession(liveSessionCenterStation)}
+      onResume={() => resumeSession(liveSessionCenterStation)}
+      onCharge={() => { setSessionCenterStation(null); open('charge', liveSessionCenterStation); }}
+      onExtend={() => { setSessionCenterStation(null); open('extend', liveSessionCenterStation); }}
+      onReduce={() => { setSessionCenterStation(null); open('reduce', liveSessionCenterStation); }}
+      onSettle={() => { setSessionCenterStation(null); open('settle', liveSessionCenterStation); }}
+    />}
     {context && <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}>
       <strong>{context.station.name} · {stateLabels[context.station.state as StationState]}</strong>
+      {(context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('details')}>▣ جزئیات کامل جلسه</button>}
       {(context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('settle')}>🧾 تسویه و بستن جلسه</button>}
       {context.station.state === 'busy' && <button onClick={() => contextAction('pause')}>⏸ توقف موقت جلسه</button>}
       {context.station.state === 'paused' && <button onClick={() => contextAction('resume')}>▶ ادامه جلسه</button>}
