@@ -137,6 +137,9 @@ const vipPackages: VipPackageRecord[] = [
   { id: 'vip-2', name: 'Silver روزانه', tier: 'silver', price: 850000, dailyMinutes: 180, totalMinutes: 6000, discount: 10, active: true },
   { id: 'vip-3', name: 'Gold ۲۴ ساعته', tier: 'gold', price: 1600000, dailyMinutes: 1440, totalMinutes: 14400, discount: 15, active: true },
 ];
+const waitlist: Array<{ id: string; customerCode: string; customerName: string; stationType: string; createdAt: string; status: 'waiting' | 'assigned' }> = [
+  { id: 'wait-1', customerCode: '2021', customerName: 'پارسا رضایی', stationType: 'PC', createdAt: new Date(Date.now() - 18 * 60000).toISOString(), status: 'waiting' },
+];
 const auditLogs: AuditLogRecord[] = [
   { id: 'audit-1', createdAt: new Date(Date.now() - 12 * 60000).toISOString(), operator: 'علی محمدی', action: 'تسویه جلسه', target: 'PC ۰۴', details: '۲۷۰٬۰۰۰ تومان · نقدی' },
   { id: 'audit-2', createdAt: new Date(Date.now() - 35 * 60000).toISOString(), operator: 'سارا احمدی', action: 'تغییر تعرفه', target: 'PS5 عادی', details: '۱۵۰٬۰۰۰ تومان / ساعت' },
@@ -206,6 +209,12 @@ export const mockService = {
   getInvoices: async () => [...invoices],
   getCustomers: async () => customers,
   getProducts: async () => products,
+  saveProduct: async (product: ProductRecord) => { const index = products.findIndex(item => item.id === product.id); if (index < 0) products.push(product); else products[index] = product; return product; },
+  addStock: async (productId: string, quantity: number) => { const product = products.find(item => item.id === productId); if (!product) throw new Error('کالا پیدا نشد'); product.stock += Math.max(0, quantity); return product; },
+  getWaitlist: async () => [...waitlist],
+  addWaitlist: async (entry: Omit<(typeof waitlist)[number], 'id' | 'createdAt' | 'status'>) => { const row = { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString(), status: 'waiting' as const }; waitlist.push(row); return row; },
+  assignWaitlist: async (id: string, stationName: string) => { const row = waitlist.find(item => item.id === id); if (!row) return null; row.status = 'assigned'; auditLogs.unshift({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), operator: 'علی محمدی', action: 'تخصیص صف انتظار', target: stationName, details: row.customerCode }); return row; },
+  transferSession: async (fromStation: string, toStation: string) => { auditLogs.unshift({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), operator: 'علی محمدی', action: 'انتقال جلسه', target: toStation, details: `${fromStation} → ${toStation}` }); return { fromStation, toStation, transferredAt: new Date().toISOString() }; },
   getUsers: async () => users,
   getTariffs: async () => tariffs,
   saveTariff: async (tariff: TariffRecord) => {
