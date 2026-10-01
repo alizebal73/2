@@ -31,6 +31,7 @@
 | [03-architecture-plan.md](03-architecture-plan.md) | معماری سرور/داشبورد/کلاینت + فازبندی |
 | [04-tech-stack-roadmap.md](04-tech-stack-roadmap.md) | تحقیق فنی: استک، مسیر شروع، مدل پیشروی |
 | [05-ui-design-system.md](05-ui-design-system.md) | **سند طراحی قفل‌شده UI + قرارداد داده DTO** — مرجع الزامی کدنویسی آینده |
+| [08-action-map.md](08-action-map.md) | **قرارداد نهایی رفتار عملیات** — ورودی/خروجی/Permission/Audit/Refund/مالکیت هر Action |
 
 ## نکات کلیدی که نباید فراموش شود
 - کنسول‌ها (PS5/PS4) و فوتبال‌دستی **کلاینت نمی‌خواهند** — فقط تایمر در داشبورد + آلارم
@@ -83,3 +84,11 @@
 - Migration دیتابیس دیگر در خطا، فایل SQLite را خودکار حذف یا بازسازی نمی‌کند؛ Recovery باید صریح و کنترل‌شده باشد.
 - ناوبری نهایی بدون «مدیریت» به‌عنوان صفحه اصلی خواهد بود؛ قابلیت‌ها در Dashboard / Customers / Buffet / Tariffs / Reports / Users & Shift / Settings مالک مشخص دارند.
 - مرکز مدیریت فعلی فقط یک ابزار موقت QA برای تکمیل Stage 1B است و تا انتقال کامل قابلیت‌ها به صفحات مالک، از ناوبری اصلی حذف نمی‌شود.
+
+
+## تصمیم جدید — Action Map / ۱۴۰۵/۱۰/۱۰
+- سند `docs/08-action-map.md` اکنون مرجع رفتاری عملیات است و قبل از پیاده‌سازی هر دکمه/فرم باید بررسی شود.
+- Pause/Resume، کاهش زمان، زمان رایگان، Pricing Schedule، Refund/Reverse، Wallet Ledger، Settlement کامل و محدودیت ورود هم‌زمان به‌عنوان گپ‌های واقعی ثبت شدند.
+- `مدیریت` به‌عنوان Navigation مستقل حذف‌شدنی است؛ OperationsPage فقط QA موقت می‌ماند.
+- Trailer بازی، CCBOOT، PXE و Remote فقط در صورت داشتن مصرف واقعی در معماری نهایی مجاز به نمایش هستند.
+- هر Action حساس باید Server Permission + Persistence + Audit + مسیر Reverse مناسب داشته باشد.
