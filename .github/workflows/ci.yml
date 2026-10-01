@@ -7,6 +7,8 @@ on:
 jobs:
   verify:
     runs-on: [self-hosted, windows, x64]
+    env:
+      DOTNET_INSTALL_DIR: ${{ runner.temp }}\.dotnet
     steps:
       - name: Checkout
         uses: actions/checkout@v4
