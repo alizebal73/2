@@ -206,7 +206,7 @@ export const mockService = {
   },
   getClients: async () => clientSystems,
   getClientSystems: async () => clientSystems,
-  getSettings: async () => settings,,
+  getSettings: async () => settings,
   getReportRows: async () => [...reportRows],
   addReportRow: async (row: ReportRow) => { reportRows.unshift(row); return row; },
   getExpenses: async () => [...expenses],
