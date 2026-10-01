@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
-import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, StationDto, StationState, ZoneKey } from '../types';
+import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
 import { mockService } from '../services/mockService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { SessionCenter } from '../features/session/SessionCenter';
@@ -49,6 +49,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [context, setContext] = useState<ContextMenu>(null);
   const [attentionOpen, setAttentionOpen] = useState(false);
   const [sessionFollowUps, setSessionFollowUps] = useState<SessionFollowUp[]>([]);
+  const [sessionTimeline, setSessionTimeline] = useState<SessionTimelineEvent[]>([]);
   const [message, setMessage] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
@@ -71,6 +72,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     const pausedMinutes = station.pausedMinutes ?? 0;
     return Math.max(0, (referenceNow - new Date(station.startedAt).getTime()) / 60000 - pausedMinutes);
   }, [now]);
+  function addSessionTimeline(stationId: string, kind: SessionTimelineEvent['kind'], title: string, detail: string, amount?: number) {
+    setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId, createdAt: new Date().toISOString(), kind, title, detail, amount }, ...current].slice(0, 300));
+  }
+
   const applyFlow = useCallback((action: string) => {
     const value = number(amount);
     if (!value) { setMessage('مبلغ معتبر وارد کنید'); return; }
@@ -259,6 +264,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     if (method === 'wallet' && (!customer || customer.wallet < finalTotal)) { setMessage('موجودی کیف پول کافی نیست'); return; }
     const closedAt = new Date().toISOString();
     setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt }, ...items]);
+    addSessionTimeline(activeStation.id, 'settle', 'تسویه جلسه', 'مبلغ نهایی ' + money(finalTotal) + ' تومان · روش پرداخت ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : method === 'wallet' ? 'کیف پول' : 'بدهی'), finalTotal);
     setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: method === 'debt' ? 'unpaid' : 'paid' } : item));
     void mockService.addReportRow({
       id: crypto.randomUUID(),
@@ -302,6 +308,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     const station = stationOverride ?? activeStation;
     if (!station || station.state !== 'busy') { setMessage('فقط جلسه در حال بازی قابل توقف است'); return; }
     updateStation(station.id, { state: 'paused', pausedAt: new Date().toISOString() });
+    addSessionTimeline(station.id, 'pause', 'توقف جلسه', 'جلسه موقتاً متوقف شد');
     setModal(null);
     setMessage('جلسه متوقف موقت شد؛ زمان صورتحساب جلو نمی‌رود');
   }
@@ -311,6 +318,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     if (!station || station.state !== 'paused' || !station.pausedAt) { setMessage('جلسه متوقفی برای ادامه وجود ندارد'); return; }
     const currentPaused = (Date.now() - new Date(station.pausedAt).getTime()) / 60000;
     updateStation(station.id, { state: 'busy', pausedAt: undefined, pausedMinutes: (station.pausedMinutes ?? 0) + Math.max(0, currentPaused) });
+    addSessionTimeline(station.id, 'resume', 'ادامه جلسه', 'توقف ' + money(currentPaused) + ' دقیقه محاسبه شد');
     setMessage('جلسه ادامه پیدا کرد');
   }
 
@@ -321,6 +329,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     if (!minutes || minutes >= current) { setMessage('زمان کاهش باید کمتر از زمان استفاده‌شده باشد'); return; }
     const nextStartedAt = new Date(new Date(activeStation.startedAt ?? Date.now()).getTime() + minutes * 60000).toISOString();
     updateStation(activeStation.id, { startedAt: nextStartedAt, sessionMinutes: Math.max(0, current - minutes) });
+    addSessionTimeline(activeStation.id, 'reduce', 'کاهش زمان', money(minutes) + ' دقیقه از زمان صورتحساب کم شد');
     setModal(null);
     setMessage(money(minutes) + ' دقیقه از زمان قابل صورتحساب کم شد');
   }
@@ -340,6 +349,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     }
     const nextStartedAt = new Date(new Date(activeStation.startedAt ?? Date.now()).getTime() - minutes * 60000).toISOString();
     updateStation(activeStation.id, { sessionMinutes: duration(activeStation) + minutes, startedAt: nextStartedAt });
+    addSessionTimeline(activeStation.id, 'extend', 'تمدید جلسه', money(minutes) + ' دقیقه به جلسه اضافه شد');
     setModal(null);
     setMessage(`${money(minutes)} دقیقه به جلسه ${activeStation.name} اضافه شد`);
   }
@@ -370,6 +380,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
         prepaidEndsAt,
       });
       setSessionFollowUps(current => [...current, { id: crypto.randomUUID(), stationId: activeStation.id, stationName: activeStation.name, customerCode: activeStation.customerCode ?? customer?.code ?? 'مهمان', amount: value, createdAt: new Date().toISOString(), status: 'watching' }]);
+      addSessionTimeline(activeStation.id, 'charge', 'شارژ جلسه', money(value) + ' تومان شارژ شد', value);
       setMessage(money(value) + ' تومان شارژ شد؛ پیگیری آن در «نیازمند توجه» ثبت شد');
     } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
     setModal(null);
@@ -505,6 +516,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       onExtend={() => { setSessionCenterStation(null); open('extend', liveSessionCenterStation); }}
       onReduce={() => { setSessionCenterStation(null); open('reduce', liveSessionCenterStation); }}
       onSettle={() => { setSessionCenterStation(null); open('settle', liveSessionCenterStation); }}
+      timeline={sessionTimeline.filter(item => item.stationId === liveSessionCenterStation.id)}
     />}
     {context && <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}>
       <strong>{context.station.name} · {stateLabels[context.station.state as StationState]}</strong>
