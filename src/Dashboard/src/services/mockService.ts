@@ -95,6 +95,28 @@ const settings: SettingGroup[] = [
 const sessions = new Map<string, { startedAt: number; input: StartSessionInput; buffetAmount: number }>();
 const invoices: SessionInvoice[] = [];
 
+
+type ExpenseRecord = { id: string; title: string; amount: number; createdAt: string; operator: string };
+type ReportRow = { id: string; station: string; timeAmount: number; buffet: number; packageAmount: number; amount: number; method: 'cash' | 'card' | 'wallet'; operator: string; type: 'time' | 'buffet' | 'package'; closedAt: string };
+type ShiftRecord = { id: string; operator: string; openedAt: string; closedAt?: string; expectedCash?: number; countedCash?: number; difference?: number; sales?: number };
+
+const expenses: ExpenseRecord[] = [
+  { id: 'e1', title: 'خرید نوشیدنی', amount: 420000, createdAt: new Date(Date.now() - 86400000).toISOString(), operator: 'علی محمدی' },
+  { id: 'e2', title: 'لوازم مصرفی', amount: 180000, createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), operator: 'سارا احمدی' },
+];
+const reportRows: ReportRow[] = [
+  { id: 'r1', station: 'PC 04', timeAmount: 180000, buffet: 90000, packageAmount: 0, amount: 270000, method: 'cash', operator: 'علی محمدی', type: 'time', closedAt: new Date(Date.now() - 2 * 3600000).toISOString() },
+  { id: 'r2', station: 'PS5 02', timeAmount: 260000, buffet: 35000, packageAmount: 0, amount: 295000, method: 'card', operator: 'سارا احمدی', type: 'time', closedAt: new Date(Date.now() - 4 * 3600000).toISOString() },
+  { id: 'r3', station: 'PC 12', timeAmount: 320000, buffet: 0, packageAmount: 1800000, amount: 2120000, method: 'wallet', operator: 'علی محمدی', type: 'package', closedAt: new Date(Date.now() - 86400000).toISOString() },
+  { id: 'r4', station: 'میز 03', timeAmount: 90000, buffet: 70000, packageAmount: 0, amount: 160000, method: 'cash', operator: 'رضا کاظمی', type: 'buffet', closedAt: new Date(Date.now() - 2 * 86400000).toISOString() },
+];
+let currentShift: ShiftRecord | null = { id: 'shift-demo', operator: 'علی محمدی', openedAt: new Date(Date.now() - 3 * 3600000).toISOString() };
+const shifts: ShiftRecord[] = [
+  { id: 'shift-1', operator: 'علی محمدی', openedAt: new Date(Date.now() - 86400000 - 7 * 3600000).toISOString(), closedAt: new Date(Date.now() - 86400000).toISOString(), expectedCash: 2100000, countedCash: 2095000, difference: -5000, sales: 3100000 },
+  { id: 'shift-2', operator: 'سارا احمدی', openedAt: new Date(Date.now() - 2 * 86400000 - 8 * 3600000).toISOString(), closedAt: new Date(Date.now() - 2 * 86400000).toISOString(), expectedCash: 1850000, countedCash: 1850000, difference: 0, sales: 2850000 },
+];
+const permissionStore: Record<string, boolean> = {};
+
 export const mockService = {
   getStations: async (stations: import('../types').StationDto[]) => stations,
   startSession: async (input: StartSessionInput) => {
@@ -184,5 +206,52 @@ export const mockService = {
   },
   getClients: async () => clientSystems,
   getClientSystems: async () => clientSystems,
-  getSettings: async () => settings,
+  getSettings: async () => settings,,
+  getReportRows: async () => [...reportRows],
+  addReportRow: async (row: ReportRow) => { reportRows.unshift(row); return row; },
+  getExpenses: async () => [...expenses],
+  addExpense: async (expense: Omit<ExpenseRecord, 'id' | 'createdAt'>) => {
+    const row = { ...expense, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+    expenses.unshift(row);
+    return row;
+  },
+  getCurrentShift: async () => currentShift ? { ...currentShift } : null,
+  startShift: async (operator = 'علی محمدی') => {
+    if (currentShift) throw new Error('شیفت فعلی هنوز باز است');
+    currentShift = { id: crypto.randomUUID(), operator, openedAt: new Date().toISOString() };
+    return { ...currentShift };
+  },
+  closeShift: async (countedCash: number) => {
+    if (!currentShift) throw new Error('شیفت بازی برای بستن وجود ندارد');
+    const expectedCash = reportRows.filter(row => row.operator === currentShift!.operator && row.method === 'cash').reduce((sum, row) => sum + row.amount, 0);
+    const closed = { ...currentShift, closedAt: new Date().toISOString(), expectedCash, countedCash, difference: countedCash - expectedCash, sales: reportRows.filter(row => row.operator === currentShift!.operator).reduce((sum, row) => sum + row.amount, 0) };
+    shifts.unshift(closed);
+    currentShift = null;
+    return closed;
+  },
+  getShifts: async () => [...shifts],
+  saveUser: async (user: UserRecord) => {
+    const index = users.findIndex(item => item.id === user.id);
+    if (index < 0) users.push(user); else users[index] = user;
+    return user;
+  },
+  getPermissions: async () => ({ ...permissionStore }),
+  savePermissions: async (values: Record<string, boolean>) => {
+    Object.keys(permissionStore).forEach(key => delete permissionStore[key]);
+    Object.assign(permissionStore, values);
+    return { ...permissionStore };
+  },
+  createBackup: async () => ({
+    customers, products, users, tariffs, games, accounts, clients: clientSystems, settings,
+    expenses, reportRows, shifts, currentShift, permissions: permissionStore, createdAt: new Date().toISOString()
+  }),
+  restoreBackup: async (payload: any) => {
+    const replace = (target: any[], source: any[]) => { if (Array.isArray(source)) target.splice(0, target.length, ...source); };
+    replace(customers, payload.customers); replace(products, payload.products); replace(users, payload.users); replace(tariffs, payload.tariffs);
+    replace(games, payload.games); replace(accounts, payload.accounts); replace(clientSystems, payload.clients); replace(settings, payload.settings);
+    replace(expenses, payload.expenses); replace(reportRows, payload.reportRows); replace(shifts, payload.shifts);
+    Object.keys(permissionStore).forEach(key => delete permissionStore[key]);
+    Object.assign(permissionStore, payload.permissions || {});
+  }
+
 };
