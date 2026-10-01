@@ -51,6 +51,7 @@ export function ReportsPage() {
       if (role === 'operator' && row.operator !== 'علی محمدی') return false;
       if (operator !== 'all' && row.operator !== operator) return false;
       if (method !== 'all' && row.method !== method) return false;
+      if (type === 'expense') return false;
       if (type !== 'all' && row.type !== type) return false;
       if (station !== 'all') {
         const zone = row.station.startsWith('PS') ? 'console' : row.station.startsWith('میز') ? 'table' : 'pc';
@@ -61,6 +62,7 @@ export function ReportsPage() {
   }, [rows, range, period, role, operator, method, type, station]);
 
   const visibleExpenses = useMemo(() => {
+    if (type !== 'expense' && type !== 'all') return [];
     const now = Date.now();
     const start = range ? range.start : period === 'month' ? now - 30 * 86400000 : period === 'year' ? now - 365 * 86400000 : now - 6 * 86400000;
     const end = range?.end ?? now;
