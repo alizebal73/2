@@ -78,7 +78,6 @@ function DashboardApp() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setCommandOpen(open => !open);
-        setCommandQuery('');
       } else if (event.key === 'Escape') {
         setCommandOpen(false);
         setNotificationsOpen(false);
