@@ -154,6 +154,7 @@ export const mockService = {
     auditLogs.unshift({ id: crypto.randomUUID(), createdAt: new Date().toISOString(), operator: 'علی محمدی', action: 'ویرایش ایستگاه', target: record.name, details: record.status });
     return record;
   },
+  deleteManagedStation: async (id: string) => { const index = managedStations.findIndex(item => item.id === id); if (index >= 0) managedStations.splice(index, 1); },
   toggleStationOutOfService: async (id: string, reason = 'خارج از سرویس') => {
     const station = managedStations.find(item => item.id === id);
     if (!station) return null;
@@ -171,6 +172,7 @@ export const mockService = {
   },
   cancelReservation: async (id: string) => { const item = reservations.find(x => x.id === id); if (item) item.status = 'cancelled'; },
   getVipPackages: async () => [...vipPackages],
+  deleteVipPackage: async (id: string) => { const index = vipPackages.findIndex(item => item.id === id); if (index >= 0) vipPackages.splice(index, 1); },
   saveVipPackage: async (record: VipPackageRecord) => { const index = vipPackages.findIndex(item => item.id === record.id); if (index < 0) vipPackages.push(record); else vipPackages[index] = record; return record; },
   getAuditLogs: async () => [...auditLogs],
   addAuditLog: async (entry: Omit<AuditLogRecord, 'id' | 'createdAt'>) => { const row = { ...entry, id: crypto.randomUUID(), createdAt: new Date().toISOString() }; auditLogs.unshift(row); return row; },
