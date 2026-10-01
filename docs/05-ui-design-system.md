@@ -76,3 +76,21 @@ Settings  { viewMode:'v-card'|'v-compact'|'v-list', zonesGrouping, showLiveCost,
 - گزارش‌ها: نمودار با تفکیک نقد/کارت، سود خالص، کارکرد ایستگاه
 - کاربران: ماتریس دسترسی صاحب/مدیر/اپراتور + شیفت با فروش
 - تنظیمات: ۶ پنل با سوییچ‌های واقعی (فعلاً در MockService ذخیره، بعداً در دیتابیس)
+
+
+## ۶) Primitive Controls — قرارداد مشترک فرم‌ها
+از ۱۴۰۵/۱۰/۱۰ تمام `input`, `select` و `textarea`های عادی باید از استایل پایه GameNet استفاده کنند: پس‌زمینه تیره، border واحد، radius واحد، focus state سبز، placeholder استاندارد و حالت disabled مشخص. هیچ فرم جدیدی نباید به ظاهر پیش‌فرض سفید مرورگر متکی باشد.
+
+کامپوننت‌های منطقی مشترک در ادامه:
+- TextInput / NumericInput / LtrInput
+- Select
+- MoneyInput
+- DurationInput
+- SearchInput
+- Modal / ConfirmModal
+- Button Primary/Default/Danger/Small
+- Badge / StatusPill
+- DataTable
+- Toast
+
+این قرارداد جای Prototype را عوض نمی‌کند؛ فقط ظاهر کنترل‌های خام را یکدست می‌کند.
