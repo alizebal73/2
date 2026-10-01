@@ -35,6 +35,40 @@ button {
   font: inherit;
 }
 
+input,
+select,
+textarea {
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0d1526;
+  color: var(--txt);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+  color-scheme: dark;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #667596;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(34, 229, 138, 0.65);
+  box-shadow: 0 0 0 2px rgba(34, 229, 138, 0.08);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 button:focus-visible {
   outline: 2px solid var(--green);
   outline-offset: 2px;
