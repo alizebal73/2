@@ -43,7 +43,6 @@ function DashboardApp() {
   const [role, setRole] = useState<DemoRole>('operator');
   const [clock, setClock] = useState(() => new Date().toLocaleTimeString('fa-IR'));
   const [commandOpen, setCommandOpen] = useState(false);
-  const [commandQuery, setCommandQuery] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([
     { id: 'n1', title: 'درخواست بوفه', detail: 'PC ۰۴ درخواست فروش بوفه دارد', level: 'info', read: false },
