@@ -70,6 +70,11 @@ function DashboardApp() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      let hk: Record<string,string> = {};
+      try { hk = JSON.parse(localStorage.getItem('gamenet-hotkeys-v1') || '{}'); } catch { hk = {}; }
+      const reportKey = (hk.reports || 'F2').toUpperCase();
+      const buffetKey = (hk.buffet || 'F3').toUpperCase();
+      const closeShiftKey = (hk.closeShift || 'F9').toUpperCase();
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setCommandOpen(open => !open);
@@ -77,9 +82,9 @@ function DashboardApp() {
       } else if (event.key === 'Escape') {
         setCommandOpen(false);
         setNotificationsOpen(false);
-      } else if (event.key === 'F2') setActivePage('reports');
-      else if (event.key === 'F3') setActivePage('buffet');
-      else if (event.key === 'F9') setActivePage('users');
+      } else if (event.key.toUpperCase() === reportKey) setActivePage('reports');
+      else if (event.key.toUpperCase() === buffetKey) setActivePage('buffet');
+      else if (event.key.toUpperCase() === closeShiftKey) setActivePage('users');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
