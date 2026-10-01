@@ -65,11 +65,13 @@ export function ClientExperience() {
   const submitAdminAction = useCallback(() => {
     if (!pin.trim()) { notify('PIN یا رمز مدیر را وارد کنید'); return; }
     if (adminDialog === 'operator') {
+      if (pin !== '2468') { notify('PIN اپراتور دمو نادرست است'); return; }
       setCustomerName('اپراتور'); setLoggedIn(true); setRemainingSeconds(24 * 3600); setLocked(false);
       notify('ورود اپراتور با زمان نامحدود انجام شد');
     } else {
+      if (pin !== '2020') { notify('رمز مدیر دمو نادرست است'); return; }
       setLoggedIn(false); setActiveGame(null); setLocked(false);
-      notify('سیستم برای آزادسازی Windows آماده شد');
+      notify('آزادسازی سیستم تأیید شد؛ Restart/Shutdown برای Agent واقعی باقی است');
     }
     setAdminDialog(null); setPin('');
   }, [adminDialog, pin]);
@@ -125,12 +127,22 @@ export function ClientExperience() {
   }
 
   function signIn(guest = false) {
-    if (!guest && !customerCode.trim()) {
-      setLoginError('شناسه مشتری را وارد کنید یا به‌صورت مهمان ادامه دهید.');
-      return;
+    if (guest) {
+      if (password.trim()) { setLoginError('برای مهمان رمز را خالی بگذارید'); return; }
+      setCustomerName('مهمان');
+    } else {
+      const id = customerCode.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))).trim();
+      if (id !== '1050' || password.trim() !== '2020') {
+        setLoginError('در نسخه دمو، شناسه ۱۰۵۰ و رمز ۲۰۲۰ است');
+        return;
+      }
+      setCustomerName('رضا محمدی');
     }
-    setCustomerName(guest ? 'مهمان' : `مشتری ${customerCode}`);
-    setLoginError(''); setLoggedIn(true); setLocked(false); setPanel(null);
+    setLoginError('');
+    setLoggedIn(true);
+    setLocked(false);
+    setPanel(null);
+    setRemainingSeconds(3 * 3600 + 45 * 60 + 12);
     notify(guest ? 'ورود مهمان انجام شد' : 'ورود موفق بود');
   }
 
