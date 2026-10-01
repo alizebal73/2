@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>گیم‌نت منیجر — پروتوتایپ کامل UI</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070a14; --bg2:#0c1120; --panel:#101728; --panel2:#151d33; --line:#1e2a44;
+    --txt:#e9eef8; --dim:#8b98b8;
+    --green:#22e58a; --blue:#3aa9ff; --purple:#a78bfa; --orange:#ffb454; --red:#ff5d73; --cyan:#2dd4bf; --gold:#ffd166;
+    --green-glow:rgba(34,229,138,.14); --red-glow:rgba(255,93,115,.14);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Vazirmatn',sans-serif;}
+  body{background:radial-gradient(1200px 600px at 80% -10%, #12224a33, transparent),var(--bg);color:var(--txt);min-height:100vh;}
+  ::-webkit-scrollbar{width:8px;height:8px}::-webkit-scrollbar-thumb{background:#233252;border-radius:8px}
+  button{font-family:inherit}
+
+  /* ── هدر ── */
+  header{display:flex;align-items:center;gap:14px;padding:10px 20px;background:linear-gradient(180deg,#0d1425,#0a101f);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50}
+  .logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#22e58a,#3aa9ff);display:flex;align-items:center;justify-content:center;font-weight:900;color:#04101a;font-size:17px;box-shadow:0 0 18px #22e58a55}
+  .brand b{font-size:14px} .brand span{display:block;font-size:10px;color:var(--dim)}
+  nav{display:flex;gap:3px;margin-inline-start:14px;flex-wrap:wrap}
+  nav a{color:var(--dim);text-decoration:none;padding:7px 12px;border-radius:9px;font-size:12.5px;transition:.2s;cursor:pointer}
+  nav a.active{background:#182238;color:var(--txt);box-shadow:inset 0 -2px 0 var(--green)}
+  nav a:hover{color:var(--txt)}
+  .spacer{flex:1}
+  .clock{font-size:12px;color:var(--dim);background:#0f1729;border:1px solid var(--line);padding:6px 12px;border-radius:9px}
+  .clock b{color:var(--txt);font-size:14px}
+  .avatar{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--dim);cursor:pointer}
+  .avatar .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green)}
+
+  /* ── عمومی ── */
+  .page{display:none}.page.active{display:block}
+  .toolbar{display:flex;align-items:center;gap:10px;padding:14px 20px 8px;flex-wrap:wrap}
+  .btn{border:1px solid var(--line);background:#141d33;color:var(--txt);padding:8px 14px;border-radius:10px;cursor:pointer;font-size:12.5px;transition:.15s;display:inline-flex;align-items:center;gap:6px}
+  .btn:hover{border-color:#2a3b63;background:#182342}
+  .btn.primary{background:linear-gradient(135deg,#16a06a,#0f7f55);border-color:#1db87d;box-shadow:0 4px 16px rgba(34,229,138,.25)}
+  .btn.danger{background:#2b1220;border-color:#ff5d7355;color:var(--red)}
+  .btn.sm{padding:5px 10px;font-size:11px;border-radius:8px}
+  .search{position:relative}
+  .search input{width:100%;background:#0f1729;border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:8px 34px 8px 12px;font-family:inherit;font-size:12.5px;outline:none}
+  .search input:focus{border-color:#2a3b63}
+  .search::before{content:'⌕';position:absolute;inset-inline-end:11px;top:6px;color:var(--dim);font-size:15px}
+  .statbar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:14px 20px 0}
+  .stat{background:linear-gradient(160deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:14px;padding:11px 13px;position:relative;overflow:hidden}
+  .stat::after{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;background:var(--c,#3aa9ff);box-shadow:0 0 12px var(--c)}
+  .stat .t{font-size:11px;color:var(--dim)} .stat .v{font-size:19px;font-weight:800;margin-top:2px}
+  .stat .v small{font-size:10px;color:var(--dim);font-weight:400}
+  .section-title{padding:12px 22px 4px;font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:8px}
+  .section-title::after{content:'';flex:1;height:1px;background:var(--line)}
+  .card-panel{background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:15px}
+  .badge{font-size:10px;padding:3px 9px;border-radius:99px;font-weight:600;display:inline-block}
+  .b-free{background:rgba(34,229,138,.12);color:var(--green);border:1px solid rgba(34,229,138,.3)}
+  .b-busy{background:rgba(255,93,115,.12);color:var(--red);border:1px solid rgba(255,93,115,.3)}
+  .b-resv{background:rgba(58,169,255,.12);color:var(--blue);border:1px solid rgba(58,169,255,.3)}
+  .b-off{background:rgba(139,152,184,.1);color:var(--dim);border:1px solid rgba(139,152,184,.25)}
+
+  /* ═══ داشبورد ═══ */
+  .zones{display:flex;gap:4px;background:#0f1729;border:1px solid var(--line);padding:4px;border-radius:11px}
+  .zones button{border:0;background:transparent;color:var(--dim);padding:6px 13px;border-radius:8px;cursor:pointer;font-size:12px}
+  .zones button.active{background:#1b2540;color:var(--txt)}
+  .viewmode{display:flex;gap:4px;background:#0f1729;border:1px solid var(--line);padding:4px;border-radius:11px}
+  .viewmode button{border:0;background:transparent;color:var(--dim);padding:6px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+  .viewmode button.active{background:#1b2540;color:var(--green)}
+  .grid{display:grid;gap:10px;padding:8px 20px 30px}
+  .grid.v-card{grid-template-columns:repeat(auto-fill,minmax(168px,1fr))}
+  .grid.v-compact{grid-template-columns:repeat(auto-fill,minmax(128px,1fr))}
+  .grid.v-list{grid-template-columns:1fr}
+  .card{background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:15px;padding:11px;cursor:pointer;transition:.18s;position:relative;overflow:hidden}
+  .card:hover{transform:translateY(-2px);border-color:#2a3b63;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+  .card .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:7px}
+  .card .name{font-weight:800;font-size:13.5px}
+  .timer{font-weight:900;font-size:21px;letter-spacing:1px;margin:4px 0;font-variant-numeric:tabular-nums}
+  .card.free .timer{color:#3d5a52}
+  .card.busy .timer{color:var(--red);text-shadow:0 0 14px var(--red-glow)}
+  .card .price{font-size:11px;color:var(--dim)} .card .price b{color:var(--orange);font-size:12.5px}
+  .users{display:flex;gap:4px;margin-top:7px}
+  .users i{width:8px;height:8px;border-radius:50%;background:var(--purple);box-shadow:0 0 6px var(--purple)}
+  .minibar{height:4px;border-radius:4px;background:#1a2338;margin-top:8px;overflow:hidden}
+  .minibar i{display:block;height:100%;background:linear-gradient(90deg,var(--orange),var(--red))}
+  .card.busy{border-color:rgba(255,93,115,.22);background:linear-gradient(165deg,#131726,#181226)}
+  .card.resv{border-color:rgba(58,169,255,.25)}
+  .pulse{position:absolute;top:9px;inset-inline-start:9px;width:6px;height:6px;border-radius:50%;background:var(--red);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  /* لیستی و فشرده — مقیاس‌پذیر با اسلایدر */
+  .grid{--lscale:1}
+  .v-list .card{display:flex;align-items:center;gap:calc(14px*var(--lscale,1));padding:calc(8px*var(--lscale,1)) calc(14px*var(--lscale,1));border-radius:11px}
+  .v-list .card .top{margin:0;flex:0 0 calc(130px*var(--lscale,1))}
+  .v-list .card .name{font-size:calc(13.5px*var(--lscale,1))}
+  .v-list .timer{margin:0;font-size:calc(16px*var(--lscale,1));flex:0 0 calc(90px*var(--lscale,1))}
+  .v-list .card .price{flex:1;font-size:calc(11px*var(--lscale,1))}
+  .v-list .minibar{flex:0 0 calc(120px*var(--lscale,1));margin:0}
+  .v-card .card .name{font-size:calc(13.5px*var(--lscale,1))}
+  .v-card .timer{font-size:calc(21px*var(--lscale,1))}
+  .v-compact .card{padding:calc(8px*var(--lscale,1));border-radius:11px}
+  .v-compact .timer{font-size:calc(15px*var(--lscale,1))}
+  .v-compact .card .price{font-size:calc(10px*var(--lscale,1))}
+  .zslider{-webkit-appearance:none;appearance:none;width:110px;height:4px;background:#1a2338;border-radius:4px;outline:none;cursor:pointer;align-self:center}
+  .zslider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--green);box-shadow:0 0 8px #22e58a88;cursor:pointer}
+  .zslider::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--green);cursor:pointer}
+  .hk-row{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;padding:6px 0;border-bottom:1px dashed #1a2440;gap:8px}
+  .hk-row kbd{background:#0d1526;border:1px solid var(--line);border-radius:5px;padding:2px 8px;font-size:10px;color:var(--green);min-width:38px;text-align:center}
+  .qk-card{display:flex;align-items:center;gap:10px;background:#0d1526;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+  .qk-card .ava{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#3aa9ff,#a78bfa);display:flex;align-items:center;justify-content:center;font-weight:900;color:#0a1020}
+  .qk-card b{font-size:13px;display:block}
+  .qk-card span{font-size:10.5px;color:var(--dim)}
+  .qk-card .fin{margin-inline-start:auto;text-align:left;font-size:11px;line-height:1.7}
+
+  /* مدیریت بازی‌ها */
+  .gadm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;padding:8px 20px 30px}
+  .gadm{background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:15px;overflow:hidden;transition:.18s}
+  .gadm:hover{border-color:#2a3b63;transform:translateY(-2px)}
+  .gadm .cover{height:92px;display:flex;align-items:center;justify-content:center;font-size:38px;background:radial-gradient(220px 120px at 50% 40%,#1b2a4d,transparent);position:relative}
+  .gadm .cover .ord{position:absolute;top:8px;inset-inline-start:8px;font-size:9.5px;background:#0f1729cc;border:1px solid var(--line);border-radius:99px;padding:2px 9px;color:var(--dim)}
+  .gadm .cover .on{position:absolute;top:8px;inset-inline-end:8px;font-size:9px;padding:2px 8px;border-radius:99px;background:rgba(34,229,138,.14);color:var(--green);border:1px solid rgba(34,229,138,.35)}
+  .gadm .cover .off{background:rgba(139,152,184,.1);color:var(--dim);border-color:var(--line)}
+  .gadm .bd{padding:11px 13px}
+  .gadm .bd b{font-size:13.5px;display:block}
+  .gadm .bd .path{font-size:9.5px;color:var(--cyan);direction:ltr;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.75;margin-top:3px}
+  .gadm .bd .meta{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+  .gadm .bd .meta span{font-size:9px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+  .gadm .bd .meta span.t-on{color:var(--blue);border-color:#3aa9ff44}
+  .gadm .bd .meta span.t-off{color:var(--orange);border-color:#ffb45444}
+  .gadm .acts{display:flex;gap:6px;padding:0 13px 12px}
+  .gadm .acts .btn{flex:1;justify-content:center;padding:6px 8px;font-size:10.5px}
+
+  /* فیلد مسیر LTR */
+  .ltr{direction:ltr;text-align:left;font-family:Consolas,monospace;font-size:12px}
+  .file-drop{border:1.5px dashed #2a3b63;border-radius:12px;padding:10px 8px;text-align:center;font-size:10.5px;color:var(--dim);cursor:pointer;transition:.15s}
+  .file-drop:hover{border-color:var(--green);color:var(--green)}
+  .file-drop.filled{border-color:#22e58a66;color:var(--green);background:#0f2b1e33}
+  .file-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:11px}
+  .cover-prev{width:86px;height:86px;border-radius:13px;border:1px solid var(--line);background:#0d1526;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--dim);overflow:hidden;flex-shrink:0}
+  .cover-prev img{width:100%;height:100%;object-fit:cover}
+
+  /* صفحه کلاینت‌ها */
+  .cl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;padding:8px 20px 30px}
+  .cl-card{background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:14px;padding:11px;cursor:context-menu;transition:.15s;position:relative;user-select:none}
+  .cl-card:hover{border-color:#2a3b63;transform:translateY(-2px)}
+  .cl-card.sel{border-color:var(--green);box-shadow:0 0 0 1.5px var(--green),0 0 16px #22e58a33;background:linear-gradient(165deg,#12262a,#151d33)}
+  .cl-card.sel::after{content:'✓';position:absolute;top:7px;inset-inline-start:9px;width:18px;height:18px;border-radius:50%;background:var(--green);color:#04101a;font-size:11px;font-weight:900;display:flex;align-items:center;justify-content:center}
+  .selbar{display:none;align-items:center;gap:10px;margin:8px 20px 0;padding:9px 15px;background:#0f2b1e;border:1px solid #22e58a55;border-radius:11px;font-size:12.5px}
+  .selbar.show{display:flex}
+  .selbar b{color:var(--green)}
+  .cl-card .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .cl-card b{font-size:13.5px}
+  .cl-card .ip{font-size:9.5px;color:var(--cyan);direction:ltr;text-align:left;font-family:Consolas,monospace}
+  .cl-card .dns{font-size:9.5px;color:var(--dim);direction:ltr;text-align:left;font-family:Consolas,monospace;margin-top:2px}
+  .cl-card .row{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);margin-top:5px}
+  .cl-card .row b{font-size:10.5px}
+  .cl-ctx{position:fixed;display:none;flex-direction:column;min-width:250px;background:#121a2e;border:1px solid #2a3b63;border-radius:13px;padding:6px;z-index:220;box-shadow:0 18px 50px rgba(0,0,0,.65);animation:up .12s ease}
+  .cl-ctx.show{display:flex}
+  .cl-ctx .info{font-size:11px;color:var(--dim);padding:7px 12px 4px}
+  .cl-ctx .info b{color:var(--txt)}
+  .cl-ctx button{display:flex;align-items:center;gap:9px;background:none;border:0;color:var(--txt);padding:8px 12px;border-radius:9px;font-size:12px;cursor:pointer;text-align:right;width:100%}
+  .cl-ctx button:hover{background:#1b2540}
+  .cl-ctx .sep{height:1px;background:var(--line);margin:4px 8px}
+  .cl-ctx kbd{margin-inline-start:auto;font-size:9px;color:var(--dim);background:#0d1526;border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+  .net-swap{display:flex;gap:6px;align-items:center}
+  .net-opt{border:1px solid var(--line);background:#0d1526;color:var(--dim);padding:7px 13px;border-radius:9px;cursor:pointer;font-size:11.5px}
+  .net-opt.active{border-color:var(--green);color:var(--green)}
+
+  /* منوی راست‌کلیک داشبورد (شبیه کلاینت) */
+  .dash-ctx{position:fixed;display:none;flex-direction:column;min-width:250px;background:#121a2e;border:1px solid #2a3b63;border-radius:13px;padding:6px;z-index:210;box-shadow:0 18px 50px rgba(0,0,0,.65);animation:up .12s ease}
+  .dash-ctx.show{display:flex}
+  .dash-ctx .info{font-size:11px;color:var(--dim);padding:7px 12px 4px}
+  .dash-ctx .info b{color:var(--txt)}
+  .dash-ctx button{display:flex;align-items:center;gap:9px;background:none;border:0;color:var(--txt);padding:8px 12px;border-radius:9px;font-size:12px;cursor:pointer;text-align:right;width:100%}
+  .dash-ctx button:hover{background:#1b2540}
+  .dash-ctx .sep{height:1px;background:var(--line);margin:4px 8px}
+
+  /* تعرفه‌ها */
+  .tar-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;padding:8px 20px 30px}
+  .tar{background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:15px;padding:14px}
+  .tar .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .tar .hd b{font-size:14px}
+  .tar .rows{display:flex;flex-direction:column;gap:5px}
+  .tar .trow{display:flex;justify-content:space-between;align-items:center;font-size:12px;background:#0d1526;border:1px solid var(--line);border-radius:9px;padding:7px 11px}
+  .tar .trow span{color:var(--dim)}
+  .tar .trow b{color:var(--orange)}
+  .tar .trow .tag{font-size:9px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+  .tar .trow .tag.vip{color:var(--gold);border-color:#ffd16655}
+  .tar .night{font-size:10.5px;color:var(--dim);margin-top:9px;display:flex;justify-content:space-between;align-items:center}
+
+  /* اکانت‌ها */
+  .acc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;padding:8px 20px 30px}
+  .acc{background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:15px;padding:13px}
+  .acc .hd{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  .acc .ic{width:36px;height:36px;border-radius:11px;background:#0d1526;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:17px}
+  .acc .hd b{font-size:13px;display:block}
+  .acc .hd span{font-size:10px;color:var(--dim)}
+  .acc .st{display:flex;gap:5px;flex-wrap:wrap;margin-top:7px}
+  .acc .st span{font-size:9px;padding:2px 8px;border-radius:99px;border:1px solid var(--line);color:var(--dim)}
+  .acc .st span.in-use{color:var(--blue);border-color:#3aa9ff44}
+  .acc .st span.free{color:var(--green);border-color:#22e58a44}
+  .acc .st span.locked{color:var(--red);border-color:#ff5d7344}
+  .acc .row{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);margin-top:5px}
+  .acc .row b{color:var(--txt)}
+
+  /* ═══ مشتریان: master-detail ═══ */
+  .cust-layout{display:grid;grid-template-columns:minmax(380px,1.15fr) minmax(320px,1fr);gap:14px;padding:8px 20px 30px;align-items:start}
+  .cust-list{overflow:hidden}
+  .cust-list .cl-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+  .cust-list .cl-head .search{flex:1;min-width:180px}
+  .cl-rows{max-height:640px;overflow:auto}
+  .cl-row{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid #16203a;cursor:pointer;transition:.12s}
+  .cl-row:hover{background:#141c31}
+  .cl-row.sel{background:linear-gradient(90deg,#152036,#141c31);box-shadow:inset 3px 0 0 var(--green)}
+  .cl-ava{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;color:#0a1020;flex-shrink:0}
+  .cl-ava.gold{background:linear-gradient(135deg,#ffd166,#ffb454)} .cl-ava.silver{background:linear-gradient(135deg,#c0c5ce,#8b98b8)} .cl-ava.none{background:#243050;color:var(--dim)}
+  .cl-main{flex:1;min-width:0}
+  .cl-main b{font-size:13px;display:block}
+  .cl-main span{font-size:10.5px;color:var(--dim)}
+  .cl-fin{text-align:left;font-size:11px;line-height:1.7}
+  .cl-fin .w{color:var(--green)} .cl-fin .d{color:var(--red)}
+  .vip-mini{font-size:9px;padding:2px 7px;border-radius:99px;font-weight:800}
+  .vm-gold{background:rgba(255,209,102,.14);color:var(--gold);border:1px solid rgba(255,209,102,.4)}
+  .vm-silver{background:rgba(192,197,206,.12);color:#c0c5ce;border:1px solid rgba(192,197,206,.35)}
+  .vm-none{background:rgba(139,152,184,.08);color:var(--dim);border:1px solid var(--line)}
+  .cl-lim{color:var(--red);font-size:10px;font-weight:800}
+
+  .cust-profile{padding:16px}
+  .cp-head{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:12px}
+  .cp-ava{width:54px;height:54px;border-radius:15px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;color:#0a1020}
+  .cp-head h3{font-size:16px} .cp-head .sub{font-size:11px;color:var(--dim);margin-top:2px}
+  .cp-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+  .cp-stat{background:#0d1526;border:1px solid var(--line);border-radius:11px;padding:9px;text-align:center}
+  .cp-stat .t{font-size:10px;color:var(--dim)} .cp-stat .v{font-size:14px;font-weight:800;margin-top:2px}
+  .cp-sec{margin-bottom:12px}
+  .cp-sec h4{font-size:11.5px;color:var(--dim);margin-bottom:7px;display:flex;justify-content:space-between;align-items:center}
+  .cp-row{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;color:var(--dim);border-bottom:1px dashed #1a2440}
+  .cp-row b{color:var(--txt);font-weight:600}
+  .cp-row b.neg{color:var(--red)} .cp-row b.pos{color:var(--green)} .cp-row b.pur{color:var(--purple)}
+  .hist-row{display:flex;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px dashed #1a2440;color:var(--dim)}
+  .hist-row b{color:var(--txt)}
+  .pkg-active{background:linear-gradient(135deg,#1c1730,#241a3a);border:1px solid #a78bfa44;border-radius:12px;padding:10px 12px;margin-bottom:8px}
+  .pkg-active .t{font-size:12px;font-weight:800;color:var(--purple);display:flex;justify-content:space-between}
+  .pkg-active .d{font-size:10.5px;color:var(--dim);margin-top:4px}
+
+  /* ═══ بوفه ═══ */
+  .buffet-layout{display:grid;grid-template-columns:1fr minmax(300px,380px);gap:14px;padding:8px 20px 30px;align-items:start}
+  .cat-row{display:flex;gap:6px;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid var(--line)}
+  .cat-row button{border:1px solid var(--line);background:transparent;color:var(--dim);padding:6px 13px;border-radius:9px;cursor:pointer;font-size:11.5px}
+  .cat-row button.active{background:#1b2540;color:var(--txt);border-color:#2a3b63}
+  .prod-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;padding:14px}
+  .prod{background:#0e1526;border:1px solid var(--line);border-radius:13px;padding:11px;cursor:pointer;transition:.15s}
+  .prod:hover{border-color:#2a3b63;transform:translateY(-2px)}
+  .prod.sel{border-color:var(--green);box-shadow:0 0 0 1px var(--green)}
+  .prod .ic{font-size:22px}
+  .prod b{font-size:12.5px;display:block;margin-top:6px}
+  .prod .pr{color:var(--orange);font-weight:800;font-size:13px;margin-top:3px}
+  .prod .st{font-size:10px;color:var(--dim);margin-top:4px}
+  .prod .stbar{height:3.5px;border-radius:4px;background:#1a2338;margin-top:5px;overflow:hidden}
+  .prod .stbar i{display:block;height:100%;background:var(--green)}
+  .prod .stbar i.low{background:var(--red)}
+  .cart-panel{padding:14px}
+  .cart-panel h4{font-size:13px;margin-bottom:10px;display:flex;justify-content:space-between}
+  .cart-item{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:7px 0;border-bottom:1px dashed #1a2440}
+  .cart-item .q{display:flex;gap:6px;align-items:center}
+  .cart-item .q button{width:20px;height:20px;border-radius:6px;border:1px solid var(--line);background:#0d1526;color:var(--txt);cursor:pointer;font-size:12px;line-height:1}
+  .cart-total{display:flex;justify-content:space-between;margin-top:12px;background:#0d1526;border:1px solid var(--line);border-radius:11px;padding:11px 13px}
+  .cart-total b{color:var(--orange);font-size:17px}
+
+  /* ═══ گزارش‌ها ═══ */
+  .rep-wrap{padding:8px 20px 30px}
+  .rep-grid{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;align-items:start}
+  .chart-panel{padding:16px}
+  .chart{display:flex;align-items:flex-end;gap:9px;height:230px;padding-top:10px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+  .bar i{display:block;width:100%;max-width:44px;border-radius:7px 7px 3px 3px;background:linear-gradient(180deg,#3aa9ff,#22e58a66);box-shadow:0 0 14px #3aa9ff33;transition:.3s}
+  .bar span{font-size:9.5px;color:var(--dim)}
+  .bar em{font-style:normal;font-size:9px;color:var(--txt)}
+  .rep-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+  .rep-table td,.rep-table th{padding:8px 10px;border-bottom:1px solid #16203a;text-align:right}
+  .rep-table th{color:var(--dim);font-weight:500;font-size:11px}
+  .rep-table .num{font-weight:700}
+  .pos{color:var(--green)} .neg{color:var(--red)}
+
+  /* ═══ کاربران و دسترسی ═══ */
+  .perm-wrap{display:grid;grid-template-columns:minmax(300px,1fr) 1.4fr;gap:14px;padding:8px 20px 30px;align-items:start}
+  .user-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #16203a}
+  .role-badge{font-size:9.5px;padding:2px 8px;border-radius:99px;font-weight:800}
+  .rb-owner{background:rgba(255,209,102,.14);color:var(--gold);border:1px solid rgba(255,209,102,.4)}
+  .rb-admin{background:rgba(167,139,250,.14);color:var(--purple);border:1px solid rgba(167,139,250,.4)}
+  .rb-op{background:rgba(58,169,255,.12);color:var(--blue);border:1px solid rgba(58,169,255,.3)}
+  .perm-table{width:100%;border-collapse:collapse;font-size:12px}
+  .perm-table th,.perm-table td{padding:9px 12px;border-bottom:1px solid #16203a;text-align:center}
+  .perm-table td:first-child,.perm-table th:first-child{text-align:right;color:var(--dim)}
+  .perm-table input[type=checkbox]{width:16px;height:16px;accent-color:#22e58a;cursor:pointer}
+  .shift-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:9px 0;border-bottom:1px dashed #1a2440}
+  .shift-row .s{color:var(--dim);font-size:11px}
+
+  /* ═══ تنظیمات ═══ */
+  .set-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;padding:8px 20px 30px}
+  .set-panel{padding:16px}
+  .set-panel h4{font-size:13px;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+  .set-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px dashed #1a2440;gap:10px}
+  .set-row:last-child{border:0}
+  .set-row .lbl{font-size:12px}
+  .set-row .lbl span{display:block;font-size:10px;color:var(--dim);margin-top:2px}
+  .switch{position:relative;width:40px;height:21px;flex-shrink:0}
+  .switch input{opacity:0;width:0;height:0}
+  .switch i{position:absolute;inset:0;background:#1a2338;border:1px solid var(--line);border-radius:99px;cursor:pointer;transition:.2s}
+  .switch i::after{content:'';position:absolute;top:2px;inset-inline-start:2px;width:15px;height:15px;border-radius:50%;background:#5a6a8f;transition:.2s}
+  .switch input:checked + i{background:#0f3d2b;border-color:#22e58a88}
+  .switch input:checked + i::after{transform:translateX(-18px);background:var(--green);box-shadow:0 0 8px var(--green)}
+  .seg-sm{display:flex;gap:4px;background:#0d1526;border:1px solid var(--line);padding:3px;border-radius:9px}
+  .seg-sm button{border:0;background:transparent;color:var(--dim);padding:4px 10px;border-radius:7px;cursor:pointer;font-size:11px}
+  .seg-sm button.active{background:#1b2540;color:var(--green)}
+  select.mini{background:#0d1526;border:1px solid var(--line);border-radius:9px;color:var(--txt);padding:6px 10px;font-family:inherit;font-size:11.5px;outline:none}
+
+  /* ── مودال ── */
+  .overlay{display:none;position:fixed;inset:0;background:rgba(4,7,15,.75);backdrop-filter:blur(4px);z-index:100;align-items:center;justify-content:center}
+  .overlay.show{display:flex}
+  .modal{width:min(480px,94vw);max-height:92vh;overflow:auto;background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #24314f;border-radius:18px;padding:20px;box-shadow:0 24px 70px rgba(0,0,0,.6);animation:up .22s ease}
+  @keyframes up{from{transform:translateY(14px);opacity:0}to{transform:none;opacity:1}}
+  .modal h3{font-size:15.5px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .close{background:none;border:0;color:var(--dim);font-size:19px;cursor:pointer}
+  .field{margin-bottom:11px}
+  .field label{display:block;font-size:11px;color:var(--dim);margin-bottom:5px}
+  .field select,.field input{width:100%;background:#0d1526;border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:9px 12px;font-family:inherit;font-size:13px;outline:none}
+  .field select:focus,.field input:focus{border-color:#2a3b63}
+  .mrow{display:flex;gap:8px}.mrow .field{flex:1}
+  .sumline{display:flex;justify-content:space-between;font-size:12.5px;padding:6px 0;border-bottom:1px dashed #223052;color:var(--dim)}
+  .sumline b{color:var(--txt)}
+  .total{display:flex;justify-content:space-between;align-items:center;margin-top:11px;background:#0d1526;border:1px solid var(--line);border-radius:12px;padding:11px 14px}
+  .total b{font-size:19px;color:var(--orange)}
+  .paybtns{display:flex;gap:8px;margin-top:13px}
+  .paybtns .btn{flex:1;justify-content:center}
+  .btn.cash{background:#0f2b1e;border-color:#1db87d;color:var(--green)}
+  .btn.cardpay{background:#0f2338;border-color:#3aa9ff;color:var(--blue)}
+  .btn.wallet{background:#241a3a;border-color:#a78bfa;color:var(--purple)}
+  .persons{display:flex;gap:6px}
+  .persons button{flex:1;border:1px solid var(--line);background:#0d1526;color:var(--txt);padding:8px 0;border-radius:10px;cursor:pointer}
+  .persons button.active{background:linear-gradient(135deg,#1db87d22,#3aa9ff22);border-color:#22e58a;color:var(--green)}
+  .seg{display:flex;gap:6px}
+  .seg button{flex:1;border:1px solid var(--line);background:#0d1526;color:var(--dim);padding:8px;border-radius:10px;cursor:pointer;font-size:11.5px}
+  .seg button.active{background:#1b2540;color:var(--txt);border-color:#2a3b63}
+  .pkg-card{border:1px solid var(--line);border-radius:14px;padding:13px;cursor:pointer;transition:.15s}
+  .pkg-card:hover{border-color:#2a3b63}
+  .pkg-card.sel{border-color:var(--orange);box-shadow:0 0 0 1px var(--orange),0 0 20px rgba(255,180,84,.15)}
+  .pkg-card h4{font-size:13.5px;display:flex;justify-content:space-between;align-items:center}
+  .pkg-card .p{color:var(--orange);font-weight:800;font-size:15px}
+  .pkg-card ul{list-style:none;margin-top:7px}
+  .pkg-card li{font-size:11px;color:var(--dim);padding:3px 0;display:flex;justify-content:space-between}
+  .pkg-card li b{color:var(--txt)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+  /* پالت فرمان سریع */
+  .cmdk{width:min(520px,94vw)}
+  .cmdk input{width:100%;background:#0d1526;border:1px solid var(--line);border-radius:12px;color:var(--txt);padding:13px 15px;font-family:inherit;font-size:14px;outline:none}
+  .cmdk input:focus{border-color:var(--green)}
+  .cmdk .hint{font-size:10px;color:var(--dim);margin:8px 2px 10px;display:flex;gap:10px;flex-wrap:wrap}
+  .cmdk kbd{background:#0d1526;border:1px solid var(--line);border-radius:5px;padding:1px 7px;font-size:10px;color:var(--green)}
+  .cmdk-list{max-height:300px;overflow:auto}
+  .cmdk-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13px}
+  .cmdk-item:hover,.cmdk-item.hot{background:#1b2540}
+  .cmdk-item kbd{margin-inline-start:auto;font-size:9.5px;color:var(--dim);background:#0d1526;border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .cmdk-item .ic{font-size:16px}
+  .cmdk-item small{color:var(--dim);font-size:10.5px}
+
+  /* مودال شارژ سریع */
+  .qgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+  .qgrid button{border:1px solid var(--line);background:#0d1526;color:var(--txt);padding:10px 0;border-radius:10px;cursor:pointer;font-size:12.5px}
+  .qgrid button:hover{border-color:var(--green);color:var(--green)}
+
+  @media(max-width:1150px){.cust-layout,.buffet-layout,.rep-grid,.perm-wrap{grid-template-columns:1fr}}
+  @media(max-width:760px){
+    nav{display:none}
+    .statbar{grid-template-columns:repeat(2,1fr)}
+    .grid.v-card{grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+    .cp-stats{grid-template-columns:repeat(2,1fr)}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">گ</div>
+  <div class="brand"><b>گیم‌نت منیجر</b><span>پروتوتایپ UI — ۱۴۰۵/۰۷/۰۹</span></div>
+  <nav>
+    <a class="active" data-page="dash">داشبورد</a>
+    <a data-page="games">بازی‌ها</a>
+    <a data-page="clients">کلاینت‌ها</a>
+    <a data-page="cust">مشتریان</a>
+    <a data-page="tariffs">تعرفه‌ها</a>
+    <a data-page="accounts">اکانت‌ها</a>
+    <a data-page="buffet">بوفه</a>
+    <a data-page="reports">گزارش‌ها</a>
+    <a data-page="users">کاربران و شیفت</a>
+    <a data-page="settings">تنظیمات</a>
+  </nav>
+  
+  <div class="spacer"></div>
+  <div class="clock">🕒 <b id="clock">--:--:--</b></div>
+  <div class="avatar" onclick="cycleRole()" title="کلیک: تغییر نقش (دمو دسترسی‌ها)"><span class="dot"></span> <span id="whoami">اپراتور: علی محمدی</span></div>
+</header>
+
+<!-- ═══════════ داشبورد ═══════════ -->
+<div class="page active" id="page-dash">
+  <div class="statbar">
+    <div class="stat" style="--c:var(--green)"><div class="t">ایستگاه آزاد</div><div class="v" id="s-free">— </div></div>
+    <div class="stat" style="--c:var(--red)"><div class="t">در حال بازی</div><div class="v" id="s-busy">—</div></div>
+    <div class="stat" style="--c:var(--blue)"><div class="t">رزرو امروز</div><div class="v">7 <small>رزرو</small></div></div>
+    <div class="stat" style="--c:var(--orange)"><div class="t">درآمد امروز</div><div class="v">۴٬۸۲۰٬۰۰۰ <small>تومان</small></div></div>
+    <div class="stat" style="--c:var(--purple)"><div class="t">فروش بوفه</div><div class="v">۸۶۰٬۰۰۰ <small>تومان</small></div></div>
+    <div class="stat" style="--c:var(--cyan)"><div class="t">مشتری حاضر</div><div class="v">94 <small>نفر</small></div></div>
+  </div>
+  <div class="toolbar">
+    <div class="zones" id="zones">
+      <button class="active" data-z="all">همه</button>
+      <button data-z="pc">رایانه‌ها (۴۰)</button>
+      <button data-z="console">کنسول‌ها (۱۶)</button>
+      <button data-z="table">میزها (۵)</button>
+    </div>
+    <div class="search" style="flex:1;max-width:300px"><input id="st-search" placeholder="جست‌وجوی ایستگاه…"></div>
+    <div class="spacer"></div>
+    <div class="viewmode" id="viewmode" title="نوع نمایش">
+      <button class="active" data-v="v-card" title="کارتی">▦</button>
+      <button data-v="v-compact" title="فشرده">▤</button>
+      <button data-v="v-list" title="لیستی">☰</button>
+    </div>
+    <div class="viewmode" title="اندازه کارت‌ها — با کشیدن اسلایدر">
+      <input type="range" class="zslider" id="zslider" min="70" max="130" step="5" value="100">
+      <span id="sz" style="font-size:10px;color:var(--dim);align-self:center;min-width:38px;text-align:center">۱۰۰٪</span>
+    </div>
+    <button class="btn" onclick="openCmdk()" title="پالت فرمان">⌘ هات‌کی <kbd style="font-size:9px;background:#0d1526;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--green)">Ctrl+K</kbd></button>
+    <button class="btn">🔔 <span style="color:var(--red)">۲</span></button>
+    <button class="btn primary">+ شروع جلسه</button>
+  </div>
+  <div class="section-title">رایانه‌ها — ۴۰ دستگاه</div>
+  <div class="grid v-card" id="grid-pc"></div>
+  <div class="section-title">کنسول‌ها — PS5 (۱۰) و PS4 (۶)</div>
+  <div class="grid v-card" id="grid-console"></div>
+  <div class="section-title">میزها — فوتبال‌دستی (۵)</div>
+  <div class="grid v-card" id="grid-table"></div>
+</div>
+
+<!-- ═══════════ بازی‌ها ═══════════ -->
+<div class="page" id="page-games">
+  <div class="statbar">
+    <div class="stat" style="--c:var(--blue)"><div class="t">بازی‌های تعریف‌شده</div><div class="v" id="gs-total">—</div></div>
+    <div class="stat" style="--c:var(--green)"><div class="t">فعال در کلاینت</div><div class="v" id="gs-on">—</div></div>
+    <div class="stat" style="--c:var(--orange)"><div class="t">آنلاین</div><div class="v" id="gs-online">—</div></div>
+    <div class="stat" style="--c:var(--purple)"><div class="t">دسته‌ها</div><div class="v" id="gs-cats">—</div></div>
+  </div>
+  <div class="toolbar">
+    <div class="search" style="flex:1;max-width:320px"><input id="g-search" placeholder="جست‌وجوی بازی…"></div>
+    <div class="seg-sm" id="g-cat">
+      <button class="active" data-c="all">همه</button>
+      <button data-c="آنلاین">آنلاین</button>
+      <button data-c="آفلاین">آفلاین</button>
+      <button data-c="برنامه">برنامه</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn">📤 اعمال به همه کلاینت‌ها</button>
+    <button class="btn primary" onclick="openGameModal()">+ بازی جدید</button>
+  </div>
+  <div class="gadm-grid" id="gadm-grid"></div>
+</div>
+
+<!-- ═══════════ کلاینت‌ها ═══════════ -->
+<div class="page" id="page-clients">
+  <div class="statbar">
+    <div class="stat" style="--c:var(--green)"><div class="t">آنلاین</div><div class="v" id="cls-on">—</div></div>
+    <div class="stat" style="--c:var(--red)"><div class="t">آفلاین</div><div class="v" id="cls-off">—</div></div>
+    <div class="stat" style="--c:var(--blue)"><div class="t">در حال بازی</div><div class="v" id="cls-busy">—</div></div>
+    <div class="stat" style="--c:var(--orange)"><div class="t">آپدیت معلق</div><div class="v">2 <small>کلاینت</small></div></div>
+  </div>
+  <div class="toolbar">
+    <div class="search" style="flex:1;max-width:300px"><input id="clq" placeholder="جست‌وجوی کلاینت…"></div>
+    <div class="spacer"></div>
+    <button class="btn">📡 Wake-on-LAN همه</button>
+    <button class="btn">⚙️ تنظیم گروهی</button>
+    <button class="btn primary">📤 ارسال DNS به همه</button>
+  </div>
+  <div class="selbar" id="selbar">
+    <b id="sel-count">۰ کلاینت انتخاب شده</b>
+    <span style="color:var(--dim);font-size:11px">— راست‌کلیک روی هر کدام از انتخاب‌شده‌ها، تنظیم برای همه اعمال می‌شود</span>
+    <div class="spacer"></div>
+    <button class="btn sm" onclick="clearSel()">✕ پاک کردن انتخاب‌ها</button>
+  </div>
+  <div class="section-title">رایانه‌ها — کلیک: انتخاب • کلیک+شفت: بازه • کلیک+کنترل: تک‌تک • راست‌کلیک: منو (برای همه انتخاب‌شده‌ها)</div>
+  <div class="cl-grid" id="cl-grid"></div>
+</div>
+
+<!-- ═══════════ تعرفه‌ها ═══════════ -->
+<div class="page" id="page-tariffs">
+  <div class="toolbar">
+    <div class="seg-sm" id="tar-tier">
+      <button class="active" data-t="all">همه</button>
+      <button data-t="normal">عادی</button>
+      <button data-t="vip">VIP</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn">⏰ تعرفه ساعت خاص (شبانه)</button>
+    <button class="btn primary">+ تعرفه جدید</button>
+  </div>
+  <div class="tar-grid" id="tar-grid"></div>
+</div>
+
+<!-- ═══════════ اکانت‌ها (استخر) ═══════════ -->
+<div class="page" id="page-accounts">
+  <div class="statbar">
+    <div class="stat" style="--c:var(--green)"><div class="t">آزاد در استخر</div><div class="v" id="acs-free">—</div></div>
+    <div class="stat" style="--c:var(--blue)"><div class="t">در استفاده</div><div class="v" id="acs-use">—</div></div>
+    <div class="stat" style="--c:var(--red)"><div class="t">قفل‌شده</div><div class="v">1 <small>اکانت</small></div></div>
+    <div class="stat" style="--c:var(--orange)"><div class="t">کل استخر</div><div class="v" id="acs-all">—</div></div>
+  </div>
+  <div class="toolbar">
+    <div class="seg-sm" id="acc-cat">
+      <button class="active" data-c="all">همه</button>
+      <button data-c="Steam">Steam</button>
+      <button data-c="Battle.net">Battle.net</button>
+      <button data-c="Riot">Riot</button>
+      <button data-c="Epic">Epic</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn">📜 لاگ اکانت‌ها</button>
+    <button class="btn primary">+ اکانت جدید</button>
+  </div>
+  <div class="section-title">استخر اکانت گیم‌نت — رمزها فقط در سرور ذخیره می‌شوند و به مشتری نشان داده نمی‌شوند</div>
+  <div class="acc-grid" id="acc-grid"></div>
+</div>
+
+<!-- منوی راست‌کلیک کلاینت -->
+<div class="cl-ctx" id="cl-ctx">
+  <div class="info" id="cl-ctx-title"></div>
+  <div class="sep"></div>
+  <button onclick="clAction('اینترنت جابجا شد: اینترنت ۱ → اینترنت ۲ (دمو)')">🌐 تغییر اینترنت (۱ ↔ ۲)</button>
+  <button onclick="clAction('حالت شبکه: فقط LAN — اینترنت قطع شد (دمو)')">🔌 قطع/وصل اینترنت</button>
+  <div class="sep"></div>
+  <button onclick="clAction('جابه‌جایی یوزر: این اکانت به کلاینت دیگر منتقل شد (دمو)')">🔀 جابه‌جایی یوزر به کلاینت دیگر</button>
+  <button onclick="clAction('یوزر از این کلاینت خارج و سیستم قفل شد (دمو)')">🚪 خارج کردن یوزر (قفل)</button>
+  <button onclick="clAction('ورود با شناسه روی این کلاینت (دمو)')">🔑 ورود با شناسه</button>
+  <div class="sep"></div>
+  <button onclick="clAction('پیام روی صفحه کلاینت نمایش داده شد (دمو)')">💬 ارسال پیام به مشتری</button>
+  <button onclick="clAction('اسکرین‌شات گرفته و در سرور ذخیره شد (دمو)')">📸 اسکرین‌شات</button>
+  <button onclick="clAction('شل ری‌استارت شد (دمو)')">🔄 ری‌استارت شل</button>
+  <button onclick="clAction('کلاینت ری‌استارت شد (دمو)')">⏻ ری‌استارت ویندوز</button>
+  <button onclick="clAction('دستور خاموشی ارسال شد (دمو)')" style="color:var(--red)">⛔ خاموش‌کردن</button>
+  <div class="sep"></div>
+  <button onclick="openClientSettings()">⚙️ تنظیمات کامل این کلاینت (IP/DNS/...)</button>
+</div>
+
+<div class="page" id="page-cust">
+  <div class="statbar">
+    <div class="stat" style="--c:var(--blue)"><div class="t">مشتریان ثبت‌شده</div><div class="v" id="cs-total">—</div></div>
+    <div class="stat" style="--c:var(--gold)"><div class="t">اعضای VIP</div><div class="v" id="cs-vip">—</div></div>
+    <div class="stat" style="--c:var(--red)"><div class="t">بدهکاران</div><div class="v" id="cs-debt">—</div></div>
+    <div class="stat" style="--c:var(--green)"><div class="t">جمع کیف پول‌ها</div><div class="v" id="cs-wallet">—</div></div>
+    <div class="stat" style="--c:var(--purple)"><div class="t">پکیج فعال</div><div class="v" id="cs-pkg">—</div></div>
+  </div>
+  <div class="cust-layout">
+    <div class="card-panel cust-list">
+      <div class="cl-head">
+        <div class="search"><input id="cust-search" placeholder="جست‌وجو: نام، لقب، موبایل، کد ملی…"></div>
+        <div class="seg-sm" id="cust-filter">
+          <button class="active" data-f="all">همه</button>
+          <button data-f="vip">VIP</button>
+          <button data-f="debt">بدهکار</button>
+        </div>
+        <button class="btn primary sm">+ مشتری</button>
+      </div>
+      <div class="cl-rows" id="cl-rows"></div>
+    </div>
+    <div class="card-panel cust-profile" id="cp-panel"></div>
+  </div>
+</div>
+
+<!-- ═══════════ بوفه ═══════════ -->
+<div class="page" id="page-buffet">
+  <div class="statbar">
+    <div class="stat" style="--c:var(--orange)"><div class="t">فروش امروز</div><div class="v">۸۶۰٬۰۰۰ <small>تومان</small></div></div>
+    <div class="stat" style="--c:var(--green)"><div class="t">سود امروز</div><div class="v">۳۱۰٬۰۰۰ <small>تومان</small></div></div>
+    <div class="stat" style="--c:var(--red)"><div class="t">کالای رو به اتمام</div><div class="v">4 <small>قلم</small></div></div>
+    <div class="stat" style="--c:var(--blue)"><div class="t">پرفروش امروز</div><div class="v">نوشابه <small>۱۸ عدد</small></div></div>
+  </div>
+  <div class="buffet-layout">
+    <div class="card-panel">
+      <div class="cat-row" id="cat-row">
+        <button class="active" data-c="all">همه</button>
+        <button data-c="drink">نوشیدنی</button>
+        <button data-c="food">خوراکی</button>
+        <button data-c="snack">تنقلات</button>
+        <button data-c="acc">لوازم جانبی</button>
+      </div>
+      <div class="prod-grid" id="prod-grid"></div>
+    </div>
+    <div class="card-panel cart-panel">
+      <h4>🛒 سبد فروش سریع <button class="btn sm" id="cart-target">روی جلسه: PC ۵</button></h4>
+      <div id="cart-items"><div style="color:var(--dim);font-size:12px;padding:14px 0;text-align:center">از سمت راست کالا انتخاب کن</div></div>
+      <div class="cart-total"><span>جمع سبد</span><b id="cart-total">۰ تومان</b></div>
+      <div class="paybtns">
+        <button class="btn primary">افزودن به فاکتور</button>
+        <button class="btn">فروش مستقل</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ گزارش‌ها ═══════════ -->
+<div class="page" id="page-reports">
+  <div id="rep-role-banner" style="display:none;margin:8px 20px 0;padding:10px 14px;border:1px solid #ff5d7355;background:#2b1220;border-radius:11px;font-size:12px">🔒 نقش اپراتور — فقط گزارش شیفت خودت را می‌بینی. گزارش کامل فقط برای مدیر و صاحب گیم‌نت.</div>
+  <div class="toolbar">
+    <div class="seg-sm" id="rep-period">
+      <button class="active" data-p="week">۷ روز اخیر</button>
+      <button data-p="month">ماهانه (۶ ماه)</button>
+      <button data-p="year">سالانه</button>
+      <button data-p="custom">📅 بازه دلخواه</button>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn">📤 خروجی اکسل</button>
+    <button class="btn">🖨 چاپ گزارش</button>
+    <button class="btn primary">🔒 بستن شیفت امروز</button>
+  </div>
+  <!-- نوار بازه دلخواه -->
+  <div id="rep-custom" style="display:none;margin:0 20px;padding:12px 15px;background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid #2a3b63;border-radius:13px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <div class="field" style="margin:0"><label>📅 از تاریخ (شمسی)</label><input value="۱۴۰۵/۰۷/۰۱" style="width:120px;background:#0d1526;border:1px solid var(--line);border-radius:9px;color:var(--txt);padding:8px 10px;font-family:inherit;font-size:12px"></div>
+      <div class="field" style="margin:0"><label>تا تاریخ</label><input value="۱۴۰۵/۰۷/۰۹" style="width:120px;background:#0d1526;border:1px solid var(--line);border-radius:9px;color:var(--txt);padding:8px 10px;font-family:inherit;font-size:12px"></div>
+      <div class="field" style="margin:0"><label>ساعت از</label><input type="time" value="00:00" style="width:95px;background:#0d1526;border:1px solid var(--line);border-radius:9px;color:var(--txt);padding:8px 10px;font-family:inherit;font-size:12px"></div>
+      <div class="field" style="margin:0"><label>ساعت تا</label><input type="time" value="23:59" style="width:95px;background:#0d1526;border:1px solid var(--line);border-radius:9px;color:var(--txt);padding:8px 10px;font-family:inherit;font-size:12px"></div>
+      <button class="btn primary sm">🔍 اعمال بازه</button>
+      <button class="btn sm">↩️ بازنشانی</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+      <span style="font-size:10.5px;color:var(--dim);align-self:center">میان‌برها:</span>
+      <button class="btn sm">امروز</button>
+      <button class="btn sm">دیروز</button>
+      <button class="btn sm">این هفته</button>
+      <button class="btn sm">ماه جاری</button>
+      <button class="btn sm">ماه قبل</button>
+      <button class="btn sm">۹۰ روز اخیر</button>
+      <button class="btn sm">امسال</button>
+    </div>
+  </div>
+  <!-- فیلترهای گزارش -->
+  <div style="display:flex;gap:8px;margin:10px 20px 0;flex-wrap:wrap;align-items:center">
+    <span style="font-size:11px;color:var(--dim)">فیلترها:</span>
+    <select class="mini"><option>همه ایستگاه‌ها</option><option>فقط رایانه‌ها</option><option>فقط کنسول‌ها</option><option>فقط میزها</option><option>انتخاب زون…</option></select>
+    <select class="mini"><option>همه اپراتورها</option><option>علی محمدی</option><option>سارا احمدی</option><option>رضا کاظمی</option></select>
+    <select class="mini"><option>همه روش‌های پرداخت</option><option>نقدی</option><option>کارتخوان</option><option>کیف پول</option></select>
+    <select class="mini"><option>همه تراکنش‌ها</option><option>فقط زمان</option><option>فقط بوفه</option><option>فقط پکیج</option><option>فقط هزینه‌ها</option></select>
+    <label style="font-size:11px;color:var(--dim);display:flex;align-items:center;gap:5px"><input type="checkbox" checked style="accent-color:#22e58a"> نمایش نمودار</label>
+  </div>
+  <div class="rep-wrap" id="rep-full">
+    <div class="rep-grid">
+      <div class="card-panel chart-panel">
+        <h4 style="font-size:13px;margin-bottom:6px">📊 درآمد روزانه — تفکیک نقدی/کارت</h4>
+        <div class="chart" id="chart"></div>
+      </div>
+      <div class="card-panel" style="padding:16px">
+        <h4 style="font-size:13px;margin-bottom:8px">💰 خلاصه مالی بازه</h4>
+        <table class="rep-table">
+          <tr><td>درآمد زمان (۶۱ ایستگاه)</td><td class="num">۱۸٬۴۰۰٬۰۰۰</td></tr>
+          <tr><td>درآمد بوفه</td><td class="num">۵٬۲۰۰٬۰۰۰</td></tr>
+          <tr><td>فروش پکیج VIP</td><td class="num pos">۴٬۷۵۰٬۰۰۰</td></tr>
+          <tr><td>هزینه‌های مجموعه</td><td class="num neg">−۶٬۰۰۰٬۰۰۰</td></tr>
+          <tr><td style="font-weight:800;color:var(--txt)">سود خالص</td><td class="num pos" style="font-size:14px">۲۲٬۳۵۰٬۰۰۰</td></tr>
+        </table>
+        <div class="section-title" style="padding:12px 0 6px">روش پرداخت</div>
+        <table class="rep-table">
+          <tr><td>💵 نقدی</td><td class="num">۶۲٪ — ۱۷٬۴۰۰٬۰۰۰</td></tr>
+          <tr><td>💳 کارتخوان</td><td class="num">۳۱٪ — ۸٬۷۰۰٬۰۰۰</td></tr>
+          <tr><td>👛 کیف پول</td><td class="num">۷٪ — ۱٬۹۵۰٬۰۰۰</td></tr>
+        </table>
+        <div class="section-title" style="padding:12px 0 6px">کارکرد ایستگاه‌ها (بیشترین)</div>
+        <table class="rep-table">
+          <tr><td>PS5-۳</td><td class="num">۹۲ ساعت</td></tr>
+          <tr><td>PC ۱۲</td><td class="num">۸۸ ساعت</td></tr>
+          <tr><td>میز ۲</td><td class="num">۴۱ ساعت</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="rep-wrap" id="rep-self" style="display:none">
+    <div class="card-panel" style="padding:16px;max-width:480px">
+      <h4 style="font-size:13px;margin-bottom:10px">🕘 گزارش شیفت من — علی محمدی (از ۱۶:۰۰)</h4>
+      <table class="rep-table">
+        <tr><td>جلسات باز‌شده توسط من</td><td class="num">۱۴ جلسه</td></tr>
+        <tr><td>فروش زمان</td><td class="num">۱٬۴۲۰٬۰۰۰</td></tr>
+        <tr><td>فروش بوفه</td><td class="num">۳۱۰٬۰۰۰</td></tr>
+        <tr><td>جمع صندوق من</td><td class="num pos" style="font-size:13px">۱٬۷۳۰٬۰۰۰</td></tr>
+        <tr><td>تفکیک: نقد / کارت</td><td class="num">۹۸۰٬۰۰۰ / ۷۵۰٬۰۰۰</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="page" id="page-users">
+  <div class="toolbar">
+    <div class="spacer"></div>
+    <button class="btn">🕘 شیفت باز فعلی: علی — از ۱۶:۰۰</button>
+    <button class="btn danger">بستن شیفت</button>
+    <button class="btn primary">+ کاربر جدید</button>
+  </div>
+  <div class="perm-wrap">
+    <div>
+      <div class="card-panel" style="padding:0 0 6px">
+        <div class="section-title" style="padding:12px 14px 2px">کاربران سیستم</div>
+        <div class="user-row"><div class="cl-ava gold">م</div><div style="flex:1"><b style="font-size:13px">محمود رضایی</b><div style="font-size:10.5px;color:var(--dim)">صاحب گیم‌نت — دسترسی کامل</div></div><span class="role-badge rb-owner">صاحب</span></div>
+        <div class="user-row"><div class="cl-ava silver">س</div><div style="flex:1"><b style="font-size:13px">سارا احمدی</b><div style="font-size:10.5px;color:var(--dim)">مدیر صندوق — شیفت صبح</div></div><span class="role-badge rb-admin">مدیر</span></div>
+        <div class="user-row"><div class="cl-ava none">ع</div><div style="flex:1"><b style="font-size:13px">علی محمدی</b><div style="font-size:10.5px;color:var(--dim)">اپراتور — شیفت عصر (فعلی)</div></div><span class="role-badge rb-op">اپراتور</span></div>
+        <div class="user-row"><div class="cl-ava none">ر</div><div style="flex:1"><b style="font-size:13px">رضا کاظمی</b><div style="font-size:10.5px;color:var(--dim)">اپراتور — شیفت شب</div></div><span class="role-badge rb-op">اپراتور</span></div>
+      </div>
+      <div class="card-panel" style="padding:14px;margin-top:14px">
+        <h4 style="font-size:13px;margin-bottom:10px">🕘 شیفت‌های اخیر</h4>
+        <div class="shift-row"><div>علی محمدی <span class="s">— دیروز ۱۶:۰۰ تا ۲۳:۳۰</span></div><b>۲٬۱۰۰٬۰۰۰ ت</b></div>
+        <div class="shift-row"><div>سارا احمدی <span class="s">— دیروز ۰۹:۰۰ تا ۱۶:۰۰</span></div><b>۱٬۸۵۰٬۰۰۰ ت</b></div>
+        <div class="shift-row"><div>رضا کاظمی <span class="s">— ۲ روز پیش، شب</span></div><b>۲٬۴۰۰٬۰۰۰ ت</b></div>
+        <div class="shift-row"><div>سارا احمدی <span class="s">— ۲ روز پیش، صبح</span></div><b>۱٬۶۰۰٬۰۰۰ ت</b></div>
+      </div>
+    </div>
+    <div class="card-panel" style="padding:16px">
+      <h4 style="font-size:13px;margin-bottom:10px">🔐 ماتریس دسترسی‌ها</h4>
+      <table class="perm-table">
+        <tr><th>دسترسی</th><th>صاحب</th><th>مدیر</th><th>اپراتور</th></tr>
+        <tr><td>شروع/پایان جلسه</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked></td><td><input type="checkbox" checked></td></tr>
+        <tr><td>فروش بوفه</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked></td><td><input type="checkbox" checked></td></tr>
+        <tr><td>ثبت مشتری جدید</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked></td><td><input type="checkbox" checked></td></tr>
+        <tr><td>اعطای تخفیف تا ۱۰٪</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked></td><td><input type="checkbox" checked></td></tr>
+        <tr><td>اعطای تخفیف بیش از ۱۰٪</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+        <tr><td>فعال‌سازی پکیج VIP</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+        <tr><td>حذف فاکتور / ابطال</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox"></td><td><input type="checkbox"></td></tr>
+        <tr><td>دیدن گزارش‌های مالی</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+        <tr><td>دیدن گزارش شیفت خودش</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked></td><td><input type="checkbox" checked></td></tr>
+        <tr><td>مدیریت کاربران و دسترسی</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox"></td><td><input type="checkbox"></td></tr>
+        <tr><td>تغییر تعرفه‌ها</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox" checked></td><td><input type="checkbox"></td></tr>
+        <tr><td>تنظیمات سیستم و بکاپ</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox"></td><td><input type="checkbox"></td></tr>
+        <tr style="background:#131c30"><td colspan="4" style="color:var(--gold);font-weight:700;font-size:11px">🔐 اقدامات روی کلاینت‌ها — عمل در کلاینت انجام می‌شود، مجوزش این‌جا تعیین می‌شود</td></tr>
+        <tr><td>آزادسازی کلاینت و ورود به ویندوز <small style="color:var(--dim)">(Alt+F7 در خود کلاینت)</small></td><td><input type="checkbox" checked disabled></td><td><input type="checkbox"></td><td><input type="checkbox"></td></tr>
+        <tr><td>ورود اپراتور با وقت نامحدود روی کلاینت <small style="color:var(--dim)">(Alt+F6 در خود کلاینت)</small></td><td><input type="checkbox" checked disabled></td><td><input type="checkbox"></td><td><input type="checkbox"></td></tr>
+        <tr><td>خاموش/ری‌استارت کلاینت پس از آزادسازی</td><td><input type="checkbox" checked disabled></td><td><input type="checkbox"></td><td><input type="checkbox"></td></tr>
+      </table>
+      <div class="set-row" style="border-bottom:0;padding-top:10px">
+        <div class="lbl">سقف کلاینت هم‌زمان هر اپراتور<span>وقتی با وقت نامحدود وارد کلاینت‌ها می‌شود</span></div>
+        <select class="mini"><option>۳ کلاینت</option><option>۵ کلاینت</option><option>۱۰ کلاینت</option></select>
+      </div>
+      <div style="font-size:10.5px;color:var(--dim);margin-top:6px">⚠ همه‌ی اقدامات اپراتورها — روی داشبورد و روی کلاینت‌ها (ورود نامحدود، آزادسازی، خاموش‌کردن) — در Audit Log سرور ثبت می‌شود. سرور خودش هیچ ورود نامحدودی ندارد؛ این‌ها فقط مجوزِ اقدامات کلاینت‌اند.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ تنظیمات ═══════════ -->
+<div class="page" id="page-settings">
+  <div class="set-grid">
+    <div class="card-panel set-panel">
+      <h4>⌨️ هات‌کی‌ها (قابل تغییر)</h4>
+      <div class="hk-row"><span>F1 — باز کردن فلوی سرعت (شناسه/مبلغ/پرداخت)</span><kbd id="hk-f1">F1</kbd></div>
+      <div class="hk-row"><span>F4 — تبدیل کادر شناسه به کادر مبلغ</span><kbd id="hk-f4">F4</kbd></div>
+      <div class="hk-row"><span>F5 — شارژ مستقیم</span><kbd id="hk-f5">F5</kbd></div>
+      <div class="hk-row"><span>F6 — شارژ + ثبت بدهی</span><kbd id="hk-f6">F6</kbd></div>
+      <div class="hk-row"><span>F7 — کسر از کیف پول مشتری</span><kbd id="hk-f7">F7</kbd></div>
+      <div class="hk-row"><span>F8 — کسر از کیف پول + مازاد به بدهی</span><kbd id="hk-f8">F8</kbd></div>
+      <div class="hk-row"><span>F3 — رفتن به بوفه</span><kbd id="hk-f3">F3</kbd></div>
+      <div class="hk-row"><span>F2 — رفتن به گزارش‌ها</span><kbd id="hk-f2">F2</kbd></div>
+      <div class="hk-row" style="border:0"><span style="color:var(--dim)">برای تغییر: کلیک روی کلید، سپس کلید جدید را بزن</span><button class="btn sm" onclick="notifyQuick('حالت ثبت کلید جدید (دمو)')">✏️ تغییر</button></div>
+    </div>
+    <div class="card-panel set-panel">
+      <h4>🖥 نوع نمایش داشبورد</h4>
+      <div class="set-row"><div class="lbl">حالت نمایش ایستگاه‌ها<span>روی داشبورد اصلی اعمال می‌شود</span></div>
+        <div class="seg-sm" id="set-view">
+          <button data-v="v-card">کارتی</button>
+          <button data-v="v-compact">فشرده</button>
+          <button data-v="v-list">لیستی</button>
+        </div>
+      </div>
+      <div class="set-row"><div class="lbl">زون‌بندی گرید<span>گروه‌بندی رایانه/کنسول/میز</span></div><label class="switch"><input type="checkbox" checked id="set-zones"><i></i></label></div>
+      <div class="set-row"><div class="lbl">نمایش هزینه لحظه‌ای روی کارت<span>مبلغ جاری هر جلسه</span></div><label class="switch"><input type="checkbox" checked><i></i></label></div>
+      <div class="set-row"><div class="lbl">نمایش نوار پیشرفت وقت<span>درصد زمان سپری‌شده</span></div><label class="switch"><input type="checkbox" checked><i></i></label></div>
+      <div class="set-row"><div class="lbl">فونت بزرگ‌تر<span>برای مانیتورهای دور</span></div><label class="switch"><input type="checkbox"><i></i></label></div>
+    </div>
+    <div class="card-panel set-panel">
+      <h4>🔊 هشدارها و صدا</h4>
+      <div class="set-row"><div class="lbl">هشدار صوتی پایان وقت<span>بازپخش تا تسویه</span></div><label class="switch"><input type="checkbox" checked><i></i></label></div>
+      <div class="set-row"><div class="lbl">هشدار ۵ دقیقه مانده<span>پیش از پایان وقت</span></div><label class="switch"><input type="checkbox" checked><i></i></label></div>
+      <div class="set-row"><div class="lbl">تکرار زنگ<span>هر ۳۰ ثانیه</span></div>
+        <select class="mini"><option>تا تسویه</option><option>۳ بار</option><option>۱ بار</option></select>
+      </div>
+      <div class="set-row"><div class="lbl">صدای هشدار</div>
+        <select class="mini"><option>🔔 زنگ کلاسیک</option><option>🎹 پینگ دیجیتال</option><option>📢 آژیر ملایم</option></select>
+      </div>
+      <div class="set-row"><div class="lbl">اعلان پاپ‌آپ روی داشبورد</div><label class="switch"><input type="checkbox" checked><i></i></label></div>
+    </div>
+    <div class="card-panel set-panel">
+      <h4>🧾 رفتار فاکتور و تسویه</h4>
+      <div class="set-row"><div class="lbl">حالت پیش‌فرض جلسه</div>
+        <select class="mini"><option>تسویه بعد از بازی</option><option>پیش‌پرداخت</option></select>
+      </div>
+      <div class="set-row"><div class="lbl">رند خودکار مبلغ<span>به نزدیک‌ترین ۱۰۰۰ تومان</span></div><label class="switch"><input type="checkbox" checked><i></i></label></div>
+      <div class="set-row"><div class="lbl">تأیید دو مرحله‌ای حذف فاکتور<span>فقط نقش‌های مجاز</span></div><label class="switch"><input type="checkbox" checked><i></i></label></div>
+      <div class="set-row"><div class="lbl">چاپ خودکار فاکتور<span>پس از تسویه (نیاز به چاپگر حرارتی)</span></div><label class="switch"><input type="checkbox"><i></i></label></div>
+      <div class="set-row"><div class="lbl">سقف تخفیف آزاد اپراتور</div>
+        <select class="mini"><option>۵٪</option><option>۱۰٪</option><option>بدون سقف (مدیر)</option></select>
+      </div>
+    </div>
+    <div class="card-panel set-panel">
+      <h4>💾 داده و پشتیبان‌گیری</h4>
+      <div class="set-row"><div class="lbl">بکاپ خودکار روزانه<span>ساعت ۰۴:۰۰ بامداد</span></div><label class="switch"><input type="checkbox" checked><i></i></label></div>
+      <div class="set-row"><div class="lbl">تعداد نسخه نگهداری</div>
+        <select class="mini"><option>۳۰ نسخه</option><option>۱۴ نسخه</option><option>۷ نسخه</option></select>
+      </div>
+      <div class="set-row"><div class="lbl">مقصد بکاپ</div>
+        <select class="mini"><option>دیسک محلی + فلش متصل</option><option>دیسک محلی</option></select>
+      </div>
+      <div class="paybtns"><button class="btn">📦 بکاپ دستی الان</button><button class="btn">♻️ بازیابی از نسخه</button></div>
+      <div class="set-row" style="margin-top:8px"><div class="lbl">آخرین بکاپ موفق</div><b style="font-size:12px;color:var(--green)">امروز ۰۴:۰۰ — سالم ✓</b></div>
+    </div>
+    <div class="card-panel set-panel" style="grid-column:1/-1">
+      <h4>🛠 مدیریت بازی‌ها و کلاینت‌ها</h4>
+      <div class="set-row"><div class="lbl">صفحه‌های اختصاصی<span>تعریف بازی‌ها و تنظیم تک‌به‌تک کلاینت‌ها از منوی بالا</span></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn sm" onclick="document.querySelector('nav a[data-page=\"games\"]').click()">🎮 صفحه بازی‌ها</button>
+          <button class="btn sm" onclick="document.querySelector('nav a[data-page=\"clients\"]').click()">🖧 صفحه کلاینت‌ها</button>
+        </div>
+      </div>
+      <div class="set-row" style="border-bottom:0"><div class="lbl">DNS پیش‌فرض برای ارسال گروهی<span>روی دکمه «ارسال DNS به همه» در صفحه کلاینت‌ها اعمال می‌شود</span></div>
+        <input class="ltr" value="178.22.122.100" style="width:150px;background:#0d1526;border:1px solid var(--line);border-radius:9px;color:var(--txt);padding:6px 10px;font-size:11px">
+      </div>
+    </div>
+    <div class="card-panel set-panel">
+      <h4>🌐 شبکه و اتصال</h4>
+      <div class="set-row"><div class="lbl">آدرس سرور محلی<span>برای اتصال صندوق‌ها و کلاینت‌ها</span></div><b style="font-size:11.5px;color:var(--cyan)">192.168.1.10:8080</b></div>
+      <div class="set-row"><div class="lbl">تعداد صندوق هم‌زمان<span>لایسنس داخلی — نامحدود</span></div><b style="font-size:12px">۳ فعال</b></div>
+      <div class="set-row"><div class="lbl">حالت آفلاین کامل<span>بدون نیاز به اینترنت</span></div><label class="switch"><input type="checkbox" checked disabled><i></i></label></div>
+      <div class="set-row"><div class="lbl">Wake-on-LAN برای کیس‌ها<span>روشن کردن از راه دور</span></div><label class="switch"><input type="checkbox" checked><i></i></label></div>
+    </div>
+    <div class="card-panel set-panel">
+      <h4>🎨 ظاهر</h4>
+      <div class="set-row"><div class="lbl">تم رنگی</div>
+        <select class="mini" id="set-theme"><option>نئون گیمینگ (تیره)</option><option>مینیمال (تیره)</option><option>روشن</option></select>
+      </div>
+      <div class="set-row"><div class="lbl">رنگ تأکید وضعیت‌ها</div>
+        <div style="display:flex;gap:6px">
+          <span style="width:20px;height:20px;border-radius:6px;background:var(--green);display:inline-block"></span>
+          <span style="width:20px;height:20px;border-radius:6px;background:var(--red);display:inline-block"></span>
+          <span style="width:20px;height:20px;border-radius:6px;background:var(--blue);display:inline-block"></span>
+          <span style="width:20px;height:20px;border-radius:6px;background:var(--orange);display:inline-block"></span>
+        </div>
+      </div>
+      <div class="set-row"><div class="lbl">تقویم</div>
+        <select class="mini"><option>شمسی (پیش‌فرض)</option><option>شمسی + میلادی</option></select>
+      </div>
+      <div class="set-row"><div class="lbl">واحد پول</div>
+        <select class="mini"><option>تومان</option><option>ریال</option></select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- مودال فلوی سرعت (F1) -->
+<div class="overlay" id="ov-flow">
+  <div class="modal">
+    <h3>⚡ فلوی سرعت — <span id="flow-step" style="color:var(--green)">مرحله ۱: شناسه</span> <button class="close" onclick="hideModals()">✕</button></h3>
+    <!-- مرحله ۱: شناسه -->
+    <div id="flow-1">
+      <div class="field"><label>شناسه مشتری (نام کاربری / موبایل / شماره کارت)</label><input id="flow-id" placeholder="شناسه را بزن و Enter کن — یا F4 برای مبلغ مستقیم"></div>
+      <div class="qk-card" id="flow-last">
+        <div class="ava">ر</div>
+        <div style="flex:1"><b>آخرین پروفایل: رضا محمدی</b><span>کد ۱۰۵۰ • @Reza-Headshot • 🥇 گلد • کیف پول ۴۵۰٬۰۰۰</span></div>
+        <button class="btn sm" onclick="flowToAmount()">انتخاب (Enter)</button>
+      </div>
+      <div class="hint" style="font-size:10px;color:var(--dim)">جست‌وجو با: کد کاربری، نام، فامیل، لقب، موبایل، کد ملی • Enter = پروفایل • F4 = مبلغ مستقیم</div>
+    </div>
+    <!-- مرحله ۲: پروفایل + مبلغ -->
+    <div id="flow-2" style="display:none">
+      <div class="qk-card">
+        <div class="ava">ر</div>
+        <div style="flex:1"><b id="flow-cname">رضا محمدی</b><span id="flow-cinfo">@reza_hs • 🥇 گلد • کیف پول ۴۵۰٬۰۰۰ • بدهی ۰</span></div>
+      </div>
+      <div class="field"><label>مبلغ (تومان) — F4 همیشه برمی‌گردد اینجا</label><input id="flow-amount" inputmode="numeric" placeholder="مبلغ را وارد کن…"></div>
+      <div class="qgrid">
+        <button onclick="faSet('flow-amount','۵۰٬۰۰۰')">۵۰ هزار</button>
+        <button onclick="faSet('flow-amount','۱۰۰٬۰۰۰')">۱۰۰ هزار</button>
+        <button onclick="faSet('flow-amount','۲۰۰٬۰۰۰')">۲۰۰ هزار</button>
+        <button onclick="faSet('flow-amount','۵۰۰٬۰۰۰')">۵۰۰ هزار</button>
+      </div>
+      <div class="paybtns">
+        <button class="btn cash" onclick="flowAct('شارژ مستقیم انجام شد ✓')">F5 شارژ مستقیم</button>
+        <button class="btn cardpay" onclick="flowAct('شارژ شد و به بدهی ثبت شد ✓')">F6 شارژ+بدهی</button>
+      </div>
+      <div class="paybtns">
+        <button class="btn wallet" onclick="flowAct('از کیف پول کسر شد ✓ (مجزای بیش از موجودی → بدهی)')">F7 کسر از کیف پول</button>
+        <button class="btn danger" onclick="flowAct('کسر شد؛ مازاد به بدهی اضافه شد ✓')">F8 کسر+مازاد به بدهی</button>
+      </div>
+      <div style="font-size:10px;color:var(--dim);margin-top:8px">دکمه‌ها و کلیدها هر دو کار می‌کنند — تنظیم در: تنظیمات → هات‌کی‌ها</div>
+    </div>
+  </div>
+</div>
+
+<!-- منوی راست‌کلیک داشبورد (مثل کلاینت) -->
+<div class="dash-ctx" id="dash-ctx">
+  <div class="info" id="dc-title"></div>
+  <div class="sep"></div>
+  <button onclick="dcAction('تغییر اینترنت کلاینت: اینترنت ۱ → اینترنت ۲ (دمو)')">🌐 تغییر اینترنت (۱ ↔ ۲)</button>
+  <button onclick="dcAction('جابه‌جایی یوزر به کلاینت دیگر (دمو)')">🔀 جابه‌جایی یوزر</button>
+  <button onclick="dcAction('یوزر خارج شد و سیستم قفل شد (دمو)')">🚪 خارج کردن یوزر (قفل)</button>
+  <button onclick="dcAction('ورود با شناسه (دمو)')">🔑 ورود با شناسه</button>
+  <div class="sep"></div>
+  <button onclick="dcAction('پیام روی صفحه کلاینت نمایش داده شد (دمو)')">💬 پیام به مشتری</button>
+  <button onclick="dcAction('اسکرین‌شات ذخیره شد (دمو)')">📸 اسکرین‌شات</button>
+  <button onclick="dcAction('شل ری‌استارت شد (دمو)')">🔄 ری‌استارت شل</button>
+  <button onclick="dcAction('کلاینت ری‌استارت شد (دمو)')">⏻ ری‌استارت ویندوز</button>
+  <button onclick="dcAction('دستور خاموشی ارسال شد (دمو)')" style="color:var(--red)">⛔ خاموش‌کردن</button>
+  <div class="sep"></div>
+  <button onclick="dcAction('خارج از سرویس شد (دمو)')">🛠 خارج از سرویس / فعال</button>
+  <button onclick="document.getElementById('dash-ctx').classList.remove('show');document.querySelector('nav a[data-page=\"clients\"]').click()">⚙️ تنظیمات کامل این کلاینت</button>
+</div>
+
+<!-- مودال شارژ سریع -->
+<div class="overlay" id="ov-charge">
+  <div class="modal">
+    <h3>⚡ شارژ سریع — <span id="qc-station" style="color:var(--green)"></span> <button class="close" onclick="hideModals()">✕</button></h3>
+    <div class="field"><label>مبلغ شارژ (تومان)</label><input id="qc-amount" inputmode="numeric" placeholder="مبلغ را وارد یا از دکمه‌ها انتخاب کن"></div>
+    <div class="qgrid">
+      <button onclick="qset('۵۰٬۰۰۰')">۵۰ هزار</button>
+      <button onclick="qset('۱۰۰٬۰۰۰')">۱۰۰ هزار</button>
+      <button onclick="qset('۲۰۰٬۰۰۰')">۲۰۰ هزار</button>
+      <button onclick="qset('۵۰۰٬۰۰۰')">۵۰۰ هزار</button>
+    </div>
+    <div class="field"><label>هدف شارژ</label><select id="qc-target"><option>شارژ زمان همین جلسه</option><option>شارژ کیف پول مشتری</option><option>شارژ + تخفیف</option></select></div>
+    <div class="paybtns"><button class="btn cash">💵 نقدی</button><button class="btn cardpay">💳 کارت</button><button class="btn wallet">👛 کیف پول</button></div>
+    <div class="paybtns"><button class="btn primary" style="flex:2">⚡ شارژ فوری (Enter)</button><button class="btn">↩️ در بدهی ثبت شود</button></div>
+  </div>
+</div>
+
+<!-- پالت فرمان Ctrl+K -->
+<div class="overlay" id="ov-cmdk">
+  <div class="modal cmdk">
+    <input id="cmdk-input" placeholder="دستور را بنویس یا مستقیم هات‌کی بزن…">
+    <div class="hint">
+      <span><kbd>Ctrl+K</kbd> پالت فرمان</span><span><kbd>F2</kbd> شارژ مستقیم</span><span><kbd>F3</kbd> شارژ+بدهی</span><span><kbd>F4</kbd> کسر اعتبار</span><span><kbd>F5</kbd> بوفه</span><span><kbd>F9</kbd> بستن صندوق</span>
+    </div>
+    <div class="cmdk-list" id="cmdk-list"></div>
+  </div>
+</div>
+
+<!-- ═══════════ مودال‌ها ═══════════ -->
+<div class="overlay" id="ov-start">
+  <div class="modal">
+    <h3>شروع جلسه — <span id="m-station" style="color:var(--green)"></span> <button class="close" onclick="hideModals()">✕</button></h3>
+    <div class="field"><label>نوع پرداخت</label>
+      <div class="seg"><button class="active">تسویه بعد از بازی</button><button>پیش‌پرداخت (شارژی)</button></div>
+    </div>
+    <div class="field"><label>تعداد نفرات</label><div class="persons"><button>۱</button><button class="active">۲</button><button>۳</button><button>۴</button></div></div>
+    <div class="mrow">
+      <div class="field"><label>تعرفه</label><select><option>ساعتی معمولی — ۸۰٬۰۰۰ ت/ساعت</option><option>ساعتی شبانه — ۱۰۰٬۰۰۰ ت/ساعت</option><option>به ازای مبلغ مشخص</option></select></div>
+      <div class="field"><label>مشتری (اختیاری) — جست‌وجو با کد/نام/موبایل</label><select><option>مهمان</option><option>۱۰۵۰ — رضا محمدی — VIP گلد</option><option>۱۰۵۲ — سعید رضایی</option></select></div>
+    </div>
+    <div class="sumline"><span>نرخ لحظه‌ای</span><b>۸۰٬۰۰۰ تومان / ساعت</b></div>
+    <div class="total"><span>هزینه تخمینی هر ساعت</span><b>۱۲۰٬۰۰۰ تومان</b></div>
+    <div class="paybtns"><button class="btn primary" style="flex:2">▶ شروع بازی</button><button class="btn" onclick="hideModals()">انصراف</button></div>
+  </div>
+</div>
+
+<!-- مودال تنظیمات کامل یک کلاینت -->
+<div class="overlay" id="ov-clset">
+  <div class="modal wide">
+    <h3><span id="cs-name">تنظیمات کلاینت</span> <button class="close" onclick="hideModals()">✕</button></h3>
+    <div class="mrow">
+      <div class="field"><label>IP محلی</label><input id="cs-ip" class="ltr"></div>
+      <div class="field"><label>شماره سیستم</label><input id="cs-num" class="ltr"></div>
+    </div>
+    <div class="mrow">
+      <div class="field"><label>DNS ۱</label><input id="cs-dns1" class="ltr"></div>
+      <div class="field"><label>DNS ۲</label><input class="ltr" value="185.51.200.2"></div>
+    </div>
+    <div class="mrow">
+      <div class="field"><label>آدرس سرور</label><input class="ltr" value="192.168.1.10:8080"></div>
+      <div class="field"><label>شل هنگام بوت</label><select class="mini" style="width:100%"><option>فعال</option><option>غیرفعال</option></select></div>
+    </div>
+    <div class="field"><label>حالت شبکه این کلاینت</label>
+      <div class="seg net-swap"><button class="active">اینترنت ۱</button><button>اینترنت ۲</button><button>فقط LAN</button></div>
+    </div>
+    <div class="field"><label>دیسکلس / بوت شبکه</label>
+      <div class="seg"><button>عادی</button><button class="active">CCBOOT</button><button>PXE</button></div>
+    </div>
+    <div class="paybtns">
+      <button class="btn primary" style="flex:2" onclick="hideModals();notifyQuick('ذخیره و ارسال به کلاینت شد (دمو)')">💾 ذخیره و ارسال</button>
+      <button class="btn" onclick="hideModals();notifyQuick('اتصال ریموت (دمو)')">🖥 ریموت</button>
+      <button class="btn danger" onclick="hideModals();notifyQuick('ری‌استارت کلاینت (دمو)')">🔄 ری‌استارت</button>
+    </div>
+  </div>
+</div>
+
+<!-- مودال ویرایش بازی -->
+<div class="overlay" id="ov-game">
+  <div class="modal wide">
+    <h3><span id="game-modal-title">بازی جدید</span> <button class="close" onclick="hideModals()">✕</button></h3>
+    <div class="mrow">
+      <div class="field"><label>نام بازی</label><input id="gm-name" placeholder="مثلاً Counter-Strike 2"></div>
+      <div class="field"><label>دسته</label><select id="gm-cat"><option>آنلاین</option><option>آفلاین</option><option>برنامه</option></select></div>
+    </div>
+    <div class="field"><label>مسیر اجرا (exe)</label><input id="gm-path" class="ltr" placeholder="D:\Games\CS2\cs2.exe"></div>
+    <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:11px">
+      <div class="cover-prev" id="cover-prev">🖼</div>
+      <div style="flex:1">
+        <div class="file-row">
+          <div class="file-drop" id="fd-exe" onclick="pickFile('exe')">⚙️ فایل اجرایی<br><small>انتخاب exe</small></div>
+          <div class="file-drop" id="fd-cover" onclick="pickFile('cover')">🖼 عکس کاور<br><small>jpg / png</small></div>
+          <div class="file-drop" id="fd-trailer" onclick="pickFile('trailer')">🎬 ویدئو تریلر<br><small>mp4 — اختیاری</small></div>
+        </div>
+        <div class="field" style="margin:0"><label>مسیرها (هر کدام جدا)</label>
+          <input class="ltr" id="gm-exe" placeholder="exe: D:\\Games\\CS2\\cs2.exe" style="margin-bottom:6px">
+          <input class="ltr" id="gm-cover" placeholder="cover: D:\\Covers\\cs2.jpg" style="margin-bottom:6px">
+          <input class="ltr" id="gm-trailer" placeholder="trailer: D:\\Trailers\\cs2.mp4">
+        </div>
+      </div>
+    </div>
+    <div class="mrow">
+      <div class="field"><label>پارامترهای اجرا</label><input id="gm-args" class="ltr" placeholder="-novid -fullscreen"></div>
+      <div class="field"><label>نوع اتصال</label><select id="gm-net"><option>آنلاین</option><option>آفلاین</option><option>هردو</option></select></div>
+    </div>
+    <div class="mrow">
+      <div class="field"><label>حد زمان اجرا</label><select><option>محدود به وقت مشتری</option><option>ساعت مشخص روزانه</option></select></div>
+      <div class="field"><label>نمایش در کلاینت</label><select id="gm-vis"><option>فعال</option><option>مخفی</option></select></div>
+    </div>
+    <div class="field"><label>کلاینت‌های مقصد</label>
+      <div class="seg"><button class="active">همه رایانه‌ها</button><button>فقط زون خاص</button><button>ایستگاه‌های منتخب</button></div>
+    </div>
+    <div class="field"><label>این بازی مخصوص کدام سیستم‌ها باشد؟</label>
+      <div class="seg" id="gm-tier"><button class="active">همه سیستم‌ها (عادی + VIP)</button><button>فقط سیستم‌های VIP</button><button>فقط سیستم‌های عادی</button></div>
+    </div>
+    <div class="paybtns"><button class="btn primary" style="flex:2" onclick="saveGame()">💾 ذخیره و اعمال به کلاینت‌ها</button><button class="btn" onclick="hideModals()">انصراف</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="ov-bill">
+  <div class="modal">
+    <h3>تسویه حساب — <span id="m-station2" style="color:var(--red)"></span> <button class="close" onclick="hideModals()">✕</button></h3>
+    <div class="sumline"><span>زمان بازی</span><b>۱ ساعت و ۲۴ دقیقه</b></div>
+    <div class="sumline"><span>هزینه زمان</span><b>۱۱۲٬۰۰۰ تومان</b></div>
+    <div class="sumline"><span>بوفه (۲ نوشابه + ۱ چیپس)</span><b>۶۵٬۰۰۰ تومان</b></div>
+    <div class="sumline"><span>تخفیف</span><b style="color:var(--green)">−۱۰٬۰۰۰ تومان</b></div>
+    <div class="total"><span>مبلغ نهایی</span><b>۱۶۶٬۰۰۰ تومان</b></div>
+    <div class="paybtns"><button class="btn cash">💵 نقدی</button><button class="btn cardpay">💳 کارتخوان</button><button class="btn wallet">👛 کیف پول</button></div>
+    <div class="paybtns"><button class="btn">🖨 چاپ فاکتور</button><button class="btn">⏱ تمدید وقت</button></div>
+  </div>
+</div>
+
+<script>
+const fa=n=>Number(n).toLocaleString('fa-IR');
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('fa-IR')},500);
+document.getElementById('clock').textContent=new Date().toLocaleTimeString('fa-IR');
+
+/* ── ناوبری ── */
+document.querySelectorAll('nav a').forEach(a=>a.onclick=e=>{
+  e.preventDefault();
+  document.querySelectorAll('nav a').forEach(x=>x.classList.remove('active'));
+  a.classList.add('active');
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+a.dataset.page).classList.add('active');
+});
+function hideModals(){document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show'))}
+document.querySelectorAll('.overlay').forEach(o=>o.onclick=e=>{if(e.target===o)hideModals()});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')hideModals()});
+
+/* ── داشبورد ── */
+const stations=[];
+for(let i=1;i<=40;i++)stations.push({name:'PC '+fa(i),zone:'pc',type:'کیس گیمینگ',rate:80});
+for(let i=1;i<=10;i++)stations.push({name:'PS5-'+fa(i),zone:'console',type:'پلی‌استیشن ۵',rate:100});
+for(let i=1;i<=6;i++)stations.push({name:'PS4-'+fa(i),zone:'console',type:'پلی‌استیشن ۴',rate:70});
+for(let i=1;i<=5;i++)stations.push({name:'میز '+fa(i),zone:'table',type:'فوتبال دستی',rate:60});
+const states=['busy','free','busy','busy','resv','free','busy','busy','off','free'];
+stations.forEach((s,i)=>{
+  s.state=states[i%states.length];
+  if(s.state==='busy'){
+    s.min=12+((i*7)%80);s.persons=(i%4)+1;s.amount=s.min*1.4;
+    /* یوزر لاگین‌شده روی دستگاه — از کدهای مشتریان */
+    s.user='کد '+customers[i%customers.length].code;
+  }
+  if(s.state==='resv'){s.min=0;s.persons=2;s.user=null;}
+});
+let curZone='all', curView='v-card', stZoom=0;
+function zoomSt(d){
+  stZoom=Math.max(-2,Math.min(2,stZoom+d));
+  document.getElementById('sz').textContent=fa(Math.round((1+stZoom*0.15)*100))+'٪';
+  applyZoom();
+}
+function applyZoom(){
+  const f=1+stZoom*0.15;
+  Object.values({pc:document.getElementById('grid-pc'),console:document.getElementById('grid-console'),table:document.getElementById('grid-table')}).forEach(g=>{
+    if(curView==='v-card')g.style.gridTemplateColumns=`repeat(auto-fill,minmax(${168*f}px,1fr))`;
+    else if(curView==='v-compact')g.style.gridTemplateColumns=`repeat(auto-fill,minmax(${128*f}px,1fr))`;
+    else g.style.gridTemplateColumns='1fr';
+  });
+}
+function renderGrid(){
+  const grids={pc:document.getElementById('grid-pc'),console:document.getElementById('grid-console'),table:document.getElementById('grid-table')};
+  Object.entries(grids).forEach(([k,g])=>{g.className='grid '+curView;g.innerHTML='';g.style.gridTemplateColumns=''});
+  let cnt={free:0,busy:0};
+  stations.forEach((s,i)=>{
+    if(curZone!=='all'&&s.zone!==curZone)return;
+    if(s.state==='free')cnt.free++; if(s.state==='busy')cnt.busy++;
+    const q=document.getElementById('st-search').value.trim();
+    if(q&&!s.name.includes(q))return;
+    const badge={free:['آزاد','b-free'],busy:['در حال بازی','b-busy'],resv:['رزرو','b-resv'],off:['خارج از سرویس','b-off']}[s.state];
+    let inner=`<div class="top"><span class="badge ${badge[1]}">${badge[0]}</span><span class="name">${s.name}</span></div>`;
+    if(s.state==='busy'){
+      const mm=Math.floor(s.min),ss=Math.floor((s.min%1)*60);
+      inner+=`<div class="timer">${fa(String(mm).padStart(2,'0'))}:${fa(String(ss).padStart(2,'0'))}</div>
+      <div class="price">هزینه: <b>${fa(Math.round(s.amount*1000))}</b> تومان</div>
+      <div class="users">${'<i></i>'.repeat(s.persons)}</div>
+      <div class="minibar"><i style="width:${Math.min(100,s.min)}%"></i></div><span class="pulse"></span>`;
+    } else if(s.state==='resv'){ inner+=`<div class="timer" style="color:var(--blue);font-size:15px">رزرو ۱۸:۰۰</div><div class="price">نفرات: ${fa(s.persons)}</div>`; }
+    else if(s.state==='free'){ inner+=`<div class="timer">--:--</div><div class="price">${s.type} • از ${fa(s.rate*1000)}</div>`; }
+    else { inner+=`<div class="timer">⛔</div><div class="price">در تعمیر</div>`; }
+    const d=document.createElement('div');d.className='card '+s.state;d.innerHTML=inner;
+    d.onclick=()=>{
+      /* منطق درست: فقط دستگاهی که مشتری داخلش است (busy) پنجره پروفایل/شارژ دارد */
+      if(s.state==='busy'){openFlow(s.name)}
+      /* آزاد/رزرو/خارج از سرویس: کسی لاگین نیست → پنجره‌ای باز نمی‌شود */
+      else if(s.state==='off'){notifyQuick('این دستگاه خارج از سرویس است')}
+      else if(s.state==='resv'){notifyQuick('رزرو ساعت ۱۸:۰۰ — هنوز مشتری وارد نشده')}
+      else {notifyQuick('دستگاه آزاد است — برای شارژ اول مشتری لاگین کند یا از دکمه «شروع جلسه»')}
+    };
+    d.ondblclick=()=>{if(s.state==='busy')openQuickCharge(s.name)};
+    grids[s.zone].appendChild(d);
+  });
+  document.getElementById('s-free').innerHTML=fa(cnt.free)+' <small>از ۶۱</small>';
+  document.getElementById('s-busy').innerHTML=fa(cnt.busy)+' <small>ایستگاه</small>';
+}
+function openStart(n){document.getElementById('m-station').textContent=n;document.getElementById('ov-start').classList.add('show')}
+function openBill(n){document.getElementById('m-station2').textContent=n;document.getElementById('ov-bill').classList.add('show')}
+/* ── راست‌کلیک و کلیک‌چپ داشبورد (شبیه کلاینت) ── */
+let ctxStation=null;
+function showDashCtx(e,s){
+  ctxStation=s;
+  const ctx=document.getElementById('dash-ctx');
+  document.getElementById('dc-title').innerHTML=`<b>${s.name}</b> — ${s.type} • ${s.state==='busy'?'در حال بازی ('+fa(Math.floor(s.min))+' دقیقه)':s.state==='free'?'آزاد':s.state}`;
+  ctx.classList.add('show');
+  ctx.style.left=Math.min(e.clientX,innerWidth-270)+'px';
+  ctx.style.top=Math.min(e.clientY,innerHeight-400)+'px';
+}
+document.addEventListener('contextmenu',e=>{
+  const card=e.target.closest('.grid .card');
+  if(!card)return;
+  e.preventDefault();
+  const idx=[...card.parentElement.children].indexOf(card);
+  const filtered=stations.filter(s=>curZone==='all'||s.zone===curZone);
+  showDashCtx(e,filtered[idx]||stations[0]);
+});
+document.addEventListener('click',e=>{if(!e.target.closest('#dash-ctx'))document.getElementById('dash-ctx').classList.remove('show')});
+function dcAction(msg){document.getElementById('dash-ctx').classList.remove('show');notifyQuick(msg)}
+/* کلیک چپ روی کارت آزاد/رزرو: مودال شارژ دلخواه */
+function openFreeCharge(name){
+  document.getElementById('qc-station').textContent=name;
+  document.getElementById('qc-target').textContent='شارژ دلخواه — زمان آزاد';
+  document.getElementById('qc-amount').value='';
+  document.getElementById('ov-charge').classList.add('show');
+  setTimeout(()=>document.getElementById('qc-amount').focus(),50);
+}
+document.querySelectorAll('#zones button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#zones button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');curZone=b.dataset.z;renderGrid();
+});
+function setView(v){
+  curView=v;
+  document.querySelectorAll('#viewmode button').forEach(x=>x.classList.toggle('active',x.dataset.v===v));
+  document.querySelectorAll('#set-view button').forEach(x=>x.classList.toggle('active',x.dataset.v===v));
+  renderGrid();
+  if(stZoom!==0&&curView!=='v-list'){const f=1+stZoom*0.15;const w=(curView==='v-card'?168:128)*f;Object.values({pc:document.getElementById('grid-pc'),console:document.getElementById('grid-console'),table:document.getElementById('grid-table')}).forEach(g=>{g.style.gridTemplateColumns=`repeat(auto-fill,minmax(${w}px,1fr))`})}
+}
+document.querySelectorAll('#viewmode button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
+document.querySelectorAll('#set-view button').forEach(b=>b.onclick=()=>{setView(b.dataset.v);document.querySelector('nav a[data-page="dash"]').click()});
+setInterval(()=>{stations.forEach(s=>{if(s.state==='busy'){s.min+=1/6;s.amount+=0.23}});renderGrid()},10000);
+document.querySelectorAll('#ov-start .seg button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#ov-start .seg button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+});
+document.querySelectorAll('#ov-start .persons button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#ov-start .persons button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+});
+
+/* ── مشتریان — کد کاربری عددی جدا از نام و فامیل ── */
+const customers=[
+  {code:'1050',pass:'2020',fname:'رضا',lname:'محمدی',alias:'Reza-Headshot',mobile:'۰۹۱۲ ۳۴۵ ۶۷۸۹',nat:'۰۰۱۲۳۴۵۶۷۸',vip:'gold',pkg:{title:'گلد',days:30,left:12,daily:4,used:2.5,lim:false},wallet:450000,debt:0,gift:120000,hist:[['PS5-۳ • ۲.۵ ساعت','۲۵۰٬۰۰۰'],['پکیج گلد ۳۰ روزه','۱٬۸۰۰٬۰۰۰'],['بوفه — نوشابه×۳','۹۰٬۰۰۰']]},
+  {code:'1051',pass:'1051',fname:'امیر',lname:'کریمی',alias:'AmirK',mobile:'۰۹۳۵ ۱۱۲ ۳۳۴۴',nat:'۰۰۹۸۷۶۵۴۳۲',vip:'silver',pkg:{title:'سیلور',days:30,left:3,daily:3,used:3.2,lim:true},wallet:0,debt:80000,gift:0,hist:[['میز ۲ • ۱ ساعت','۶۰٬۰۰۰'],['بدهی نسیه','۸۰٬۰۰۰']]},
+  {code:'1052',pass:'2255',fname:'سعید',lname:'رضایی',alias:'Saeed-OP',mobile:'۰۹۱۹ ۵۵۵ ۶۶۷۷',nat:'۰۰۴۵۶۷۸۹۱۲',vip:'none',pkg:null,wallet:150000,debt:0,gift:50000,hist:[['PC ۷ • ۳ ساعت','۲۴۰٬۰۰۰'],['شارژ کیف پول','۲۰۰٬۰۰۰']]},
+  {code:'1053',pass:'3300',fname:'محمد',lname:'اکبری',alias:'MAMAD',mobile:'۰۹۰۲ ۷۷۸ ۸۹۹۰',nat:'۰۰۷۸۹۱۲۳۴۵',vip:'gold',pkg:{title:'گلد',days:30,left:24,daily:4,used:0.5,lim:false},wallet:1200000,debt:0,gift:0,hist:[['پکیج گلد ۳۰ روزه','۱٬۸۰۰٬۰۰۰']]},
+  {code:'1054',pass:'4400',fname:'حسین',lname:'نوری',alias:'Hunter-H',mobile:'۰۹۳۸ ۲۲۱ ۴۴۵۵',nat:'۰۰۳۲۱۶۵۴۹۸',vip:'none',pkg:null,wallet:0,debt:250000,gift:30000,hist:[['PS4-۲ • ۲ ساعت','۱۴۰٬۰۰۰'],['بدهی نسیه','۲۵۰٬۰۰۰']]},
+  {code:'1055',pass:'5500',fname:'علی',lname:'قاسمی',alias:'Ali-Sniper',mobile:'۰۹۱۲ ۹۹۹ ۰۰۱۱',nat:'۰۰۱۱۲۲۳۳۴۴',vip:'silver',pkg:{title:'سیلور',days:30,left:18,daily:3,used:1.8,lim:false},wallet:300000,debt:0,gift:0,hist:[['PC ۱۲ • ۱.۵ ساعت','۱۲۰٬۰۰۰'],['پکیج سیلور','۹۵۰٬۰۰۰']]},
+];
+let selCust=0, custFilter='all', custQ='';
+const vipMini={gold:['گلد','vm-gold'],silver:['سیلور','vm-silver'],none:['—','vm-none']};
+function renderCustList(){
+  const box=document.getElementById('cl-rows');box.innerHTML='';
+  const list=customers.map((c,i)=>({c,i})).filter(({c})=>{
+    if(custFilter==='vip'&&c.vip==='none')return false;
+    if(custFilter==='debt'&&c.debt<=0)return false;
+    /* جست‌وجوی همه‌فیلدی: کد کاربری، نام، فامیل، لقب، موبایل، کد ملی */
+    if(custQ&&!(c.code+c.fname+c.lname+c.alias+c.mobile+c.nat).includes(custQ))return false;
+    return true;
+  });
+  list.forEach(({c,i})=>{
+    const d=document.createElement('div');d.className='cl-row'+(i===selCust?' sel':'');
+    d.innerHTML=`<div class="cl-ava ${c.vip}">${c.fname[0]}</div>
+      <div class="cl-main"><b>${c.fname} ${c.lname} <span class="vip-mini ${vipMini[c.vip][1]}">${vipMini[c.vip][0]}</span></b>
+      <span>کد ${c.code} • @${c.alias} • ${c.mobile}</span>${c.pkg&&c.pkg.lim?' <span class="cl-lim">⚠ لیمیت</span>':''}</div>
+      <div class="cl-fin"><span class="w">${fa(c.wallet)} ت</span>${c.debt>0?` <span class="d">بدهی ${fa(c.debt)}</span>`:''}</div>`;
+    d.onclick=()=>{selCust=i;renderCustList();renderCustProfile()};
+    box.appendChild(d);
+  });
+  document.getElementById('cs-total').innerHTML=fa(customers.length)+' <small>نفر</small>';
+  document.getElementById('cs-vip').innerHTML=fa(customers.filter(c=>c.vip!=='none').length)+' <small>عضو</small>';
+  document.getElementById('cs-debt').innerHTML=fa(customers.filter(c=>c.debt>0).length)+' <small>نفر</small>';
+  document.getElementById('cs-wallet').innerHTML=fa(customers.reduce((a,c)=>a+c.wallet,0))+' <small>تومان</small>';
+  document.getElementById('cs-pkg').innerHTML=fa(customers.filter(c=>c.pkg).length)+' <small>پکیج فعال</small>';
+}
+function renderCustProfile(){
+  const c=customers[selCust];
+  const pkgHtml=c.pkg?`
+    <div class="pkg-active">
+      <div class="t"><span>🥇 پکیج ${c.pkg.title} — فعال</span><span>${fa(c.pkg.left)} روز مانده</span></div>
+      <div class="minibar" style="margin-top:8px"><i style="width:${Math.min(100,c.pkg.used/c.pkg.daily*100)}%"></i></div>
+      <div class="d" style="margin-top:5px">امروز: ${fa(c.pkg.used)} از ${fa(c.pkg.daily)} ساعت ${c.pkg.lim?'— <b style="color:var(--red)">لیمیت خورده، مازاد ساعتی</b>':''}</div>
+    </div>`
+    :`<div style="font-size:12px;color:var(--dim);padding:8px 0 12px">پکیج فعالی ندارد — <a href="#" style="color:var(--orange)">فعال‌سازی پکیج</a></div>`;
+  document.getElementById('cp-panel').innerHTML=`
+    <div class="cp-head"><div class="cp-ava ${c.vip}">${c.fname[0]}</div>
+      <div style="flex:1"><h3>${c.fname} ${c.lname} <span class="vip-mini ${vipMini[c.vip][1]}">${vipMini[c.vip][0]}</span></h3>
+      <div class="sub">کد کاربری ${c.code} • @${c.alias} • ${c.mobile} • کد ملی ${c.nat}</div></div>
+      <button class="btn sm">✏️ ویرایش</button></div>
+    <div class="cp-stats">
+      <div class="cp-stat"><div class="t">کیف پول</div><div class="v pos">${fa(c.wallet)}</div></div>
+      <div class="cp-stat"><div class="t">بدهی</div><div class="v ${c.debt>0?'neg':''}">${fa(c.debt)}</div></div>
+      <div class="cp-stat"><div class="t">اعتبار رایگان</div><div class="v pur">${fa(c.gift)}</div></div>
+    </div>
+    ${pkgHtml}
+    <div class="cp-sec"><h4>👤 حساب کاربری (ورود در کلاینت)</h4>
+      <div class="cp-row"><span>کد کاربری</span><b style="color:var(--green);font-size:14px">${c.code}</b></div>
+      <div class="cp-row"><span>رمز عبور</span><b>•••• <a href="#" style="color:var(--blue);font-size:10px">تغییر</a></b></div>
+      <div class="cp-row"><span>نام و فامیل</span><b>${c.fname} ${c.lname}</b></div>
+      <div class="cp-row"><span>سطح تخفیف</span><b>${c.vip==='gold'?'طلایی — ۱۰٪':c.vip==='silver'?'نقره‌ای — ۵٪':'برنزی — ۰٪'}</b></div>
+    </div>
+    <div class="cp-sec"><h4>📜 آخرین تراکنش‌ها <a href="#" style="color:var(--blue);font-size:10px">همه</a></h4>
+      ${c.hist.map(h=>`<div class="hist-row"><span>${h[0]}</span><b>${h[1]} ت</b></div>`).join('')}
+    </div>
+    <div class="paybtns"><button class="btn cash">شارژ کیف پول</button><button class="btn danger">ثبت بدهی</button><button class="btn wallet">هدیه رایگان</button></div>`;
+}
+document.getElementById('cust-search').oninput=e=>{custQ=e.target.value;renderCustList()};
+document.querySelectorAll('#cust-filter button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#cust-filter button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');custFilter=b.dataset.f;renderCustList();
+});
+renderCustList();renderCustProfile();
+
+/* ── بوفه ── */
+const products=[
+  {n:'نوشابه',c:'drink',p:35000,buy:22000,stock:48,max:60,ic:'🥤'},
+  {n:'آب معدنی',c:'drink',p:15000,buy:8000,stock:30,max:60,ic:'💧'},
+  {n:'چای',c:'drink',p:20000,buy:6000,stock:25,max:40,ic:'🍵'},
+  {n:'قهوه فوری',c:'drink',p:45000,buy:20000,stock:12,max:30,ic:'☕'},
+  {n:'چیپس',c:'snack',p:30000,buy:18000,stock:22,max:40,ic:'🥔'},
+  {n:'پاپ‌کورن',c:'snack',p:35000,buy:14000,stock:8,max:30,ic:'🍿'},
+  {n:'بیسکویت',c:'food',p:20000,buy:11000,stock:15,max:30,ic:'🍪'},
+  {n:'ساندویچ سرد',c:'food',p:90000,buy:55000,stock:5,max:10,ic:'🥪'},
+  {n:'آدامس',c:'snack',p:10000,buy:5000,stock:40,max:50,ic:'🍬'},
+  {n:'هدفون یکبارمصرف',c:'acc',p:60000,buy:35000,stock:6,max:15,ic:'🎧'},
+  {n:'ماوس‌پد',c:'acc',p:120000,buy:70000,stock:3,max:10,ic:'🖱'},
+];
+let cart={},curCat='all';
+renderGrid(); /* رندر اولیه داشبورد — بعد از تعریف همه دیتاها */
+function renderProd(){
+  const g=document.getElementById('prod-grid');g.innerHTML='';
+  products.forEach((p,i)=>{
+    if(curCat!=='all'&&p.c!==curCat)return;
+    const pct=p.stock/p.max*100, low=p.stock<=8;
+    const d=document.createElement('div');d.className='prod';
+    d.innerHTML=`<span class="ic">${p.ic}</span><b>${p.n}</b>
+      <div class="pr">${fa(p.p)}</div>
+      <div class="st">موجودی: ${fa(p.stock)} ${low?'⚠':''}</div>
+      <div class="stbar"><i class="${low?'low':''}" style="width:${pct}%"></i></div>`;
+    d.onclick=()=>{cart[i]=(cart[i]||0)+1;renderCart()};
+    g.appendChild(d);
+  });
+}
+function renderCart(){
+  const keys=Object.keys(cart);
+  const box=document.getElementById('cart-items');
+  if(!keys.length){box.innerHTML='<div style="color:var(--dim);font-size:12px;padding:14px 0;text-align:center">از سمت راست کالا انتخاب کن</div>'}
+  else{
+    box.innerHTML=keys.map(i=>{const p=products[i];return `
+      <div class="cart-item"><span>${p.ic} ${p.n}</span>
+      <span class="q"><button onclick="chQty(${i},-1)">−</button>${fa(cart[i])}<button onclick="chQty(${i},1)">+</button></span>
+      <b>${fa(p.p*cart[i])}</b></div>`}).join('');
+  }
+  const total=keys.reduce((a,i)=>a+products[i].p*cart[i],0);
+  document.getElementById('cart-total').textContent=fa(total)+' تومان';
+}
+window.chQty=(i,d)=>{cart[i]=(cart[i]||0)+d;if(cart[i]<=0)delete cart[i];renderCart()};
+document.querySelectorAll('#cat-row button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#cat-row button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');curCat=b.dataset.c;renderProd();
+});
+renderProd();renderCart();
+
+/* ── گزارش‌ها ── */
+const chartData={
+  week:{labels:['شنبه','یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه'],vals:[3.1,2.8,3.4,4.0,4.6,6.2,5.3]},
+  month:{labels:['اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر'],vals:[88,95,102,110,96,108]},
+  year:{labels:['۱۴۰۱','۱۴۰۲','۱۴۰۳','۱۴۰۴'],vals:[780,940,1120,1310]}
+};
+function renderChart(p){
+  const d=chartData[p],max=Math.max(...d.vals);
+  const ch=document.getElementById('chart');ch.innerHTML='';
+  d.labels.forEach((l,i)=>{
+    const b=document.createElement('div');b.className='bar';
+    b.innerHTML=`<em>${fa(d.vals[i])}</em><i style="height:${d.vals[i]/max*100}%"></i><span>${l}</span>`;
+    ch.appendChild(b);
+  });
+}
+document.querySelectorAll('#rep-period button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#rep-period button').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active');
+  const p=b.dataset.p;
+  document.getElementById('rep-custom').style.display=p==='custom'?'block':'none';
+  if(p!=='custom')renderChart(p);
+});
+renderChart('week');
+/* ── مدیریت بازی‌ها ── */
+const games=[
+  {n:'Counter-Strike 2',cat:'آنلاین',ic:'🔫',path:'D:\\Games\\CS2\\cs2.exe',net:'آنلاین',on:true},
+  {n:'Valorant',cat:'آنلاین',ic:'🎯',path:'D:\\Riot\\VALORANT.exe',net:'آنلاین',on:true},
+  {n:'EA FC 26',cat:'آفلاین',ic:'⚽',path:'E:\\Games\\FC26\\FC26.exe',net:'هردو',on:true},
+  {n:'GTA V',cat:'آفلاین',ic:'🚗',path:'E:\\Games\\GTAV\\GTA5.exe',net:'آفلاین',on:true},
+  {n:'Dota 2',cat:'آنلاین',ic:'🛡',path:'D:\\Steam\\dota2.exe',net:'آنلاین',on:false},
+  {n:'Chrome',cat:'برنامه',ic:'🌐',path:'C:\\Program Files\\Chrome\\chrome.exe',net:'آنلاین',on:true},
+  {n:'Discord',cat:'برنامه',ic:'💬',path:'C:\\Discord\\Update.exe',net:'آنلاین',on:true},
+];
+let gQ='',gCat='all';
+function renderGames(){
+  const g=document.getElementById('gadm-grid');g.innerHTML='';
+  games.filter(x=>(gCat==='all'||x.cat===gCat)&&(!gQ||x.n.includes(gQ))).forEach(x=>{
+    const d=document.createElement('div');d.className='gadm';
+    d.innerHTML=`<div class="cover">${x.ic}<span class="ord">مسیر: ${x.path.length>34?'…'+x.path.slice(-34):x.path}</span><span class="on ${x.on?'':'off'}">${x.on?'فعال':'مخفی'}</span></div>
+    <div class="bd"><b>${x.n}</b><div class="path">${x.path}</div>
+    <div class="meta"><span class="t-${x.net==='آنلاین'?'on':'off'}">${x.net}</span><span>${x.cat}</span><span>نسخه ۱.۰</span></div></div>
+    <div class="acts"><button class="btn" onclick="editGame('${x.n}')">✏️ ویرایش</button><button class="btn" onclick="notifyQuick('بروزرسانی روی ${'${'}''}کلاینت‌ها ارسال شد')">📤 اعمال</button><button class="btn danger" onclick="notifyQuick('حذف (دمو)')">🗑</button></div>`;
+    g.appendChild(d);
+  });
+  document.getElementById('gs-total').innerHTML=fa(games.length)+' <small>عنوان</small>';
+  document.getElementById('gs-on').innerHTML=fa(games.filter(x=>x.on).length)+' <small>بازی</small>';
+  document.getElementById('gs-online').innerHTML=fa(games.filter(x=>x.net==='آنلاین').length)+' <small>عنوان</small>';
+  document.getElementById('gs-cats').innerHTML=fa(3)+' <small>دسته</small>';
+}
+function openGameModal(){document.getElementById('game-modal-title').textContent='بازی جدید';document.getElementById('ov-game').classList.add('show')}
+function editGame(n){
+  const x=games.find(g=>g.n===n);
+  document.getElementById('gm-name').value=x.n;
+  document.getElementById('gm-path').value=x.path;
+  document.getElementById('gm-exe').value=x.path;
+  document.getElementById('game-modal-title').textContent='ویرایش: '+x.n;
+  document.getElementById('cover-prev').textContent=x.ic;
+  document.getElementById('ov-game').classList.add('show')
+}
+function pickFile(kind){
+  const map={exe:['fd-exe','gm-exe','D:\\Games\\CS2\\cs2.exe'],cover:['fd-cover','gm-cover','D:\\Covers\\cs2.jpg'],trailer:['fd-trailer','gm-trailer','D:\\Trailers\\cs2.mp4']};
+  const [drop,input,path]=map[kind];
+  document.getElementById(drop).classList.add('filled');
+  document.getElementById(input).value=path;
+  if(kind==='cover'){const p=document.getElementById('cover-prev');p.innerHTML='';const img=document.createElement('img');img.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="86" height="86"><rect width="86" height="86" fill="%231b2a4d"/><text x="43" y="52" font-size="30" text-anchor="middle">🔫</text></svg>');p.appendChild(img)}
+  notifyQuick('فایل انتخاب شد (دمو)');
+}
+function saveGame(){hideModals();notifyQuick('ذخیره شد و به کلاینت‌ها اعمال شد (دمو)')}
+document.getElementById('g-search').addEventListener('input',e=>{gQ=e.target.value;renderGames()});
+document.querySelectorAll('#g-cat button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#g-cat button').forEach(x=>x.classList.remove('active'));b.classList.add('active');gCat=b.dataset.c;renderGames()});
+renderGames();
+
+/* ── صفحه کلاینت‌ها ── */
+const clients=[];
+for(let i=1;i<=40;i++){
+  clients.push({
+    name:'PC '+fa(i),ip:'192.168.1.'+(100+i),dns:'178.22.122.100',num:String(i),
+    online:i%9!==0,busy:stations[i-1].state==='busy',user:i%3===1?'reza_hs':i%3===2?'amirk':null,
+    net:'اینترنت ۱',shell:'فعال',update:i%13===0
+  });
+}
+let clq='',selClient=null;
+let selSet=new Set(),lastSelIdx=-1;
+function renderClients(){
+  const g=document.getElementById('cl-grid');g.innerHTML='';
+  let on=0,off=0,busy=0;
+  const visible=[];
+  clients.forEach((c,idx)=>{
+    if(clq&&!c.name.includes(clq)&&!c.ip.includes(clq))return;
+    visible.push({c,idx});
+    c.online?on++:off++; if(c.busy)busy++;
+    const d=document.createElement('div');d.className='cl-card'+(selSet.has(idx)?' sel':'');
+    d.dataset.idx=idx;
+    d.innerHTML=`<div class="hd"><b>${c.name}</b><span class="badge ${c.online?'b-free':'b-off'}">${c.online?'آنلاین':'آفلاین'}</span></div>
+      <div class="ip">${c.ip}</div><div class="dns">DNS: ${c.dns}</div>
+      <div class="row"><span>یوزر</span><b>${c.user?'@'+c.user:'—'}</b></div>
+      <div class="row"><span>شبکه</span><b>${c.net}</b></div>
+      <div class="row"><span>شل</span><b style="color:${c.shell==='فعال'?'var(--green)':'var(--red)'}">${c.shell}</b></div>
+      ${c.update?'<span class="badge b-busy" style="margin-top:6px">آپدیت معلق</span>':''}`;
+    d.onmousedown=e=>{
+      if(e.button!==0)return;
+      e.preventDefault();
+      if(e.shiftKey&&lastSelIdx>=0){ /* بازه از آخرین انتخاب */
+        const [a,b]=[Math.min(lastSelIdx,idx),Math.max(lastSelIdx,idx)];
+        for(let i=a;i<=b;i++)selSet.add(i);
+      } else if(e.ctrlKey){
+        selSet.has(idx)?selSet.delete(idx):selSet.add(idx);
+        lastSelIdx=idx;
+      } else {
+        /* انتخاب تکی — اگر قبلاً چندتایی انتخاب بود، فقط همین */
+        if(selSet.size<=1||selSet.has(idx)){selSet.clear();selSet.add(idx)}
+        else {selSet.clear();selSet.add(idx)}
+        lastSelIdx=idx;
+      }
+      updateSelBar();renderClients();
+    };
+    d.oncontextmenu=e=>{
+      e.preventDefault();e.stopPropagation();
+      /* اگر روی انتخابی راست‌کلیک شد که در سلکشن نیست، سلکشن به همین یکی */
+      if(!selSet.has(idx)){selSet.clear();selSet.add(idx);lastSelIdx=idx;updateSelBar();renderClients()}
+      showClCtx(e,clients[idx]);
+    };
+    d.ondblclick=e=>{if(e.ctrlKey||e.shiftKey)return;openClientSettings(clients[idx])};
+    g.appendChild(d);
+  });
+  document.getElementById('cls-on').innerHTML=fa(on)+' <small>کلاینت</small>';
+  document.getElementById('cls-off').innerHTML=fa(off)+' <small>کلاینت</small>';
+  document.getElementById('cls-busy').innerHTML=fa(busy)+' <small>کلاینت</small>';
+}
+function updateSelBar(){
+  const bar=document.getElementById('selbar');
+  if(selSet.size>1){bar.classList.add('show');document.getElementById('sel-count').textContent=fa(selSet.size)+' کلاینت انتخاب شده'}
+  else bar.classList.remove('show');
+}
+function clearSel(){selSet.clear();lastSelIdx=-1;updateSelBar();renderClients()}
+function showClCtx(e,c){
+  selClient=c;
+  const ctx=document.getElementById('cl-ctx');
+  const n=selSet.size;
+  document.getElementById('cl-ctx-title').innerHTML=n>1
+    ?`<b>${fa(n)} کلاینت انتخاب‌شده</b> — تنظیم برای همه اعمال می‌شود`
+    :`<b>${c.name}</b> — ${c.ip} • ${c.user?'یوزر @'+c.user:'بدون یوزر'}`;
+  ctx.classList.add('show');
+  ctx.style.left=Math.min(e.clientX,innerWidth-270)+'px';
+  ctx.style.top=Math.min(e.clientY,Math.max(10,innerHeight-430))+'px';
+}
+document.addEventListener('click',e=>{if(!e.target.closest('#cl-ctx'))document.getElementById('cl-ctx').classList.remove('show')});
+document.getElementById('clq').addEventListener('input',e=>{clq=e.target.value;renderClients()});
+function clAction(msg){
+  document.getElementById('cl-ctx').classList.remove('show');
+  const n=selSet.size;
+  notifyQuick(n>1?`برای ${fa(n)} کلاینت اعمال شد: ${msg} (دمو)`:`${msg} (دمو)`);
+  if(n>0&&msg.includes('خارج کردن'))clients.forEach((c,i)=>{if(selSet.has(i))c.user=null});
+  renderClients();
+}
+function openClientSettings(c){
+  c=c||selClient;
+  document.getElementById('cl-ctx').classList.remove('show');
+  if(c){
+    document.getElementById('cs-name').textContent='تنظیمات '+c.name;
+    document.getElementById('cs-ip').value=c.ip;
+    document.getElementById('cs-dns1').value=c.dns;
+    document.getElementById('cs-num').value=c.num;
+  }
+  document.getElementById('ov-clset').classList.add('show');
+}
+renderClients();
+
+/* ── تعرفه‌ها ── */
+const tariffs=[
+  {name:'رایانه عادی',tier:'normal',rows:[['ساعتی عادی','۸۰٬۰۰۰'],['نیم‌ساعت','۵۰٬۰۰۰']],night:'ساعت ۰۰ تا ۸: ۱۰۰٬۰۰۰',note:'۴۰ دستگاه PC ۱ تا ۴۰'},
+  {name:'رایانه VIP',tier:'vip',rows:[['ساعتی VIP','۱۲۰٬۰۰۰'],['نیم‌ساعت','۷۰٬۰۰۰']],night:'ساعت ۰۰ تا ۸: ۱۵۰٬۰۰۰',note:'۵ دستگاه VIP — سخت‌افزار بالا'},
+  {name:'PS5',tier:'normal',rows:[['۱ نفره','۱۰۰٬۰۰۰'],['۲ نفره','۱۵۰٬۰۰۰'],['۳ نفره','۱۸۰٬۰۰۰'],['۴ نفره','۲۰۰٬۰۰۰']],night:'ساعت ۰۰ تا ۸: +۲۵٪',note:'۱۰ دستگاه — نفرات متغیر'},
+  {name:'PS4',tier:'normal',rows:[['۱ نفره','۷۰٬۰۰۰'],['۲ نفره','۱۰۰٬۰۰۰'],['۳ نفره','۱۲۰٬۰۰۰'],['۴ نفره','۱۴۰٬۰۰۰']],night:'ساعت ۰۰ تا ۸: +۲۰٪',note:'۶ دستگاه'},
+  {name:'فوتبال دستی',tier:'normal',rows:[['ساعتی','۶۰٬۰۰۰'],['هر بازی','۲۰٬۰۰۰']],night:'—',note:'۵ میز'},
+  {name:'پکیج VIP عضویت',tier:'vip',rows:[['سیلور — ۳۰ روز','۹۵۰٬۰۰۰'],['گلد — ۳۰ روز','۱٬۸۰۰٬۰۰۰']],night:'—',note:'سقف ساعت روزانه + مازاد نیم‌بها'},
+];
+let tarTier='all';
+function renderTariffs(){
+  const g=document.getElementById('tar-grid');g.innerHTML='';
+  tariffs.filter(t=>tarTier==='all'||t.tier===tarTier).forEach(t=>{
+    const d=document.createElement('div');d.className='tar';
+    d.innerHTML=`<div class="hd"><b>${t.name}</b><span class="vip-mini ${t.tier==='vip'?'vm-gold':'vm-none'}">${t.tier==='vip'?'VIP':'عادی'}</span></div>
+      <div class="rows">${t.rows.map(r=>`<div class="trow"><span>${r[0]}</span><b>${r[1]} ت</b></div>`).join('')}</div>
+      ${t.night!=='—'?`<div class="night">🌙 ${t.night}</div>`:''}
+      <div class="night" style="color:var(--cyan)">ℹ ${t.note}</div>
+      <div class="paybtns" style="margin-top:10px"><button class="btn sm">✏️ ویرایش</button><button class="btn sm">⏱ تعرفه ساعت خاص</button><button class="btn sm">🗑</button></div>`;
+    g.appendChild(d);
+  });
+}
+document.querySelectorAll('#tar-tier button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#tar-tier button').forEach(x=>x.classList.remove('active'));b.classList.add('active');tarTier=b.dataset.t;renderTariffs()});
+renderTariffs();
+
+/* ── استخر اکانت‌ها ── */
+const accounts=[
+  {n:'CS2-01',plat:'Steam',ic:'🔫',st:'in-use',who:'PC ۵ — رضا محمدی',games:'CS2',guard:'غیرفعال (کافه مود)'},
+  {n:'CS2-02',plat:'Steam',ic:'🔫',st:'free',who:'—',games:'CS2',guard:'غیرفعال'},
+  {n:'CS2-03',plat:'Steam',ic:'🔫',st:'free',who:'—',games:'CS2, Dota',guard:'غیرفعال'},
+  {n:'CS2-04',plat:'Steam',ic:'🔫',st:'locked',who:'—',games:'CS2',guard:'قفل موقت (احراز)'},
+  {n:'FIFA-01',plat:'EA',ic:'⚽',st:'in-use',who:'PC ۱۲ — امیر کریمی',games:'FC 26',guard:'—'},
+  {n:'FIFA-02',plat:'EA',ic:'⚽',st:'free',who:'—',games:'FC 26',guard:'—'},
+  {n:'BT-01',plat:'Battle.net',ic:'🪖',st:'free',who:'—',games:'COD',guard:'2FA خاموش'},
+  {n:'VAL-01',plat:'Riot',ic:'🎯',st:'in-use',who:'PC ۷ — سعید رضایی',games:'Valorant',guard:'—'},
+  {n:'VAL-02',plat:'Riot',ic:'🎯',st:'free',who:'—',games:'Valorant',guard:'—'},
+  {n:'EPC-01',plat:'Epic',ic:'🎮',st:'free',who:'—',games:'Fortnite',guard:'غیرفعال'},
+];
+let accCat='all';
+function renderAccounts(){
+  const g=document.getElementById('acc-grid');g.innerHTML='';
+  accounts.filter(a=>accCat==='all'||a.plat===accCat).forEach(a=>{
+    const stMap={free:['آزاد','free'],['in-use']:['در استفاده','in-use'],locked:['قفل','locked']};
+    const s=stMap[a.st];
+    const d=document.createElement('div');d.className='acc';
+    d.innerHTML=`<div class="hd"><div class="ic">${a.ic}</div><div><b>${a.n}</b><span>${a.plat} • ${a.games}</span></div></div>
+      <div class="st"><span class="${s[1]}">${s[0]}</span><span>رمز: 🔒 فقط سرور</span></div>
+      ${a.st==='in-use'?`<div class="row"><span>در اختیار</span><b>${a.who}</b></div>`:''}
+      <div class="row"><span>Steam Guard / 2FA</span><b>${a.guard}</b></div>
+      <div class="paybtns" style="margin-top:8px"><button class="btn sm">✏️ ویرایش</button>${a.st==='locked'?'<button class="btn sm">🔓 رفع قفل</button>':''}<button class="btn sm">📜 لاگ</button></div>`;
+    g.appendChild(d);
+  });
+  document.getElementById('acs-free').innerHTML=fa(accounts.filter(a=>a.st==='free').length)+' <small>اکانت</small>';
+  document.getElementById('acs-use').innerHTML=fa(accounts.filter(a=>a.st==='in-use').length)+' <small>اکانت</small>';
+  document.getElementById('acs-all').innerHTML=fa(accounts.length)+' <small>اکانت</small>';
+}
+document.querySelectorAll('#acc-cat button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#acc-cat button').forEach(x=>x.classList.remove('active'));b.classList.add('active');accCat=b.dataset.c;renderAccounts()});
+renderAccounts();
+
+/* ── فلوی سرعت F1 ── */
+let flowStage=1;
+/* فلوی سرعت — بدون دستگاه: مرحله شناسه؛ با دستگاه: پروفایل آماده مرحله مبلغ */
+function openFlow(stationName){
+  flowStage=1;
+  document.getElementById('flow-1').style.display='block';
+  document.getElementById('flow-2').style.display='none';
+  document.getElementById('flow-step').textContent='مرحله ۱: شناسه';
+  document.getElementById('flow-id').value='';
+  /* اگر دستگاهی مشخص شد، یوزرش را پیدا کن و پروفایلش را آماده کن */
+  if(stationName){
+    const st=stations.find(x=>x.name===stationName);
+    const c=customers.find(x=>st.user&&st.user.includes(x.code))||customers[0];
+    document.getElementById('flow-cname').textContent=c.fname+' '+c.lname;
+    document.getElementById('flow-cinfo').textContent='کد '+c.code+' • @'+c.alias+' • '+(c.vip==='gold'?'🥇 گلد':c.vip==='silver'?'🥈 سیلور':'بدون پکیج')+' • کیف پول '+fa(c.wallet)+' • دستگاه: '+stationName;
+    /* نمایش مرحله ۲ مستقیم چون پروفایل دستگاه شناخته شده است */
+    flowStage=2;
+    document.getElementById('flow-1').style.display='none';
+    document.getElementById('flow-2').style.display='block';
+    document.getElementById('flow-step').textContent='مرحله ۲: مبلغ و پرداخت — '+stationName;
+    document.getElementById('ov-flow').classList.add('show');
+    setTimeout(()=>document.getElementById('flow-amount').focus(),50);
+    return;
+  }
+  document.getElementById('ov-flow').classList.add('show');
+  setTimeout(()=>document.getElementById('flow-id').focus(),50);
+}
+function flowToAmount(name){
+  const q=(name||document.getElementById('flow-id').value.trim());
+  /* جست‌وجوی همه‌فیلدی — اولین تطبیق */
+  const hit=customers.find(c=>(c.code+c.fname+c.lname+c.alias+c.mobile+c.nat).includes(q))||customers[0];
+  if(q){
+    document.getElementById('flow-cname').textContent=hit.fname+' '+hit.lname;
+    document.getElementById('flow-cinfo').textContent='کد '+hit.code+' • @'+hit.alias+' • '+(hit.vip==='gold'?'🥇 گلد':hit.vip==='silver'?'🥈 سیلور':'بدون پکیج')+' • کیف پول '+fa(hit.wallet);
+  }
+  flowStage=2;
+  document.getElementById('flow-1').style.display='none';
+  document.getElementById('flow-2').style.display='block';
+  document.getElementById('flow-step').textContent='مرحله ۲: مبلغ و پرداخت';
+  setTimeout(()=>document.getElementById('flow-amount').focus(),50);
+}
+function flowAct(msg){hideModals();notifyQuick(msg)}
+function faSet(id,v){document.getElementById(id).value=v}
+
+/* نقش‌ها برای دموی دسترسی گزارش */
+let curRole='op';
+function cycleRole(){
+  curRole=curRole==='op'?'admin':curRole==='admin'?'owner':'op';
+  const label={op:'اپراتور: علی محمدی',admin:'مدیر: سارا احمدی',owner:'صاحب گیم‌نت: محمود رضایی'}[curRole];
+  document.getElementById('whoami').textContent=label;
+  const isOp=curRole==='op';
+  document.getElementById('rep-full').style.display=isOp?'none':'block';
+  document.getElementById('rep-self').style.display=isOp?'block':'none';
+  document.getElementById('rep-role-banner').style.display=isOp?'block':'none';
+  notifyQuick('نقش فعلی: '+label+' (دمو)');
+}
+
+/* اسلایدر زوم — همه حالت‌ها */
+document.getElementById('zslider').addEventListener('input',e=>{
+  const pct=+e.target.value;
+  document.getElementById('sz').textContent=fa(pct)+'٪';
+  const f=pct/100;
+  document.querySelectorAll('.grid').forEach(g=>{
+    g.style.setProperty('--lscale',f);
+    if(curView==='v-card')g.style.gridTemplateColumns=`repeat(auto-fill,minmax(${168*f}px,1fr))`;
+    else if(curView==='v-compact')g.style.gridTemplateColumns=`repeat(auto-fill,minmax(${128*f}px,1fr))`;
+    else g.style.gridTemplateColumns='1fr';
+  });
+});
+
+/* هات‌کی‌های جدید */
+document.addEventListener('keydown',e=>{
+  if(e.key==='F1'){e.preventDefault();openFlow()}
+  if(flowStage===2){
+    if(e.key==='F4'){e.preventDefault();document.getElementById('flow-amount').focus()}
+    if(e.key==='F5'){e.preventDefault();flowAct('F5: شارژ مستقیم انجام شد ✓')}
+    if(e.key==='F6'){e.preventDefault();flowAct('F6: شارژ + بدهی ثبت شد ✓')}
+    if(e.key==='F7'){e.preventDefault();flowAct('F7: از کیف پول کسر شد ✓')}
+    if(e.key==='F8'){e.preventDefault();flowAct('F8: کسر از کیف پول؛ مازاد به بدهی ✓')}
+  }
+  if(e.key==='F4'&&!document.querySelector('.overlay.show')&&flowStage===1){
+    e.preventDefault();openFlow();flowToAmount();
+  }
+},true);
+
+/* شارژ سریع روی کارت (دابل‌کلیک) */
+function openQuickCharge(name){
+  document.getElementById('qc-station').textContent=name;
+  document.getElementById('qc-amount').value='';
+  document.getElementById('qc-target').textContent='شارژ زمان همین جلسه';
+  document.getElementById('ov-charge').classList.add('show');
+  setTimeout(()=>document.getElementById('qc-amount').focus(),50);
+}
+window.qset=v=>{document.getElementById('qc-amount').value=v};
+document.getElementById('qc-amount').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){hideModals();notifyQuick('شارژ شد ✓ (دمو)')}
+});
+function notifyQuick(t){
+  const m=document.createElement('div');
+  m.style.cssText='position:fixed;bottom:20px;inset-inline-start:50%;transform:translateX(50%);background:#0f2b1e;border:1px solid #22e58a;color:#22e58a;padding:10px 22px;border-radius:12px;font-size:13px;z-index:400;animation:up .2s ease';
+  m.textContent=t;document.body.appendChild(m);setTimeout(()=>m.remove(),2200);
+}
+
+/* پالت فرمان (Ctrl+K) */
+const commands=[
+  {ic:'⚡',t:'شارژ مستقیم جلسه',k:'F2',sub:'انتخاب ایستگاه → مبلغ → شارژ',act:()=>{document.querySelector('nav a[data-page="dash"]').click();openQuickCharge('PC ۵')}},
+  {ic:'🧾',t:'شارژ + ثبت در بدهی',k:'F3',sub:'مشتری بازی کند و بدهکار شود',act:()=>notifyQuick('حالت بدهی: مبلغ به حساب مشتری اضافه می‌شود (دمو)')},
+  {ic:'✂️',t:'کسر اعتبار/تخفیف',k:'F4',sub:'کسر از کیف پول یا اعتبار رایگان',act:()=>notifyQuick('کسر اعتبار (دمو)')},
+  {ic:'🛒',t:'فروش بوفه سریع',k:'F5',sub:'رفتن به صفحه بوفه',act:()=>document.querySelector('nav a[data-page="buffet"]').click()},
+  {ic:'👤',t:'جست‌وجوی مشتری',k:'F6',sub:'رفتن به صفحه مشتریان با جست‌وجو',act:()=>document.querySelector('nav a[data-page="cust"]').click()},
+  {ic:'▶️',t:'شروع جلسه جدید',k:'F7',sub:'انتخاب ایستگاه آزاد',act:()=>{document.querySelector('nav a[data-page="dash"]').click();document.getElementById('ov-start').classList.add('show')}},
+  {ic:'⏱',t:'تمدید وقت',k:'F8',sub:'افزودن زمان به جلسه فعال',act:()=>notifyQuick('تمدید وقت (دمو)')},
+  {ic:'💰',t:'بستن صندوق / پایان شیفت',k:'F9',sub:'خلاصه نقد/کارت و کسری',act:()=>document.querySelector('nav a[data-page="users"]').click()},
+];
+let cmdHot=0;
+function openCmdk(){
+  document.getElementById('cmdk-input').value='';
+  renderCmdk('');
+  document.getElementById('ov-cmdk').classList.add('show');
+  setTimeout(()=>document.getElementById('cmdk-input').focus(),50);
+}
+function renderCmdk(q){
+  const box=document.getElementById('cmdk-list');box.innerHTML='';
+  commands.filter(c=>(c.t+c.sub).includes(q)).forEach((c,i)=>{
+    const d=document.createElement('div');d.className='cmdk-item'+(i===0?' hot':'');
+    d.innerHTML=`<span class="ic">${c.ic}</span><div><div>${c.t}</div><small>${c.sub}</small></div><kbd>${c.k}</kbd>`;
+    d.onclick=()=>{hideModals();c.act()};
+    box.appendChild(d);
+  });
+}
+document.getElementById('cmdk-input').addEventListener('input',e=>renderCmdk(e.target.value));
+document.getElementById('cmdk-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const f=document.querySelector('.cmdk-item.hot');if(f)f.click()}
+  if(e.key==='Escape')hideModals();
+});
+/* هات‌کی‌های جهانی — ناوبری و پالت؛ فلو در listener جدا */
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.key.toLowerCase()==='k'){e.preventDefault();openCmdk();return}
+  if(document.querySelector('.overlay.show'))return;
+  if(e.key==='F3'){e.preventDefault();document.querySelector('nav a[data-page="buffet"]').click()}
+  if(e.key==='F2'){e.preventDefault();document.querySelector('nav a[data-page="reports"]').click()}
+  if(e.key==='F9'){e.preventDefault();document.querySelector('nav a[data-page="users"]').click()}
+});
+</script>
+</body>
+</html>

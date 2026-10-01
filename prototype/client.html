@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>گیم‌نت منیجر — شل مشتری (کلاینت)</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070a14; --panel:#101728; --panel2:#151d33; --line:#1e2a44;
+    --txt:#e9eef8; --dim:#8b98b8;
+    --green:#22e58a; --blue:#3aa9ff; --purple:#a78bfa; --orange:#ffb454; --red:#ff5d73;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;font-family:'Vazirmatn',sans-serif}
+  body{height:100vh;overflow:hidden;background:radial-gradient(1000px 500px at 50% -10%,#12224a55,transparent),var(--bg);color:var(--txt)}
+  button{font-family:inherit}
+
+  /* ── نوار بالا (همیشه نمایان) ── */
+  .topbar{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:12px;padding:8px 16px;background:linear-gradient(180deg,#0d1425ee,#0a101fd9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);z-index:60}
+  .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#22e58a,#3aa9ff);display:flex;align-items:center;justify-content:center;font-weight:900;color:#04101a;font-size:14px}
+  .sys{font-size:12px;color:var(--dim)} .sys b{color:var(--txt)}
+  .spacer{flex:1}
+  .pill{display:flex;align-items:center;gap:8px;background:#0f1729;border:1px solid var(--line);border-radius:99px;padding:6px 14px;font-size:12.5px}
+  .timer{font-weight:900;font-size:17px;color:var(--green);font-variant-numeric:tabular-nums;letter-spacing:1px}
+  .timer.warn{color:var(--orange);animation:blink 1s infinite}
+  .timer.crit{color:var(--red);animation:blink .6s infinite}
+  @keyframes blink{50%{opacity:.45}}
+  .balance b{color:var(--orange)}
+  .user-pill{display:flex;align-items:center;gap:8px;cursor:pointer}
+  .ava{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,#3aa9ff,#a78bfa);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;color:#0a1020}
+
+  /* ── صفحه لاگین ── */
+  .stage{height:100vh;display:flex;align-items:center;justify-content:center;position:relative}
+  .login{width:min(420px,92vw);background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #24314f;border-radius:20px;padding:28px;box-shadow:0 30px 80px rgba(0,0,0,.6);text-align:center;animation:up .3s ease}
+  @keyframes up{from{transform:translateY(16px);opacity:0}to{transform:none;opacity:1}}
+  .login .glogo{width:64px;height:64px;border-radius:18px;background:linear-gradient(135deg,#22e58a,#3aa9ff);margin:0 auto 14px;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:900;color:#04101a;box-shadow:0 0 40px #22e58a44}
+  .login h1{font-size:19px;margin-bottom:4px}
+  .login p{font-size:12px;color:var(--dim);margin-bottom:18px}
+  .login input{width:100%;background:#0d1526;border:1px solid var(--line);border-radius:12px;color:var(--txt);padding:13px 15px;font-family:inherit;font-size:15px;text-align:center;letter-spacing:2px;outline:none;margin-bottom:10px}
+  .login input:focus{border-color:var(--green);box-shadow:0 0 0 3px #22e58a22}
+  .login .btn{width:100%;padding:12px;border-radius:12px;border:1px solid #1db87d;background:linear-gradient(135deg,#16a06a,#0f7f55);color:#fff;font-size:15px;font-weight:800;cursor:pointer;box-shadow:0 6px 20px rgba(34,229,138,.3)}
+  .login .hint{font-size:10.5px;color:var(--dim);margin-top:12px}
+  .login .hint b{color:var(--blue)}
+  .err{color:var(--red);font-size:11.5px;height:16px;margin-bottom:4px}
+
+  /* ── دسکتاپ بازی (بعد از لاگین) ── */
+  .games{display:none;padding:70px 30px 30px;height:100vh;overflow:auto}
+  .games h2{font-size:15px;color:var(--dim);margin:10px 2px 12px;font-weight:500}
+  .g-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--gsize,190px),1fr));gap:14px}
+  .g-grid.v-compact{grid-template-columns:repeat(auto-fill,minmax(calc(var(--gsize,190px)*.7),1fr));gap:9px}
+  .g-grid.v-compact .g-card .info b{font-size:11.5px}
+  .g-grid.v-list{grid-template-columns:1fr;gap:7px}
+  .g-grid.v-list .g-card{display:flex;align-items:center;gap:12px;aspect-ratio:auto;padding:7px 12px}
+  .g-grid.v-list .g-card .art{height:auto;width:42px;font-size:24px;flex-shrink:0}
+  .g-grid.v-list .g-card .info{padding:0;flex:1}
+  .g-grid.v-list .g-card .info span{display:block}
+  .g-grid.v-list .run-badge{position:static}
+
+  /* کنترل‌های نمایش */
+  .seg-sm{display:flex;gap:3px;background:#0f1729;border:1px solid var(--line);padding:3px;border-radius:9px}
+  .seg-sm button{border:0;background:transparent;color:var(--dim);padding:4px 9px;border-radius:7px;cursor:pointer;font-size:12px}
+  .seg-sm button.active{background:#1b2540;color:var(--green)}
+  .zoomctl{display:flex;align-items:center;background:#0f1729;border:1px solid var(--line);border-radius:9px;padding:3px}
+  .zoomctl button{border:0;background:transparent;color:var(--txt);width:24px;height:22px;border-radius:6px;cursor:pointer;font-size:14px;line-height:1}
+  .zoomctl span{font-size:10px;color:var(--dim);min-width:36px;text-align:center}
+
+  /* قلنک کلاینت */
+  .ck{position:fixed;top:64px;inset-inline-start:50%;transform:translateX(50%);width:min(520px,94vw);background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #24314f;border-radius:15px;padding:12px;z-index:250;display:none;box-shadow:0 24px 70px rgba(0,0,0,.65)}
+  .ck.show{display:block;animation:up .15s ease}
+  .ck input{width:100%;background:#0d1526;border:1px solid var(--line);border-radius:11px;color:var(--txt);padding:12px 14px;font-family:inherit;font-size:13.5px;outline:none}
+  .ck input:focus{border-color:var(--green)}
+  .ck-list{max-height:270px;overflow:auto;margin-top:8px}
+  .ck-item{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:9px;cursor:pointer;font-size:12.5px}
+  .ck-item:hover,.ck-item.hot{background:#1b2540}
+  .ck-item .ic{font-size:15px}
+  .ck-item small{color:var(--dim);margin-inline-start:auto;font-size:10px}
+  .ck .hint{font-size:10px;color:var(--dim);margin-top:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .ck kbd{background:#0d1526;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:9.5px;color:var(--green)}
+  .ck .zctl{display:flex;align-items:center;gap:7px;margin-inline-start:auto}
+  .ck .zctl input{-webkit-appearance:none;width:90px;height:4px;background:#1a2338;border-radius:4px;outline:none;cursor:pointer}
+  .ck .zctl input::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--green);cursor:pointer;box-shadow:0 0 6px #22e58a88}
+  .ck .zctl span{font-size:10px;color:var(--dim);min-width:34px;text-align:center}
+
+  /* پیش‌نمایش بازی + تبلیغ (ستون چپ) */
+  .leftcol{position:fixed;bottom:52px;inset-inline-end:14px;width:230px;z-index:85;display:none;flex-direction:column;gap:10px}
+  .leftcol.show{display:flex}
+  .gprev{background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #24314f;border-radius:15px;overflow:hidden}
+  .gprev .img{height:150px;display:flex;align-items:center;justify-content:center;font-size:56px;background:radial-gradient(240px 160px at 50% 40%,#1b2a4d,transparent)}
+  .gprev .img img{width:100%;height:100%;object-fit:cover}
+  .gprev .bd{padding:10px 13px}
+  .gprev .bd b{font-size:13px;display:block;margin-bottom:4px}
+  .gprev .bd p{font-size:10.5px;color:var(--dim);line-height:1.8;margin:0}
+  .gprev .bd p+p{margin-top:3px}
+  .adcard{background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #24314f;border-radius:15px;overflow:hidden;position:relative}
+  .adcard .x{position:absolute;top:7px;inset-inline-end:9px;background:none;border:0;color:var(--dim);cursor:pointer;font-size:13px;z-index:2}
+  .adcard .media{height:110px;display:flex;align-items:center;justify-content:center;font-size:38px;background:radial-gradient(200px 120px at 50% 40%,#2a2313,transparent)}
+  .adcard .bd{padding:9px 12px 11px}
+  .adcard .ttl{font-size:12px;font-weight:800;color:var(--gold)}
+  .adcard .txt{font-size:10px;color:var(--dim);margin-top:3px;line-height:1.7}
+  .adcard .cta{margin-top:8px;width:100%;border:1px solid #ffd16655;background:#2a2313;color:var(--gold);border-radius:9px;padding:6px;cursor:pointer;font-size:10.5px}
+
+  /* کادرهای اپراتور/آزادسازی */
+  .admin-box{position:fixed;top:50%;inset-inline-start:50%;transform:translate(50%,-50%);width:min(380px,92vw);background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #ffd16655;border-radius:16px;padding:20px;z-index:350;display:none;box-shadow:0 24px 70px rgba(0,0,0,.7)}
+  .admin-box.show{display:block;animation:up .2s ease}
+  .admin-box h4{font-size:14.5px;margin-bottom:6px;display:flex;justify-content:space-between}
+  .admin-box p{font-size:11px;color:var(--dim);margin-bottom:12px}
+  .admin-box input{width:100%;background:#0d1526;border:1px solid var(--line);border-radius:11px;color:var(--txt);padding:11px 13px;font-family:inherit;font-size:14px;text-align:center;outline:none;margin-bottom:8px}
+  .admin-box input:focus{border-color:var(--gold)}
+  .ab-btns{display:flex;gap:8px;margin-top:6px}
+  .ab-btns button{flex:1;padding:10px;border-radius:11px;border:1px solid var(--line);background:#0d1526;color:var(--txt);cursor:pointer;font-size:12.5px}
+  .ab-btns button.go{background:#0f2b1e;border-color:#1db87d;color:var(--green);font-weight:800}
+  .ab-btns button.dg{background:#2b1220;border-color:#ff5d7355;color:var(--red)}
+  .ab-note{font-size:10px;color:var(--dim);margin-top:10px}
+
+  /* باکس انتخاب اکانت */
+  .accpick{position:fixed;top:50%;inset-inline-start:50%;transform:translate(50%,-50%);width:min(360px,92vw);background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #24314f;border-radius:16px;padding:18px;z-index:320;display:none;box-shadow:0 24px 70px rgba(0,0,0,.7)}
+  .accpick.show{display:block;animation:up .18s ease}
+  .accpick h4{font-size:14.5px;margin-bottom:4px;display:flex;justify-content:space-between}
+  .accpick .sub{font-size:11px;color:var(--dim);margin-bottom:13px}
+  .acc-btn{display:flex;align-items:center;gap:11px;width:100%;background:#0d1526;border:1px solid var(--line);border-radius:13px;padding:13px 15px;cursor:pointer;color:var(--txt);margin-bottom:9px;transition:.15s;text-align:right}
+  .acc-btn:hover{border-color:var(--green)}
+  .acc-btn .ic{font-size:22px}
+  .acc-btn b{font-size:13.5px;display:block}
+  .acc-btn span{font-size:10.5px;color:var(--dim)}
+  .acc-btn.pool{border-color:#22e58a55;background:#0f2b1e33}
+  .acc-note{font-size:10px;color:var(--dim);margin-top:6px}
+  .g-card{border-radius:15px;overflow:hidden;cursor:pointer;position:relative;border:1px solid var(--line);background:linear-gradient(165deg,var(--panel),var(--panel2));transition:.18s;aspect-ratio:3/4}
+  .g-card:hover{transform:translateY(-3px);border-color:#2a3b63;box-shadow:0 14px 34px rgba(0,0,0,.5)}
+  .g-card .art{height:72%;display:flex;align-items:center;justify-content:center;font-size:52px;background:radial-gradient(300px 200px at 50% 30%,#1b2a4d,transparent)}
+  .g-card .info{padding:11px 13px}
+  .g-card .info b{font-size:13.5px;display:block}
+  .g-card .info span{font-size:10px;color:var(--dim)}
+  .g-card .tag{position:absolute;top:10px;inset-inline-start:10px;font-size:9px;padding:2px 8px;border-radius:99px;background:#0f1729cc;border:1px solid var(--line);color:var(--dim)}
+  .g-card .tag.on{color:var(--green);border-color:#22e58a55}
+  .g-card.running{border-color:var(--green);box-shadow:0 0 0 1px var(--green),0 0 24px #22e58a33}
+  .run-badge{display:none;position:absolute;bottom:10px;inset-inline-end:10px;font-size:9px;color:var(--green);font-weight:800}
+  .g-card.running .run-badge{display:block}
+
+  /* ── منوی راست‌کلیک ── */
+  .ctx{position:fixed;display:none;flex-direction:column;min-width:230px;background:#121a2e;border:1px solid #2a3b63;border-radius:13px;padding:6px;z-index:200;box-shadow:0 18px 50px rgba(0,0,0,.65);animation:up .12s ease}
+  .ctx.show{display:flex}
+  .ctx button{display:flex;align-items:center;gap:10px;background:none;border:0;color:var(--txt);padding:9px 12px;border-radius:9px;font-size:12.5px;cursor:pointer;text-align:right;width:100%}
+  .ctx button:hover{background:#1b2540}
+  .ctx button kbd{margin-inline-start:auto;font-size:9.5px;color:var(--dim);background:#0d1526;border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .ctx .sep{height:1px;background:var(--line);margin:4px 8px}
+  .ctx .info{font-size:10.5px;color:var(--dim);padding:7px 12px 4px}
+  .ctx .info b{color:var(--txt)}
+
+  /* ── پنل حساب (خود مشتری) ── */
+  .acct{position:fixed;top:52px;inset-inline-start:16px;width:300px;background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #24314f;border-radius:16px;padding:16px;z-index:80;display:none;box-shadow:0 20px 50px rgba(0,0,0,.5)}
+  .acct.show{display:block;animation:up .18s ease}
+  .acct h4{font-size:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+  .acct .row{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px dashed #1a2440;color:var(--dim)}
+  .acct .row b{color:var(--txt)}
+  .pkg-box{background:linear-gradient(135deg,#1c1730,#241a3a);border:1px solid #a78bfa44;border-radius:11px;padding:10px;margin:10px 0;font-size:11px}
+  .pkg-box .t{color:var(--purple);font-weight:800;display:flex;justify-content:space-between}
+  .pkg-box .bar{height:4px;background:#1a2338;border-radius:4px;margin-top:7px;overflow:hidden}
+  .pkg-box .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--purple),var(--blue))}
+  .acct .msg{font-size:10.5px;color:var(--dim);margin-top:8px}
+
+  /* ── مودال پیام سرور ── */
+  .server-msg{position:fixed;bottom:20px;inset-inline-start:50%;transform:translateX(50%);background:#1b2540;border:1px solid var(--blue);color:var(--txt);padding:11px 20px;border-radius:12px;font-size:13px;z-index:300;display:none;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .server-msg.show{display:block;animation:up .2s ease}
+
+  /* ── نوار پایین ── */
+  .dock{position:fixed;bottom:0;left:0;right:0;display:flex;align-items:center;gap:6px;padding:7px 14px;background:linear-gradient(180deg,#0d1425ee,#0a101fdd);backdrop-filter:blur(8px);border-top:1px solid var(--line);z-index:70}
+  .dock button{display:flex;align-items:center;gap:7px;background:#0f1729;border:1px solid var(--line);color:var(--txt);padding:8px 15px;border-radius:11px;cursor:pointer;font-size:12.5px;transition:.15s}
+  .dock button:hover{border-color:#2a3b63;background:#141d33}
+  .dock button.hot{color:var(--green);border-color:#22e58a55}
+  .dock .left{margin-inline-end:auto}
+
+  /* پنل نرم‌افزارها (کشویی از پایین) */
+  .apps{position:fixed;bottom:52px;inset-inline-start:14px;width:min(430px,92vw);background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #24314f;border-radius:15px;padding:13px;z-index:90;display:none;box-shadow:0 20px 50px rgba(0,0,0,.55);animation:up .18s ease}
+  .apps.show{display:block}
+  .apps h4{font-size:12.5px;color:var(--dim);font-weight:500;margin-bottom:10px}
+  .app-row{display:flex;flex-wrap:wrap;gap:8px}
+  .app-chip{display:flex;align-items:center;gap:8px;background:#0d1526;border:1px solid var(--line);border-radius:11px;padding:8px 13px;cursor:pointer;font-size:12px;transition:.15s}
+  .app-chip:hover{border-color:var(--green);color:var(--green)}
+  .app-chip .ic{font-size:16px}
+
+  /* پنل بوفه مشتری */
+  .menu{position:fixed;bottom:52px;inset-inline-start:14px;width:min(430px,92vw);max-height:60vh;overflow:auto;background:linear-gradient(170deg,#121a2e,#0e1526);border:1px solid #24314f;border-radius:15px;padding:13px;z-index:90;display:none;box-shadow:0 20px 50px rgba(0,0,0,.55);animation:up .18s ease}
+  .menu.show{display:block}
+  .menu h4{font-size:12.5px;color:var(--dim);font-weight:500;margin-bottom:10px}
+  .m-item{display:flex;align-items:center;gap:10px;padding:8px 6px;border-bottom:1px dashed #1a2440;font-size:12.5px}
+  .m-item .ic{font-size:17px}
+  .m-item b{flex:1}
+  .m-item .p{color:var(--orange);font-weight:800}
+  .m-item .add{border:1px solid var(--line);background:#0d1526;color:var(--green);border-radius:8px;padding:3px 11px;cursor:pointer;font-size:11px}
+  .m-note{font-size:10.5px;color:var(--dim);margin-top:9px}
+
+  /* کادر تبلیغ (سمت چپ) */
+  .adbox{display:none}
+
+  /* پیش‌نمایش قفل پس از اتمام */
+  .lockover{position:fixed;inset:0;background:#040710ee;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:400}
+  .lockover.show{display:flex}
+  .lockover h2{font-size:20px}
+  .lockover p{font-size:12.5px;color:var(--dim)}
+  .lockover .btn{padding:11px 26px;border-radius:12px;border:1px solid #1db87d;background:#0f2b1e;color:var(--green);font-size:14px;cursor:pointer}
+</style>
+</head>
+<body>
+
+<!-- نوار بالا -->
+<div class="topbar">
+  <div class="logo">گ</div>
+  <div class="sys"><b>PC ۱۲</b> — گیم‌نت منیجر</div>
+  <div class="spacer"></div>
+  <div class="pill balance">👛 مانده: <b id="bal">۴۵۰٬۰۰۰</b> ت</div>
+  <div class="pill">⏱ <span class="timer" id="timer">۰۳:۴۵:۱۲</span></div>
+  <div class="seg-sm" id="gview" title="نوع نمایش بازی‌ها">
+    <button data-v="v-card" class="active" title="کارتی">▦</button>
+    <button data-v="v-compact" title="فشرده">▤</button>
+    <button data-v="v-list" title="لیستی">☰</button>
+  </div>
+  <div class="zoomctl" title="بزرگ‌نمایی">
+    <button onclick="zoomG(-1)">−</button><span id="gz">۱۰۰٪</span><button onclick="zoomG(1)">＋</button>
+  </div>
+  <div class="pill user-pill" onclick="toggleAcct()"><span class="ava">ر</span> رضا-Headshot 🥇</div>
+</div>
+
+<!-- صفحه لاگین -->
+<div class="stage" id="stage-login">
+  <div class="login">
+    <div class="glogo">گ</div>
+    <h1>به گیم‌نت خوش آمدی</h1>
+    <p>کد کاربری یا شماره کارت خودت را وارد کن</p>
+    <div class="err" id="err"></div>
+    <input id="login-id" placeholder="کد کاربری — مثلاً ۱۰۵۰" autofocus>
+    <input id="login-pass" type="password" placeholder="رمز عبور (برای مهمان خالی بگذار)" style="margin-top:2px">
+    <button class="btn" onclick="doLogin()">ورود به سیستم</button>
+    <button class="btn" style="width:100%;padding:11px;border-radius:12px;border:1px solid #ffd16655;background:#2a2313;color:var(--gold);font-size:13.5px;font-weight:800;cursor:pointer;margin-top:8px" onclick="showBox('opbox')">🧑‍💼 ورود اپراتور (وقت نامحدود) <span style="font-size:9px;opacity:.7">Alt+F6</span></button>
+    <button class="btn" style="width:100%;padding:10px;border-radius:12px;border:1px solid var(--line);background:#0d1526;color:var(--dim);font-size:11.5px;cursor:pointer;margin-top:6px" onclick="showBox('freebox')">🔓 آزادسازی سیستم / ورود به ویندوز <span style="font-size:9px">Alt+F7</span></button>
+    <div class="hint">مهمان هستی؟ از اپراتور بخواه اکانت باز کند — یا با <b>Enter</b> وارد شو</div>
+  </div>
+</div>
+
+<!-- دسکتاپ بازی -->
+<div class="games" id="stage-games">
+  <h2>🎮 بازی‌های این سیستم — برای اجرا دوبار کلیک کن</h2>
+  <div class="g-grid">
+    <div class="g-card running" ondblclick="notify('بازی در حال اجرا است — CS2')" onmouseenter="showPrev(this,'Counter-Strike 2','شوتر تاکتیکی رقابتی ۵ نفره با رنک رسمی.','مخصوص سیستم‌های آنلاین — استخر اکانت موجود.','🔫')">
+      <span class="tag on">در حال اجرا</span><div class="art">🔫</div>
+      <div class="info"><b>Counter-Strike 2</b><span>شوتر تاکتیکی • آنلاین</span></div><span class="run-badge">● RUNNING</span>
+    </div>
+    <div class="g-card" ondblclick="openAccPick('Valorant')" onmouseenter="showPrev(this,'Valorant','شوتر تاکتیکی ۵v5 با شخصیت‌های یونیک.','فقط سیستم‌های VIP — نیازمند اکانت Riot.','🎯')">
+      <span class="tag">نصب‌شده</span><div class="art">🎯</div>
+      <div class="info"><b>Valorant</b><span>شوتر تاکتیکی • آنلاین</span></div>
+    </div>
+    <div class="g-card" ondblclick="run(this,'fifa')" onmouseenter="showPrev(this,'EA FC 26','فوتبال شبیه‌سازی با تیم‌های رسمی و Ultimate Team.','استخر اکانت EA موجود — آنلاین و آفلاین.','⚽')">
+      <span class="tag">نصب‌شده</span><div class="art">⚽</div>
+      <div class="info"><b>EA FC 26</b><span>ورزشی • آنلاین/آفلاین</span></div>
+    </div>
+    <div class="g-card" ondblclick="run(this,'cod')" onmouseenter="showPrev(this,'Call of Duty','شوتر جنگی مدرن با کمپین و مولتی‌پلیر.','اکانت Battle.net در استخر — 2FA خاموش.','🪖')">
+      <span class="tag">نصب‌شده</span><div class="art">🪖</div>
+      <div class="info"><b>Call of Duty</b><span>اکشن • آنلاین</span></div>
+    </div>
+    <div class="g-card" ondblclick="run(this,'gta')" onmouseenter="showPrev(this,'GTA V','دنیای آزاد جنایی با داستان جذاب و GTA Online.','آفلاین — بدون نیاز به اکانت.','🚗')">
+      <span class="tag">نصب‌شده</span><div class="art">🚗</div>
+      <div class="info"><b>GTA V</b><span>اکشن • آفلاین</span></div>
+    </div>
+    <div class="g-card" ondblclick="run(this,'dota')" onmouseenter="showPrev(this,'Dota 2','موبا ۵v5 رقابتی با صد قهرمان.','استخر Steam شامل Dota — رایگان.','🛡')">
+      <span class="tag">نصب‌شده</span><div class="art">🛡</div>
+      <div class="info"><b>Dota 2</b><span>موبا • آنلاین</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- نوار پایین (Dock) -->
+<div class="dock" id="dock">
+  <button class="hot" onclick="openCk()">⌘ قلنک <kbd style="font-size:9px;background:#0d1526;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--green)">Ctrl+K</kbd></button>
+  <button onclick="toggleApps()">🧩 نرم‌افزارها</button>
+  <button onclick="toggleMenu()">🛒 منوی بوفه</button>
+  <button onclick="notify('مسابقات فعال: جام CS2 جمعه‌ها — ثبت‌نام از صندوق')">🏆 مسابقات</button>
+  <button onclick="notify('بازی‌های شما: آخرین رنک CS2 — Gold Nova 3')">📊 بازی‌های من</button>
+  <button onclick="toggleAcct()">👤 حساب من</button>
+  <div class="left"></div>
+  <button onclick="toggleAd()">📢 تبلیغات</button>
+  <button style="color:var(--gold);border-color:#ffd16644" onclick="event.stopPropagation();document.getElementById('opmenu').classList.add('show');document.getElementById('opmenu').style.left='14px';document.getElementById('opmenu').style.bottom='52px'">🛠 ابزار اپراتور <kbd style="font-size:9px;background:#0d1526;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--gold)">Alt+F6</kbd></button>
+</div>
+
+<!-- پنل نرم‌افزارها -->
+<div class="apps" id="apps">
+  <h4>🧩 نرم‌افزارها و ابزارهای مجاز</h4>
+  <div class="app-row">
+    <div class="app-chip" onclick="notify('Chrome باز شد (دمو)')"><span class="ic">🌐</span>کروم</div>
+    <div class="app-chip" onclick="notify('Discord باز شد (دمو)')"><span class="ic">💬</span>دیسکورد</div>
+    <div class="app-chip" onclick="notify('Spotify باز شد (دمو)')"><span class="ic">🎵</span>موزیک</div>
+    <div class="app-chip" onclick="notify('Telegram باز شد (دمو)')"><span class="ic">✈️</span>تلگرام</div>
+    <div class="app-chip" onclick="notify('OBS باز شد (دمو)')"><span class="ic">🎥</span>ضبط صفحه</div>
+    <div class="app-chip" onclick="notify('ماشین حساب باز شد (دمو)')"><span class="ic">🧮</span>ماشین حساب</div>
+  </div>
+</div>
+
+<!-- منوی بوفه -->
+<div class="menu" id="menu">
+  <h4>🛒 منوی بوفه — سفارش به صندوق ارسال می‌شود</h4>
+  <div class="m-item"><span class="ic">🥤</span><b>نوشابه</b><span class="p">۳۵٬۰۰۰</span><button class="add" onclick="notify('نوشابه به سفارش اضافه شد — اپراتور تایید می‌کند')">+</button></div>
+  <div class="m-item"><span class="ic">☕</span><b>قهوه فوری</b><span class="p">۴۵٬۰۰۰</span><button class="add" onclick="notify('قهوه به سفارش اضافه شد')">+</button></div>
+  <div class="m-item"><span class="ic">🍿</span><b>پاپ‌کورن</b><span class="p">۳۵٬۰۰۰</span><button class="add" onclick="notify('پاپ‌کورن اضافه شد')">+</button></div>
+  <div class="m-item"><span class="ic">🥪</span><b>ساندویچ سرد</b><span class="p">۹۰٬۰۰۰</span><button class="add" onclick="notify('ساندویچ اضافه شد')">+</button></div>
+  <div class="m-note">💡 مبلغ سفارش به فاکتور جلسه‌ات اضافه می‌شود. پرداخت از کیف پول یا هنگام تسویه.</div>
+</div>
+
+<!-- کادر تبلیغ (سمت چپ) -->
+<div class="adbox" id="adbox">
+  <div class="media">🎬</div>
+  <div class="body">
+    <div class="ttl">پکیج گلد VIP</div>
+    <div class="txt">۳۰ روز عضویت • ۴ ساعت بازی روزانه • ۱۰٪ تخفیف بوفه</div>
+    <div class="txt" style="color:var(--gold)">فقط ۱٬۸۰۰٬۰۰۰ تومان</div>
+    <button class="cta" onclick="notify('درخواست پکیج به صندوق ارسال شد!')">درخواست فعال‌سازی</button>
+  </div>
+</div>
+
+<!-- ستون چپ: پیش‌نمایش بازی + تبلیغ قابل بستن -->
+<div class="leftcol" id="leftcol">
+  <div class="gprev" id="gprev">
+    <div class="img" id="gp-img">🎮</div>
+    <div class="bd">
+      <b id="gp-name">—</b>
+      <p id="gp-d1">روی هر بازی ماوس ببر تا این‌جا پیش‌نمایش بیاید</p>
+      <p id="gp-d2">دوبار کلیک = اجرا</p>
+    </div>
+  </div>
+  <div class="adcard" id="adcard">
+    <button class="x" onclick="toggleAd(true)">✕</button>
+    <div class="media" id="ad-media">🎬</div>
+    <div class="bd">
+      <div class="ttl" id="ad-ttl">پکیج گلد VIP</div>
+      <div class="txt" id="ad-txt">۳۰ روز عضویت • ۴ ساعت روزانه • ۱۰٪ بوفه<br>فقط <b style="color:var(--gold)">۱٬۸۰۰٬۰۰۰ تومان</b></div>
+      <button class="cta" onclick="notify('درخواست پکیج به صندوق ارسال شد!')">درخواست فعال‌سازی</button>
+    </div>
+  </div>
+</div>
+<div class="accpick" id="accpick">
+  <h4><span id="ap-game">🎮 بازی</span> <button style="background:none;border:0;color:var(--dim);cursor:pointer" onclick="closeAccPick()">✕</button></h4>
+  <div class="sub">با کدام اکانت اجرا شود؟</div>
+  <button class="acc-btn" onclick="launchAcc('own')">
+    <span class="ic">👤</span>
+    <span style="flex:1"><b>اکانت خودم</b><span>پیشرفت و دوستان خودت — رمز را خودت وارد می‌کنی</span></span>
+  </button>
+  <button class="acc-btn pool" onclick="launchAcc('pool')">
+    <span class="ic">🏪</span>
+    <span style="flex:1"><b>اکانت گیم‌نت <span style="color:var(--green);font-size:10px">موجود ✓</span></b><span>ورود خودکار — بدون رمز، آماده بازی</span></span>
+  </button>
+  <div class="acc-note">ⓘ اکانت گیم‌نت به‌صورت امن از سمت سرور لاگین می‌شود؛ رمزها هیچ‌وقت روی این سیستم دیده نمی‌شوند. در پایان وقت، اکانت خودکار آزاد می‌شود.</div>
+</div>
+<div class="acct" id="acct">
+  <h4>حساب من <button style="background:none;border:0;color:var(--dim);cursor:pointer" onclick="toggleAcct()">✕</button></h4>
+  <div class="row"><span>نام کاربری</span><b>reza_hs</b></div>
+  <div class="row"><span>کیف پول</span><b style="color:var(--green)">۴۵۰٬۰۰۰ ت</b></div>
+  <div class="row"><span>اعتبار رایگان</span><b style="color:var(--purple)">۱۲۰٬۰۰۰ ت</b></div>
+  <div class="row"><span>بدهی</span><b style="color:var(--red)">۰ ت</b></div>
+  <div class="pkg-box">
+    <div class="t"><span>🥇 پکیج گلد — فعال</span><span>۱۲ روز مانده</span></div>
+    <div class="bar"><i style="width:62%"></i></div>
+    <div style="margin-top:6px;color:var(--dim)">امروز: ۲.۵ از ۴ ساعت مصرف شده</div>
+  </div>
+  <div class="msg">💡 مازاد بر سقف پکیج، نیم‌بها محاسبه می‌شود.</div>
+</div>
+
+<!-- منوی راست‌کلیک -->
+<div class="ctx" id="ctx">
+  <div class="info">PC ۱۲ • رضا-Headshot 🥇 • مانده <b>۴۵۰٬۰۰۰ ت</b></div>
+  <div class="sep"></div>
+  <button onclick="notify('پنل تغییر اینترنت: آنلاین ↔ آفلاین (با مجوز سرور)')">🌐 تغییر اینترنت (آنلاین/آفلاین) <kbd>Ctrl+I</kbd></button>
+  <button onclick="notify('جابه‌جایی شناسه: اکانت تو به سیستم دیگر منتقل می‌شود')">🔀 جابه‌جایی شناسه به سیستم دیگر <kbd>Ctrl+M</kbd></button>
+  <button onclick="notify('ورود با شناسه دیگر — اکانت فعلی بسته و اکانت جدید باز می‌شود')">🔄 ورود / خروج با شناسه <kbd>Ctrl+L</kbd></button>
+  <button onclick="notify('درخواست شارژ به صندوق ارسال شد — اپراتور تایید می‌کند')">💰 درخواست شارژ از اپراتور <kbd>Ctrl+R</kbd></button>
+  <div class="sep"></div>
+  <button onclick="notify('پیام شما به صندوق ارسال شد')">💬 ارسال پیام به اپراتور <kbd>Ctrl+P</kbd></button>
+  <button onclick="lockNow()">🔒 قفل کردن سیستم (خروج امن) <kbd>Win+L</kbd></button>
+</div>
+
+<div class="server-msg" id="smsg"></div>
+
+<!-- کادر ورود اپراتور (Alt+F6) — فقط همین کلاینت؛ مجوزش در سرور چک می‌شود -->
+<div class="admin-box" id="opbox">
+  <h4>🧑‍💼 ورود اپراتور روی این کلاینت (PC ۱۲) <button style="background:none;border:0;color:var(--dim);cursor:pointer" onclick="hideAdmin()">✕</button></h4>
+  <p>این سیستم با وقت نامحدود به تو آزاد می‌شود — مجوز از سرور چک می‌شود (نقش + سقف تعداد)</p>
+  <input type="password" placeholder="رمز اپراتوری خودت" id="op-pass">
+  <div class="ab-btns">
+    <button class="go" onclick="opLogin()">ورود (Enter)</button>
+    <button onclick="hideAdmin()">انصراف</button>
+  </div>
+  <div class="ab-note">ⓘ سرور خودش بازی نیست؛ ورود نامحدود فقط برای کلاینت‌هاست. لاگ ورود در سرور ثبت می‌شود.</div>
+</div>
+
+<!-- کادر آزادسازی/ویندوز (Alt+F7) — فقط همین کلاینت -->
+<div class="admin-box" id="freebox">
+  <h4>🔓 آزادسازی این سیستم (PC ۱۲) <button style="background:none;border:0;color:var(--dim);cursor:pointer" onclick="hideAdmin()">✕</button></h4>
+  <p>رمز ادمین → شل بسته می‌شود و ویندوز این دستگاه آزاد می‌شود</p>
+  <input type="password" placeholder="رمز ادمین" id="free-pass">
+  <div class="ab-btns">
+    <button class="go" onclick="freeSys('win')">آزادسازی ویندوز</button>
+    <button onclick="freeSys('restart')">🔄 ری‌استارت</button>
+    <button class="dg" onclick="freeSys('shutdown')">⏻ خاموش</button>
+  </div>
+  <div class="ab-note">ⓘ مجوز این اقدام در سرور (کاربران → ماتریس دسترسی) برای نقش تو تعریف شده. لاگ ثبت می‌شود.</div>
+</div>
+
+<!-- منوی کوچک Alt+F6 -->
+<div class="ctx" id="opmenu" style="min-width:200px">
+  <div class="info">ابزار سریع اپراتور/مشتری</div>
+  <div class="sep"></div>
+  <button onclick="showBox('opbox')">🧑‍💼 ورود اپراتور (وقت نامحدود) <kbd>Alt+F6</kbd></button>
+  <button onclick="showBox('freebox')">🔓 آزادسازی / ویندوز / خاموش‌کردن <kbd>Alt+F7</kbd></button>
+  <div class="sep"></div>
+  <button onclick="logoutCust()">🚪 خروج مشتری و بستن وقت (Logoff)</button>
+</div>
+
+<!-- پالت قلنک مشتری -->
+<div class="ck" id="ck">
+  <input id="ck-input" placeholder="جست‌وجو: بازی، نرم‌افزار، دستور…">
+  <div class="ck-list" id="ck-list"></div>
+  <div class="hint"><kbd>Enter</kbd> اجرا • <kbd>Esc</kbd> بستن • <kbd>Ctrl+K</kbd> باز کردن
+    <span class="zctl">🔍 اندازه لیست <input type="range" min="70" max="140" step="5" value="100" id="ck-zoom" oninput="ckZoom(this.value)"><span id="ckz">۱۰۰٪</span></span>
+  </div>
+</div>
+
+<!-- اورلی قفل -->
+<div class="lockover" id="lock">
+  <h2>🔒 سیستم قفل است</h2>
+  <p>برای ادامه، شناسه خود را وارد کن یا از اپراتور کمک بگیر</p>
+  <button class="btn" onclick="document.getElementById('lock').classList.remove('show');notify('دوباره وارد شدی (دمو)')">ورود مجدد</button>
+</div>
+
+<script>
+const fa=n=>Number(n).toLocaleString('fa-IR');
+
+/* ساعت/تایمر زنده دمو */
+let secs=3*3600+45*60+12;
+setInterval(()=>{
+  secs=secs>0?secs-1:0;
+  const h=String(Math.floor(secs/3600)).padStart(2,'0'),m=String(Math.floor(secs%3600/60)).padStart(2,'0'),s=String(secs%60).padStart(2,'0');
+  const t=document.getElementById('timer');
+  t.textContent=fa(h)+':'+fa(m)+':'+fa(s);
+  t.className='timer'+(secs<600?' crit':secs<1800?' warn':'');
+},1000);
+
+/* لاگین دمو */
+function doLogin(){
+  const id=document.getElementById('login-id').value.trim();
+  if(!id){document.getElementById('err').textContent='شناسه را وارد کن (مثلاً reza_hs)';return}
+  document.getElementById('err').textContent='';
+  document.getElementById('stage-login').style.display='none';
+  document.getElementById('stage-games').style.display='block';
+  notify('خوش آمدی '+id+' — جلسه شروع شد');
+}
+document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+document.getElementById('login-id').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('login-pass').focus()});
+
+/* منوی راست‌کلیک */
+const ctx=document.getElementById('ctx');
+document.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  ctx.classList.add('show');
+  const w=240,h=280;
+  ctx.style.left=Math.min(e.clientX,innerWidth-w-8)+'px';
+  ctx.style.top=Math.min(e.clientY,innerHeight-h-8)+'px';
+});
+document.addEventListener('click',e=>{if(!ctx.contains(e.target))ctx.classList.remove('show')});
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.key.toLowerCase()==='i'){e.preventDefault();notify('پنل تغییر اینترنت (دمو)')}
+  if(e.ctrlKey&&e.key.toLowerCase()==='m'){e.preventDefault();notify('جابه‌جایی شناسه (دمو)')}
+  if(e.ctrlKey&&e.key.toLowerCase()==='l'){e.preventDefault();lockNow()}
+});
+
+/* پنل حساب */
+function toggleAcct(){document.getElementById('acct').classList.toggle('show');document.getElementById('apps').classList.remove('show');document.getElementById('menu').classList.remove('show')}
+function toggleApps(){closeAll();document.getElementById('apps').classList.toggle('show')}
+function toggleMenu(){closeAll();document.getElementById('menu').classList.toggle('show')}
+function closeAll(){document.getElementById('apps').classList.remove('show');document.getElementById('menu').classList.remove('show');document.getElementById('acct').classList.remove('show')}
+
+/* تبلیغ چرخشی دمو */
+const ads=[
+  {ic:'🎬',ttl:'پکیج گلد VIP',txt:'۳۰ روز عضویت • ۴ ساعت روزانه • ۱۰٪ بوفه<br>فقط <b style="color:var(--gold)">۱٬۸۰۰٬۰۰۰ تومان</b>'},
+  {ic:'🏆',ttl:'جام جمعه‌ها — CS2',txt:'جایزه اول: ۵۰ ساعت بازی رایگان<br>ثبت‌نام: ۲۰۰٬۰۰۰ تومان از صندوق'},
+  {ic:'🥤',ttl:'پیشنهاد بوفه',txt:'نوشابه + پاپ‌کورن فقط ۶۰٬۰۰۰ تومان<br>سفارش از دکمه منوی بوفه'},
+];
+let adIdx=0;
+let adOpen=false;
+function toggleAd(close){
+  if(close){adOpen=false;document.getElementById('leftcol').classList.remove('show');return}
+  adOpen=!adOpen;
+  document.getElementById('leftcol').classList.toggle('show',adOpen);
+}
+setInterval(()=>{
+  adIdx=(adIdx+1)%ads.length;
+  const a=ads[adIdx];
+  if(!adOpen)return;
+  document.getElementById('ad-media').textContent=a.ic;
+  document.getElementById('ad-ttl').textContent=a.ttl;
+  document.getElementById('ad-txt').innerHTML=a.txt;
+},6000);
+
+/* پیش‌نمایش بازی با هاور */
+function showPrev(el,name,d1,d2,ic){
+  if(!adOpen)return;
+  document.getElementById('gp-img').textContent=ic;
+  document.getElementById('gp-name').textContent=name;
+  document.getElementById('gp-d1').textContent=d1;
+  document.getElementById('gp-d2').textContent=d2;
+}
+
+/* اجرای بازی دمو */
+function run(el,name){el.classList.add('running');el.querySelector('.tag').textContent='در حال اجرا';el.querySelector('.tag').classList.add('on');notify('بازی اجرا شد — از این لحظه شمارش ادامه دارد')}
+
+/* پیام سرور */
+let msgT;
+function notify(txt){
+  const m=document.getElementById('smsg');m.textContent=txt;m.classList.add('show');
+  clearTimeout(msgT);msgT=setTimeout(()=>m.classList.remove('show'),2600);
+}
+function lockNow(){
+  ctx.classList.remove('show');
+  document.getElementById('lock').classList.add('show');
+}
+
+/* ── نوع نمایش و بزرگ‌نمایی بازی‌ها ── */
+let gview='v-card', gzoom=0; /* zoom: -2..+2 */
+const zoomBase={v_card:190,v_compact:190,v_list:190};
+function applyG(){
+  const g=document.querySelector('.g-grid');
+  g.className='g-grid '+gview;
+  const size=190+gzoom*30;
+  g.style.setProperty('--gsize',size+'px');
+  document.getElementById('gz').textContent=fa(Math.round((size/190)*100))+'٪';
+  document.querySelectorAll('#gview button').forEach(b=>b.classList.toggle('active',b.dataset.v===gview));
+}
+document.querySelectorAll('#gview button').forEach(b=>b.onclick=()=>{gview=b.dataset.v;applyG()});
+function zoomG(d){gzoom=Math.max(-2,Math.min(2,gzoom+d));applyG()}
+
+/* ── پالت قلنک مشتری ── */
+const cCmds=[
+  {ic:'🔫',t:'Counter-Strike 2',s:'بازی — اجرا',a:()=>notify('CS2 اجرا شد (دمو)')},
+  {ic:'🎯',t:'Valorant',s:'بازی — اجرا',a:()=>notify('Valorant اجرا شد (دمو)')},
+  {ic:'⚽',t:'EA FC 26',s:'بازی — اجرا',a:()=>notify('FC 26 اجرا شد (دمو)')},
+  {ic:'🌐',t:'کروم',s:'نرم‌افزار',a:()=>notify('کروم باز شد (دمو)')},
+  {ic:'💬',t:'دیسکورد',s:'نرم‌افزار',a:()=>notify('دیسکورد باز شد (دمو)')},
+  {ic:'🎵',t:'موزیک',s:'نرم‌افزار',a:()=>notify('موزیک باز شد (دمو)')},
+  {ic:'🛒',t:'منوی بوفه',s:'دستور',a:()=>{closeAll();toggleMenu()}},
+  {ic:'🧩',t:'نرم‌افزارها',s:'دستور',a:()=>{closeAll();toggleApps()}},
+  {ic:'👤',t:'حساب من',s:'دستور',a:()=>{closeAll();toggleAcct()}},
+  {ic:'📢',t:'تبلیغات و پلن‌ها',s:'دستور',a:()=>{closeAll();toggleAd()}},
+  {ic:'💳',t:'درخواست شارژ از اپراتور',s:'دستور',a:()=>notify('درخواست شارژ ارسال شد')},
+  {ic:'🔀',t:'جابه‌جایی شناسه به سیستم دیگر',s:'دستور',a:()=>notify('جابه‌جایی شناسه (دمو)')},
+  {ic:'🌐',t:'تغییر اینترنت (آنلاین/آفلاین)',s:'دستور',a:()=>notify('تغییر اینترنت (دمو)')},
+  {ic:'🔒',t:'قفل کردن سیستم',s:'دستور',a:()=>lockNow()},
+];
+function openCk(){
+  document.getElementById('ck').classList.add('show');
+  document.getElementById('ck-input').value='';
+  renderCk('');
+  setTimeout(()=>document.getElementById('ck-input').focus(),40);
+}
+function ckZoom(v){
+  document.getElementById('ckz').textContent=fa(v)+'٪';
+  const f=v/100;
+  document.querySelectorAll('.ck-item').forEach(i=>{
+    i.style.fontSize=(12.5*f)+'px';i.style.padding=(9*f)+'px '+(11*f)+'px';
+    i.querySelector('.ic').style.fontSize=(15*f)+'px';
+  });
+}
+function renderCk(q){
+  const box=document.getElementById('ck-list');box.innerHTML='';
+  cCmds.filter(c=>(c.t+c.s).includes(q)).forEach((c,i)=>{
+    const d=document.createElement('div');d.className='ck-item'+(i===0?' hot':'');
+    d.innerHTML=`<span class="ic">${c.ic}</span><span>${c.t}</span><small>${c.s}</small>`;
+    d.onclick=()=>{document.getElementById('ck').classList.remove('show');c.a()};
+    box.appendChild(d);
+  });
+  if(!box.children.length)box.innerHTML='<div style="color:var(--dim);font-size:12px;text-align:center;padding:12px">چیزی پیدا نشد</div>';
+}
+document.getElementById('ck-input').addEventListener('input',e=>{renderCk(e.target.value);ckZoom(document.getElementById('ck-zoom').value)});
+document.getElementById('ck-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){const f=document.querySelector('.ck-item.hot');if(f)f.click()}
+  if(e.key==='Escape')document.getElementById('ck').classList.remove('show');
+});
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.key.toLowerCase()==='k'){e.preventDefault();
+    const ck=document.getElementById('ck');
+    ck.classList.contains('show')?ck.classList.remove('show'):openCk();
+  }
+  /* Alt+F6 و Alt+F7 */
+  if(e.altKey&&e.key==='F6'){e.preventDefault();ctx.classList.remove('show');showBox('opbox')}
+  if(e.altKey&&e.key==='F7'){e.preventDefault();ctx.classList.remove('show');showBox('freebox')}
+  if(e.key==='Escape'){document.getElementById('ck').classList.remove('show');hideAdmin();document.getElementById('opmenu').classList.remove('show')}
+});
+
+/* ── انتخاب اکانت ── */
+function openAccPick(game){
+  document.getElementById('ap-game').textContent='🎮 '+game;
+  document.getElementById('accpick').classList.add('show');
+}
+function closeAccPick(){document.getElementById('accpick').classList.remove('show')}
+function launchAcc(mode){
+  closeAccPick();
+  if(mode==='own')notify('اکانت خودت — رمز را در لانچر وارد کن (دمو)');
+  else notify('اکانت گیم‌نت تخصیص یافت و خودکار لاگین شد ✓ (رمز دیده نمی‌شود)');
+}
+
+/* کادرهای اپراتور/آزادسازی */
+function showBox(id){
+  document.getElementById(id).classList.add('show');
+  document.getElementById('opmenu').classList.remove('show');
+  ctx.classList.remove('show');
+  setTimeout(()=>document.querySelector('#'+id+' input').focus(),40);
+}
+function hideAdmin(){document.getElementById('opbox').classList.remove('show');document.getElementById('freebox').classList.remove('show')}
+function opLogin(){
+  const p=document.getElementById('op-pass').value;
+  if(!p){notify('رمز را وارد کن');return}
+  hideAdmin();document.getElementById('op-pass').value='';
+  notify('ورود اپراتور موفق — وقت نامحدود فعال شد (دمو)');
+  document.querySelector('.timer').textContent='∞';
+  document.querySelector('.timer').style.color='var(--purple)';
+}
+document.getElementById('op-pass').addEventListener('keydown',e=>{if(e.key==='Enter')opLogin()});
+document.getElementById('free-pass').addEventListener('keydown',e=>{if(e.key==='Enter')freeSys('win')});
+function freeSys(mode){
+  const p=document.getElementById('free-pass').value;
+  if(!p){notify('رمز ادمین لازم است');return}
+  hideAdmin();document.getElementById('free-pass').value='';
+  if(mode==='win')notify('شل بسته شد — ویندوز آزاد شد (دمو). لاگ ثبت شد.');
+  if(mode==='restart')notify('ری‌استارت سیستم ارسال شد (دمو)');
+  if(mode==='shutdown')notify('دستور خاموش‌کردن ارسال شد (دمو)');
+}
+function logoutCust(){
+  document.getElementById('opmenu').classList.remove('show');
+  document.getElementById('stage-games').style.display='none';
+  document.getElementById('stage-login').style.display='flex';
+  document.getElementById('lock').classList.remove('show');
+  document.getElementById('login-id').value='';
+  notify('وقت بسته شد و مشتری خارج شد (Logoff)');
+}
+/* منوی Alt+F6 با راست‌کلیک وقتی Alt نگه‌داشته؟ — برای دمو: دکمه داک */
+document.getElementById('opmenu').addEventListener('click',e=>{if(!e.target.closest('button'))return});
+applyG();
+</script>
+</body>
+</html>
