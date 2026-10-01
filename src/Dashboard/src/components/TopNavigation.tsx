@@ -2,16 +2,15 @@ import type { PageKey } from '../types';
 
 const navItems: Array<{ key: PageKey; label: string }> = [
   { key: 'dashboard', label: 'داشبورد' },
+  { key: 'customers', label: 'مشتریان' },
+  { key: 'buffet', label: 'بوفه' },
+  { key: 'tariffs', label: 'تعرفه‌ها' },
   { key: 'games', label: 'بازی‌ها' },
   { key: 'client-shell', label: 'کلاینت‌ها' },
-  { key: 'customers', label: 'مشتریان' },
-  { key: 'tariffs', label: 'تعرفه‌ها' },
   { key: 'accounts', label: 'اکانت‌ها' },
-  { key: 'buffet', label: 'بوفه' },
   { key: 'reports', label: 'گزارش‌ها' },
   { key: 'users', label: 'کاربران و شیفت' },
   { key: 'settings', label: 'تنظیمات' },
-  { key: 'operations', label: 'مدیریت' },
 ];
 
 type Props = { activePage: PageKey; onChange: (page: PageKey) => void };
