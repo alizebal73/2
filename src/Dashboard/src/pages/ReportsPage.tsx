@@ -121,7 +121,7 @@ export function ReportsPage() {
   async function registerExpense() {
     const title = window.prompt('شرح هزینه'); if (!title) return;
     const value = amount(window.prompt('مبلغ هزینه به تومان', '100000') ?? ''); if (!value) { setNotice('مبلغ معتبر نیست'); return; }
-    await mockService.addExpense({ title, amount: value, operator: 'علی محمدی' }); setExpenses(await mockService.getExpenses()); setNotice('هزینه ثبت شد');
+    await mockService.addExpense({ title, amount: value, category: 'سایر', operator: 'علی محمدی' }); setExpenses(await mockService.getExpenses()); setNotice('هزینه ثبت شد');
   }
 
   async function closeShift() {
