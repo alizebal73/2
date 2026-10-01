@@ -428,7 +428,7 @@
     </div>
     <button class="btn" onclick="openCmdk()" title="پالت فرمان">⌘ هات‌کی <kbd style="font-size:9px;background:#0d1526;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--green)">Ctrl+K</kbd></button>
     <button class="btn">🔔 <span style="color:var(--red)">۲</span></button>
-    <button class="btn primary">+ شروع جلسه</button>
+    <button class="btn primary" onclick="openStart()">+ شروع جلسه</button>
   </div>
   <div class="section-title">رایانه‌ها — ۴۰ دستگاه</div>
   <div class="grid v-card" id="grid-pc"></div>
@@ -472,9 +472,9 @@
   <div class="toolbar">
     <div class="search" style="flex:1;max-width:300px"><input id="clq" placeholder="جست‌وجوی کلاینت…"></div>
     <div class="spacer"></div>
-    <button class="btn">📡 Wake-on-LAN همه</button>
-    <button class="btn">⚙️ تنظیم گروهی</button>
-    <button class="btn primary">📤 ارسال DNS به همه</button>
+    <button class="btn" id="wake-all">📡 Wake-on-LAN همه</button>
+    <button class="btn" id="group-client-settings">⚙️ تنظیم گروهی</button>
+    <button class="btn primary" id="dns-all">📤 ارسال DNS به همه</button>
   </div>
   <div class="selbar" id="selbar">
     <b id="sel-count">۰ کلاینت انتخاب شده</b>
@@ -495,8 +495,8 @@
       <button data-t="vip">VIP</button>
     </div>
     <div class="spacer"></div>
-    <button class="btn">⏰ تعرفه ساعت خاص (شبانه)</button>
-    <button class="btn primary">+ تعرفه جدید</button>
+    <button class="btn" id="special-tariff">⏰ تعرفه ساعت خاص (شبانه)</button>
+    <button class="btn primary" id="new-tariff">+ تعرفه جدید</button>
   </div>
   <div class="tar-grid" id="tar-grid"></div>
 </div>
@@ -518,8 +518,8 @@
       <button data-c="Epic">Epic</button>
     </div>
     <div class="spacer"></div>
-    <button class="btn">📜 لاگ اکانت‌ها</button>
-    <button class="btn primary">+ اکانت جدید</button>
+    <button class="btn" id="account-logs">📜 لاگ اکانت‌ها</button>
+    <button class="btn primary" id="new-account">+ اکانت جدید</button>
   </div>
   <div class="section-title">استخر اکانت گیم‌نت — رمزها فقط در سرور ذخیره می‌شوند و به مشتری نشان داده نمی‌شوند</div>
   <div class="acc-grid" id="acc-grid"></div>
@@ -529,18 +529,18 @@
 <div class="cl-ctx" id="cl-ctx">
   <div class="info" id="cl-ctx-title"></div>
   <div class="sep"></div>
-  <button onclick="clAction('اینترنت جابجا شد: اینترنت ۱ → اینترنت ۲ (دمو)')">🌐 تغییر اینترنت (۱ ↔ ۲)</button>
-  <button onclick="clAction('حالت شبکه: فقط LAN — اینترنت قطع شد (دمو)')">🔌 قطع/وصل اینترنت</button>
+  <button onclick="clAction('switch-net')">🌐 تغییر اینترنت (۱ ↔ ۲)</button>
+  <button onclick="clAction('toggle-internet')">🔌 قطع/وصل اینترنت</button>
   <div class="sep"></div>
-  <button onclick="clAction('جابه‌جایی یوزر: این اکانت به کلاینت دیگر منتقل شد (دمو)')">🔀 جابه‌جایی یوزر به کلاینت دیگر</button>
-  <button onclick="clAction('یوزر از این کلاینت خارج و سیستم قفل شد (دمو)')">🚪 خارج کردن یوزر (قفل)</button>
-  <button onclick="clAction('ورود با شناسه روی این کلاینت (دمو)')">🔑 ورود با شناسه</button>
+  <button onclick="clAction('move-user')">🔀 جابه‌جایی یوزر به کلاینت دیگر</button>
+  <button onclick="clAction('logout-user')">🚪 خارج کردن یوزر (قفل)</button>
+  <button onclick="clAction('login-user')">🔑 ورود با شناسه</button>
   <div class="sep"></div>
-  <button onclick="clAction('پیام روی صفحه کلاینت نمایش داده شد (دمو)')">💬 ارسال پیام به مشتری</button>
-  <button onclick="clAction('اسکرین‌شات گرفته و در سرور ذخیره شد (دمو)')">📸 اسکرین‌شات</button>
-  <button onclick="clAction('شل ری‌استارت شد (دمو)')">🔄 ری‌استارت شل</button>
-  <button onclick="clAction('کلاینت ری‌استارت شد (دمو)')">⏻ ری‌استارت ویندوز</button>
-  <button onclick="clAction('دستور خاموشی ارسال شد (دمو)')" style="color:var(--red)">⛔ خاموش‌کردن</button>
+  <button onclick="clAction('message')">💬 ارسال پیام به مشتری</button>
+  <button onclick="clAction('screenshot')">📸 اسکرین‌شات</button>
+  <button onclick="clAction('restart-shell')">🔄 ری‌استارت شل</button>
+  <button onclick="clAction('restart')">⏻ ری‌استارت ویندوز</button>
+  <button onclick="clAction('shutdown')" style="color:var(--red)">⛔ خاموش‌کردن</button>
   <div class="sep"></div>
   <button onclick="openClientSettings()">⚙️ تنظیمات کامل این کلاینت (IP/DNS/...)</button>
 </div>
@@ -590,12 +590,12 @@
       <div class="prod-grid" id="prod-grid"></div>
     </div>
     <div class="card-panel cart-panel">
-      <h4>🛒 سبد فروش سریع <button class="btn sm" id="cart-target">روی جلسه: PC ۵</button></h4>
+      <h4>🛒 سبد فروش سریع <button class="btn sm" id="cart-target" onclick="toggleBuffetTarget()">—</button></h4>
       <div id="cart-items"><div style="color:var(--dim);font-size:12px;padding:14px 0;text-align:center">از سمت راست کالا انتخاب کن</div></div>
       <div class="cart-total"><span>جمع سبد</span><b id="cart-total">۰ تومان</b></div>
       <div class="paybtns">
-        <button class="btn primary">افزودن به فاکتور</button>
-        <button class="btn">فروش مستقل</button>
+        <button class="btn primary" onclick="checkoutBuffet('session')">افزودن به فاکتور</button>
+        <button class="btn" onclick="checkoutBuffet('standalone')">فروش مستقل</button>
       </div>
     </div>
   </div>
@@ -612,9 +612,10 @@
       <button data-p="custom">📅 بازه دلخواه</button>
     </div>
     <div class="spacer"></div>
-    <button class="btn">📤 خروجی اکسل</button>
-    <button class="btn">🖨 چاپ گزارش</button>
-    <button class="btn primary">🔒 بستن شیفت امروز</button>
+    <button class="btn" id="export-report">📤 خروجی اکسل</button>
+    <button class="btn" id="print-report">🖨 چاپ گزارش</button>
+    <button class="btn primary" id="close-shift-report">🔒 بستن شیفت امروز</button>
+    <button class="btn" id="add-expense">➖ ثبت هزینه</button>
   </div>
   <!-- نوار بازه دلخواه -->
   <div id="rep-custom" style="display:none;margin:0 20px;padding:12px 15px;background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid #2a3b63;border-radius:13px">
@@ -655,17 +656,17 @@
       <div class="card-panel" style="padding:16px">
         <h4 style="font-size:13px;margin-bottom:8px">💰 خلاصه مالی بازه</h4>
         <table class="rep-table">
-          <tr><td>درآمد زمان (۶۱ ایستگاه)</td><td class="num">۱۸٬۴۰۰٬۰۰۰</td></tr>
-          <tr><td>درآمد بوفه</td><td class="num">۵٬۲۰۰٬۰۰۰</td></tr>
-          <tr><td>فروش پکیج VIP</td><td class="num pos">۴٬۷۵۰٬۰۰۰</td></tr>
-          <tr><td>هزینه‌های مجموعه</td><td class="num neg">−۶٬۰۰۰٬۰۰۰</td></tr>
-          <tr><td style="font-weight:800;color:var(--txt)">سود خالص</td><td class="num pos" style="font-size:14px">۲۲٬۳۵۰٬۰۰۰</td></tr>
+          <tr><td>درآمد زمان</td><td class="num" id="report-time-total">۰</td></tr>
+          <tr><td>درآمد بوفه</td><td class="num" id="report-buffet-total">۰</td></tr>
+          <tr><td>فروش پکیج VIP</td><td class="num pos" id="report-package-total">۰</td></tr>
+          <tr><td>هزینه‌های مجموعه</td><td class="num neg" id="report-expense-total">۰</td></tr>
+          <tr><td style="font-weight:800;color:var(--txt)">سود خالص</td><td class="num pos" id="report-net-total" style="font-size:14px">۰</td></tr>
         </table>
         <div class="section-title" style="padding:12px 0 6px">روش پرداخت</div>
         <table class="rep-table">
-          <tr><td>💵 نقدی</td><td class="num">۶۲٪ — ۱۷٬۴۰۰٬۰۰۰</td></tr>
-          <tr><td>💳 کارتخوان</td><td class="num">۳۱٪ — ۸٬۷۰۰٬۰۰۰</td></tr>
-          <tr><td>👛 کیف پول</td><td class="num">۷٪ — ۱٬۹۵۰٬۰۰۰</td></tr>
+          <tr><td>💵 نقدی</td><td class="num" id="report-cash-total">۰</td></tr>
+          <tr><td>💳 کارتخوان</td><td class="num" id="report-card-total">۰</td></tr>
+          <tr><td>👛 کیف پول</td><td class="num" id="report-wallet-total">۰</td></tr>
         </table>
         <div class="section-title" style="padding:12px 0 6px">کارکرد ایستگاه‌ها (بیشترین)</div>
         <table class="rep-table">
@@ -748,15 +749,15 @@
   <div class="set-grid">
     <div class="card-panel set-panel">
       <h4>⌨️ هات‌کی‌ها (قابل تغییر)</h4>
-      <div class="hk-row"><span>F1 — باز کردن فلوی سرعت (شناسه/مبلغ/پرداخت)</span><kbd id="hk-f1">F1</kbd></div>
-      <div class="hk-row"><span>F4 — تبدیل کادر شناسه به کادر مبلغ</span><kbd id="hk-f4">F4</kbd></div>
-      <div class="hk-row"><span>F5 — شارژ مستقیم</span><kbd id="hk-f5">F5</kbd></div>
-      <div class="hk-row"><span>F6 — شارژ + ثبت بدهی</span><kbd id="hk-f6">F6</kbd></div>
-      <div class="hk-row"><span>F7 — کسر از کیف پول مشتری</span><kbd id="hk-f7">F7</kbd></div>
-      <div class="hk-row"><span>F8 — کسر از کیف پول + مازاد به بدهی</span><kbd id="hk-f8">F8</kbd></div>
-      <div class="hk-row"><span>F3 — رفتن به بوفه</span><kbd id="hk-f3">F3</kbd></div>
-      <div class="hk-row"><span>F2 — رفتن به گزارش‌ها</span><kbd id="hk-f2">F2</kbd></div>
-      <div class="hk-row" style="border:0"><span style="color:var(--dim)">برای تغییر: کلیک روی کلید، سپس کلید جدید را بزن</span><button class="btn sm" onclick="notifyQuick('حالت ثبت کلید جدید (دمو)')">✏️ تغییر</button></div>
+      <div class="hk-row"><span>باز کردن فلوی سرعت</span><kbd id="hk-f1" data-hotkey="flow">F1</kbd></div>
+      <div class="hk-row"><span>رفتن به مبلغ</span><kbd id="hk-f4" data-hotkey="amount">F4</kbd></div>
+      <div class="hk-row"><span>شارژ مستقیم</span><kbd id="hk-f5" data-hotkey="walletAdd">F5</kbd></div>
+      <div class="hk-row"><span>ثبت بدهی</span><kbd id="hk-f6" data-hotkey="debtAdd">F6</kbd></div>
+      <div class="hk-row"><span>کسر از کیف پول</span><kbd id="hk-f7" data-hotkey="walletDeduct">F7</kbd></div>
+      <div class="hk-row"><span>کسر کیف پول و ثبت مازاد</span><kbd id="hk-f8" data-hotkey="walletDebt">F8</kbd></div>
+      <div class="hk-row"><span>رفتن به بوفه</span><kbd id="hk-f3" data-hotkey="buffet">F3</kbd></div>
+      <div class="hk-row"><span>رفتن به گزارش‌ها</span><kbd id="hk-f2" data-hotkey="reports">F2</kbd></div>
+      <div class="hk-row" style="border:0"><span style="color:var(--dim)">برای تغییر روی کلید کلیک کن و کلید جدید را بزن</span></div>
     </div>
     <div class="card-panel set-panel">
       <h4>🖥 نوع نمایش داشبورد</h4>
@@ -805,7 +806,7 @@
       <div class="set-row"><div class="lbl">مقصد بکاپ</div>
         <select class="mini"><option>دیسک محلی + فلش متصل</option><option>دیسک محلی</option></select>
       </div>
-      <div class="paybtns"><button class="btn">📦 بکاپ دستی الان</button><button class="btn">♻️ بازیابی از نسخه</button></div>
+      <div class="paybtns"><button class="btn" id="backup-now">📦 بکاپ دستی الان</button><button class="btn" id="restore-backup">♻️ بازیابی از نسخه</button></div>
       <div class="set-row" style="margin-top:8px"><div class="lbl">آخرین بکاپ موفق</div><b style="font-size:12px;color:var(--green)">امروز ۰۴:۰۰ — سالم ✓</b></div>
     </div>
     <div class="card-panel set-panel" style="grid-column:1/-1">
@@ -860,7 +861,7 @@
       <div class="qk-card" id="flow-last">
         <div class="ava">ر</div>
         <div style="flex:1"><b>آخرین پروفایل: رضا محمدی</b><span>کد ۱۰۵۰ • @Reza-Headshot • 🥇 گلد • کیف پول ۴۵۰٬۰۰۰</span></div>
-        <button class="btn sm" onclick="flowToAmount()">انتخاب (Enter)</button>
+          <button class="btn sm" onclick="flowToAmount('1050')">انتخاب (Enter)</button>
       </div>
       <div class="hint" style="font-size:10px;color:var(--dim)">جست‌وجو با: کد کاربری، نام، فامیل، لقب، موبایل، کد ملی • Enter = پروفایل • F4 = مبلغ مستقیم</div>
     </div>
@@ -878,12 +879,12 @@
         <button onclick="faSet('flow-amount','۵۰۰٬۰۰۰')">۵۰۰ هزار</button>
       </div>
       <div class="paybtns">
-        <button class="btn cash" onclick="flowAct('شارژ مستقیم انجام شد ✓')">F5 شارژ مستقیم</button>
-        <button class="btn cardpay" onclick="flowAct('شارژ شد و به بدهی ثبت شد ✓')">F6 شارژ+بدهی</button>
+        <button class="btn cash" onclick="flowAct('wallet-add')">F5 شارژ مستقیم</button>
+        <button class="btn cardpay" onclick="flowAct('debt-add')">F6 ثبت بدهی</button>
       </div>
       <div class="paybtns">
-        <button class="btn wallet" onclick="flowAct('از کیف پول کسر شد ✓ (مجزای بیش از موجودی → بدهی)')">F7 کسر از کیف پول</button>
-        <button class="btn danger" onclick="flowAct('کسر شد؛ مازاد به بدهی اضافه شد ✓')">F8 کسر+مازاد به بدهی</button>
+        <button class="btn wallet" onclick="flowAct('wallet-deduct')">F7 کسر از کیف پول</button>
+        <button class="btn danger" onclick="flowAct('wallet-deduct-debt')">F8 کسر+مازاد به بدهی</button>
       </div>
       <div style="font-size:10px;color:var(--dim);margin-top:8px">دکمه‌ها و کلیدها هر دو کار می‌کنند — تنظیم در: تنظیمات → هات‌کی‌ها</div>
     </div>
@@ -894,16 +895,17 @@
 <div class="dash-ctx" id="dash-ctx">
   <div class="info" id="dc-title"></div>
   <div class="sep"></div>
-  <button onclick="dcAction('تغییر اینترنت کلاینت: اینترنت ۱ → اینترنت ۲ (دمو)')">🌐 تغییر اینترنت (۱ ↔ ۲)</button>
+  <button onclick="finishContextSession()">🧾 تسویه و بستن جلسه</button>
+  <button onclick="dcAction('switch-net')">🌐 تغییر اینترنت (۱ ↔ ۲)</button>
   <button onclick="dcAction('جابه‌جایی یوزر به کلاینت دیگر (دمو)')">🔀 جابه‌جایی یوزر</button>
   <button onclick="dcAction('یوزر خارج شد و سیستم قفل شد (دمو)')">🚪 خارج کردن یوزر (قفل)</button>
   <button onclick="dcAction('ورود با شناسه (دمو)')">🔑 ورود با شناسه</button>
   <div class="sep"></div>
-  <button onclick="dcAction('پیام روی صفحه کلاینت نمایش داده شد (دمو)')">💬 پیام به مشتری</button>
-  <button onclick="dcAction('اسکرین‌شات ذخیره شد (دمو)')">📸 اسکرین‌شات</button>
-  <button onclick="dcAction('شل ری‌استارت شد (دمو)')">🔄 ری‌استارت شل</button>
-  <button onclick="dcAction('کلاینت ری‌استارت شد (دمو)')">⏻ ری‌استارت ویندوز</button>
-  <button onclick="dcAction('دستور خاموشی ارسال شد (دمو)')" style="color:var(--red)">⛔ خاموش‌کردن</button>
+  <button onclick="dcAction('message')">💬 پیام به مشتری</button>
+  <button onclick="dcAction('screenshot')">📸 اسکرین‌شات</button>
+  <button onclick="dcAction('restart-shell')">🔄 ری‌استارت شل</button>
+  <button onclick="dcAction('restart')">⏻ ری‌استارت ویندوز</button>
+  <button onclick="dcAction('shutdown')" style="color:var(--red)">⛔ خاموش‌کردن</button>
   <div class="sep"></div>
   <button onclick="dcAction('خارج از سرویس شد (دمو)')">🛠 خارج از سرویس / فعال</button>
   <button onclick="document.getElementById('dash-ctx').classList.remove('show');document.querySelector('nav a[data-page=\"clients\"]').click()">⚙️ تنظیمات کامل این کلاینت</button>
@@ -921,8 +923,8 @@
       <button onclick="qset('۵۰۰٬۰۰۰')">۵۰۰ هزار</button>
     </div>
     <div class="field"><label>هدف شارژ</label><select id="qc-target"><option>شارژ زمان همین جلسه</option><option>شارژ کیف پول مشتری</option><option>شارژ + تخفیف</option></select></div>
-    <div class="paybtns"><button class="btn cash">💵 نقدی</button><button class="btn cardpay">💳 کارت</button><button class="btn wallet">👛 کیف پول</button></div>
-    <div class="paybtns"><button class="btn primary" style="flex:2">⚡ شارژ فوری (Enter)</button><button class="btn">↩️ در بدهی ثبت شود</button></div>
+    <div class="paybtns"><button class="btn cash" onclick="applyQuickCharge('cash')">💵 نقدی</button><button class="btn cardpay" onclick="applyQuickCharge('card')">💳 کارت</button><button class="btn wallet" onclick="applyQuickCharge('wallet')">👛 کیف پول</button></div>
+    <div class="paybtns"><button class="btn primary" style="flex:2" onclick="applyQuickCharge('cash')">⚡ شارژ فوری (Enter)</button><button class="btn" onclick="applyQuickCharge('debt')">↩️ در بدهی ثبت شود</button></div>
   </div>
 </div>
 
@@ -946,12 +948,12 @@
     </div>
     <div class="field"><label>تعداد نفرات</label><div class="persons"><button>۱</button><button class="active">۲</button><button>۳</button><button>۴</button></div></div>
     <div class="mrow">
-      <div class="field"><label>تعرفه</label><select><option>ساعتی معمولی — ۸۰٬۰۰۰ ت/ساعت</option><option>ساعتی شبانه — ۱۰۰٬۰۰۰ ت/ساعت</option><option>به ازای مبلغ مشخص</option></select></div>
-      <div class="field"><label>مشتری (اختیاری) — جست‌وجو با کد/نام/موبایل</label><select><option>مهمان</option><option>۱۰۵۰ — رضا محمدی — VIP گلد</option><option>۱۰۵۲ — سعید رضایی</option></select></div>
+      <div class="field"><label>تعرفه</label><select id="start-rate"><option value="station">تعرفه ایستگاه</option><option value="80000">ساعتی معمولی — ۸۰٬۰۰۰ ت/ساعت</option><option value="100000">ساعتی شبانه — ۱۰۰٬۰۰۰ ت/ساعت</option></select></div>
+      <div class="field"><label>مشتری (اختیاری) — جست‌وجو با کد/نام/موبایل</label><select id="start-customer"><option value="">مهمان</option></select></div>
     </div>
     <div class="sumline"><span>نرخ لحظه‌ای</span><b>۸۰٬۰۰۰ تومان / ساعت</b></div>
     <div class="total"><span>هزینه تخمینی هر ساعت</span><b>۱۲۰٬۰۰۰ تومان</b></div>
-    <div class="paybtns"><button class="btn primary" style="flex:2">▶ شروع بازی</button><button class="btn" onclick="hideModals()">انصراف</button></div>
+    <div class="paybtns"><button class="btn primary" style="flex:2" onclick="startSessionFromModal()">▶ شروع بازی</button><button class="btn" onclick="hideModals()">انصراف</button></div>
   </div>
 </div>
 
@@ -965,11 +967,11 @@
     </div>
     <div class="mrow">
       <div class="field"><label>DNS ۱</label><input id="cs-dns1" class="ltr"></div>
-      <div class="field"><label>DNS ۲</label><input class="ltr" value="185.51.200.2"></div>
+      <div class="field"><label>DNS ۲</label><input id="cs-dns2" class="ltr" value="185.51.200.2"></div>
     </div>
     <div class="mrow">
-      <div class="field"><label>آدرس سرور</label><input class="ltr" value="192.168.1.10:8080"></div>
-      <div class="field"><label>شل هنگام بوت</label><select class="mini" style="width:100%"><option>فعال</option><option>غیرفعال</option></select></div>
+      <div class="field"><label>آدرس سرور</label><input id="cs-server" class="ltr" value="192.168.1.10:8080"></div>
+      <div class="field"><label>شل هنگام بوت</label><select id="cs-shell" class="mini" style="width:100%"><option>فعال</option><option>غیرفعال</option></select></div>
     </div>
     <div class="field"><label>حالت شبکه این کلاینت</label>
       <div class="seg net-swap"><button class="active">اینترنت ۱</button><button>اینترنت ۲</button><button>فقط LAN</button></div>
@@ -978,9 +980,9 @@
       <div class="seg"><button>عادی</button><button class="active">CCBOOT</button><button>PXE</button></div>
     </div>
     <div class="paybtns">
-      <button class="btn primary" style="flex:2" onclick="hideModals();notifyQuick('ذخیره و ارسال به کلاینت شد (دمو)')">💾 ذخیره و ارسال</button>
-      <button class="btn" onclick="hideModals();notifyQuick('اتصال ریموت (دمو)')">🖥 ریموت</button>
-      <button class="btn danger" onclick="hideModals();notifyQuick('ری‌استارت کلاینت (دمو)')">🔄 ری‌استارت</button>
+      <button class="btn primary" style="flex:2" onclick="saveClientSettings()">💾 ذخیره و ارسال</button>
+      <button class="btn" onclick="queueClientCommand('remote')">🖥 ریموت</button>
+      <button class="btn danger" onclick="queueClientCommand('restart')">🔄 ری‌استارت</button>
     </div>
   </div>
 </div>
@@ -1030,13 +1032,13 @@
 <div class="overlay" id="ov-bill">
   <div class="modal">
     <h3>تسویه حساب — <span id="m-station2" style="color:var(--red)"></span> <button class="close" onclick="hideModals()">✕</button></h3>
-    <div class="sumline"><span>زمان بازی</span><b>۱ ساعت و ۲۴ دقیقه</b></div>
-    <div class="sumline"><span>هزینه زمان</span><b>۱۱۲٬۰۰۰ تومان</b></div>
-    <div class="sumline"><span>بوفه (۲ نوشابه + ۱ چیپس)</span><b>۶۵٬۰۰۰ تومان</b></div>
-    <div class="sumline"><span>تخفیف</span><b style="color:var(--green)">−۱۰٬۰۰۰ تومان</b></div>
-    <div class="total"><span>مبلغ نهایی</span><b>۱۶۶٬۰۰۰ تومان</b></div>
-    <div class="paybtns"><button class="btn cash">💵 نقدی</button><button class="btn cardpay">💳 کارتخوان</button><button class="btn wallet">👛 کیف پول</button></div>
-    <div class="paybtns"><button class="btn">🖨 چاپ فاکتور</button><button class="btn">⏱ تمدید وقت</button></div>
+    <div class="sumline"><span>زمان بازی</span><b id="bill-duration">—</b></div>
+    <div class="sumline"><span>هزینه زمان</span><b id="bill-time">—</b></div>
+    <div class="sumline"><span>بوفه</span><b id="bill-buffet">—</b></div>
+    <div class="sumline"><span>تخفیف</span><b id="bill-discount" style="color:var(--green)">—</b></div>
+    <div class="total"><span>مبلغ نهایی</span><b id="bill-total">—</b></div>
+    <div class="paybtns"><button class="btn cash" onclick="settleSession('cash')">💵 نقدی</button><button class="btn cardpay" onclick="settleSession('card')">💳 کارتخوان</button><button class="btn wallet" onclick="settleSession('wallet')">👛 کیف پول</button></div>
+    <div class="paybtns"><button class="btn" onclick="window.print()">🖨 چاپ فاکتور</button><button class="btn" onclick="extendSession()">⏱ تمدید وقت</button></div>
   </div>
 </div>
 
@@ -1053,7 +1055,7 @@ document.querySelectorAll('nav a').forEach(a=>a.onclick=e=>{
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+a.dataset.page).classList.add('active');
 });
-function hideModals(){document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show'))}
+function hideModals(){document.querySelectorAll('.overlay').forEach(o=>o.classList.remove('show'));flowStage=1;flowCustomer=null}
 document.querySelectorAll('.overlay').forEach(o=>o.onclick=e=>{if(e.target===o)hideModals()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')hideModals()});
 
@@ -1069,11 +1071,45 @@ stations.forEach((s,i)=>{
   if(s.state==='busy'){
     s.min=12+((i*7)%80);s.persons=(i%4)+1;s.amount=s.min*1.4;
     /* یوزر لاگین‌شده روی دستگاه — از کدهای مشتریان */
-    s.user='کد '+customers[i%customers.length].code;
+    s.user='کد '+String(1050+(i%6));
   }
   if(s.state==='resv'){s.min=0;s.persons=2;s.user=null;}
 });
 let curZone='all', curView='v-card', stZoom=0;
+let demoInvoices=[];
+let demoCommands=[];
+let demoExpenses=[];
+let demoShifts=[];
+let currentShift=null;
+let activeSessionStation='';
+const stateStorageKey='gamenet-manager-demo-v1';
+function saveDemoState(){
+  try{
+    localStorage.setItem(stateStorageKey,JSON.stringify({stations,customers,products,games,clients,accounts,tariffs,demoInvoices,demoCommands,demoExpenses,demoShifts,currentShift}));
+  }catch(error){console.warn('Demo state could not be saved',error)}
+}
+function restoreDemoState(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(stateStorageKey)||'{}');
+    for(const [key,target] of Object.entries({stations,customers,products,games,clients,accounts,tariffs,demoInvoices,demoCommands,demoExpenses,demoShifts})){
+      if(Array.isArray(saved[key]))target.splice(0,target.length,...saved[key]);
+    }
+    currentShift=saved.currentShift||null;
+  }catch(error){console.warn('Saved demo state could not be loaded',error)}
+}
+function stationFor(name){return stations.find(s=>s.name===name)}
+function activeCustomerFor(station){
+  const code=station&&station.user&&station.user.match(/\d+/)?.[0];
+  return customers.find(c=>c.code===code)||null;
+}
+function refreshOperationalViews(){
+  renderGrid();renderCustList();renderCustProfile();renderProd();renderCart();renderClients();renderTariffs();renderAccounts();saveDemoState();
+}
+function queueDemoCommand(target,action,details={}){
+  demoCommands.push({id:Date.now(),target,action,details,createdAt:new Date().toISOString(),status:'queued'});
+  saveDemoState();
+  notifyQuick('فرمان در صف دمو ثبت شد؛ اجرای واقعی به سرور و Agent کلاینت نیاز دارد');
+}
 function zoomSt(d){
   stZoom=Math.max(-2,Math.min(2,stZoom+d));
   document.getElementById('sz').textContent=fa(Math.round((1+stZoom*0.15)*100))+'٪';
@@ -1107,14 +1143,14 @@ function renderGrid(){
     } else if(s.state==='resv'){ inner+=`<div class="timer" style="color:var(--blue);font-size:15px">رزرو ۱۸:۰۰</div><div class="price">نفرات: ${fa(s.persons)}</div>`; }
     else if(s.state==='free'){ inner+=`<div class="timer">--:--</div><div class="price">${s.type} • از ${fa(s.rate*1000)}</div>`; }
     else { inner+=`<div class="timer">⛔</div><div class="price">در تعمیر</div>`; }
-    const d=document.createElement('div');d.className='card '+s.state;d.innerHTML=inner;
+    const d=document.createElement('div');d.className='card '+s.state;d.dataset.station=s.name;d.innerHTML=inner;
     d.onclick=()=>{
       /* منطق درست: فقط دستگاهی که مشتری داخلش است (busy) پنجره پروفایل/شارژ دارد */
       if(s.state==='busy'){openFlow(s.name)}
       /* آزاد/رزرو/خارج از سرویس: کسی لاگین نیست → پنجره‌ای باز نمی‌شود */
       else if(s.state==='off'){notifyQuick('این دستگاه خارج از سرویس است')}
       else if(s.state==='resv'){notifyQuick('رزرو ساعت ۱۸:۰۰ — هنوز مشتری وارد نشده')}
-      else {notifyQuick('دستگاه آزاد است — برای شارژ اول مشتری لاگین کند یا از دکمه «شروع جلسه»')}
+      else if(s.state==='free'){openStart(s.name)}
     };
     d.ondblclick=()=>{if(s.state==='busy')openQuickCharge(s.name)};
     grids[s.zone].appendChild(d);
@@ -1122,8 +1158,66 @@ function renderGrid(){
   document.getElementById('s-free').innerHTML=fa(cnt.free)+' <small>از ۶۱</small>';
   document.getElementById('s-busy').innerHTML=fa(cnt.busy)+' <small>ایستگاه</small>';
 }
-function openStart(n){document.getElementById('m-station').textContent=n;document.getElementById('ov-start').classList.add('show')}
-function openBill(n){document.getElementById('m-station2').textContent=n;document.getElementById('ov-bill').classList.add('show')}
+function renderStartCustomers(){
+  const select=document.getElementById('start-customer');
+  select.innerHTML='<option value="">مهمان</option>'+customers.map(c=>`<option value="${c.code}">${c.code} — ${c.fname} ${c.lname}</option>`).join('');
+}
+function openStart(n){
+  const stationName=n||stations.find(s=>s.state==='free')?.name;
+  if(!stationName){notifyQuick('ایستگاه آزادی برای شروع جلسه وجود ندارد');return}
+  activeSessionStation=stationName;
+  renderStartCustomers();
+  document.getElementById('start-rate').value='station';
+  document.getElementById('m-station').textContent=stationName;
+  document.getElementById('ov-start').classList.add('show');
+}
+function startSessionFromModal(){
+  const station=stationFor(activeSessionStation);
+  if(!station||station.state!=='free'){notifyQuick('این ایستگاه دیگر آزاد نیست');hideModals();return}
+  const persons=Number(document.querySelector('#ov-start .persons button.active')?.textContent||2);
+  const customerCode=document.getElementById('start-customer').value;
+  const customer=customers.find(c=>c.code===customerCode)||null;
+  const selectedRate=document.getElementById('start-rate').value;
+  station.sessionRate=selectedRate==='station'?station.rate:Number(selectedRate)/1000;
+  station.state='busy';station.startedAt=Date.now();station.min=0;station.persons=persons;station.amount=0;station.user=customer?'کد '+customer.code:null;station.buffetTotal=0;
+  hideModals();refreshOperationalViews();notifyQuick('جلسه '+station.name+' شروع شد');
+}
+function openBill(n){
+  const station=stationFor(n||ctxStation?.name);
+  if(!station||station.state!=='busy'){notifyQuick('جلسه فعالی برای تسویه وجود ندارد');return}
+  activeSessionStation=station.name;
+  const minutes=Math.max(0,Math.floor(station.min||0));
+  const timeAmount=Math.round((station.sessionRate||station.rate)*1000*minutes/60);
+  const buffet=station.buffetTotal||0,total=timeAmount+buffet;
+  document.getElementById('m-station2').textContent=station.name;
+  document.getElementById('bill-duration').textContent=fa(Math.floor(minutes/60))+' ساعت و '+fa(minutes%60)+' دقیقه';
+  document.getElementById('bill-time').textContent=fa(timeAmount)+' تومان';
+  document.getElementById('bill-buffet').textContent=fa(buffet)+' تومان';
+  document.getElementById('bill-discount').textContent='۰ تومان';
+  document.getElementById('bill-total').textContent=fa(total)+' تومان';
+  document.getElementById('ov-bill').dataset.total=String(total);
+  document.getElementById('ov-bill').classList.add('show');
+}
+function finishContextSession(){document.getElementById('dash-ctx').classList.remove('show');openBill(ctxStation?.name)}
+function settleSession(method){
+  const station=stationFor(activeSessionStation);
+  if(!station||station.state!=='busy')return;
+  const total=Number(document.getElementById('ov-bill').dataset.total||0);
+  const customer=activeCustomerFor(station);
+  if(method==='wallet'&&(!customer||customer.wallet<total)){notifyQuick('موجودی کیف پول کافی نیست');return}
+  if(method==='wallet')customer.wallet-=total;
+  const timeAmount=Math.round((station.sessionRate||station.rate)*1000*Math.max(0,station.min||0)/60);
+  demoInvoices.push({station:station.name,amount:total,timeAmount,buffet:station.buffetTotal||0,method,closedAt:Date.now(),operator:'علی محمدی',shiftId:currentShift?.id||null});
+  station.state='free';delete station.min;delete station.amount;delete station.persons;delete station.user;delete station.startedAt;delete station.buffetTotal;delete station.sessionRate;
+  hideModals();refreshOperationalViews();notifyQuick('تسویه ثبت شد: '+fa(total)+' تومان');
+}
+function extendSession(){
+  const station=stationFor(activeSessionStation);
+  const minutes=Number(prompt('چند دقیقه تمدید شود؟','30'));
+  if(!station||station.state!=='busy'||!Number.isFinite(minutes)||minutes<=0)return;
+  station.min=(station.min||0)+minutes;station.amount=(station.amount||0)+(station.sessionRate||station.rate)*minutes/60;
+  hideModals();refreshOperationalViews();notifyQuick(fa(minutes)+' دقیقه به جلسه اضافه شد');
+}
 /* ── راست‌کلیک و کلیک‌چپ داشبورد (شبیه کلاینت) ── */
 let ctxStation=null;
 function showDashCtx(e,s){
@@ -1138,12 +1232,15 @@ document.addEventListener('contextmenu',e=>{
   const card=e.target.closest('.grid .card');
   if(!card)return;
   e.preventDefault();
-  const idx=[...card.parentElement.children].indexOf(card);
-  const filtered=stations.filter(s=>curZone==='all'||s.zone===curZone);
-  showDashCtx(e,filtered[idx]||stations[0]);
+  showDashCtx(e,stationFor(card.dataset.station)||stations[0]);
 });
 document.addEventListener('click',e=>{if(!e.target.closest('#dash-ctx'))document.getElementById('dash-ctx').classList.remove('show')});
-function dcAction(msg){document.getElementById('dash-ctx').classList.remove('show');notifyQuick(msg)}
+function dcAction(action){
+  document.getElementById('dash-ctx').classList.remove('show');
+  const index=clients.findIndex(c=>c.name===ctxStation?.name);
+  if(index>=0){selClient=clients[index];selSet=new Set([index]);clAction(action)}
+  else queueDemoCommand(ctxStation?.name||'unknown',action);
+}
 /* کلیک چپ روی کارت آزاد/رزرو: مودال شارژ دلخواه */
 function openFreeCharge(name){
   document.getElementById('qc-station').textContent=name;
@@ -1165,7 +1262,7 @@ function setView(v){
 }
 document.querySelectorAll('#viewmode button').forEach(b=>b.onclick=()=>setView(b.dataset.v));
 document.querySelectorAll('#set-view button').forEach(b=>b.onclick=()=>{setView(b.dataset.v);document.querySelector('nav a[data-page="dash"]').click()});
-setInterval(()=>{stations.forEach(s=>{if(s.state==='busy'){s.min+=1/6;s.amount+=0.23}});renderGrid()},10000);
+setInterval(()=>{stations.forEach(s=>{if(s.state==='busy'){s.min+=1/6;s.amount+=(s.sessionRate||s.rate)/360}});renderGrid()},10000);
 document.querySelectorAll('#ov-start .seg button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#ov-start .seg button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
 });
@@ -1216,7 +1313,7 @@ function renderCustProfile(){
       <div class="minibar" style="margin-top:8px"><i style="width:${Math.min(100,c.pkg.used/c.pkg.daily*100)}%"></i></div>
       <div class="d" style="margin-top:5px">امروز: ${fa(c.pkg.used)} از ${fa(c.pkg.daily)} ساعت ${c.pkg.lim?'— <b style="color:var(--red)">لیمیت خورده، مازاد ساعتی</b>':''}</div>
     </div>`
-    :`<div style="font-size:12px;color:var(--dim);padding:8px 0 12px">پکیج فعالی ندارد — <a href="#" style="color:var(--orange)">فعال‌سازی پکیج</a></div>`;
+    :`<div style="font-size:12px;color:var(--dim);padding:8px 0 12px">پکیج فعالی ندارد — <a href="#" onclick="event.preventDefault();activateCustomerPackage()" style="color:var(--orange)">فعال‌سازی پکیج</a></div>`;
   document.getElementById('cp-panel').innerHTML=`
     <div class="cp-head"><div class="cp-ava ${c.vip}">${c.fname[0]}</div>
       <div style="flex:1"><h3>${c.fname} ${c.lname} <span class="vip-mini ${vipMini[c.vip][1]}">${vipMini[c.vip][0]}</span></h3>
@@ -1237,7 +1334,45 @@ function renderCustProfile(){
     <div class="cp-sec"><h4>📜 آخرین تراکنش‌ها <a href="#" style="color:var(--blue);font-size:10px">همه</a></h4>
       ${c.hist.map(h=>`<div class="hist-row"><span>${h[0]}</span><b>${h[1]} ت</b></div>`).join('')}
     </div>
-    <div class="paybtns"><button class="btn cash">شارژ کیف پول</button><button class="btn danger">ثبت بدهی</button><button class="btn wallet">هدیه رایگان</button></div>`;
+    <div class="paybtns"><button class="btn cash" onclick="customerAction('wallet')">شارژ کیف پول</button><button class="btn danger" onclick="customerAction('debt')">ثبت بدهی</button><button class="btn wallet" onclick="customerAction('gift')">هدیه رایگان</button></div>`;
+}
+function customerAction(action){
+  if(action==='new'){
+    const fullName=prompt('نام و نام خانوادگی مشتری را وارد کن');
+    if(!fullName)return;
+    const [fname,...rest]=fullName.trim().split(/\s+/);
+    const code=String(Math.max(1000,...customers.map(c=>Number(c.code)||0))+1);
+    const customer={code,pass:'',fname,lname:rest.join(' '),alias:'',mobile:'',nat:'',vip:'none',pkg:null,wallet:0,debt:0,gift:0,hist:[]};
+    customers.push(customer);selCust=customers.length-1;refreshOperationalViews();notifyQuick('مشتری '+code+' ساخته شد');return;
+  }
+  const customer=customers[selCust];
+  if(!customer)return;
+  if(action==='edit'){
+    const name=prompt('نام و نام خانوادگی',customer.fname+' '+customer.lname);
+    if(!name)return;
+    const [fname,...rest]=name.trim().split(/\s+/);customer.fname=fname;customer.lname=rest.join(' ');
+    customer.mobile=prompt('شماره موبایل',customer.mobile)||customer.mobile;
+    customer.alias=prompt('لقب',customer.alias)||customer.alias;
+  }else{
+    const amount=parseAmount(prompt('مبلغ تراکنش به تومان'));
+    if(!amount){notifyQuick('مبلغ معتبر وارد کن');return}
+    if(action==='wallet')customer.wallet+=amount;
+    if(action==='debt')customer.debt+=amount;
+    if(action==='gift')customer.gift+=amount;
+    const label={wallet:'شارژ کیف پول',debt:'ثبت بدهی',gift:'اعتبار رایگان'}[action];
+    customer.hist.unshift([label,fa(amount)]);
+  }
+  refreshOperationalViews();notifyQuick('اطلاعات مشتری ذخیره شد');
+}
+function activateCustomerPackage(){
+  const customer=customers[selCust];
+  if(!customer)return;
+  const tier=prompt('نوع پکیج را وارد کن: silver یا gold','silver');
+  if(!['silver','gold'].includes((tier||'').toLowerCase())){notifyQuick('نوع پکیج باید silver یا gold باشد');return}
+  const amount=tier.toLowerCase()==='gold'?1800000:950000;
+  if(customer.wallet<amount){notifyQuick('موجودی کیف پول برای خرید پکیج کافی نیست');return}
+  customer.wallet-=amount;customer.vip=tier.toLowerCase();customer.pkg={title:tier.toLowerCase()==='gold'?'گلد':'سیلور',days:30,left:30,daily:tier.toLowerCase()==='gold'?4:3,used:0,lim:false};
+  customer.hist.unshift(['خرید پکیج '+customer.pkg.title,fa(amount)]);refreshOperationalViews();notifyQuick('پکیج فعال شد');
 }
 document.getElementById('cust-search').oninput=e=>{custQ=e.target.value;renderCustList()};
 document.querySelectorAll('#cust-filter button').forEach(b=>b.onclick=()=>{
@@ -1245,6 +1380,8 @@ document.querySelectorAll('#cust-filter button').forEach(b=>b.onclick=()=>{
   b.classList.add('active');custFilter=b.dataset.f;renderCustList();
 });
 renderCustList();renderCustProfile();
+document.querySelector('.cust-list .cl-head .btn.primary').onclick=()=>customerAction('new');
+document.getElementById('flow-id').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();flowToAmount()}});
 
 /* ── بوفه ── */
 const products=[
@@ -1260,7 +1397,7 @@ const products=[
   {n:'هدفون یکبارمصرف',c:'acc',p:60000,buy:35000,stock:6,max:15,ic:'🎧'},
   {n:'ماوس‌پد',c:'acc',p:120000,buy:70000,stock:3,max:10,ic:'🖱'},
 ];
-let cart={},curCat='all';
+let cart={},curCat='all',buffetTarget='session',buffetStation='';
 renderGrid(); /* رندر اولیه داشبورد — بعد از تعریف همه دیتاها */
 function renderProd(){
   const g=document.getElementById('prod-grid');g.innerHTML='';
@@ -1272,7 +1409,10 @@ function renderProd(){
       <div class="pr">${fa(p.p)}</div>
       <div class="st">موجودی: ${fa(p.stock)} ${low?'⚠':''}</div>
       <div class="stbar"><i class="${low?'low':''}" style="width:${pct}%"></i></div>`;
-    d.onclick=()=>{cart[i]=(cart[i]||0)+1;renderCart()};
+    d.onclick=()=>{
+      if((cart[i]||0)>=p.stock){notifyQuick('موجودی کافی نیست');return}
+      cart[i]=(cart[i]||0)+1;renderCart();
+    };
     g.appendChild(d);
   });
 }
@@ -1290,11 +1430,34 @@ function renderCart(){
   document.getElementById('cart-total').textContent=fa(total)+' تومان';
 }
 window.chQty=(i,d)=>{cart[i]=(cart[i]||0)+d;if(cart[i]<=0)delete cart[i];renderCart()};
+function buffetTotal(){return Object.keys(cart).reduce((sum,i)=>sum+products[i].p*cart[i],0)}
+function renderBuffetTarget(){
+  const button=document.getElementById('cart-target');
+  if(!button)return;
+  if(buffetTarget==='standalone')button.textContent='فروش مستقل';
+  else{
+    if(!buffetStation||stationFor(buffetStation)?.state!=='busy')buffetStation=stations.find(s=>s.state==='busy')?.name||'';
+    button.textContent=buffetStation?'روی جلسه: '+buffetStation:'جلسه‌ی فعالی نیست';
+  }
+}
+function toggleBuffetTarget(){buffetTarget=buffetTarget==='session'?'standalone':'session';renderBuffetTarget()}
+function checkoutBuffet(mode){
+  const total=buffetTotal(),items=Object.keys(cart).map(i=>({product:products[i].n,qty:cart[i],amount:products[i].p*cart[i]}));
+  if(!items.length){notifyQuick('سبد فروش خالی است');return}
+  if(items.some(item=>products.find(p=>p.n===item.product).stock<item.qty)){notifyQuick('موجودی یکی از کالاها کافی نیست');return}
+  if(mode==='session'&&buffetTarget==='session'){
+    const station=stationFor(buffetStation);
+    if(!station||station.state!=='busy'){notifyQuick('برای افزودن به فاکتور، ابتدا یک جلسه‌ی فعال انتخاب کن');return}
+    station.buffetTotal=(station.buffetTotal||0)+total;
+  }else demoInvoices.push({station:'فروش مستقل',amount:total,timeAmount:0,buffet:total,method:'cash',items,closedAt:Date.now(),operator:'علی محمدی',shiftId:currentShift?.id||null});
+  items.forEach(item=>{products.find(p=>p.n===item.product).stock-=item.qty});
+  cart={};renderCart();refreshOperationalViews();renderBuffetTarget();notifyQuick('فروش ثبت شد: '+fa(total)+' تومان');
+}
 document.querySelectorAll('#cat-row button').forEach(b=>b.onclick=()=>{
   document.querySelectorAll('#cat-row button').forEach(x=>x.classList.remove('active'));
   b.classList.add('active');curCat=b.dataset.c;renderProd();
 });
-renderProd();renderCart();
+renderProd();renderCart();renderBuffetTarget();
 
 /* ── گزارش‌ها ── */
 const chartData={
@@ -1330,14 +1493,20 @@ const games=[
   {n:'Discord',cat:'برنامه',ic:'💬',path:'C:\\Discord\\Update.exe',net:'آنلاین',on:true},
 ];
 let gQ='',gCat='all';
+let editingGameIndex=-1;
 function renderGames(){
   const g=document.getElementById('gadm-grid');g.innerHTML='';
-  games.filter(x=>(gCat==='all'||x.cat===gCat)&&(!gQ||x.n.includes(gQ))).forEach(x=>{
+  games.forEach((x,index)=>{
+    if((gCat!=='all'&&x.cat!==gCat)||(gQ&&!x.n.includes(gQ)))return;
     const d=document.createElement('div');d.className='gadm';
     d.innerHTML=`<div class="cover">${x.ic}<span class="ord">مسیر: ${x.path.length>34?'…'+x.path.slice(-34):x.path}</span><span class="on ${x.on?'':'off'}">${x.on?'فعال':'مخفی'}</span></div>
     <div class="bd"><b>${x.n}</b><div class="path">${x.path}</div>
     <div class="meta"><span class="t-${x.net==='آنلاین'?'on':'off'}">${x.net}</span><span>${x.cat}</span><span>نسخه ۱.۰</span></div></div>
-    <div class="acts"><button class="btn" onclick="editGame('${x.n}')">✏️ ویرایش</button><button class="btn" onclick="notifyQuick('بروزرسانی روی ${'${'}''}کلاینت‌ها ارسال شد')">📤 اعمال</button><button class="btn danger" onclick="notifyQuick('حذف (دمو)')">🗑</button></div>`;
+    <div class="acts"><button class="btn">✏️ ویرایش</button><button class="btn">📤 اعمال</button><button class="btn danger">🗑</button></div>`;
+    const [editButton,applyButton,deleteButton]=d.querySelectorAll('.acts button');
+    editButton.onclick=()=>editGame(index);
+    applyButton.onclick=()=>queueDemoCommand('کلاینت‌ها','اعمال بازی',{game:x.n});
+    deleteButton.onclick=()=>removeGame(index);
     g.appendChild(d);
   });
   document.getElementById('gs-total').innerHTML=fa(games.length)+' <small>عنوان</small>';
@@ -1345,28 +1514,50 @@ function renderGames(){
   document.getElementById('gs-online').innerHTML=fa(games.filter(x=>x.net==='آنلاین').length)+' <small>عنوان</small>';
   document.getElementById('gs-cats').innerHTML=fa(3)+' <small>دسته</small>';
 }
-function openGameModal(){document.getElementById('game-modal-title').textContent='بازی جدید';document.getElementById('ov-game').classList.add('show')}
-function editGame(n){
-  const x=games.find(g=>g.n===n);
+function openGameModal(){
+  editingGameIndex=-1;document.getElementById('game-modal-title').textContent='بازی جدید';
+  ['gm-name','gm-path','gm-exe','gm-cover','gm-trailer','gm-args'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('ov-game').classList.add('show');
+}
+function editGame(index){
+  const x=typeof index==='number'?games[index]:games.find(g=>g.n===index);
+  if(!x)return;
+  editingGameIndex=games.indexOf(x);
   document.getElementById('gm-name').value=x.n;
   document.getElementById('gm-path').value=x.path;
   document.getElementById('gm-exe').value=x.path;
+  document.getElementById('gm-cat').value=x.cat;
+  document.getElementById('gm-net').value=x.net;
+  document.getElementById('gm-vis').value=x.on?'فعال':'مخفی';
   document.getElementById('game-modal-title').textContent='ویرایش: '+x.n;
   document.getElementById('cover-prev').textContent=x.ic;
   document.getElementById('ov-game').classList.add('show')
 }
 function pickFile(kind){
-  const map={exe:['fd-exe','gm-exe','D:\\Games\\CS2\\cs2.exe'],cover:['fd-cover','gm-cover','D:\\Covers\\cs2.jpg'],trailer:['fd-trailer','gm-trailer','D:\\Trailers\\cs2.mp4']};
-  const [drop,input,path]=map[kind];
-  document.getElementById(drop).classList.add('filled');
-  document.getElementById(input).value=path;
-  if(kind==='cover'){const p=document.getElementById('cover-prev');p.innerHTML='';const img=document.createElement('img');img.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="86" height="86"><rect width="86" height="86" fill="%231b2a4d"/><text x="43" y="52" font-size="30" text-anchor="middle">🔫</text></svg>');p.appendChild(img)}
-  notifyQuick('فایل انتخاب شد (دمو)');
+  const input=document.createElement('input');input.type='file';
+  input.accept=kind==='exe'?'.exe':kind==='cover'?'image/*':'video/*';
+  input.onchange=()=>{
+    const file=input.files?.[0];if(!file)return;
+    const id={exe:'gm-exe',cover:'gm-cover',trailer:'gm-trailer'}[kind];
+    const drop={exe:'fd-exe',cover:'fd-cover',trailer:'fd-trailer'}[kind];
+    document.getElementById(id).value=file.name;document.getElementById(drop).classList.add('filled');
+    if(kind==='exe')document.getElementById('gm-path').value=file.name;
+    if(kind==='cover'){const img=document.createElement('img');img.src=URL.createObjectURL(file);const preview=document.getElementById('cover-prev');preview.replaceChildren(img)}
+  };
+  input.click();
 }
-function saveGame(){hideModals();notifyQuick('ذخیره شد و به کلاینت‌ها اعمال شد (دمو)')}
+function saveGame(){
+  const name=document.getElementById('gm-name').value.trim(),path=document.getElementById('gm-path').value.trim()||document.getElementById('gm-exe').value.trim();
+  if(!name||!path){notifyQuick('نام بازی و مسیر فایل اجرایی لازم است');return}
+  const game={n:name,cat:document.getElementById('gm-cat').value,ic:'🎮',path,net:document.getElementById('gm-net').value,on:document.getElementById('gm-vis').value==='فعال'};
+  if(editingGameIndex<0)games.push(game);else games[editingGameIndex]=game;
+  hideModals();renderGames();saveDemoState();notifyQuick('اطلاعات بازی ذخیره شد');
+}
+function removeGame(index){if(!confirm('این بازی از فهرست حذف شود؟'))return;games.splice(index,1);renderGames();saveDemoState()}
 document.getElementById('g-search').addEventListener('input',e=>{gQ=e.target.value;renderGames()});
 document.querySelectorAll('#g-cat button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#g-cat button').forEach(x=>x.classList.remove('active'));b.classList.add('active');gCat=b.dataset.c;renderGames()});
 renderGames();
+document.querySelector('#page-games .toolbar .btn:not(.primary)').onclick=()=>queueDemoCommand('کلاینت‌ها','اعمال فهرست بازی‌ها');
 
 /* ── صفحه کلاینت‌ها ── */
 const clients=[];
@@ -1377,7 +1568,7 @@ for(let i=1;i<=40;i++){
     net:'اینترنت ۱',shell:'فعال',update:i%13===0
   });
 }
-let clq='',selClient=null;
+let clq='',selClient=null,settingsTargets=[];
 let selSet=new Set(),lastSelIdx=-1;
 function renderClients(){
   const g=document.getElementById('cl-grid');g.innerHTML='';
@@ -1446,22 +1637,80 @@ document.addEventListener('click',e=>{if(!e.target.closest('#cl-ctx'))document.g
 document.getElementById('clq').addEventListener('input',e=>{clq=e.target.value;renderClients()});
 function clAction(msg){
   document.getElementById('cl-ctx').classList.remove('show');
-  const n=selSet.size;
-  notifyQuick(n>1?`برای ${fa(n)} کلاینت اعمال شد: ${msg} (دمو)`:`${msg} (دمو)`);
-  if(n>0&&msg.includes('خارج کردن'))clients.forEach((c,i)=>{if(selSet.has(i))c.user=null});
-  renderClients();
+  const indexes=selSet.size?[...selSet]:selClient?[clients.indexOf(selClient)]:[];
+  const selected=indexes.map(i=>clients[i]).filter(Boolean);
+  if(!selected.length){notifyQuick('کلاینتی انتخاب نشده');return}
+  if(msg==='switch-net')selected.forEach(c=>c.net=c.net==='اینترنت ۱'?'اینترنت ۲':'اینترنت ۱');
+  else if(msg==='toggle-internet')selected.forEach(c=>c.net=c.net==='فقط LAN'?'اینترنت ۱':'فقط LAN');
+  else if(msg==='logout-user')selected.forEach(c=>{c.user=null;c.busy=false});
+  else if(msg==='login-user'){
+    const code=prompt('کد کاربری مشتری را وارد کن');
+    const customer=customers.find(c=>c.code===String(code||'').trim());
+    if(!customer){notifyQuick('مشتری پیدا نشد');return}
+    selected.forEach(c=>{c.user=customer.alias||customer.code;c.busy=true});
+  }else if(msg==='move-user'){
+    const source=selected.find(c=>c.user),destinationName=prompt('شماره کلاینت مقصد (مثلاً PC ۱۲)');
+    const destination=clients.find(c=>c.name===destinationName);
+    if(!source||!destination||destination.busy){notifyQuick('مبدا باید کاربر داشته باشد و مقصد آزاد باشد');return}
+    destination.user=source.user;destination.busy=true;source.user=null;source.busy=false;
+  }else if(msg==='message'){
+    const message=prompt('متن پیام برای کلاینت(ها)');if(!message)return;
+    queueDemoCommand(selected.map(c=>c.name),'پیام به کلاینت',{message});
+  }else queueDemoCommand(selected.map(c=>c.name),msg);
+  saveDemoState();renderClients();notifyQuick('عملیات روی '+fa(selected.length)+' کلاینت ثبت شد');
 }
 function openClientSettings(c){
   c=c||selClient;
   document.getElementById('cl-ctx').classList.remove('show');
   if(c){
+    selClient=c;
+    settingsTargets=[clients.indexOf(c)];
     document.getElementById('cs-name').textContent='تنظیمات '+c.name;
     document.getElementById('cs-ip').value=c.ip;
     document.getElementById('cs-dns1').value=c.dns;
     document.getElementById('cs-num').value=c.num;
+    document.getElementById('cs-shell').value=c.shell;
+    document.querySelectorAll('.net-swap button').forEach(b=>b.classList.toggle('active',b.textContent.trim()===c.net));
   }
   document.getElementById('ov-clset').classList.add('show');
 }
+function saveClientSettings(){
+  const targets=settingsTargets.map(i=>clients[i]).filter(Boolean);
+  if(!targets.length){notifyQuick('کلاینتی برای ذخیره انتخاب نشده');return}
+  const network=document.querySelector('.net-swap button.active')?.textContent.trim()||'اینترنت ۱';
+  const shell=document.getElementById('cs-shell').value;
+  targets.forEach(c=>{
+    if(targets.length===1){c.ip=document.getElementById('cs-ip').value.trim()||c.ip;c.num=document.getElementById('cs-num').value.trim()||c.num}
+    c.dns=document.getElementById('cs-dns1').value.trim();c.dns2=document.getElementById('cs-dns2').value.trim();
+    c.server=document.getElementById('cs-server').value.trim();c.shell=shell;c.net=network;
+    c.boot=document.querySelector('#ov-clset .seg:not(.net-swap) button.active')?.textContent.trim()||'عادی';
+  });
+  queueDemoCommand(targets.map(c=>c.name),'اعمال تنظیمات کلاینت');
+  hideModals();renderClients();saveDemoState();
+}
+function queueClientCommand(action){
+  const targets=settingsTargets.map(i=>clients[i]).filter(Boolean);
+  queueDemoCommand(targets.map(c=>c.name),action);hideModals();
+}
+document.getElementById('wake-all').onclick=()=>{
+  const offline=clients.filter(c=>!c.online);
+  if(!offline.length){notifyQuick('همه‌ی کلاینت‌ها آنلاین هستند');return}
+  queueDemoCommand(offline.map(c=>c.name),'Wake-on-LAN');
+};
+document.getElementById('dns-all').onclick=()=>{
+  const dns=prompt('DNS اصلی برای همه‌ی کلاینت‌ها','178.22.122.100');
+  if(!dns)return;
+  clients.forEach(c=>c.dns=dns);queueDemoCommand('همه‌ی کلاینت‌ها','اعمال DNS',{dns});renderClients();saveDemoState();
+};
+document.getElementById('group-client-settings').onclick=()=>{
+  settingsTargets=selSet.size?[...selSet]:clients.map((_,i)=>i);
+  openClientSettings(clients[settingsTargets[0]]);
+  settingsTargets=selSet.size?[...selSet]:clients.map((_,i)=>i);
+  document.getElementById('cs-name').textContent='تنظیم گروهی ('+fa(settingsTargets.length)+' کلاینت)';
+};
+document.querySelectorAll('#ov-clset .seg button').forEach(button=>button.onclick=()=>{
+  button.parentElement.querySelectorAll('button').forEach(item=>item.classList.remove('active'));button.classList.add('active');
+});
 renderClients();
 
 /* ── تعرفه‌ها ── */
@@ -1476,15 +1725,39 @@ const tariffs=[
 let tarTier='all';
 function renderTariffs(){
   const g=document.getElementById('tar-grid');g.innerHTML='';
-  tariffs.filter(t=>tarTier==='all'||t.tier===tarTier).forEach(t=>{
+  tariffs.forEach((t,index)=>{
+    if(tarTier!=='all'&&t.tier!==tarTier)return;
     const d=document.createElement('div');d.className='tar';
     d.innerHTML=`<div class="hd"><b>${t.name}</b><span class="vip-mini ${t.tier==='vip'?'vm-gold':'vm-none'}">${t.tier==='vip'?'VIP':'عادی'}</span></div>
       <div class="rows">${t.rows.map(r=>`<div class="trow"><span>${r[0]}</span><b>${r[1]} ت</b></div>`).join('')}</div>
       ${t.night!=='—'?`<div class="night">🌙 ${t.night}</div>`:''}
       <div class="night" style="color:var(--cyan)">ℹ ${t.note}</div>
       <div class="paybtns" style="margin-top:10px"><button class="btn sm">✏️ ویرایش</button><button class="btn sm">⏱ تعرفه ساعت خاص</button><button class="btn sm">🗑</button></div>`;
+    const [editButton,nightButton,deleteButton]=d.querySelectorAll('.paybtns button');
+    editButton.onclick=()=>editTariff(index);nightButton.onclick=()=>editNightRate(index);deleteButton.onclick=()=>removeTariff(index);
     g.appendChild(d);
   });
+}
+function editTariff(index){
+  const tariff=tariffs[index];if(!tariff)return;
+  const amount=parseAmount(prompt('مبلغ تعرفه‌ی اصلی (تومان)',tariff.rows[0][1]));
+  if(!amount)return;
+  tariff.rows[0][1]=fa(amount);
+  const zone=tariff.name.includes('PS5')||tariff.name.includes('PS4')?'console':tariff.name.includes('فوتبال')?'table':tariff.name.includes('رایانه')?'pc':null;
+  if(zone)stations.filter(s=>s.zone===zone).forEach(s=>s.rate=amount/1000);
+  renderTariffs();renderGrid();saveDemoState();
+}
+function editNightRate(index){
+  const tariff=tariffs[index];if(!tariff)return;
+  const value=prompt('قانون تعرفه‌ی ساعت خاص را وارد کن',tariff.night);
+  if(value===null)return;tariff.night=value||'—';renderTariffs();saveDemoState();
+}
+function removeTariff(index){if(!confirm('این تعرفه حذف شود؟'))return;tariffs.splice(index,1);renderTariffs();saveDemoState()}
+function createTariff(){
+  const name=prompt('نام تعرفه');if(!name)return;
+  const amount=parseAmount(prompt('قیمت ساعتی به تومان'));
+  if(!amount){notifyQuick('قیمت معتبر وارد کن');return}
+  tariffs.push({name,tier:'normal',rows:[['ساعتی',fa(amount)]],night:'—',note:'تعرفه‌ی جدید'});renderTariffs();saveDemoState();
 }
 document.querySelectorAll('#tar-tier button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#tar-tier button').forEach(x=>x.classList.remove('active'));b.classList.add('active');tarTier=b.dataset.t;renderTariffs()});
 renderTariffs();
@@ -1514,20 +1787,41 @@ function renderAccounts(){
       ${a.st==='in-use'?`<div class="row"><span>در اختیار</span><b>${a.who}</b></div>`:''}
       <div class="row"><span>Steam Guard / 2FA</span><b>${a.guard}</b></div>
       <div class="paybtns" style="margin-top:8px"><button class="btn sm">✏️ ویرایش</button>${a.st==='locked'?'<button class="btn sm">🔓 رفع قفل</button>':''}<button class="btn sm">📜 لاگ</button></div>`;
+    const actionButtons=d.querySelectorAll('.paybtns button');
+    actionButtons[0].onclick=()=>editAccount(a);
+    if(a.st==='locked')actionButtons[1].onclick=()=>{a.st='free';a.guard='آزاد';renderAccounts();saveDemoState()};
+    actionButtons[actionButtons.length-1].onclick=()=>notifyQuick(demoCommands.filter(command=>String(command.target).includes(a.n)).length+' فرمان مرتبط با این اکانت در صف ثبت شده');
     g.appendChild(d);
   });
   document.getElementById('acs-free').innerHTML=fa(accounts.filter(a=>a.st==='free').length)+' <small>اکانت</small>';
   document.getElementById('acs-use').innerHTML=fa(accounts.filter(a=>a.st==='in-use').length)+' <small>اکانت</small>';
   document.getElementById('acs-all').innerHTML=fa(accounts.length)+' <small>اکانت</small>';
+  document.querySelector('#page-accounts .statbar .stat:nth-child(3) .v').innerHTML=fa(accounts.filter(a=>a.st==='locked').length)+' <small>اکانت</small>';
+}
+function createAccount(){
+  const name=prompt('شناسه نمایشی اکانت');if(!name)return;
+  const platform=prompt('پلتفرم: Steam، Battle.net، Riot، Epic یا EA','Steam');if(!platform)return;
+  const game=prompt('بازی‌های قابل استفاده','');
+  accounts.push({n:name,plat:platform,ic:'🎮',st:'free',who:'—',games:game||'—',guard:'رمز در این prototype ذخیره نمی‌شود'});
+  renderAccounts();saveDemoState();
+}
+function editAccount(account){
+  const game=prompt('بازی‌های این اکانت',account.games);if(game===null)return;
+  account.games=game;account.guard='رمز در این prototype ذخیره نمی‌شود';renderAccounts();saveDemoState();
 }
 document.querySelectorAll('#acc-cat button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#acc-cat button').forEach(x=>x.classList.remove('active'));b.classList.add('active');accCat=b.dataset.c;renderAccounts()});
 renderAccounts();
+document.getElementById('special-tariff').onclick=()=>{const index=Number(prompt('شماره تعرفه برای تنظیم شبانه (۱ تا '+tariffs.length+')','1'))-1;if(index>=0&&index<tariffs.length)editNightRate(index)};
+document.getElementById('new-tariff').onclick=createTariff;
+document.getElementById('new-account').onclick=createAccount;
+document.getElementById('account-logs').onclick=()=>notifyQuick(demoCommands.length+' فرمان در صف دمو ثبت شده است');
 
 /* ── فلوی سرعت F1 ── */
 let flowStage=1;
 /* فلوی سرعت — بدون دستگاه: مرحله شناسه؛ با دستگاه: پروفایل آماده مرحله مبلغ */
 function openFlow(stationName){
   flowStage=1;
+  flowCustomer=null;
   document.getElementById('flow-1').style.display='block';
   document.getElementById('flow-2').style.display='none';
   document.getElementById('flow-step').textContent='مرحله ۱: شناسه';
@@ -1535,7 +1829,9 @@ function openFlow(stationName){
   /* اگر دستگاهی مشخص شد، یوزرش را پیدا کن و پروفایلش را آماده کن */
   if(stationName){
     const st=stations.find(x=>x.name===stationName);
-    const c=customers.find(x=>st.user&&st.user.includes(x.code))||customers[0];
+    const c=activeCustomerFor(st);
+    if(!c){notifyQuick('این جلسه به مشتری ثبت‌شده متصل نیست');return}
+    flowCustomer=c;
     document.getElementById('flow-cname').textContent=c.fname+' '+c.lname;
     document.getElementById('flow-cinfo').textContent='کد '+c.code+' • @'+c.alias+' • '+(c.vip==='gold'?'🥇 گلد':c.vip==='silver'?'🥈 سیلور':'بدون پکیج')+' • کیف پول '+fa(c.wallet)+' • دستگاه: '+stationName;
     /* نمایش مرحله ۲ مستقیم چون پروفایل دستگاه شناخته شده است */
@@ -1550,21 +1846,43 @@ function openFlow(stationName){
   document.getElementById('ov-flow').classList.add('show');
   setTimeout(()=>document.getElementById('flow-id').focus(),50);
 }
+let flowCustomer=null;
+function normalizeSearch(value){return String(value||'').replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[\s-]/g,'').toLowerCase()}
 function flowToAmount(name){
-  const q=(name||document.getElementById('flow-id').value.trim());
-  /* جست‌وجوی همه‌فیلدی — اولین تطبیق */
-  const hit=customers.find(c=>(c.code+c.fname+c.lname+c.alias+c.mobile+c.nat).includes(q))||customers[0];
-  if(q){
-    document.getElementById('flow-cname').textContent=hit.fname+' '+hit.lname;
-    document.getElementById('flow-cinfo').textContent='کد '+hit.code+' • @'+hit.alias+' • '+(hit.vip==='gold'?'🥇 گلد':hit.vip==='silver'?'🥈 سیلور':'بدون پکیج')+' • کیف پول '+fa(hit.wallet);
-  }
+  const q=normalizeSearch(name||document.getElementById('flow-id').value.trim());
+  if(!q){notifyQuick('شناسه مشتری را وارد یا از آخرین پروفایل انتخاب کن');return}
+  flowCustomer=customers.find(c=>normalizeSearch([c.code,c.fname,c.lname,c.alias,c.mobile,c.nat].join(' ')).includes(q));
+  if(!flowCustomer){notifyQuick('مشتری با این شناسه پیدا نشد');return}
+  document.getElementById('flow-cname').textContent=flowCustomer.fname+' '+flowCustomer.lname;
+  document.getElementById('flow-cinfo').textContent='کد '+flowCustomer.code+' • @'+flowCustomer.alias+' • '+(flowCustomer.vip==='gold'?'🥇 گلد':flowCustomer.vip==='silver'?'🥈 سیلور':'بدون پکیج')+' • کیف پول '+fa(flowCustomer.wallet);
   flowStage=2;
   document.getElementById('flow-1').style.display='none';
   document.getElementById('flow-2').style.display='block';
   document.getElementById('flow-step').textContent='مرحله ۲: مبلغ و پرداخت';
   setTimeout(()=>document.getElementById('flow-amount').focus(),50);
 }
-function flowAct(msg){hideModals();notifyQuick(msg)}
+function parseAmount(value){
+  const digits=String(value||'').replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,'');
+  const amount=Number(digits);
+  return Number.isSafeInteger(amount)&&amount>0?amount:0;
+}
+function flowAct(action){
+  if(!flowCustomer){notifyQuick('ابتدا مشتری را از شناسه پیدا کن');return}
+  const amount=parseAmount(document.getElementById('flow-amount').value);
+  if(!amount){notifyQuick('مبلغ معتبر وارد کن');return}
+  if(action==='wallet-add')flowCustomer.wallet+=amount;
+  else if(action==='debt-add')flowCustomer.debt+=amount;
+  else if(action==='wallet-deduct'){
+    if(flowCustomer.wallet<amount){notifyQuick('موجودی کیف پول کافی نیست');return}
+    flowCustomer.wallet-=amount;
+  }else if(action==='wallet-deduct-debt'){
+    const deducted=Math.min(flowCustomer.wallet,amount);
+    flowCustomer.wallet-=deducted;flowCustomer.debt+=amount-deducted;
+  }
+  const labels={'wallet-add':'شارژ کیف پول','debt-add':'ثبت بدهی','wallet-deduct':'کسر از کیف پول','wallet-deduct-debt':'کسر کیف پول و ثبت مازاد بدهی'};
+  flowCustomer.hist.unshift([labels[action]||'تراکنش',fa(amount)]);
+  refreshOperationalViews();hideModals();notifyQuick('تراکنش ثبت شد: '+fa(amount)+' تومان');
+}
 function faSet(id,v){document.getElementById(id).value=v}
 
 /* نقش‌ها برای دموی دسترسی گزارش */
@@ -1594,32 +1912,73 @@ document.getElementById('zslider').addEventListener('input',e=>{
 });
 
 /* هات‌کی‌های جدید */
+const defaultHotkeys={flow:'F1',amount:'F4',walletAdd:'F5',debtAdd:'F6',walletDeduct:'F7',walletDebt:'F8',buffet:'F3',reports:'F2'};
+let hotkeyMap={...defaultHotkeys};
+let hotkeyCaptureAction=null;
+try{hotkeyMap={...defaultHotkeys,...JSON.parse(localStorage.getItem('gamenet-hotkeys-v1')||'{}')}}catch{}
+function renderHotkeys(){document.querySelectorAll('[data-hotkey]').forEach(key=>{key.textContent=hotkeyMap[key.dataset.hotkey]||defaultHotkeys[key.dataset.hotkey]})}
+document.querySelectorAll('[data-hotkey]').forEach(key=>key.onclick=()=>{hotkeyCaptureAction=key.dataset.hotkey;notifyQuick('کلید جدید را فشار بده؛ Esc برای لغو')});
+renderHotkeys();
 document.addEventListener('keydown',e=>{
-  if(e.key==='F1'){e.preventDefault();openFlow()}
-  if(flowStage===2){
-    if(e.key==='F4'){e.preventDefault();document.getElementById('flow-amount').focus()}
-    if(e.key==='F5'){e.preventDefault();flowAct('F5: شارژ مستقیم انجام شد ✓')}
-    if(e.key==='F6'){e.preventDefault();flowAct('F6: شارژ + بدهی ثبت شد ✓')}
-    if(e.key==='F7'){e.preventDefault();flowAct('F7: از کیف پول کسر شد ✓')}
-    if(e.key==='F8'){e.preventDefault();flowAct('F8: کسر از کیف پول؛ مازاد به بدهی ✓')}
+  if(hotkeyCaptureAction){
+    if(e.key==='Escape'){hotkeyCaptureAction=null;return}
+    if(!e.key.startsWith('F'))return;
+    e.preventDefault();
+    if(Object.entries(hotkeyMap).some(([action,key])=>action!==hotkeyCaptureAction&&key===e.key)){notifyQuick('این کلید قبلاً استفاده شده است');return}
+    hotkeyMap[hotkeyCaptureAction]=e.key;localStorage.setItem('gamenet-hotkeys-v1',JSON.stringify(hotkeyMap));renderHotkeys();hotkeyCaptureAction=null;return;
   }
-  if(e.key==='F4'&&!document.querySelector('.overlay.show')&&flowStage===1){
-    e.preventDefault();openFlow();flowToAmount();
+  if(e.key===hotkeyMap.flow){e.preventDefault();openFlow();return}
+  if(flowStage===2&&document.getElementById('ov-flow').classList.contains('show')){
+    if(e.key===hotkeyMap.amount){e.preventDefault();document.getElementById('flow-amount').focus()}
+    if(e.key===hotkeyMap.walletAdd){e.preventDefault();flowAct('wallet-add')}
+    if(e.key===hotkeyMap.debtAdd){e.preventDefault();flowAct('debt-add')}
+    if(e.key===hotkeyMap.walletDeduct){e.preventDefault();flowAct('wallet-deduct')}
+    if(e.key===hotkeyMap.walletDebt){e.preventDefault();flowAct('wallet-deduct-debt')}
+  }
+  if(e.key===hotkeyMap.amount&&document.getElementById('ov-flow').classList.contains('show')&&flowStage===1){
+    e.preventDefault();flowToAmount('1050');
+  }else if(e.key===hotkeyMap.amount&&!document.querySelector('.overlay.show')&&flowStage===1){
+    e.preventDefault();openFlow();flowToAmount('1050');
   }
 },true);
 
 /* شارژ سریع روی کارت (دابل‌کلیک) */
 function openQuickCharge(name){
   document.getElementById('qc-station').textContent=name;
+  activeSessionStation=name;
   document.getElementById('qc-amount').value='';
-  document.getElementById('qc-target').textContent='شارژ زمان همین جلسه';
+  document.getElementById('qc-target').value='شارژ زمان همین جلسه';
   document.getElementById('ov-charge').classList.add('show');
   setTimeout(()=>document.getElementById('qc-amount').focus(),50);
 }
 window.qset=v=>{document.getElementById('qc-amount').value=v};
 document.getElementById('qc-amount').addEventListener('keydown',e=>{
-  if(e.key==='Enter'){hideModals();notifyQuick('شارژ شد ✓ (دمو)')}
+  if(e.key==='Enter')applyQuickCharge('cash');
 });
+function applyQuickCharge(method){
+  const amount=parseAmount(document.getElementById('qc-amount').value);
+  if(!amount){notifyQuick('مبلغ معتبر وارد کن');return}
+  const station=stations.find(s=>s.name===activeSessionStation);
+  const customer=activeCustomerFor(station);
+  const target=document.getElementById('qc-target').value;
+  if(method==='debt'){
+    if(!customer){notifyQuick('برای ثبت بدهی، مشتری باید به جلسه متصل باشد');return}
+    customer.debt+=amount;customer.hist.unshift(['ثبت بدهی',fa(amount)]);
+  }else if(target==='شارژ زمان همین جلسه'){
+    if(!station||station.state!=='busy'){notifyQuick('جلسه‌ی فعالی برای تمدید پیدا نشد');return}
+    const rate=(station.sessionRate||station.rate)*1000;
+    const minutes=amount/rate*60;
+    station.min=(station.min||0)+minutes;station.amount=(station.amount||0)+amount/1000;
+  }else if(target==='شارژ کیف پول مشتری'){
+    if(!customer){notifyQuick('برای شارژ کیف پول، مشتری باید به جلسه متصل باشد');return}
+    if(method==='wallet'){notifyQuick('برای شارژ کیف پول، نقد یا کارت را انتخاب کن');return}
+    customer.wallet+=amount;customer.hist.unshift(['شارژ کیف پول',fa(amount)]);
+  }else{
+    if(!customer){notifyQuick('برای شارژ+تخفیف، مشتری باید به جلسه متصل باشد');return}
+    customer.wallet+=amount;customer.discountLevel=(customer.discountLevel||0)+1;
+  }
+  hideModals();refreshOperationalViews();notifyQuick('شارژ ثبت شد: '+fa(amount)+' تومان');
+}
 function notifyQuick(t){
   const m=document.createElement('div');
   m.style.cssText='position:fixed;bottom:20px;inset-inline-start:50%;transform:translateX(50%);background:#0f2b1e;border:1px solid #22e58a;color:#22e58a;padding:10px 22px;border-radius:12px;font-size:13px;z-index:400;animation:up .2s ease';
@@ -1628,14 +1987,14 @@ function notifyQuick(t){
 
 /* پالت فرمان (Ctrl+K) */
 const commands=[
-  {ic:'⚡',t:'شارژ مستقیم جلسه',k:'F2',sub:'انتخاب ایستگاه → مبلغ → شارژ',act:()=>{document.querySelector('nav a[data-page="dash"]').click();openQuickCharge('PC ۵')}},
-  {ic:'🧾',t:'شارژ + ثبت در بدهی',k:'F3',sub:'مشتری بازی کند و بدهکار شود',act:()=>notifyQuick('حالت بدهی: مبلغ به حساب مشتری اضافه می‌شود (دمو)')},
-  {ic:'✂️',t:'کسر اعتبار/تخفیف',k:'F4',sub:'کسر از کیف پول یا اعتبار رایگان',act:()=>notifyQuick('کسر اعتبار (دمو)')},
-  {ic:'🛒',t:'فروش بوفه سریع',k:'F5',sub:'رفتن به صفحه بوفه',act:()=>document.querySelector('nav a[data-page="buffet"]').click()},
-  {ic:'👤',t:'جست‌وجوی مشتری',k:'F6',sub:'رفتن به صفحه مشتریان با جست‌وجو',act:()=>document.querySelector('nav a[data-page="cust"]').click()},
-  {ic:'▶️',t:'شروع جلسه جدید',k:'F7',sub:'انتخاب ایستگاه آزاد',act:()=>{document.querySelector('nav a[data-page="dash"]').click();document.getElementById('ov-start').classList.add('show')}},
-  {ic:'⏱',t:'تمدید وقت',k:'F8',sub:'افزودن زمان به جلسه فعال',act:()=>notifyQuick('تمدید وقت (دمو)')},
-  {ic:'💰',t:'بستن صندوق / پایان شیفت',k:'F9',sub:'خلاصه نقد/کارت و کسری',act:()=>document.querySelector('nav a[data-page="users"]').click()},
+  {ic:'⚡',t:'شارژ مستقیم جلسه',k:'↵',sub:'انتخاب ایستگاه → مبلغ → شارژ',act:()=>{const s=stations.find(x=>x.state==='busy');if(s){document.querySelector('nav a[data-page="dash"]').click();openQuickCharge(s.name)}else notifyQuick('جلسه فعالی وجود ندارد')}},
+  {ic:'🧾',t:'شارژ + ثبت در بدهی',k:'↵',sub:'ثبت بدهی برای مشتری',act:()=>{openFlow();flowToAmount('1050')}},
+  {ic:'✂️',t:'کسر اعتبار/تخفیف',k:'↵',sub:'کسر از کیف پول مشتری',act:()=>{openFlow();flowToAmount('1050')}},
+  {ic:'🛒',t:'فروش بوفه سریع',k:'↵',sub:'رفتن به صفحه بوفه',act:()=>document.querySelector('nav a[data-page="buffet"]').click()},
+  {ic:'👤',t:'جست‌وجوی مشتری',k:'↵',sub:'رفتن به صفحه مشتریان با جست‌وجو',act:()=>document.querySelector('nav a[data-page="cust"]').click()},
+  {ic:'▶️',t:'شروع جلسه جدید',k:'↵',sub:'انتخاب ایستگاه آزاد',act:()=>{document.querySelector('nav a[data-page="dash"]').click();openStart()}},
+  {ic:'⏱',t:'تمدید وقت',k:'↵',sub:'افزودن زمان به جلسه فعال',act:()=>{const s=stations.find(x=>x.state==='busy');if(s){activeSessionStation=s.name;extendSession()}else notifyQuick('جلسه فعالی وجود ندارد')}},
+  {ic:'💰',t:'بستن صندوق / پایان شیفت',k:'↵',sub:'خلاصه نقد/کارت و کسری',act:()=>closeShift()},
 ];
 let cmdHot=0;
 function openCmdk(){
@@ -1658,14 +2017,147 @@ document.getElementById('cmdk-input').addEventListener('keydown',e=>{
   if(e.key==='Enter'){const f=document.querySelector('.cmdk-item.hot');if(f)f.click()}
   if(e.key==='Escape')hideModals();
 });
+function downloadText(name,text,type='text/csv;charset=utf-8'){
+  const link=document.createElement('a');link.href=URL.createObjectURL(new Blob(['\ufeff'+text],{type}));link.download=name;link.click();URL.revokeObjectURL(link.href);
+}
+function csvCell(value){return '"'+String(value??'').replace(/"/g,'""')+'"'}
+function exportReport(){
+  const rows=[['تاریخ','ایستگاه','درآمد زمان','بوفه','مبلغ','روش پرداخت','اپراتور']];
+  demoInvoices.forEach(invoice=>rows.push([new Date(invoice.closedAt).toLocaleString('fa-IR'),invoice.station,invoice.timeAmount||0,invoice.buffet||0,invoice.amount,invoice.method,invoice.operator]));
+  demoExpenses.forEach(expense=>rows.push([new Date(expense.createdAt).toLocaleString('fa-IR'),'هزینه: '+expense.title,0,0,-expense.amount,'expense',expense.operator]));
+  downloadText('gamenet-report.csv',rows.map(row=>row.map(csvCell).join(',')).join('\r\n'));
+}
+function renderReportTotals(){
+  const time=demoInvoices.reduce((sum,invoice)=>sum+(invoice.timeAmount||0),0);
+  const buffet=demoInvoices.reduce((sum,invoice)=>sum+(invoice.buffet||0),0);
+  const expenses=demoExpenses.reduce((sum,expense)=>sum+expense.amount,0);
+  const methods={cash:0,card:0,wallet:0};
+  demoInvoices.forEach(invoice=>{methods[invoice.method]=(methods[invoice.method]||0)+invoice.amount});
+  document.getElementById('report-time-total').textContent=fa(time);
+  document.getElementById('report-buffet-total').textContent=fa(buffet);
+  document.getElementById('report-package-total').textContent=fa(0);
+  document.getElementById('report-expense-total').textContent='−'+fa(expenses);
+  document.getElementById('report-net-total').textContent=fa(time+buffet-expenses);
+  document.getElementById('report-cash-total').textContent=fa(methods.cash||0);
+  document.getElementById('report-card-total').textContent=fa(methods.card||0);
+  document.getElementById('report-wallet-total').textContent=fa(methods.wallet||0);
+}
+function registerExpense(){
+  const title=prompt('شرح هزینه');if(!title)return;
+  const amount=parseAmount(prompt('مبلغ هزینه به تومان'));
+  if(!amount){notifyQuick('مبلغ معتبر وارد کن');return}
+  demoExpenses.push({title,amount,createdAt:Date.now(),operator:'علی محمدی'});saveDemoState();renderReportTotals();notifyQuick('هزینه ثبت شد');
+}
+function startShift(){
+  if(currentShift){notifyQuick('شیفت فعلی هنوز باز است');return}
+  currentShift={id:'shift-'+Date.now(),operator:'علی محمدی',openedAt:Date.now()};saveDemoState();updateShiftButtons();notifyQuick('شیفت جدید باز شد');
+}
+function closeShift(){
+  if(!currentShift){notifyQuick('شیفت بازی برای بستن وجود ندارد');return}
+  const invoices=demoInvoices.filter(invoice=>invoice.shiftId===currentShift.id);
+  const expected=invoices.filter(invoice=>invoice.method==='cash').reduce((sum,invoice)=>sum+invoice.amount,0);
+  const counted=parseAmount(prompt('وجه نقد شمارش‌شده (تومان). مبلغ مورد انتظار: '+fa(expected),String(expected)));
+  if(!counted&&expected!==0)return;
+  const closed={...currentShift,closedAt:Date.now(),expectedCash:expected,countedCash:counted,difference:counted-expected,sales:invoices.reduce((sum,invoice)=>sum+invoice.amount,0)};
+  demoShifts.unshift(closed);currentShift=null;saveDemoState();updateShiftButtons();renderReportTotals();
+  notifyQuick('شیفت بسته شد؛ اختلاف صندوق: '+fa(closed.difference)+' تومان');
+}
+function updateShiftButtons(){
+  const button=document.querySelector('#page-users .toolbar .btn');
+  if(button)button.textContent=currentShift?'🕘 شیفت باز فعلی: '+currentShift.operator+' — '+new Date(currentShift.openedAt).toLocaleTimeString('fa-IR'):'▶ باز کردن شیفت';
+}
+function setReportPreset(name){
+  const fields=document.querySelectorAll('#rep-custom .field input');
+  const end=new Date(),start=new Date(end);
+  if(name==='دیروز'){end.setDate(end.getDate()-1);start.setTime(end.getTime())}
+  else if(name==='این هفته')start.setDate(start.getDate()-6);
+  else if(name==='ماه جاری')start.setDate(1);
+  else if(name==='ماه قبل'){start.setMonth(start.getMonth()-1,1);end.setDate(0)}
+  else if(name==='۹۰ روز اخیر')start.setDate(start.getDate()-89);
+  else if(name==='امسال')start.setMonth(0,1);
+  const persian=date=>date.toLocaleDateString('fa-IR-u-ca-persian').replaceAll('-','/');
+  fields[0].value=persian(start);fields[1].value=persian(end);
+  document.querySelectorAll('#rep-custom .paybtns button').forEach(button=>button.classList.toggle('active',button.textContent.trim()===name));
+}
+function applyReportRange(){
+  const fields=document.querySelectorAll('#rep-custom .field input');
+  if(!fields[0].value||!fields[1].value){notifyQuick('بازه‌ی تاریخ را کامل کن');return}
+  renderReportTotals();notifyQuick('بازه‌ی گزارش اعمال شد: '+fields[0].value+' تا '+fields[1].value);
+}
+document.getElementById('export-report').onclick=exportReport;
+document.getElementById('print-report').onclick=()=>window.print();
+document.getElementById('close-shift-report').onclick=closeShift;
+document.getElementById('add-expense').onclick=registerExpense;
+document.querySelectorAll('#rep-custom > div:first-child .btn').forEach(button=>button.onclick=button.textContent.includes('اعمال')?applyReportRange:()=>setReportPreset('امروز'));
+document.querySelectorAll('#rep-custom > div:last-child .btn').forEach(button=>button.onclick=()=>setReportPreset(button.textContent.trim()));
+document.querySelectorAll('#rep-custom .field input').forEach(input=>input.addEventListener('change',applyReportRange));
+document.querySelector('#page-users .toolbar .btn').onclick=()=>currentShift?notifyQuick('شیفت از '+new Date(currentShift.openedAt).toLocaleTimeString('fa-IR')+' باز است'):startShift();
+document.querySelector('#page-users .toolbar .btn.danger').onclick=closeShift;
+document.querySelector('#page-users .toolbar .btn.primary').onclick=()=>{
+  const name=prompt('نام کاربر جدید');if(!name)return;
+  const role=prompt('نقش کاربر (مدیر یا اپراتور)','اپراتور');
+  const row=document.createElement('div');row.className='user-row';row.textContent=name+' — '+(role||'اپراتور');
+  document.querySelector('#page-users .perm-wrap .card-panel').appendChild(row);saveDemoState();
+};
+const uiSettingsKey='gamenet-ui-settings-v1';
+function saveUiSettings(){
+  const controls=[...document.querySelectorAll('#page-settings input, #page-settings select')].filter(control=>!control.disabled);
+  const values=controls.map(control=>control.type==='checkbox'?control.checked:control.value);
+  try{localStorage.setItem(uiSettingsKey,JSON.stringify(values))}catch(error){console.warn('Settings could not be saved',error)}
+}
+function restoreUiSettings(){
+  try{
+    const values=JSON.parse(localStorage.getItem(uiSettingsKey)||'[]');
+    const controls=[...document.querySelectorAll('#page-settings input, #page-settings select')].filter(control=>!control.disabled);
+    controls.forEach((control,index)=>{if(index<values.length){if(control.type==='checkbox')control.checked=Boolean(values[index]);else control.value=values[index]}});
+  }catch(error){console.warn('Saved settings could not be loaded',error)}
+}
+function savePermissions(){
+  const values=[...document.querySelectorAll('#page-users .perm-table input[type="checkbox"]')].map(input=>input.checked);
+  localStorage.setItem('gamenet-permissions-v1',JSON.stringify(values));
+}
+function restorePermissions(){
+  try{
+    const values=JSON.parse(localStorage.getItem('gamenet-permissions-v1')||'[]');
+    document.querySelectorAll('#page-users .perm-table input[type="checkbox"]').forEach((input,index)=>{if(index<values.length&&!input.disabled)input.checked=Boolean(values[index])});
+  }catch{}
+}
+function backupDemoData(){
+  saveDemoState();saveUiSettings();
+  const backup={state:JSON.parse(localStorage.getItem(stateStorageKey)||'{}'),settings:JSON.parse(localStorage.getItem(uiSettingsKey)||'[]'),hotkeys:hotkeyMap,permissions:JSON.parse(localStorage.getItem('gamenet-permissions-v1')||'[]')};
+  downloadText('gamenet-backup.json',JSON.stringify(backup,null,2),'application/json');
+}
+function restoreDemoBackup(){
+  const input=document.createElement('input');input.type='file';input.accept='.json,application/json';
+  input.onchange=async()=>{
+    try{
+      const text=(await input.files[0].text()).replace(/^\uFEFF/,'');const backup=JSON.parse(text);
+      if(!Array.isArray(backup.state?.stations)||!Array.isArray(backup.state?.customers))throw new Error('invalid backup');
+      localStorage.setItem(stateStorageKey,JSON.stringify(backup.state));
+      localStorage.setItem(uiSettingsKey,JSON.stringify(backup.settings||[]));
+      localStorage.setItem('gamenet-hotkeys-v1',JSON.stringify(backup.hotkeys||defaultHotkeys));
+      localStorage.setItem('gamenet-permissions-v1',JSON.stringify(backup.permissions||[]));location.reload();
+    }catch{notifyQuick('فایل پشتیبان معتبر نیست')}
+  };
+  input.click();
+}
+document.querySelectorAll('#page-settings input, #page-settings select').forEach(control=>control.addEventListener('change',saveUiSettings));
+document.querySelectorAll('#page-users .perm-table input[type="checkbox"]').forEach(input=>input.addEventListener('change',savePermissions));
+document.getElementById('backup-now').onclick=backupDemoData;
+document.getElementById('restore-backup').onclick=restoreDemoBackup;
+restoreUiSettings();restorePermissions();
 /* هات‌کی‌های جهانی — ناوبری و پالت؛ فلو در listener جدا */
 document.addEventListener('keydown',e=>{
   if(e.ctrlKey&&e.key.toLowerCase()==='k'){e.preventDefault();openCmdk();return}
   if(document.querySelector('.overlay.show'))return;
-  if(e.key==='F3'){e.preventDefault();document.querySelector('nav a[data-page="buffet"]').click()}
-  if(e.key==='F2'){e.preventDefault();document.querySelector('nav a[data-page="reports"]').click()}
-  if(e.key==='F9'){e.preventDefault();document.querySelector('nav a[data-page="users"]').click()}
+  if(e.key===hotkeyMap.buffet){e.preventDefault();document.querySelector('nav a[data-page="buffet"]').click()}
+  if(e.key===hotkeyMap.reports){e.preventDefault();document.querySelector('nav a[data-page="reports"]').click()}
+  if(e.key==='F9'){e.preventDefault();closeShift()}
 });
+restoreDemoState();
+if(!currentShift&&!demoShifts.length)currentShift={id:'shift-demo',operator:'علی محمدی',openedAt:Date.now()};
+renderGrid();renderCustList();renderCustProfile();renderProd();renderCart();renderGames();renderClients();renderTariffs();renderAccounts();renderBuffetTarget();
+renderReportTotals();updateShiftButtons();saveDemoState();
 </script>
 </body>
 </html>

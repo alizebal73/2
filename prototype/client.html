@@ -217,7 +217,7 @@
   <div class="zoomctl" title="بزرگ‌نمایی">
     <button onclick="zoomG(-1)">−</button><span id="gz">۱۰۰٪</span><button onclick="zoomG(1)">＋</button>
   </div>
-  <div class="pill user-pill" onclick="toggleAcct()"><span class="ava">ر</span> رضا-Headshot 🥇</div>
+  <div class="pill user-pill" onclick="toggleAcct()"><span class="ava" id="user-initial">ر</span><span id="user-label">ورود مشتری</span></div>
 </div>
 
 <!-- صفحه لاگین -->
@@ -232,7 +232,7 @@
     <button class="btn" onclick="doLogin()">ورود به سیستم</button>
     <button class="btn" style="width:100%;padding:11px;border-radius:12px;border:1px solid #ffd16655;background:#2a2313;color:var(--gold);font-size:13.5px;font-weight:800;cursor:pointer;margin-top:8px" onclick="showBox('opbox')">🧑‍💼 ورود اپراتور (وقت نامحدود) <span style="font-size:9px;opacity:.7">Alt+F6</span></button>
     <button class="btn" style="width:100%;padding:10px;border-radius:12px;border:1px solid var(--line);background:#0d1526;color:var(--dim);font-size:11.5px;cursor:pointer;margin-top:6px" onclick="showBox('freebox')">🔓 آزادسازی سیستم / ورود به ویندوز <span style="font-size:9px">Alt+F7</span></button>
-    <div class="hint">مهمان هستی؟ از اپراتور بخواه اکانت باز کند — یا با <b>Enter</b> وارد شو</div>
+    <div class="hint">ورود دمو: کد ۱۰۵۰، رمز ۲۰۲۰ • مهمان: شناسه guest و رمز خالی</div>
   </div>
 </div>
 
@@ -272,8 +272,8 @@
   <button class="hot" onclick="openCk()">⌘ قلنک <kbd style="font-size:9px;background:#0d1526;border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--green)">Ctrl+K</kbd></button>
   <button onclick="toggleApps()">🧩 نرم‌افزارها</button>
   <button onclick="toggleMenu()">🛒 منوی بوفه</button>
-  <button onclick="notify('مسابقات فعال: جام CS2 جمعه‌ها — ثبت‌نام از صندوق')">🏆 مسابقات</button>
-  <button onclick="notify('بازی‌های شما: آخرین رنک CS2 — Gold Nova 3')">📊 بازی‌های من</button>
+  <button onclick="showTournaments()">🏆 مسابقات</button>
+  <button onclick="showMyGames()">📊 بازی‌های من</button>
   <button onclick="toggleAcct()">👤 حساب من</button>
   <div class="left"></div>
   <button onclick="toggleAd()">📢 تبلیغات</button>
@@ -284,22 +284,22 @@
 <div class="apps" id="apps">
   <h4>🧩 نرم‌افزارها و ابزارهای مجاز</h4>
   <div class="app-row">
-    <div class="app-chip" onclick="notify('Chrome باز شد (دمو)')"><span class="ic">🌐</span>کروم</div>
-    <div class="app-chip" onclick="notify('Discord باز شد (دمو)')"><span class="ic">💬</span>دیسکورد</div>
-    <div class="app-chip" onclick="notify('Spotify باز شد (دمو)')"><span class="ic">🎵</span>موزیک</div>
-    <div class="app-chip" onclick="notify('Telegram باز شد (دمو)')"><span class="ic">✈️</span>تلگرام</div>
-    <div class="app-chip" onclick="notify('OBS باز شد (دمو)')"><span class="ic">🎥</span>ضبط صفحه</div>
-    <div class="app-chip" onclick="notify('ماشین حساب باز شد (دمو)')"><span class="ic">🧮</span>ماشین حساب</div>
+    <div class="app-chip" onclick="launchApp('Chrome')"><span class="ic">🌐</span>کروم</div>
+    <div class="app-chip" onclick="launchApp('Discord')"><span class="ic">💬</span>دیسکورد</div>
+    <div class="app-chip" onclick="launchApp('Spotify')"><span class="ic">🎵</span>موزیک</div>
+    <div class="app-chip" onclick="launchApp('Telegram')"><span class="ic">✈️</span>تلگرام</div>
+    <div class="app-chip" onclick="launchApp('OBS')"><span class="ic">🎥</span>ضبط صفحه</div>
+    <div class="app-chip" onclick="launchApp('Calculator')"><span class="ic">🧮</span>ماشین حساب</div>
   </div>
 </div>
 
 <!-- منوی بوفه -->
 <div class="menu" id="menu">
   <h4>🛒 منوی بوفه — سفارش به صندوق ارسال می‌شود</h4>
-  <div class="m-item"><span class="ic">🥤</span><b>نوشابه</b><span class="p">۳۵٬۰۰۰</span><button class="add" onclick="notify('نوشابه به سفارش اضافه شد — اپراتور تایید می‌کند')">+</button></div>
-  <div class="m-item"><span class="ic">☕</span><b>قهوه فوری</b><span class="p">۴۵٬۰۰۰</span><button class="add" onclick="notify('قهوه به سفارش اضافه شد')">+</button></div>
-  <div class="m-item"><span class="ic">🍿</span><b>پاپ‌کورن</b><span class="p">۳۵٬۰۰۰</span><button class="add" onclick="notify('پاپ‌کورن اضافه شد')">+</button></div>
-  <div class="m-item"><span class="ic">🥪</span><b>ساندویچ سرد</b><span class="p">۹۰٬۰۰۰</span><button class="add" onclick="notify('ساندویچ اضافه شد')">+</button></div>
+  <div class="m-item"><span class="ic">🥤</span><b>نوشابه</b><span class="p">۳۵٬۰۰۰</span><button class="add" onclick="requestBuffet('نوشابه',35000)">+</button></div>
+  <div class="m-item"><span class="ic">☕</span><b>قهوه فوری</b><span class="p">۴۵٬۰۰۰</span><button class="add" onclick="requestBuffet('قهوه فوری',45000)">+</button></div>
+  <div class="m-item"><span class="ic">🍿</span><b>پاپ‌کورن</b><span class="p">۳۵٬۰۰۰</span><button class="add" onclick="requestBuffet('پاپ‌کورن',35000)">+</button></div>
+  <div class="m-item"><span class="ic">🥪</span><b>ساندویچ سرد</b><span class="p">۹۰٬۰۰۰</span><button class="add" onclick="requestBuffet('ساندویچ سرد',90000)">+</button></div>
   <div class="m-note">💡 مبلغ سفارش به فاکتور جلسه‌ات اضافه می‌شود. پرداخت از کیف پول یا هنگام تسویه.</div>
 </div>
 
@@ -349,11 +349,11 @@
 </div>
 <div class="acct" id="acct">
   <h4>حساب من <button style="background:none;border:0;color:var(--dim);cursor:pointer" onclick="toggleAcct()">✕</button></h4>
-  <div class="row"><span>نام کاربری</span><b>reza_hs</b></div>
-  <div class="row"><span>کیف پول</span><b style="color:var(--green)">۴۵۰٬۰۰۰ ت</b></div>
-  <div class="row"><span>اعتبار رایگان</span><b style="color:var(--purple)">۱۲۰٬۰۰۰ ت</b></div>
-  <div class="row"><span>بدهی</span><b style="color:var(--red)">۰ ت</b></div>
-  <div class="pkg-box">
+  <div class="row"><span>نام کاربری</span><b id="acct-username">—</b></div>
+  <div class="row"><span>کیف پول</span><b id="acct-wallet" style="color:var(--green)">۰ ت</b></div>
+  <div class="row"><span>اعتبار رایگان</span><b id="acct-gift" style="color:var(--purple)">۰ ت</b></div>
+  <div class="row"><span>بدهی</span><b id="acct-debt" style="color:var(--red)">۰ ت</b></div>
+  <div class="pkg-box" id="pkg-box" style="display:none">
     <div class="t"><span>🥇 پکیج گلد — فعال</span><span>۱۲ روز مانده</span></div>
     <div class="bar"><i style="width:62%"></i></div>
     <div style="margin-top:6px;color:var(--dim)">امروز: ۲.۵ از ۴ ساعت مصرف شده</div>
@@ -365,12 +365,12 @@
 <div class="ctx" id="ctx">
   <div class="info">PC ۱۲ • رضا-Headshot 🥇 • مانده <b>۴۵۰٬۰۰۰ ت</b></div>
   <div class="sep"></div>
-  <button onclick="notify('پنل تغییر اینترنت: آنلاین ↔ آفلاین (با مجوز سرور)')">🌐 تغییر اینترنت (آنلاین/آفلاین) <kbd>Ctrl+I</kbd></button>
-  <button onclick="notify('جابه‌جایی شناسه: اکانت تو به سیستم دیگر منتقل می‌شود')">🔀 جابه‌جایی شناسه به سیستم دیگر <kbd>Ctrl+M</kbd></button>
-  <button onclick="notify('ورود با شناسه دیگر — اکانت فعلی بسته و اکانت جدید باز می‌شود')">🔄 ورود / خروج با شناسه <kbd>Ctrl+L</kbd></button>
-  <button onclick="notify('درخواست شارژ به صندوق ارسال شد — اپراتور تایید می‌کند')">💰 درخواست شارژ از اپراتور <kbd>Ctrl+R</kbd></button>
+  <button onclick="toggleInternet()">🌐 تغییر اینترنت (آنلاین/آفلاین) <kbd>Ctrl+I</kbd></button>
+  <button onclick="requestMove()">🔀 جابه‌جایی شناسه به سیستم دیگر <kbd>Ctrl+M</kbd></button>
+  <button onclick="switchCustomer()">🔄 ورود / خروج با شناسه <kbd>Ctrl+L</kbd></button>
+  <button onclick="requestCharge()">💰 درخواست شارژ از اپراتور <kbd>Ctrl+R</kbd></button>
   <div class="sep"></div>
-  <button onclick="notify('پیام شما به صندوق ارسال شد')">💬 ارسال پیام به اپراتور <kbd>Ctrl+P</kbd></button>
+  <button onclick="sendMessageToOperator()">💬 ارسال پیام به اپراتور <kbd>Ctrl+P</kbd></button>
   <button onclick="lockNow()">🔒 قفل کردن سیستم (خروج امن) <kbd>Win+L</kbd></button>
 </div>
 
@@ -385,7 +385,7 @@
     <button class="go" onclick="opLogin()">ورود (Enter)</button>
     <button onclick="hideAdmin()">انصراف</button>
   </div>
-  <div class="ab-note">ⓘ سرور خودش بازی نیست؛ ورود نامحدود فقط برای کلاینت‌هاست. لاگ ورود در سرور ثبت می‌شود.</div>
+  <div class="ab-note">ⓘ رمز دمو اپراتور: ۲۴۶۸. اجرای واقعی نیازمند سرویس ویندوزی و مجوز سرور است.</div>
 </div>
 
 <!-- کادر آزادسازی/ویندوز (Alt+F7) — فقط همین کلاینت -->
@@ -398,7 +398,7 @@
     <button onclick="freeSys('restart')">🔄 ری‌استارت</button>
     <button class="dg" onclick="freeSys('shutdown')">⏻ خاموش</button>
   </div>
-  <div class="ab-note">ⓘ مجوز این اقدام در سرور (کاربران → ماتریس دسترسی) برای نقش تو تعریف شده. لاگ ثبت می‌شود.</div>
+  <div class="ab-note">ⓘ رمز دمو مدیر: ۲۰۲۰. فرمان آزادسازی واقعی از این صفحه‌ی وب اجرا نمی‌شود.</div>
 </div>
 
 <!-- منوی کوچک Alt+F6 -->
@@ -424,30 +424,158 @@
 <div class="lockover" id="lock">
   <h2>🔒 سیستم قفل است</h2>
   <p>برای ادامه، شناسه خود را وارد کن یا از اپراتور کمک بگیر</p>
-  <button class="btn" onclick="document.getElementById('lock').classList.remove('show');notify('دوباره وارد شدی (دمو)')">ورود مجدد</button>
+  <button class="btn" onclick="returnToLogin()">ورود مجدد</button>
 </div>
 
 <script>
 const fa=n=>Number(n).toLocaleString('fa-IR');
+const sharedStateKey='gamenet-manager-demo-v1';
+const clientStateKey='gamenet-client-pc12-v1';
+const fallbackCustomers=[{code:'1050',pass:'2020',fname:'رضا',lname:'محمدی',alias:'Reza-Headshot',wallet:450000,gift:120000,debt:0,vip:'gold'}];
+let sharedDemoState={};
+let customer=null;
+let runningGame='';
+let accountPoolId='';
+let onlineMode='آنلاین';
+let unlimitedTime=false;
+let sessionEndsAt=0;
+let clientInbox=[];
+function readStoredJson(key,fallback={}){try{return JSON.parse(localStorage.getItem(key)||'null')||fallback}catch{return fallback}}
+function saveClientState(){
+  try{localStorage.setItem(clientStateKey,JSON.stringify({customerCode:customer?.code||'',sessionEndsAt,runningGame,accountPoolId,onlineMode,clientInbox,unlimitedTime}))}catch{}
+}
+function sendToManager(action,details={}){
+  try{
+    sharedDemoState=readStoredJson(sharedStateKey,{});
+    sharedDemoState.demoCommands=sharedDemoState.demoCommands||[];
+    sharedDemoState.demoCommands.push({id:Date.now(),target:'PC ۱۲',action,details,createdAt:new Date().toISOString(),status:'queued'});
+    localStorage.setItem(sharedStateKey,JSON.stringify(sharedDemoState));
+  }catch{}
+}
+function readDemoCustomers(){
+  sharedDemoState=readStoredJson(sharedStateKey,{});
+  return Array.isArray(sharedDemoState.customers)&&sharedDemoState.customers.length?sharedDemoState.customers:fallbackCustomers;
+}
+function renderCustomerAccount(){
+  document.getElementById('user-label').textContent=customer?(customer.alias||customer.fname+' '+customer.lname):'ورود مشتری';
+  document.getElementById('user-initial').textContent=customer?.fname?.[0]||'؟';
+  document.getElementById('bal').textContent=fa(customer?.wallet||0);
+  document.getElementById('acct-username').textContent=customer?.alias||customer?.code||'—';
+  document.getElementById('acct-wallet').textContent=fa(customer?.wallet||0)+' ت';
+  document.getElementById('acct-gift').textContent=fa(customer?.gift||0)+' ت';
+  document.getElementById('acct-debt').textContent=fa(customer?.debt||0)+' ت';
+  document.getElementById('pkg-box').style.display=customer?.pkg?'block':'none';
+}
 
 /* ساعت/تایمر زنده دمو */
-let secs=3*3600+45*60+12;
+let secs=0;
+const savedClientState=readStoredJson(clientStateKey,{});
+sessionEndsAt=Number(savedClientState.sessionEndsAt)||0;
+runningGame=savedClientState.runningGame||'';accountPoolId=savedClientState.accountPoolId||'';
+onlineMode=savedClientState.onlineMode||'آنلاین';clientInbox=savedClientState.clientInbox||[];unlimitedTime=Boolean(savedClientState.unlimitedTime);
+if(savedClientState.customerCode)customer=readDemoCustomers().find(c=>c.code===savedClientState.customerCode)||null;
+renderCustomerAccount();
 setInterval(()=>{
-  secs=secs>0?secs-1:0;
+  secs=unlimitedTime?Infinity:sessionEndsAt?Math.max(0,Math.ceil((sessionEndsAt-Date.now())/1000)):0;
   const h=String(Math.floor(secs/3600)).padStart(2,'0'),m=String(Math.floor(secs%3600/60)).padStart(2,'0'),s=String(secs%60).padStart(2,'0');
   const t=document.getElementById('timer');
-  t.textContent=fa(h)+':'+fa(m)+':'+fa(s);
+  t.textContent=unlimitedTime?'∞':fa(h)+':'+fa(m)+':'+fa(s);
   t.className='timer'+(secs<600?' crit':secs<1800?' warn':'');
+  if(!unlimitedTime&&sessionEndsAt&&secs===0&&!document.getElementById('lock').classList.contains('show')){
+    document.getElementById('lock').classList.add('show');sendToManager('session-expired',{customerCode:customer?.code});
+  }
 },1000);
 
 /* لاگین دمو */
 function doLogin(){
-  const id=document.getElementById('login-id').value.trim();
-  if(!id){document.getElementById('err').textContent='شناسه را وارد کن (مثلاً reza_hs)';return}
+  const normalize=value=>String(value||'').replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
+  const id=normalize(document.getElementById('login-id').value);
+  const password=normalize(document.getElementById('login-pass').value);
+  const customers=readDemoCustomers();
+  const match=customers.find(c=>[c.code,c.alias,c.mobile].some(value=>String(value||'').toLowerCase()===id.toLowerCase()));
+  const guest=id.toLowerCase()==='guest'&&!password;
+  if(!guest&&(!match||match.pass!==password)){document.getElementById('err').textContent='شناسه یا رمز عبور درست نیست';return}
+  customer=guest?null:match;
   document.getElementById('err').textContent='';
+  unlimitedTime=false;
+  if(!sessionEndsAt||sessionEndsAt<=Date.now())sessionEndsAt=Date.now()+(3*3600+45*60+12)*1000;
   document.getElementById('stage-login').style.display='none';
   document.getElementById('stage-games').style.display='block';
-  notify('خوش آمدی '+id+' — جلسه شروع شد');
+  renderCustomerAccount();saveClientState();sendToManager('customer-login',{customerCode:customer?.code||'guest'});notify('خوش آمدی '+(customer?.fname||'مهمان')+' — جلسه شروع شد');
+}
+function returnToLogin(){
+  document.getElementById('lock').classList.remove('show');
+  document.getElementById('stage-games').style.display='none';document.getElementById('stage-login').style.display='flex';
+  document.getElementById('login-id').value='';document.getElementById('login-pass').value='';
+}
+function requestBuffet(product,price){
+  sendToManager('buffet-order',{product,price,customerCode:customer?.code||'guest'});
+  clientInbox.unshift({type:'order',product,price,createdAt:Date.now()});saveClientState();notify(product+' به درخواست‌های صندوق اضافه شد');
+}
+function toggleInternet(){
+  onlineMode=onlineMode==='آنلاین'?'فقط LAN':'آنلاین';saveClientState();
+  sendToManager('network-mode',{mode:onlineMode});notify('درخواست تغییر شبکه ثبت شد: '+onlineMode);
+}
+function requestMove(){
+  const target=prompt('نام سیستم مقصد، مثل PC ۱۳');if(!target)return;
+  sendToManager('move-session',{target,customerCode:customer?.code||'guest'});notify('درخواست انتقال به '+target+' برای اپراتور ارسال شد');
+}
+function requestCharge(){
+  const amount=Number(String(prompt('مبلغ شارژ درخواستی (تومان)','50000')||'').replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''));
+  if(!Number.isSafeInteger(amount)||amount<=0){notify('مبلغ معتبر وارد کن');return}
+  sendToManager('charge-request',{amount,customerCode:customer?.code||'guest'});notify('درخواست '+fa(amount)+' تومان برای صندوق ارسال شد');
+}
+function sendMessageToOperator(){
+  const message=prompt('پیام برای اپراتور');if(!message)return;
+  sendToManager('customer-message',{message,customerCode:customer?.code||'guest'});notify('پیام در صف صندوق ثبت شد');
+}
+function launchApp(name){sendToManager('launch-app',{name});notify('درخواست اجرای '+name+' ثبت شد؛ اجرای واقعی به Agent ویندوز نیاز دارد')}
+function showTournaments(){notify('مسابقه‌ی دمو: جام CS2 جمعه‌ها؛ ثبت‌نام از صندوق انجام می‌شود')}
+function showMyGames(){notify(runningGame?'بازی فعال: '+runningGame:'هنوز بازی‌ای در این جلسه اجرا نشده')}
+function runClientGame(element,name){
+  const title=element.querySelector('.info b')?.textContent||name;
+  if(runningGame&&runningGame!==title){notify('ابتدا بازی فعال را ببند: '+runningGame);return}
+  runningGame=title;document.querySelectorAll('.g-card.running').forEach(card=>{if(card!==element){card.classList.remove('running');const old=card.querySelector('.tag');if(old){old.textContent='نصب‌شده';old.classList.remove('on')}}});element.classList.add('running');
+  const badge=element.querySelector('.tag');if(badge){badge.textContent='در حال اجرا';badge.classList.add('on')}
+  sendToManager('launch-game',{game:title});saveClientState();notify('درخواست اجرای '+title+' ثبت شد؛ مرورگر خودش فایل exe را اجرا نمی‌کند');
+}
+function accountPlatformForGame(game){
+  const name=game.toLowerCase();
+  if(name.includes('valorant'))return 'Riot';
+  if(name.includes('fc')||name.includes('fifa'))return 'EA';
+  if(name.includes('call of duty')||name.includes('cod'))return 'Battle.net';
+  if(name.includes('cs')||name.includes('dota'))return 'Steam';
+  return '';
+}
+function allocatePoolAccount(game){
+  sharedDemoState=readStoredJson(sharedStateKey,{});
+  const accounts=sharedDemoState.accounts||[];
+  const platform=accountPlatformForGame(game);
+  const account=accounts.find(a=>a.st==='free'&&(!platform||a.plat===platform));
+  if(!account){notify('اکانت آزاد سازگار در استخر پیدا نشد');return false}
+  account.st='in-use';account.who='PC ۱۲ — '+(customer?.fname||'مهمان');accountPoolId=account.n;
+  localStorage.setItem(sharedStateKey,JSON.stringify(sharedDemoState));saveClientState();return true;
+}
+function releasePoolAccount(){
+  if(!accountPoolId)return;
+  sharedDemoState=readStoredJson(sharedStateKey,{});
+  const account=(sharedDemoState.accounts||[]).find(a=>a.n===accountPoolId);
+  if(account){account.st='free';account.who='—';localStorage.setItem(sharedStateKey,JSON.stringify(sharedDemoState))}
+  accountPoolId='';saveClientState();
+}
+function launchClientAccount(mode){
+  const game=document.getElementById('ap-game').textContent.replace('🎮 ','');
+  closeAccPick();
+  if(mode==='pool'&&!allocatePoolAccount(game))return;
+  document.querySelectorAll('.g-card').forEach(card=>{if(card.querySelector('.info b')?.textContent===game){card.classList.add('running');const tag=card.querySelector('.tag');if(tag){tag.textContent='در حال اجرا';tag.classList.add('on')}}});
+  sendToManager('launch-game',{game,account:mode==='pool'?accountPoolId:'own'});
+  runningGame=game;saveClientState();notify(mode==='own'?'بازی با اکانت شخصی درخواست شد':'اکانت '+accountPoolId+' به این جلسه تخصیص یافت');
+}
+function stopGame(){
+  if(!runningGame){notify('بازی فعالی وجود ندارد');return}
+  sendToManager('stop-game',{game:runningGame});
+  document.querySelectorAll('.g-card.running').forEach(card=>{card.classList.remove('running');const tag=card.querySelector('.tag');if(tag){tag.textContent='نصب‌شده';tag.classList.remove('on')}});
+  runningGame='';releasePoolAccount();saveClientState();notify('درخواست بستن بازی ثبت شد');
 }
 document.getElementById('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
 document.getElementById('login-id').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('login-pass').focus()});
@@ -463,9 +591,11 @@ document.addEventListener('contextmenu',e=>{
 });
 document.addEventListener('click',e=>{if(!ctx.contains(e.target))ctx.classList.remove('show')});
 document.addEventListener('keydown',e=>{
-  if(e.ctrlKey&&e.key.toLowerCase()==='i'){e.preventDefault();notify('پنل تغییر اینترنت (دمو)')}
-  if(e.ctrlKey&&e.key.toLowerCase()==='m'){e.preventDefault();notify('جابه‌جایی شناسه (دمو)')}
+  if(e.ctrlKey&&e.key.toLowerCase()==='i'){e.preventDefault();toggleInternet()}
+  if(e.ctrlKey&&e.key.toLowerCase()==='m'){e.preventDefault();requestMove()}
   if(e.ctrlKey&&e.key.toLowerCase()==='l'){e.preventDefault();lockNow()}
+  if(e.ctrlKey&&e.key.toLowerCase()==='r'){e.preventDefault();requestCharge()}
+  if(e.ctrlKey&&e.key.toLowerCase()==='p'){e.preventDefault();sendMessageToOperator()}
 });
 
 /* پنل حساب */
@@ -506,7 +636,7 @@ function showPrev(el,name,d1,d2,ic){
 }
 
 /* اجرای بازی دمو */
-function run(el,name){el.classList.add('running');el.querySelector('.tag').textContent='در حال اجرا';el.querySelector('.tag').classList.add('on');notify('بازی اجرا شد — از این لحظه شمارش ادامه دارد')}
+function run(el,name){runClientGame(el,name)}
 
 /* پیام سرور */
 let msgT;
@@ -516,6 +646,7 @@ function notify(txt){
 }
 function lockNow(){
   ctx.classList.remove('show');
+  sendToManager('lock-client',{customerCode:customer?.code||'guest'});
   document.getElementById('lock').classList.add('show');
 }
 
@@ -596,11 +727,7 @@ function openAccPick(game){
   document.getElementById('accpick').classList.add('show');
 }
 function closeAccPick(){document.getElementById('accpick').classList.remove('show')}
-function launchAcc(mode){
-  closeAccPick();
-  if(mode==='own')notify('اکانت خودت — رمز را در لانچر وارد کن (دمو)');
-  else notify('اکانت گیم‌نت تخصیص یافت و خودکار لاگین شد ✓ (رمز دیده نمی‌شود)');
-}
+function launchAcc(mode){launchClientAccount(mode)}
 
 /* کادرهای اپراتور/آزادسازی */
 function showBox(id){
@@ -612,9 +739,9 @@ function showBox(id){
 function hideAdmin(){document.getElementById('opbox').classList.remove('show');document.getElementById('freebox').classList.remove('show')}
 function opLogin(){
   const p=document.getElementById('op-pass').value;
-  if(!p){notify('رمز را وارد کن');return}
+  if(p!=='2468'){notify('رمز اپراتور دمو نادرست است');return}
   hideAdmin();document.getElementById('op-pass').value='';
-  notify('ورود اپراتور موفق — وقت نامحدود فعال شد (دمو)');
+  unlimitedTime=true;sessionEndsAt=0;sendToManager('operator-login',{operator:'demo'});saveClientState();notify('ورود اپراتور دمو تأیید شد — زمان نامحدود');
   document.querySelector('.timer').textContent='∞';
   document.querySelector('.timer').style.color='var(--purple)';
 }
@@ -622,22 +749,39 @@ document.getElementById('op-pass').addEventListener('keydown',e=>{if(e.key==='En
 document.getElementById('free-pass').addEventListener('keydown',e=>{if(e.key==='Enter')freeSys('win')});
 function freeSys(mode){
   const p=document.getElementById('free-pass').value;
-  if(!p){notify('رمز ادمین لازم است');return}
+  if(p!=='2020'){notify('رمز مدیر دمو نادرست است');return}
   hideAdmin();document.getElementById('free-pass').value='';
-  if(mode==='win')notify('شل بسته شد — ویندوز آزاد شد (دمو). لاگ ثبت شد.');
-  if(mode==='restart')notify('ری‌استارت سیستم ارسال شد (دمو)');
-  if(mode==='shutdown')notify('دستور خاموش‌کردن ارسال شد (دمو)');
+  sendToManager('client-'+mode,{authorizedBy:'demo-admin'});
+  if(mode==='win'){unlimitedTime=false;saveClientState();notify('درخواست آزادسازی ثبت شد؛ مرورگر نمی‌تواند شل ویندوز را ببندد')}
+  if(mode==='restart')notify('فرمان ری‌استارت در صف دمو ثبت شد');
+  if(mode==='shutdown')notify('فرمان خاموشی در صف دمو ثبت شد');
 }
 function logoutCust(){
+  sendToManager('customer-logout',{customerCode:customer?.code||'guest',game:runningGame});
+  if(runningGame){sendToManager('stop-game',{game:runningGame});runningGame=''}
+  releasePoolAccount();sessionEndsAt=0;unlimitedTime=false;customer=null;
   document.getElementById('opmenu').classList.remove('show');
   document.getElementById('stage-games').style.display='none';
   document.getElementById('stage-login').style.display='flex';
   document.getElementById('lock').classList.remove('show');
   document.getElementById('login-id').value='';
-  notify('وقت بسته شد و مشتری خارج شد (Logoff)');
+  document.getElementById('login-pass').value='';renderCustomerAccount();saveClientState();notify('جلسه‌ی دمو بسته شد و مشتری خارج شد');
 }
 /* منوی Alt+F6 با راست‌کلیک وقتی Alt نگه‌داشته؟ — برای دمو: دکمه داک */
 document.getElementById('opmenu').addEventListener('click',e=>{if(!e.target.closest('button'))return});
+if(customer&&(unlimitedTime||sessionEndsAt>Date.now())){
+  document.getElementById('stage-login').style.display='none';document.getElementById('stage-games').style.display='block';
+  if(runningGame)document.querySelectorAll('.g-card').forEach(card=>{if(card.querySelector('.info b')?.textContent===runningGame){card.classList.add('running');const tag=card.querySelector('.tag');if(tag){tag.textContent='در حال اجرا';tag.classList.add('on')}}});
+}
+window.addEventListener('storage',event=>{
+  if(event.key!==sharedStateKey||!event.newValue)return;
+  try{
+    sharedDemoState=JSON.parse(event.newValue);
+    const messages=(sharedDemoState.demoCommands||[]).filter(command=>(command.target==='PC ۱۲'||Array.isArray(command.target)&&command.target.includes('PC ۱۲'))&&command.action==='پیام به کلاینت');
+    const latest=messages[messages.length-1];
+    if(latest&&latest.id>(clientInbox[0]?.id||0)){clientInbox.unshift({id:latest.id,type:'message',message:latest.details.message});saveClientState();notify('پیام اپراتور: '+latest.details.message)}
+  }catch{}
+});
 applyG();
 </script>
 </body>
