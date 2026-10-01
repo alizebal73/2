@@ -32,6 +32,7 @@
 | [04-tech-stack-roadmap.md](04-tech-stack-roadmap.md) | تحقیق فنی: استک، مسیر شروع، مدل پیشروی |
 | [05-ui-design-system.md](05-ui-design-system.md) | **سند طراحی قفل‌شده UI + قرارداد داده DTO** — مرجع الزامی کدنویسی آینده |
 | [08-action-map.md](08-action-map.md) | **قرارداد نهایی رفتار عملیات** — ورودی/خروجی/Permission/Audit/Refund/مالکیت هر Action |
+| [09-client-experience.md](09-client-experience.md) | **قرارداد UX کلاینت** — Dock/Drawer/Game Library/Quick Actions/Agent boundary |
 
 ## نکات کلیدی که نباید فراموش شود
 - کنسول‌ها (PS5/PS4) و فوتبال‌دستی **کلاینت نمی‌خواهند** — فقط تایمر در داشبورد + آلارم
