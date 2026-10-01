@@ -1,6 +1,7 @@
 using GameNetManager.Server.Data;
 using GameNetManager.Server.Hubs;
 using GameNetManager.Shared.Contracts;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -22,10 +23,7 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
-    await using var scope = app.Services.CreateAsyncScope();
-    var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
-    await database.Database.MigrateAsync();
-    await DatabaseSeeder.SeedAsync(database);
+    await InitializeDatabaseAsync(app.Services, databasePath, logger);
     logger.LogInformation("Database ready at {DatabasePath}", databasePath);
 }
 catch (Exception exception)
@@ -57,8 +55,8 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
             station.Name,
             station.Zone,
             station.Type,
-            station.RatePerHour,
-            station.State))
+            (long)station.RatePerHour,
+            station.State.ToString()))
         .ToListAsync(cancellationToken);
 
     return Results.Ok(new DashboardSnapshotDto(stations.Count, stations, DateTimeOffset.UtcNow));
@@ -75,5 +73,38 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+static async Task InitializeDatabaseAsync(IServiceProvider services, string databasePath, ILogger logger)
+{
+    try
+    {
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
+        await database.Database.MigrateAsync();
+        await DatabaseSeeder.SeedAsync(database);
+        return;
+    }
+    catch (Exception exception) when (IsMigrationRecoveryCandidate(exception))
+    {
+        logger.LogWarning(exception, "Detected a stale SQLite database state; recreating database at {DatabasePath}", databasePath);
+
+        if (File.Exists(databasePath))
+        {
+            File.Delete(databasePath);
+        }
+
+        await using var scope = services.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
+        await database.Database.MigrateAsync();
+        await DatabaseSeeder.SeedAsync(database);
+    }
+}
+
+static bool IsMigrationRecoveryCandidate(Exception exception)
+{
+    return exception is SqliteException or AggregateException { InnerException: SqliteException }
+        || exception.Message.Contains("FOREIGN KEY constraint failed", StringComparison.OrdinalIgnoreCase)
+        || exception.Message.Contains("SQLite Error 19", StringComparison.OrdinalIgnoreCase);
+}
 
 public partial class Program { }

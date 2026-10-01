@@ -1,156 +1,197 @@
-import { useEffect, useState } from 'react'
-import { HubConnectionBuilder } from '@microsoft/signalr'
-import './App.css'
+import { useEffect, useState } from 'react';
+import { HubConnectionBuilder } from '@microsoft/signalr';
+import './App.css';
+import { TopNavigation } from './components/TopNavigation';
+import { DashboardPage } from './pages/DashboardPage';
+import { CustomersPage } from './pages/CustomersPage';
+import { BuffetPage } from './pages/BuffetPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { UsersPage } from './pages/UsersPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { TariffsPage } from './pages/TariffsPage';
+import { GamesPage } from './pages/GamesPage';
+import { AccountsPage } from './pages/AccountsPage';
+import { ClientShellPage } from './pages/ClientShellPage';
+import { ClientExperience } from './features/client/ClientExperience';
+import type { DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
+import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
 
-type StationDto = {
-  id: string
-  name: string
-  zone: string
-  type: string
-  ratePerHour: number
-  state: string
+type HubState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+type DemoRole = 'operator' | 'manager' | 'owner';
+
+const roleLabels: Record<DemoRole, string> = { operator: 'اپراتور', manager: 'مدیر', owner: 'صاحب' };
+const commandItems = [
+  { title: 'شروع جلسه جدید', key: 'start-session', page: 'dashboard' as PageKey },
+  { title: 'شارژ مستقیم جلسه', key: 'quick-charge', page: 'dashboard' as PageKey },
+  { title: 'شارژ + بدهی', key: 'flow', page: 'dashboard' as PageKey },
+  { title: 'کسر اعتبار', key: 'flow', page: 'dashboard' as PageKey },
+  { title: 'فروش سریع بوفه', key: 'buffet', page: 'buffet' as PageKey },
+  { title: 'جست‌وجوی مشتری', key: 'customers', page: 'customers' as PageKey },
+  { title: 'تمدید وقت', key: 'extend-session', page: 'dashboard' as PageKey },
+  { title: 'بستن صندوق / پایان شیفت', key: 'close-shift', page: 'users' as PageKey },
+];
+
+function formatTime(dateString: string) {
+  const date = new Date(dateString);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
 }
 
-type DashboardSnapshotDto = {
-  totalStations: number
-  stations: StationDto[]
-  generatedAt: string
-}
-
-type ServerInfoDto = {
-  name: string
-  environment: string
-  utcNow: string
-}
-
-type HubState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
-
-const zoneLabels: Record<string, string> = {
-  all: 'همه ایستگاه‌ها',
-  pc: 'رایانه‌ها',
-  console: 'کنسول‌ها',
-  table: 'میزها',
-}
-
-const stateLabels: Record<string, string> = {
-  free: 'آزاد',
-  busy: 'در حال بازی',
-  reserved: 'رزرو',
-  off: 'خارج از سرویس',
-}
-
-function formatMoney(amount: number) {
-  return new Intl.NumberFormat('fa-IR').format(amount)
-}
-
-function App() {
-  const [snapshot, setSnapshot] = useState<DashboardSnapshotDto | null>(null)
-  const [serverInfo, setServerInfo] = useState<ServerInfoDto | null>(null)
-  const [apiState, setApiState] = useState<'loading' | 'online' | 'offline'>('loading')
-  const [hubState, setHubState] = useState<HubState>('connecting')
-  const [error, setError] = useState('')
-  const [zone, setZone] = useState('all')
-  const [retry, setRetry] = useState(0)
+function DashboardApp() {
+  const [activePage, setActivePage] = useState<PageKey>('dashboard');
+  const [snapshot, setSnapshot] = useState<DashboardSnapshotDto | null>(null);
+  const [serverInfo, setServerInfo] = useState<ServerInfoDto | null>(null);
+  const [apiState, setApiState] = useState<'loading' | 'online' | 'offline'>('loading');
+  const [hubState, setHubState] = useState<HubState>('connecting');
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const [role, setRole] = useState<DemoRole>('operator');
+  const [clock, setClock] = useState(() => new Date().toLocaleTimeString('fa-IR'));
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
-    let active = true
-    const connection = new HubConnectionBuilder()
-      .withUrl('/hubs/dashboard')
-      .withAutomaticReconnect()
-      .build()
+    const timer = window.setInterval(() => setClock(new Date().toLocaleTimeString('fa-IR')), 500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setCommandOpen(open => !open);
+        setCommandQuery('');
+      } else if (event.key === 'Escape') {
+        setCommandOpen(false);
+        setNotificationsOpen(false);
+      } else if (event.key === 'F2') setActivePage('reports');
+      else if (event.key === 'F3') setActivePage('buffet');
+      else if (event.key === 'F9') setActivePage('users');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  function runCommand(command: typeof commandItems[number]) {
+    setActivePage(command.page);
+    setCommandOpen(false);
+    window.dispatchEvent(new CustomEvent('gamenet-command', { detail: command.key }));
+  }
+
+  useEffect(() => {
+    let active = true;
+    const connection = new HubConnectionBuilder().withUrl('/hubs/dashboard').withAutomaticReconnect().build();
 
     connection.on('ServerReady', (info: ServerInfoDto) => {
-      if (active) setServerInfo(info)
-    })
-    connection.onreconnecting(() => { if (active) setHubState('reconnecting') })
-    connection.onreconnected(() => { if (active) setHubState('connected') })
-    connection.onclose(() => { if (active) setHubState('disconnected') })
+      if (active) setServerInfo(info);
+    });
+    connection.onreconnecting(() => {
+      if (active) setHubState('reconnecting');
+    });
+    connection.onreconnected(() => {
+      if (active) setHubState('connected');
+    });
+    connection.onclose(() => {
+      if (active) setHubState('disconnected');
+    });
+
+    void connection.start().catch(() => {
+      if (active) setHubState('disconnected');
+    });
 
     const loadSnapshot = async () => {
-      setApiState('loading')
-      setError('')
+      setApiState('loading');
+      setError('');
       try {
-        const response = await fetch('/api/dashboard')
-        if (!response.ok) throw new Error(`API returned ${response.status}`)
-        const data = (await response.json()) as DashboardSnapshotDto
+        const response = await fetch('/api/dashboard');
+        if (!response.ok) throw new Error(`API returned ${response.status}`);
+        const data = normalizeDashboardSnapshot((await response.json()) as DashboardSnapshotDto);
         if (active) {
-          setSnapshot(data)
-          setApiState('online')
+          setSnapshot(data);
+          setApiState('online');
         }
       } catch (cause) {
         if (active) {
-          setApiState('offline')
-          setError(cause instanceof Error ? cause.message : 'ارتباط با سرور ناموفق بود')
+          setApiState('offline');
+          setError(cause instanceof Error ? cause.message : 'ارتباط با سرور ناموفق بود');
         }
       }
-    }
+    };
 
-    void loadSnapshot()
-    const startTimer = window.setTimeout(() => {
-      startPromise = connection.start()
-        .then(() => { if (active) setHubState('connected') })
-        .catch(() => { if (active) setHubState('disconnected') })
-    }, 0)
-    let startPromise: Promise<void> | undefined
+    void loadSnapshot();
 
     return () => {
-      active = false
-      window.clearTimeout(startTimer)
-      if (startPromise) {
-        void startPromise.finally(() => connection.stop())
-      } else {
-        void connection.stop()
-      }
-    }
-  }, [retry])
-
-  const stations = snapshot?.stations ?? []
-  const visibleStations = zone === 'all' ? stations : stations.filter((station) => station.zone === zone)
-  const count = (state: string) => stations.filter((station) => station.state === state).length
+      active = false;
+      void connection.stop();
+    };
+  }, [retry]);
 
   return (
-    <main className="dashboard" dir="rtl">
+    <div className="app-shell" dir="rtl">
       <header className="topbar">
         <div className="brand-mark">گ</div>
-        <div className="brand-copy"><strong>گیم‌نت منیجر</strong><span>داشبورد مدیریت</span></div>
-        <div className="connection-list" aria-live="polite">
-          <span className={`connection ${apiState}`}><i /> API {apiState === 'online' ? 'متصل' : apiState === 'loading' ? 'در حال اتصال' : 'قطع'}</span>
-          <span className={`connection ${hubState}`}><i /> SignalR {hubState === 'connected' ? 'متصل' : hubState === 'connecting' ? 'در حال اتصال' : hubState === 'reconnecting' ? 'اتصال مجدد' : 'قطع'}</span>
+        <div className="brand-copy">
+          <strong>گیم‌نت منیجر</strong>
+          <span>داشبورد مدیریت</span>
         </div>
-        <button className="refresh-button" type="button" onClick={() => setRetry((value) => value + 1)}>تلاش مجدد</button>
+
+        <TopNavigation activePage={activePage} onChange={setActivePage} />
+
+        <div className="connection-list" aria-live="polite">
+          <span className="header-clock">🕒 {clock}</span>
+          <span className={`status-chip ${apiState === 'online' ? 'online' : apiState === 'loading' ? 'loading' : 'offline'}`}>
+            API {apiState === 'online' ? 'متصل' : apiState === 'loading' ? 'در حال اتصال' : 'قطع'}
+          </span>
+          <span className={`status-chip ${hubState === 'connected' ? 'online' : hubState === 'reconnecting' ? 'loading' : hubState === 'connecting' ? 'loading' : 'offline'}`}>
+            SignalR {hubState === 'connected' ? 'متصل' : hubState === 'reconnecting' ? 'اتصال مجدد' : hubState === 'connecting' ? 'در حال اتصال' : 'قطع'}
+          </span>
+        </div>
+
+        <button type="button" className="refresh-button command-trigger" onClick={() => setCommandOpen(true)} title="پالت فرمان Ctrl+K">⌘ Ctrl+K</button>
+        <button type="button" className="refresh-button" onClick={() => setRetry((value) => value + 1)}>
+          تلاش مجدد
+        </button>
+
+        <button type="button" className="user-pill role-switch" onClick={() => setRole(current => current === 'operator' ? 'manager' : current === 'manager' ? 'owner' : 'operator')} title="برای تغییر نقش دمو کلیک کنید">
+          <span className="user-dot" />
+          <span>{roleLabels[role]}: {role === 'operator' ? 'علی محمدی' : role === 'manager' ? 'سارا احمدی' : 'محمود رضایی'}</span>
+        </button>
+        <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 ۲</button>
       </header>
 
-      <section className="page-heading">
-        <div><p className="eyebrow">وضعیت زنده</p><h1>ایستگاه‌ها</h1></div>
-        <div className="server-meta"><span>{serverInfo?.environment ?? '—'}</span><span>{snapshot ? `آخرین دریافت ${new Date(snapshot.generatedAt).toLocaleTimeString('fa-IR')}` : 'در انتظار دریافت داده'}</span></div>
-      </section>
+      {notificationsOpen && <div className="notification-popover"><strong>اعلان‌ها</strong><p>درخواست بوفه از PC ۰۴</p><p>۲ ایستگاه به‌روزرسانی معلق دارند</p></div>}
 
-      {error && <div className="error-banner" role="alert">ارتباط API برقرار نشد: {error}. سرور را روی پورت ۵۰۸۰ اجرا کنید.</div>}
+      {error && (
+        <div className="error-banner" role="alert">
+          ارتباط API برقرار نشد: {error}. سرور را روی پورت ۵۰۸۰ اجرا کنید.
+        </div>
+      )}
 
-      <section className="summary" aria-label="خلاصه ایستگاه‌ها">
-        <div className="summary-item"><span>کل ایستگاه‌ها</span><strong>{formatMoney(snapshot?.totalStations ?? 0)}</strong></div>
-        <div className="summary-item"><span>آزاد</span><strong className="free-text">{formatMoney(count('free'))}</strong></div>
-        <div className="summary-item"><span>در حال بازی</span><strong className="busy-text">{formatMoney(count('busy'))}</strong></div>
-        <div className="summary-item"><span>خارج از سرویس</span><strong className="off-text">{formatMoney(count('off'))}</strong></div>
-      </section>
+      <div className="page-shell">
+        <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={snapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={setActivePage} /></div>
+        <div hidden={activePage !== 'games'}><GamesPage /></div>
+        <div hidden={activePage !== 'client-shell'}><ClientShellPage /></div>
+        <div hidden={activePage !== 'customers'}><CustomersPage /></div>
+        <div hidden={activePage !== 'tariffs'}><TariffsPage /></div>
+        <div hidden={activePage !== 'accounts'}><AccountsPage /></div>
+        <div hidden={activePage !== 'buffet'}><BuffetPage /></div>
+        <div hidden={activePage !== 'reports'}><ReportsPage /></div>
+        <div hidden={activePage !== 'users'}><UsersPage /></div>
+        <div hidden={activePage !== 'settings'}><SettingsPage /></div>
+      </div>
 
-      <nav className="zone-filter" aria-label="فیلتر زون">
-        {Object.entries(zoneLabels).map(([key, label]) => <button key={key} className={zone === key ? 'selected' : ''} type="button" onClick={() => setZone(key)}>{label}</button>)}
-        <span className="result-count">{formatMoney(visibleStations.length)} ایستگاه</span>
-      </nav>
+      {commandOpen && <div className="modal-backdrop command-backdrop" onMouseDown={event => event.target === event.currentTarget && setCommandOpen(false)}><section className="command-palette" role="dialog" aria-modal="true"><input autoFocus value={commandQuery} onChange={event => setCommandQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { const first = commandItems.find(item => item.title.toLowerCase().includes(commandQuery.toLowerCase())); if (first) runCommand(first); } }} placeholder="جست‌وجوی فرمان…" /><div className="command-list">{commandItems.filter(item => item.title.toLowerCase().includes(commandQuery.toLowerCase())).map(item => <button key={item.title} onClick={() => runCommand(item)}><span>{item.title}</span><kbd>Enter</kbd></button>)}</div><small>Ctrl+K باز کردن · Esc بستن</small></section></div>}
 
-      {apiState === 'loading' && <p className="empty-state">در حال دریافت DTO از سرور…</p>}
-      {apiState === 'online' && visibleStations.length === 0 && <p className="empty-state">ایستگاهی برای نمایش وجود ندارد.</p>}
-      <section className="station-grid" aria-label="ایستگاه‌های گیم‌نت">
-        {visibleStations.map((station) => <article className={`station ${station.state}`} key={station.id}>
-          <div className="station-top"><strong>{station.name}</strong><span className={`state-badge ${station.state}`}>{stateLabels[station.state] ?? station.state}</span></div>
-          <span className="station-type">{station.type}</span>
-          <div className="station-rate">{formatMoney(station.ratePerHour)} <small>تومان / ساعت</small></div>
-        </article>)}
-      </section>
-      <footer className="status-footer">{snapshot ? `${formatMoney(snapshot.stations.length)} DTO از سرور دریافت شد` : 'اتصال به سرور لازم است'} · {serverInfo?.name ?? 'GameNet Manager'}</footer>
-    </main>
-  )
+      <footer className="status-footer">
+        {(snapshot && snapshot.generatedAt ? `آخرین به‌روزرسانی ${formatTime(snapshot.generatedAt)}` : 'در انتظار دریافت داده')} · {serverInfo?.environment ?? 'Development'}
+      </footer>
+    </div>
+  );
 }
 
-export default App
+function App() {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  return path === '/client' ? <ClientExperience /> : <DashboardApp />;
+}
+
+export default App;

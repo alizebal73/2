@@ -65,6 +65,17 @@ ASPNETCORE_ENVIRONMENT=Production dotnet run --no-launch-profile --project src/S
 dotnet tool run dotnet-ef migrations add MigrationName --project src/Server --startup-project src/Server --output-dir Data/Migrations
 ```
 
+## ساختار UI و مرجع فایل‌ها
+
+- `src/Dashboard/src/main.tsx` تنها entrypoint برنامه React است.
+- `src/Dashboard/src/App.tsx` پوسته و routeهای همان برنامه را انتخاب می‌کند: `/` برای پنل مدیریت و `/client` برای تجربه Client.
+- `src/Dashboard/src/pages/` شامل صفحات پنل مدیریت است؛ `src/Dashboard/src/features/client/` تنها پیاده‌سازی React تجربه Client است.
+- `src/Dashboard/src/services/` و `types.ts` محل قرارداد داده و سرویس UI هستند؛ منطق صفحه‌ها نباید در entrypoint یا HTML جداگانه تکثیر شود.
+- `prototype/index.html` و `prototype/client.html` فقط مرجع‌های تأییدشده‌ی رفتار/طراحی‌اند؛ آن‌ها را حذف یا به‌عنوان برنامه‌ی موازی اجرا نمی‌کنیم.
+- `src/Dashboard/index.html` ورودی Vite است. `src/Server/wwwroot/` خروجی تولیدشده‌ی build است و نباید دستی ویرایش شود.
+
+در Development هر دو route از `http://localhost:5173` سرو می‌شوند؛ رابط Client در `http://localhost:5173/client` در دسترس است.
+
 Development و Production از فایل‌های SQLite جدا استفاده می‌کنند. از رمزها یا داده‌های prototype برای محیط واقعی استفاده نکنید.
 
 ## بررسی
