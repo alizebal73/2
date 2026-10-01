@@ -14,6 +14,7 @@ import type {
 } from '../types';
 
 type CommandItem = {
+  id: string;
   title: string;
   description: string;
   key: string;
@@ -38,14 +39,14 @@ type Props = {
 };
 
 const commands: CommandItem[] = [
-  { title: 'شروع جلسه جدید', description: 'اولین ایستگاه آزاد را برای شروع جلسه انتخاب می‌کند.', key: 'start-session', page: 'dashboard', keywords: ['جلسه', 'شروع', 'ایستگاه', 'session'] },
-  { title: 'شارژ مستقیم جلسه', description: 'پنجره شارژ سریع برای یک جلسه فعال را باز می‌کند.', key: 'quick-charge', page: 'dashboard', keywords: ['شارژ', 'جلسه', 'اعتبار', 'charge'] },
-  { title: 'شارژ + بدهی', description: 'جریان مالی سریع شارژ و ثبت بدهی را باز می‌کند.', key: 'charge-debt-flow', page: 'dashboard', keywords: ['شارژ', 'بدهی', 'مالی'] },
-  { title: 'کسر اعتبار', description: 'کسر مبلغ از کیف پول مشتری را اجرا می‌کند.', key: 'deduct-wallet', page: 'dashboard', keywords: ['کسر', 'کیف پول', 'اعتبار'] },
-  { title: 'فروش سریع بوفه', description: 'به فروش سریع بوفه می‌رود.', key: 'buffet', page: 'buffet', keywords: ['بوفه', 'فروش', 'کالا'] },
-  { title: 'جست‌وجوی مشتری', description: 'صفحه مشتریان را باز می‌کند.', key: 'customers', page: 'customers', keywords: ['مشتری', 'customer', 'شناسه', 'کد'] },
-  { title: 'تمدید وقت', description: 'تمدید جلسه فعال را از داشبورد باز می‌کند.', key: 'extend-session', page: 'dashboard', keywords: ['تمدید', 'زمان', 'وقت'] },
-  { title: 'بستن صندوق / پایان شیفت', description: 'به بخش بستن شیفت می‌رود.', key: 'close-shift', page: 'users', keywords: ['صندوق', 'شیفت', 'بستن', 'handover'] },
+  { id: 'start-session', title: 'شروع جلسه جدید', description: 'اولین ایستگاه آزاد را برای شروع جلسه انتخاب می‌کند.', key: 'start-session', page: 'dashboard', keywords: ['جلسه', 'شروع', 'ایستگاه', 'session'] },
+  { id: 'quick-charge', title: 'شارژ مستقیم جلسه', description: 'پنجره شارژ سریع برای یک جلسه فعال را باز می‌کند.', key: 'quick-charge', page: 'dashboard', keywords: ['شارژ', 'جلسه', 'اعتبار', 'charge'] },
+  { id: 'charge-debt', title: 'شارژ + بدهی', description: 'جریان مالی سریع شارژ و ثبت بدهی را باز می‌کند.', key: 'charge-debt-flow', page: 'dashboard', keywords: ['شارژ', 'بدهی', 'مالی'] },
+  { id: 'deduct-wallet', title: 'کسر اعتبار', description: 'کسر مبلغ از کیف پول مشتری را اجرا می‌کند.', key: 'deduct-wallet', page: 'dashboard', keywords: ['کسر', 'کیف پول', 'اعتبار'] },
+  { id: 'buffet-sale', title: 'فروش سریع بوفه', description: 'به فروش سریع بوفه می‌رود.', key: 'buffet', page: 'buffet', keywords: ['بوفه', 'فروش', 'کالا'] },
+  { id: 'customer-search', title: 'جست‌وجوی مشتری', description: 'صفحه مشتریان را باز می‌کند.', key: 'customers', page: 'customers', keywords: ['مشتری', 'customer', 'شناسه', 'کد'] },
+  { id: 'extend-session', title: 'تمدید وقت', description: 'تمدید جلسه فعال را از داشبورد باز می‌کند.', key: 'extend-session', page: 'dashboard', keywords: ['تمدید', 'زمان', 'وقت'] },
+  { id: 'close-shift', title: 'بستن صندوق / پایان شیفت', description: 'به بخش بستن شیفت می‌رود.', key: 'close-shift', page: 'users', keywords: ['صندوق', 'شیفت', 'بستن', 'handover'] },
 ];
 
 function normalize(value: unknown): string {
@@ -198,7 +199,7 @@ export function GlobalCommandCenter({ open, stations, onNavigate, onClose }: Pro
 
   const keyboardRows = useMemo(
     () => [
-      ...filtered.commandRows.map(item => ({ kind: 'command' as const, id: item.key, item })),
+      ...filtered.commandRows.map(item => ({ kind: 'command' as const, id: item.id, item })),
       ...filtered.resultRows.map(item => ({ kind: 'result' as const, id: `${item.kind}-${item.id}`, item })),
     ],
     [filtered],
@@ -266,11 +267,11 @@ export function GlobalCommandCenter({ open, stations, onNavigate, onClose }: Pro
             <section className="global-search-section">
               <div className="global-search-section-title">فرمان‌ها <span>{filtered.commandRows.length}</span></div>
               {filtered.commandRows.map(command => {
-                const rowIndex = keyboardRows.findIndex(row => row.kind === 'command' && row.id === command.key);
+                const rowIndex = keyboardRows.findIndex(row => row.kind === 'command' && row.id === command.id);
                 return (
                   <button
                     type="button"
-                    key={command.key}
+                    key={command.id}
                     className={`global-search-row ${rowIndex === activeIndex ? 'active' : ''}`}
                     onMouseEnter={() => setActiveIndex(rowIndex)}
                     onClick={() => runCommand(command)}
