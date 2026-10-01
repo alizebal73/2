@@ -1,17 +1,18 @@
 @echo off
 setlocal EnableExtensions
 
-cd /d "%~dp0"
-set "ROOT=%~dp0"
-set "SERVER_PROJECT=%ROOT%src\Server\GameNetManager.Server.csproj"
-set "DASHBOARD=%ROOT%src\Dashboard"
+set "SOURCE=%~dp0"
+set "PREVIEW=C:\GameNetManager-Preview"
+set "SERVER_PROJECT=%PREVIEW%\src\Server\GameNetManager.Server.csproj"
+set "DASHBOARD=%PREVIEW%\src\Dashboard"
 
 echo.
 echo ==========================================
 echo      GameNet Manager - Local Preview
 echo ==========================================
 echo.
-echo Project: %ROOT%
+echo Source : %SOURCE%
+echo Preview: %PREVIEW%
 echo.
 
 where dotnet >nul 2>nul
@@ -28,16 +29,27 @@ if errorlevel 1 (
   exit /b 1
 )
 
-if not exist "%SERVER_PROJECT%" (
-  echo [ERROR] Server project not found:
-  echo %SERVER_PROJECT%
+if not exist "%SOURCE%src\Server\GameNetManager.Server.csproj" (
+  echo [ERROR] Server project not found in source:
+  echo %SOURCE%src\Server\GameNetManager.Server.csproj
   pause
   exit /b 1
 )
 
-if not exist "%DASHBOARD%\package.json" (
-  echo [ERROR] Dashboard package.json not found:
-  echo %DASHBOARD%\package.json
+if not exist "%SOURCE%src\Dashboard\package.json" (
+  echo [ERROR] Dashboard package.json not found in source:
+  echo %SOURCE%src\Dashboard\package.json
+  pause
+  exit /b 1
+)
+
+echo [INFO] Syncing source to isolated preview folder...
+if not exist "%PREVIEW%" mkdir "%PREVIEW%"
+
+robocopy "%SOURCE%" "%PREVIEW%" /MIR /XD ".git" "bin" "obj" "node_modules" "App_Data" >nul
+set "ROBOCODE=%ERRORLEVEL%"
+if %ROBOCODE% GEQ 8 (
+  echo [ERROR] Preview sync failed. Robocopy code: %ROBOCODE%
   pause
   exit /b 1
 )
@@ -56,7 +68,7 @@ if not exist "%DASHBOARD%\node_modules" (
 )
 
 echo [INFO] Starting Server on http://localhost:5080 ...
-start "GameNet Server" cmd /k "cd /d ""%ROOT%src\Server"" && dotnet run --project ""%SERVER_PROJECT%"""
+start "GameNet Server" cmd /k "cd /d ""%PREVIEW%\src\Server"" && dotnet run --project ""%SERVER_PROJECT%"""
 
 echo [INFO] Starting Dashboard on http://localhost:5173 ...
 start "GameNet Dashboard" cmd /k "cd /d ""%DASHBOARD%"" && npm run dev -- --host 0.0.0.0"
@@ -70,7 +82,7 @@ if errorlevel 1 (
 )
 
 echo [INFO] Waiting for Dashboard...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5173 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5173 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit /b 1 }"
 if errorlevel 1 (
   echo [ERROR] Dashboard did not become ready on port 5173.
   pause
