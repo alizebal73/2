@@ -13,10 +13,12 @@
 - ✅ پالت قلنک کلاینت (Ctrl+K) + سه حالت نمایش بازی + زوم
 
 ## وضعیت فعلی پروژه
-- **مرحله:** اسکلت واقعی مرحله ۱ ساخته و اجرا شد: Solution .NET 10، Server، Dashboard React/TypeScript، Client SignalR، Shared DTO، SQLite/EF Core و migration اولیه
-- **تأیید مرحله ۱:** startup سرور migration را اعمال می‌کند؛ ۶۱ ایستگاه seed می‌شوند؛ `/api/dashboard` DTO می‌دهد؛ داشبورد API و SignalR را وصل می‌کند؛ کلاینت .NET پیام `ServerReady` می‌گیرد
-- **قدم بعد:** vertical slice شروع/پایان Session با تست موتور هزینه؛ کلاینت فعلی console smoke client است و WPF/Windows Agent در فاز ۳ می‌آید
-- **قرار مهم:** prototype/index.html = سند طراحی تاییدشده؛ بازنویسی ممنوع؛ کد آینده عیناً همین طراحی را پیاده می‌کند
+
+- **مرحله ۱A — Foundation:** ✅ پیاده‌سازی شده: Solution .NET 10، Server، Dashboard React/TypeScript، Client SignalR، Shared DTO، SQLite/EF Core و migration اولیه.
+- **مرحله ۱B — UI/Behavior Migration:** ✅ پیاده‌سازی و ممیزی استاتیک انجام شد؛ تمام منوهای اصلی، ۱۰ صفحه، راست‌کلیک Dashboard/Client، مودال‌های اصلی، Flow سرعت F1 و F4-F8، هات‌کی‌های قابل‌تغییر، گزارش/فیلتر/بازه شمسی، شیفت و ماتریس دسترسی، Backup/Restore، تنظیمات، Account Pool، Client Shell و PINهای دمو به React منتقل شده‌اند.
+- **دروازه تست مرحله ۱:** ⏳ آخرین Push با Workflow واحد CI ارسال شده است، اما از ابزار فعلی هنوز نتیجه Build/Test گیت‌هاب گزارش نشده؛ بنابراین تا دریافت نتیجه واقعی CI/اجرای Codespace، مرحله ۱ را از نظر فرآیندی Done نهایی نمی‌کنیم.
+- **مرحله ۲:** ⏸ شروع رسمی آن متوقف است تا دروازه تست مرحله ۱ سبز شود. هر فایل/اسکلت Domain Model که از قبل در تاریخچه ریپو وجود دارد، در این ممیزی به‌عنوان «مرحله ۲ پذیرفته‌شده» محسوب نشده است.
+- **قرار مهم:** prototype/index.html و prototype/client.html مرجع رفتار و UI نسخه اولیه هستند؛ بازنویسی و حذف قابلیت مجاز نیست.
 - **تکنولوژی تاییدشده:** ASP.NET Core + SignalR + SQLite + React (RTL) + WPF (کلاینت فاز ۳)
 - **مجموعه کاربر:** ۴۰ کیس + ۱۰ PS5 + ۶ PS4 + ۵ فوتبال‌دستی = ۶۱ ایستگاه
 
