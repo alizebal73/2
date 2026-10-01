@@ -37,6 +37,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [persons, setPersons] = useState(2);
   const [paymentMode, setPaymentMode] = useState<'settle-later' | 'prepaid'>('settle-later');
   const [amount, setAmount] = useState('');
+  const [chargeTarget, setChargeTarget] = useState<'session' | 'wallet' | 'discount'>('session');
   const [context, setContext] = useState<ContextMenu>(null);
   const [message, setMessage] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -53,14 +54,23 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const applyFlow = useCallback((action: string) => {
     const value = number(amount);
     if (!value) { setMessage('مبلغ معتبر وارد کنید'); return; }
-    const customer = customers.find(item => item.username === customerCode || item.mobile === customerCode || item.id === customerCode || item.name.includes(customerCode));
-    if (action === 'F5') setMessage(`شارژ مستقیم ${money(value)} تومان ثبت شد`);
-    if (action === 'F6') setMessage(`بدهی ${money(value)} تومان ثبت شد`);
-    if (action === 'F7') {
-      if (customer && customer.wallet < value) { setMessage('موجودی کیف پول کافی نیست'); return; }
-      setMessage(`${money(value)} تومان از کیف پول کسر شد`);
+    const customer = customers.find(item => item.code === customerCode || item.username === customerCode || item.mobile === customerCode || item.id === customerCode || item.name.includes(customerCode));
+    if (!customer) { setMessage('مشتری پیدا نشد'); return; }
+    if (action === 'F5') {
+      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet + value, transactionHistory: ['شارژ مستقیم · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+      setMessage('شارژ مستقیم ' + money(value) + ' تومان ثبت شد');
+    } else if (action === 'F6') {
+      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['ثبت بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+      setMessage('بدهی ' + money(value) + ' تومان ثبت شد');
+    } else if (action === 'F7') {
+      if (customer.wallet < value) { setMessage('موجودی کیف پول کافی نیست'); return; }
+      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet - value, transactionHistory: ['کسر از کیف پول · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+      setMessage(money(value) + ' تومان از کیف پول کسر شد');
+    } else {
+      const deducted = Math.min(customer.wallet, value);
+      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet - deducted, debt: item.debt + value - deducted, transactionHistory: ['کسر کیف پول/بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+      setMessage('تراکنش F8 ثبت شد؛ ' + money(Math.max(0, value - deducted)) + ' تومان مازاد به بدهی رفت');
     }
-    if (action === 'F8') setMessage(`برداشت کیف پول و ثبت مازاد ${money(value)} تومان انجام شد`);
     setModal(null);
   }, [amount, customers, customerCode]);
   useEffect(() => { void mockService.getCustomers().then(setCustomers); }, []);
@@ -128,6 +138,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   function open(kind: ModalKind, station: StationDto | null = null) {
     setActiveStation(station);
     setAmount('');
+    setChargeTarget('session');
     setCustomerCode(station?.customerCode ?? '');
     setContext(null);
     setModal(kind);
@@ -143,20 +154,32 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     const elapsed = duration(activeStation);
     const timeCost = (activeStation.sessionRate ?? activeStation.ratePerHour) * elapsed / 60;
     const total = Math.max(0, Math.round(timeCost + (activeStation.buffetTotal ?? 0)));
+    const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
+    if (method === 'wallet' && (!customer || customer.wallet < total)) { setMessage('موجودی کیف پول کافی نیست'); return; }
     setInvoices(items => [{ station: activeStation.name, total, payment: method, closedAt: new Date().toISOString() }, ...items]);
+    if (method === 'wallet' && customer) setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet - total, transactionHistory: ['تسویه کیف پول · ' + money(total) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
     updateStation(activeStation.id, { state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined, customerCode: undefined, persons: undefined, buffetTotal: undefined });
     setModal(null);
-    setMessage(`تسویه ${money(total)} تومان ثبت شد؛ فاکتور در تاریخچه باقی ماند`);
+    setMessage('تسویه ' + money(total) + ' تومان ثبت شد؛ فاکتور در تاریخچه باقی ماند');
   }
   function applyCharge(method: string) {
     const value = number(amount);
     if (!value || !activeStation) { setMessage('مبلغ معتبر وارد کنید'); return; }
-    if (method === 'debt') { setMessage(`بدهی ${money(value)} تومان ثبت شد`); }
-    else if (activeStation.state === 'busy') {
+    const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
+    if (method === 'debt') {
+      if (!customer) { setMessage('جلسه مشتری ثبت‌شده ندارد'); return; }
+      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['ثبت بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+      setMessage('بدهی ' + money(value) + ' تومان ثبت شد');
+    } else if (chargeTarget === 'wallet' || chargeTarget === 'discount') {
+      if (!customer) { setMessage('جلسه به مشتری وصل نیست'); return; }
+      if (method === 'wallet') { setMessage('برای شارژ کیف پول، نقد یا کارت را انتخاب کنید'); return; }
+      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet + value, discountLevel: chargeTarget === 'discount' ? item.discountLevel + 1 : item.discountLevel, transactionHistory: [(chargeTarget === 'discount' ? 'شارژ + تخفیف' : 'شارژ کیف پول') + ' · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+      setMessage(chargeTarget === 'discount' ? 'شارژ + تخفیف ثبت شد' : 'کیف پول شارژ شد');
+    } else if (activeStation.state === 'busy') {
       const extraMinutes = value / ((activeStation.sessionRate ?? activeStation.ratePerHour) / 60);
       updateStation(activeStation.id, { sessionMinutes: duration(activeStation) + extraMinutes, startedAt: new Date(Date.now() - (duration(activeStation) + extraMinutes) * 60000).toISOString() });
-      setMessage(`${money(value)} تومان به زمان جلسه اضافه شد`);
-    } else setMessage(`شارژ ${money(value)} تومان ثبت شد`);
+      setMessage(money(value) + ' تومان به زمان جلسه اضافه شد');
+    } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
     setModal(null);
   }
   function showContext(event: MouseEvent<HTMLElement>, station: StationDto) {
@@ -174,7 +197,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       updateStation(station.id, { state: station.state === 'off' ? 'free' : 'off', outOfServiceReason: station.state === 'off' ? undefined : 'تعمیر و نگهداری' });
       setMessage(station.state === 'off' ? 'ایستگاه فعال شد' : 'ایستگاه خارج از سرویس شد'); return;
     }
-    if (action === 'settings') { onNavigate('client-shell'); return; }
+    if (action === 'settings') { window.dispatchEvent(new CustomEvent('gamenet-select-client', { detail: station.name })); onNavigate('client-shell'); return; }
     if (action === 'switch-net') { updateStation(station.id, { network: station.network === 1 ? 2 : 1 }); setMessage(`شبکه به اینترنت ${station.network === 1 ? '۲' : '۱'} تغییر کرد`); return; }
     setMessage(`${action} برای ${station.name} در صف دمو ثبت شد`);
   }
@@ -224,7 +247,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       <button className="modal-close" onClick={() => setModal(null)} aria-label="بستن">×</button>
       {modal === 'start' && <><h2>شروع جلسه · {activeStation?.name ?? 'انتخاب ایستگاه آزاد'}</h2><label>ایستگاه<select value={activeStation?.id ?? ''} onChange={event => setActiveStation(stations.find(item => item.id === event.target.value) ?? null)}>{stations.filter(item => item.state === 'free').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>مشتری<select value={customerCode} onChange={event => setCustomerCode(event.target.value)}><option value="">مهمان</option>{customers.map(item => <option key={item.id} value={item.username}>{item.code ?? item.username} · {item.name}</option>)}</select></label><label>تعرفه<select><option value="station">تعرفه ایستگاه · {money(activeStation?.ratePerHour ?? 0)} تومان</option><option value="night">تعرفه شبانه</option></select></label><div className="person-choice">{[1, 2, 3, 4].map(item => <button key={item} className={persons === item ? 'active' : ''} onClick={() => setPersons(item)}>{money(item)} نفر</button>)}</div><div className="person-choice"><button className={paymentMode === 'settle-later' ? 'active' : ''} onClick={() => setPaymentMode('settle-later')}>تسویه بعد از بازی</button><button className={paymentMode === 'prepaid' ? 'active' : ''} onClick={() => setPaymentMode('prepaid')}>پیش‌پرداخت / شارژی</button></div><div className="modal-actions"><button className="btn primary" onClick={startSession}>▶ شروع بازی</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
       {modal === 'flow' && <><h2>⚡ فلوی سرعت · F1</h2>{flowStep === 1 ? <><label>شناسه مشتری<input autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && setFlowStep(2)} placeholder="کد، نام، لقب یا موبایل" /></label><button className="btn primary" onClick={() => setFlowStep(2)}>نمایش پروفایل</button></> : <><p>{customers.find(item => [item.username, item.mobile, item.id, item.name].some(value => value.includes(customerCode)))?.name ?? 'مشتری مهمان'} · {activeStation?.name ?? 'بدون دستگاه'}</p><label>مبلغ (تومان)<input id="flow-amount" inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label><div className="amount-presets">{[50000, 100000, 200000, 500000].map(value => <button key={value} onClick={() => setAmount(String(value))}>{money(value)}</button>)}</div><div className="modal-actions">{[['F5', 'شارژ مستقیم'], ['F6', 'ثبت بدهی'], ['F7', 'کسر از کیف پول'], ['F8', 'کسر کیف پول + بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyFlow(key)}>{key} {label}</button>)}</div></>}</>}
-      {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><div className="amount-presets">{[50000, 100000, 200000, 500000].map(value => <button key={value} onClick={() => setAmount(String(value))}>{money(value)}</button>)}</div><label>هدف<select><option>شارژ زمان همین جلسه</option><option>شارژ کیف پول</option><option>شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول'], ['debt', 'ثبت در بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
+      {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><div className="amount-presets">{[50000, 100000, 200000, 500000].map(value => <button key={value} onClick={() => setAmount(String(value))}>{money(value)}</button>)}</div><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول'], ['debt', 'ثبت در بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
       {modal === 'settle' && activeStation && <><h2>تسویه جلسه · {activeStation.name}</h2><div className="info-row"><span>مدت جلسه</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="info-row"><span>مبلغ زمان</span><strong>{money((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60)} تومان</strong></div><div className="info-row"><span>مبلغ بوفه</span><strong>{money(activeStation.buffetTotal ?? 0)} تومان</strong></div><div className="info-row"><span>مبلغ نهایی</span><strong>{money((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60 + (activeStation.buffetTotal ?? 0))} تومان</strong></div><div className="modal-actions"><button className="btn" onClick={() => finishSession('cash')}>پرداخت نقدی</button><button className="btn" onClick={() => finishSession('card')}>کارتخوان</button><button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button><button className="btn" onClick={() => window.print()}>چاپ فاکتور</button><button className="btn" onClick={() => { updateStation(activeStation.id, { sessionMinutes: duration(activeStation) + 30, startedAt: new Date(Date.now() - (duration(activeStation) + 30) * 60000).toISOString() }); setModal(null); setMessage('۳۰ دقیقه تمدید شد'); }}>تمدید وقت</button></div></>}
     </section></div>}
     {message && <div className="operation-toast" role="status">{message}</div>}
