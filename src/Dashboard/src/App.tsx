@@ -13,6 +13,7 @@ import { GamesPage } from './pages/GamesPage';
 import { AccountsPage } from './pages/AccountsPage';
 import { ClientShellPage } from './pages/ClientShellPage';
 import { ClientExperience } from './features/client/ClientExperience';
+import { OperationsPage } from './pages/OperationsPage';
 import type { DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
 
@@ -196,6 +197,7 @@ function DashboardApp() {
         <div hidden={activePage !== 'reports'}><ReportsPage /></div>
         <div hidden={activePage !== 'users'}><UsersPage /></div>
         <div hidden={activePage !== 'settings'}><SettingsPage /></div>
+        <div hidden={activePage !== 'operations'}><OperationsPage /></div>
       </div>
 
       {commandOpen && <div className="modal-backdrop command-backdrop" onMouseDown={event => event.target === event.currentTarget && setCommandOpen(false)}><section className="command-palette" role="dialog" aria-modal="true"><input autoFocus value={commandQuery} onChange={event => setCommandQuery(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { const first = commandItems.find(item => item.title.toLowerCase().includes(commandQuery.toLowerCase())); if (first) runCommand(first); } }} placeholder="جست‌وجوی فرمان…" /><div className="command-list">{commandItems.filter(item => item.title.toLowerCase().includes(commandQuery.toLowerCase())).map(item => <button key={item.title} onClick={() => runCommand(item)}><span>{item.title}</span><kbd>Enter</kbd></button>)}</div><small>Ctrl+K باز کردن · Esc بستن</small></section></div>}
