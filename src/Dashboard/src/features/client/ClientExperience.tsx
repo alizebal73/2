@@ -102,7 +102,7 @@ export function ClientExperience() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault(); setPaletteOpen(value => !value); setPaletteQuery('');
       } else if (event.key === 'Escape') {
-        setPaletteOpen(false); setContext(null); setPanel(null); setAdminDialog(null); setAccountGame(null);
+        setPaletteOpen(false); setContext(null); setPanel(null); setDockHoverPanel(null); setAdminDialog(null); setAccountGame(null);
       } else if (event.altKey && event.key === 'F6') {
         event.preventDefault(); setAdminDialog('operator');
       } else if (event.altKey && event.key === 'F7') {
@@ -235,7 +235,7 @@ export function ClientExperience() {
       </main>}
 
       <nav className="client-dock">
-        <button className="hot" onClick={() => { setPaletteOpen(true); setPaletteQuery(''); }}>⌘ قلنک <kbd>Ctrl+K</kbd></button>
+        <button className="hot" onClick={() => { setDockHoverPanel(null); setPanel(null); setPaletteOpen(true); setPaletteQuery(''); }}>⌘ قلنک <kbd>Ctrl+K</kbd></button>
 
         <div className="client-dock-item client-dock-apps"
           onMouseEnter={() => scheduleDockHover('apps')}
