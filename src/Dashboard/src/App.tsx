@@ -51,6 +51,19 @@ function DashboardApp() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
+    window.dispatchEvent(new CustomEvent('gamenet-role-change', { detail: role }));
+  }, [role]);
+
+  useEffect(() => {
+    const onNavigate = (event: Event) => {
+      const page = (event as CustomEvent<PageKey>).detail;
+      if (page) setActivePage(page);
+    };
+    window.addEventListener('gamenet-navigate', onNavigate);
+    return () => window.removeEventListener('gamenet-navigate', onNavigate);
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date().toLocaleTimeString('fa-IR')), 500);
     return () => window.clearInterval(timer);
   }, []);
