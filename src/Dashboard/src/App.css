@@ -1712,3 +1712,28 @@ button:focus-visible {
   font-weight:900;
   letter-spacing:1px;
 }
+
+.attention-bar{display:flex;align-items:center;gap:10px;padding:0 22px 10px}
+.attention-trigger{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;background:#0d1526;color:var(--dim);padding:7px 11px;font:inherit;font-size:11px;cursor:pointer}
+.attention-trigger span{min-width:22px;padding:2px 6px;border-radius:99px;text-align:center;background:#182238;color:var(--txt);font-variant-numeric:tabular-nums}
+.attention-trigger.has-items{border-color:rgba(255,180,84,.4);color:var(--orange)}
+.attention-trigger.has-items span{background:rgba(255,180,84,.12);color:var(--orange)}
+.attention-summary{color:var(--dim);font-size:10px}
+.attention-panel{margin:0 22px 12px;padding:12px;background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:15px;box-shadow:0 16px 40px rgba(0,0,0,.16);animation:attentionRise .16s ease}
+.attention-panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+.attention-panel-head div{display:grid;gap:3px}
+.attention-panel-head strong{font-size:13px}
+.attention-panel-head small{font-size:10px;color:var(--dim)}
+.attention-list{display:grid;gap:7px;margin-top:9px}
+.attention-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:#0d1526}
+.attention-item.action{border-color:rgba(255,93,115,.28)}
+.attention-item.warning{border-color:rgba(255,180,84,.28)}
+.attention-dot{width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:var(--blue)}
+.attention-item.action .attention-dot{background:var(--red);box-shadow:0 0 9px rgba(255,93,115,.3)}
+.attention-item.warning .attention-dot{background:var(--orange);box-shadow:0 0 9px rgba(255,180,84,.25)}
+.attention-content{display:grid;gap:2px;min-width:0;flex:1}
+.attention-content strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attention-content span{color:var(--dim);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.attention-empty{padding:14px 4px 3px;color:var(--green);font-size:11px}
+@keyframes attentionRise{from{transform:translateY(-4px);opacity:0}to{transform:translateY(0);opacity:1}}
+@media(max-width:700px){.attention-bar{padding-inline:14px}.attention-panel{margin-inline:14px}.attention-item{align-items:flex-start;flex-wrap:wrap}.attention-item .btn{margin-inline-start:auto}}

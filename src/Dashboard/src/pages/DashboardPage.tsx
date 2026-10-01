@@ -23,6 +23,8 @@ type Props = {
 };
 
 type ContextMenu = { x: number; y: number; station: StationDto } | null;
+type AttentionKind = 'action' | 'warning' | 'info';
+type AttentionItem = { id: string; kind: AttentionKind; station: StationDto; title: string; detail: string; actionLabel: string; };
 
 export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Props) {
   const [stationOverrides, setStationOverrides] = useState<StationDto[] | null>(null);
@@ -41,6 +43,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [amount, setAmount] = useState('');
   const [chargeTarget, setChargeTarget] = useState<'session' | 'wallet' | 'discount'>('session');
   const [context, setContext] = useState<ContextMenu>(null);
+  const [attentionOpen, setAttentionOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
@@ -154,6 +157,33 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     off: stations.filter(item => item.state === 'off').length,
   }), [stations]);
 
+  const attentionItems = useMemo<AttentionItem[]>(() => {
+    const items: AttentionItem[] = [];
+    for (const station of stations) {
+      if (station.state === 'paused') items.push({ id: `paused-${station.id}`, kind: 'action', station, title: `${station.name} · جلسه متوقف`, detail: station.customerCode ? `مشتری ${station.customerCode} منتظر ادامه جلسه است.` : 'جلسه مهمان متوقف شده و نیازمند بررسی است.', actionLabel: 'ادامه جلسه' });
+      if (station.state === 'off') items.push({ id: `off-${station.id}`, kind: 'action', station, title: `${station.name} · خارج از سرویس`, detail: station.outOfServiceReason ?? 'ایستگاه برای استفاده عادی در دسترس نیست.', actionLabel: 'بررسی ایستگاه' });
+      if (station.state === 'reserved' && station.reservationAt) {
+        const reservationMs = new Date(station.reservationAt).getTime();
+        const minutesUntil = Math.round((reservationMs - now) / 60000);
+        if (minutesUntil >= 0 && minutesUntil <= 30) items.push({ id: `reservation-${station.id}`, kind: 'warning', station, title: `${station.name} · رزرو نزدیک`, detail: minutesUntil === 0 ? 'زمان رزرو همین حالا فرا رسیده است.' : `${minutesUntil} دقیقه تا شروع رزرو باقی مانده است.`, actionLabel: 'مشاهده ایستگاه' });
+      }
+    }
+    return items.sort((a, b) => { const rank: Record<AttentionKind, number> = { action: 0, warning: 1, info: 2 }; return rank[a.kind] - rank[b.kind]; });
+  }, [stations, now]);
+
+  const attentionCounts = useMemo(() => ({ total: attentionItems.length, action: attentionItems.filter(item => item.kind === 'action').length, warning: attentionItems.filter(item => item.kind === 'warning').length }), [attentionItems]);
+
+
+  function focusAttentionItem(item: AttentionItem) {
+    setAttentionOpen(false);
+    setZone(item.station.zone as ZoneKey);
+    setQuery(item.station.name);
+    window.setTimeout(() => { document.getElementById(`station-${item.station.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80);
+    if (item.kind === 'action' && item.station.state === 'paused') { resumeSession(item.station); return; }
+    if (item.kind === 'action' && item.station.state === 'off') { openContextAt(window.innerWidth / 2, Math.min(window.innerHeight - 80, 260), item.station); return; }
+    setMessage(item.detail);
+  }
+
   function open(kind: ModalKind, station: StationDto | null = null) {
     setActiveStation(station);
     setAmount('');
@@ -231,17 +261,19 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     setMessage('تسویه ' + money(finalTotal) + ' تومان ثبت شد؛ فاکتور در تاریخچه باقی ماند');
   }
 
-  function pauseSession() {
-    if (!activeStation || activeStation.state !== 'busy') { setMessage('فقط جلسه در حال بازی قابل توقف است'); return; }
-    updateStation(activeStation.id, { state: 'paused', pausedAt: new Date().toISOString() });
+  function pauseSession(stationOverride?: StationDto) {
+    const station = stationOverride ?? activeStation;
+    if (!station || station.state !== 'busy') { setMessage('فقط جلسه در حال بازی قابل توقف است'); return; }
+    updateStation(station.id, { state: 'paused', pausedAt: new Date().toISOString() });
     setModal(null);
     setMessage('جلسه متوقف موقت شد؛ زمان صورتحساب جلو نمی‌رود');
   }
 
-  function resumeSession() {
-    if (!activeStation || activeStation.state !== 'paused' || !activeStation.pausedAt) { setMessage('جلسه متوقفی برای ادامه وجود ندارد'); return; }
-    const currentPaused = (Date.now() - new Date(activeStation.pausedAt).getTime()) / 60000;
-    updateStation(activeStation.id, { state: 'busy', pausedAt: undefined, pausedMinutes: (activeStation.pausedMinutes ?? 0) + Math.max(0, currentPaused) });
+  function resumeSession(stationOverride?: StationDto) {
+    const station = stationOverride ?? activeStation;
+    if (!station || station.state !== 'paused' || !station.pausedAt) { setMessage('جلسه متوقفی برای ادامه وجود ندارد'); return; }
+    const currentPaused = (Date.now() - new Date(station.pausedAt).getTime()) / 60000;
+    updateStation(station.id, { state: 'busy', pausedAt: undefined, pausedMinutes: (station.pausedMinutes ?? 0) + Math.max(0, currentPaused) });
     setMessage('جلسه ادامه پیدا کرد');
   }
 
@@ -311,8 +343,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     if (!station) return;
     if (action === 'settle') { open('settle', station); return; }
     if (action === 'extend') { open('extend', station); return; }
-    if (action === 'pause') { setActiveStation(station); pauseSession(); return; }
-    if (action === 'resume') { setActiveStation(station); resumeSession(); return; }
+    if (action === 'pause') { pauseSession(station); return; }
+    if (action === 'resume') { resumeSession(station); return; }
     if (action === 'reduce') { open('reduce', station); return; }
     if (action === 'offline') {
       updateStation(station.id, { state: station.state === 'off' ? 'free' : 'off', outOfServiceReason: station.state === 'off' ? undefined : 'تعمیر و نگهداری' });
@@ -327,7 +359,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     const minutes = duration(station);
     const elapsedCost = station.state === 'busy' ? (station.sessionRate ?? station.ratePerHour) * minutes / 60 : 0;
     const style = { '--zoom': zoom / 100 } as CSSProperties;
-    return <article key={station.id} style={style} className={`station-card ${station.state} ${view}`} onClick={() => {
+    return <article id={`station-${station.id}`} key={station.id} style={style} className={`station-card ${station.state} ${view}`} onClick={() => {
       if (station.state === 'free') open('start', station);
       else if (station.state === 'busy') { setCustomerCode(station.customerCode ?? ''); setActiveStation(station); setFlowStep(1); setModal('flow'); }
       else setMessage(station.state === 'reserved' ? 'رزرو ساعت ۱۸:۰۰ — هنوز مشتری وارد نشده' : station.outOfServiceReason ?? 'این دستگاه خارج از سرویس است');
@@ -363,7 +395,32 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     <div className="summary-grid">
       {[["ایستگاه آزاد", counts.free, 'green'], ['در حال جلسه', counts.busy + stations.filter(item => item.state === 'paused').length, 'red'], ['رزرو امروز', counts.reserved, 'blue'], ['درآمد امروز', invoices.reduce((sum, item) => sum + item.total, 4820000), 'orange'], ['فروش بوفه', 860000, 'orange'], ['مشتری حاضر', stations.filter(item => item.state === 'busy').reduce((sum, item) => sum + (item.persons ?? 1), 0), 'blue']].map(([label, value, color]) => <div key={label} className="summary-card"><div className="label">{label}</div><div className={`value ${color}`}>{money(Number(value))}{String(label).includes('درآمد') || String(label).includes('فروش') ? ' تومان' : ''}</div></div>)}
     </div>
-    <div className="toolbar dashboard-toolbar">
+        <div className="attention-bar">
+      <button type="button" className={`attention-trigger ${attentionCounts.total ? 'has-items' : ''}`} onClick={() => setAttentionOpen(value => !value)} aria-expanded={attentionOpen}>
+        ⚠ نیازمند توجه
+        <span>{attentionCounts.total ? money(attentionCounts.total) : '۰'}</span>
+      </button>
+      <span className="attention-summary">
+        {attentionCounts.action ? `اقدام لازم: ${money(attentionCounts.action)}` : 'اقدام فوری نداریم'}
+        {attentionCounts.warning ? ` · هشدار: ${money(attentionCounts.warning)}` : ''}
+      </span>
+    </div>
+    {attentionOpen && (
+      <section className="attention-panel" aria-label="مرکز نیازمند توجه">
+        <div className="attention-panel-head">
+          <div><strong>مرکز نیازمند توجه</strong><small>مواردی که از وضعیت فعلی ایستگاه‌ها نیاز به بررسی یا اقدام دارند</small></div>
+          <button type="button" className="btn sm" onClick={() => setAttentionOpen(false)}>بستن</button>
+        </div>
+        {attentionItems.length === 0 ? <div className="attention-empty">در حال حاضر موردی نیازمند توجه نیست.</div> : <div className="attention-list">
+          {attentionItems.map(item => <div className={`attention-item ${item.kind}`} key={item.id}>
+            <span className="attention-dot" aria-hidden="true" />
+            <div className="attention-content"><strong>{item.title}</strong><span>{item.detail}</span></div>
+            <button type="button" className="btn sm" onClick={() => focusAttentionItem(item)}>{item.actionLabel}</button>
+          </div>)}
+        </div>}
+      </section>
+    )}
+<div className="toolbar dashboard-toolbar">
       <div className="zone-filter">{Object.entries(zoneLabels).map(([key, label]) => <button key={key} type="button" className={zone === key ? 'active' : ''} onClick={() => setZone(key as ZoneKey)}>{label}</button>)}</div>
       <div className="search-box"><input aria-label="جست‌وجوی ایستگاه" value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی ایستگاه…" /></div>
       <div className="view-switch" aria-label="حالت نمایش">{(['v-card', 'v-compact', 'v-list'] as ViewMode[]).map((item, index) => <button key={item} type="button" className={view === item ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(item)}>{['▦', '▤', '☰'][index]}</button>)}</div>
