@@ -107,8 +107,8 @@ type ReportRow = { id: string; station: string; timeAmount: number; buffet: numb
 type ShiftRecord = { id: string; operator: string; openedAt: string; closedAt?: string; expectedCash?: number; countedCash?: number; difference?: number; sales?: number };
 
 const expenses: ExpenseRecord[] = [
-  { id: 'e1', title: 'خرید نوشیدنی', amount: 420000, createdAt: new Date(Date.now() - 86400000).toISOString(), operator: 'علی محمدی' },
-  { id: 'e2', title: 'لوازم مصرفی', amount: 180000, createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), operator: 'سارا احمدی' },
+  { id: 'e1', title: 'خرید نوشیدنی', category: 'خرید/تأمین', amount: 420000, createdAt: new Date(Date.now() - 86400000).toISOString(), operator: 'علی محمدی' },
+  { id: 'e2', title: 'لوازم مصرفی', category: 'خرید/تأمین', amount: 180000, createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), operator: 'سارا احمدی' },
 ];
 const reportRows: ReportRow[] = [
   { id: 'r1', station: 'PC 04', timeAmount: 180000, buffet: 90000, packageAmount: 0, amount: 270000, method: 'cash', operator: 'علی محمدی', type: 'time', closedAt: new Date(Date.now() - 2 * 3600000).toISOString() },
