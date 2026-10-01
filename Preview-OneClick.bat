@@ -13,34 +13,44 @@ echo   GameNet Manager - One Click Preview
 echo ==========================================
 echo.
 
-where powershell >nul 2>nul
-if errorlevel 1 (
+set "PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+if not exist "%PS%" (
   echo [ERROR] Windows PowerShell not found.
   pause
   exit /b 1
 )
 
-where dotnet >nul 2>nul
-if errorlevel 1 (
-  echo [ERROR] dotnet not found in PATH.
+rem Make common local tool installations visible to Explorer-launched BAT files.
+if exist "C:\dotnet\dotnet.exe" set "PATH=C:\dotnet;%PATH%"
+if exist "%ProgramFiles%\dotnet\dotnet.exe" set "PATH=%ProgramFiles%\dotnet;%PATH%"
+if exist "%ProgramFiles%\nodejs\npm.cmd" set "PATH=%ProgramFiles%\nodejs;%PATH%"
+if exist "%APPDATA%\npm\npm.cmd" set "PATH=%APPDATA%\npm;%PATH%"
+
+if not exist "C:\dotnet\dotnet.exe" if not exist "%ProgramFiles%\dotnet\dotnet.exe" (
+  echo [ERROR] .NET SDK not found.
+  echo Checked:
+  echo   C:\dotnet\dotnet.exe
+  echo   %ProgramFiles%\dotnet\dotnet.exe
   pause
   exit /b 1
 )
 
-where npm >nul 2>nul
-if errorlevel 1 (
-  echo [ERROR] npm not found in PATH.
+if not exist "%ProgramFiles%\nodejs\npm.cmd" if not exist "%APPDATA%\npm\npm.cmd" (
+  echo [ERROR] npm not found.
+  echo Checked:
+  echo   %ProgramFiles%\nodejs\npm.cmd
+  echo   %APPDATA%\npm\npm.cmd
   pause
   exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-NetTCPConnection -LocalPort 5080 -State Listen -ErrorAction SilentlyContinue; if($p){Write-Host '[ERROR] Port 5080 is already in use. Close the previous GameNet Server window first.'; exit 1}"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-NetTCPConnection -LocalPort 5080 -State Listen -ErrorAction SilentlyContinue; if($p){Write-Host '[ERROR] Port 5080 is already in use. Close the previous GameNet Server window first.'; exit 1}"
 if errorlevel 1 (
   pause
   exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue; if($p){Write-Host '[ERROR] Port 5173 is already in use. Close the previous GameNet Dashboard window first.'; exit 1}"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue; if($p){Write-Host '[ERROR] Port 5173 is already in use. Close the previous GameNet Dashboard window first.'; exit 1}"
 if errorlevel 1 (
   pause
   exit /b 1
@@ -50,7 +60,7 @@ echo [1/5] Downloading latest main...
 if exist "%DOWNLOAD%" del /q "%DOWNLOAD%" >nul 2>nul
 if exist "%EXTRACT%" rmdir /s /q "%EXTRACT%" >nul 2>nul
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing '%REPO_ZIP%' -OutFile '%DOWNLOAD%'"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -UseBasicParsing '%REPO_ZIP%' -OutFile '%DOWNLOAD%'"
 if errorlevel 1 (
   echo [ERROR] Download failed.
   pause
@@ -58,7 +68,7 @@ if errorlevel 1 (
 )
 
 echo [2/5] Extracting...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Force '%DOWNLOAD%' '%EXTRACT%'"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "Expand-Archive -Force '%DOWNLOAD%' '%EXTRACT%'"
 if errorlevel 1 (
   echo [ERROR] Extraction failed.
   pause
@@ -92,7 +102,7 @@ if %ROBOCODE% GEQ 8 (
 if not exist "%PREVIEW%\src\Dashboard\node_modules" (
   echo [4/5] Installing Dashboard dependencies...
   pushd "%PREVIEW%\src\Dashboard"
-  call npm ci
+  call npm.cmd ci
   if errorlevel 1 (
     popd
     echo [ERROR] npm ci failed.
@@ -105,18 +115,18 @@ if not exist "%PREVIEW%\src\Dashboard\node_modules" (
 )
 
 echo [5/5] Starting Server and Dashboard...
-start "GameNet Server" cmd /k "cd /d ""%PREVIEW%\src\Server"" && dotnet run --project ""%PREVIEW%\src\Server\GameNetManager.Server.csproj"""
-start "GameNet Dashboard" cmd /k "cd /d ""%PREVIEW%\src\Dashboard"" && npm run dev -- --host 0.0.0.0"
+start "GameNet Server" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Server"" && dotnet run --project ""%PREVIEW%\src\Server\GameNetManager.Server.csproj"""
+start "GameNet Dashboard" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Dashboard"" && npm.cmd run dev -- --host 0.0.0.0"
 
 echo Waiting for services...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5080 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5080 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
 if errorlevel 1 (
   echo [ERROR] Server did not become ready on port 5080.
   pause
   exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5173 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5173 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
 if errorlevel 1 (
   echo [ERROR] Dashboard did not become ready on port 5173.
   pause
