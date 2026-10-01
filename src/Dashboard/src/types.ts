@@ -257,3 +257,13 @@ export type ExpenseRecord = {
   createdAt: string;
   operator: string;
 };
+
+export type SessionTimelineEvent = {
+  id: string;
+  stationId: string;
+  createdAt: string;
+  kind: 'start' | 'pause' | 'resume' | 'charge' | 'extend' | 'reduce' | 'buffet' | 'settle' | 'note';
+  title: string;
+  detail: string;
+  amount?: number;
+};
