@@ -37,6 +37,10 @@ function formatTime(dateString: string) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatPersianDate(date = new Date()) {
+  return new Intl.DateTimeFormat('fa-IR-u-ca-persian', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+}
+
 function DashboardApp() {
   const [activePage, setActivePage] = useState<PageKey>('dashboard');
   const [snapshot, setSnapshot] = useState<DashboardSnapshotDto | null>(null);
@@ -50,6 +54,11 @@ function DashboardApp() {
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([
+    { id: 'n1', title: 'درخواست بوفه', detail: 'PC ۰۴ درخواست فروش بوفه دارد', level: 'info', read: false },
+    { id: 'n2', title: 'به‌روزرسانی کلاینت', detail: '۲ ایستگاه به‌روزرسانی معلق دارند', level: 'warning', read: false },
+    { id: 'n3', title: 'رزرو نزدیک', detail: 'رزرو PC ۰۷ تا ۱۵ دقیقه دیگر شروع می‌شود', level: 'info', read: false },
+  ]);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('gamenet-role-change', { detail: role }));
@@ -157,7 +166,7 @@ function DashboardApp() {
         <TopNavigation activePage={activePage} onChange={setActivePage} />
 
         <div className="connection-list" aria-live="polite">
-          <span className="header-clock">🕒 {clock}</span>
+          <span className="header-clock">🗓 {formatPersianDate()} · 🕒 {clock}</span>
           <span className={`status-chip ${apiState === 'online' ? 'online' : apiState === 'loading' ? 'loading' : 'offline'}`}>
             API {apiState === 'online' ? 'متصل' : apiState === 'loading' ? 'در حال اتصال' : 'قطع'}
           </span>
@@ -175,10 +184,10 @@ function DashboardApp() {
           <span className="user-dot" />
           <span>{roleLabels[role]}: {role === 'operator' ? 'علی محمدی' : role === 'manager' ? 'سارا احمدی' : 'محمود رضایی'}</span>
         </button>
-        <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 ۲</button>
+        <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 {notifications.filter(item => !item.read).length}</button>
       </header>
 
-      {notificationsOpen && <div className="notification-popover"><strong>اعلان‌ها</strong><p>درخواست بوفه از PC ۰۴</p><p>۲ ایستگاه به‌روزرسانی معلق دارند</p></div>}
+      {notificationsOpen && <div className="notification-popover"><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><strong>اعلان‌ها</strong><button type="button" className="btn sm" onClick={() => setNotifications(current => current.map(item => ({ ...item, read: true })))}>خوانده‌شده</button></div>{notifications.map(item => <button type="button" key={item.id} className={`notification-item ${item.read ? 'read' : ''}`} onClick={() => setNotifications(current => current.map(row => row.id === item.id ? { ...row, read: true } : row))}><strong>{item.title}</strong><span>{item.detail}</span></button>)}</div>}
 
       {error && (
         <div className="error-banner" role="alert">
