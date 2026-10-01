@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { mockService } from '../services/mockService';
+import { mockService } from '../../services/mockService';
 import type {
   AccountRecord,
   ClientRecord,
@@ -11,7 +11,7 @@ import type {
   StationDto,
   TariffRecord,
   UserRecord,
-} from '../types';
+} from '../../types';
 
 type CommandItem = {
   id: string;
