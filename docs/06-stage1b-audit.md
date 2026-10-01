@@ -96,3 +96,21 @@
 
 ## مرحله ۲
 بعد از سبز شدن گیت تست، Stage 2 با هدف Domain Model/Database به‌صورت رسمی ادامه پیدا می‌کند.
+
+
+## گپ‌های رفتاری کشف‌شده در ممیزی Action Map — ۱۴۰۵/۱۰/۱۰
+این موارد در ممیزی اخیر به‌عنوان کمبودهای واقعی رفتار ثبت شدند و نباید صرفاً با اضافه‌کردن کنترل ظاهری تیک بخورند:
+
+- [ ] Pause / Resume واقعی جلسه
+- [ ] کاهش زمان جلسه
+- [ ] Free Time مستقل از Free Money
+- [ ] Pricing Schedule / Price Resolve با روز/ساعت/گروه دستگاه/سطح مشتری
+- [ ] Minimum Charge و سیاست رند/محاسبه قیمت
+- [ ] Wallet Ledger و Refund/Reverse
+- [ ] Settlement کامل شامل بوفه، تخفیف، رند، کیف پول، بدهی، مبلغ دریافتی و برگشتی
+- [ ] Shift Settlement Summary به‌جای prompt
+- [ ] محدودیت Login هم‌زمان مشتری
+- [ ] چرخه Order بوفه و اصلاح/ضایعات/مرجوعی موجودی
+- [ ] تبدیل عملیات Mock مانند Remote/Screenshot/Restart/Shutdown به Command واقعی Agent
+
+مرجع پذیرش هر مورد: [Action Map](08-action-map.md). تا زمانی که مسیر Server + Permission + Persistence + Audit + تست مربوطه وجود نداشته باشد، این موارد Done محسوب نمی‌شوند.
