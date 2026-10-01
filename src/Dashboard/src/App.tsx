@@ -15,6 +15,7 @@ import { ClientShellPage } from './pages/ClientShellPage';
 import { ClientExperience } from './features/client/ClientExperience';
 import { GlobalCommandCenter } from './features/search/GlobalCommandCenter';
 import { OperationsPage } from './pages/OperationsPage';
+import { UserErrorBanner } from './components/UserErrorBanner';
 import type { DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
 
@@ -125,7 +126,7 @@ function DashboardApp() {
       } catch (cause) {
         if (active) {
           setApiState('offline');
-          setError(cause instanceof Error ? cause.message : 'ارتباط با سرور ناموفق بود');
+          setError('ارتباط با سرور برقرار نشد');
         }
       }
     };
@@ -174,9 +175,12 @@ function DashboardApp() {
       {notificationsOpen && <div className="notification-popover"><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><strong>اعلان‌ها</strong><button type="button" className="btn sm" onClick={() => setNotifications(current => current.map(item => ({ ...item, read: true })))}>خوانده‌شده</button></div>{notifications.map(item => <button type="button" key={item.id} className={`notification-item ${item.read ? 'read' : ''}`} onClick={() => setNotifications(current => current.map(row => row.id === item.id ? { ...row, read: true } : row))}><strong>{item.title}</strong><span>{item.detail}</span></button>)}</div>}
 
       {error && (
-        <div className="error-banner" role="alert">
-          ارتباط API برقرار نشد: {error}. سرور را روی پورت ۵۰۸۰ اجرا کنید.
-        </div>
+        <UserErrorBanner
+          kind="network"
+          title="ارتباط با سرور برقرار نشد"
+          detail="دادهٔ جدید از سرور دریافت نشد. اتصال شبکه یا خود سرویس را بررسی کنید."
+          onAction={() => setRetry(value => value + 1)}
+        />
       )}
 
       <div className="page-shell">
