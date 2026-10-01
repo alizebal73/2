@@ -152,6 +152,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       const station = stations.find(item => item.state === 'busy');
       if (station) {
         updateStation(station.id, { buffetTotal: (station.buffetTotal ?? 0) + detail.total });
+        addSessionTimeline(station.id, 'buffet', 'افزودن بوفه', money(detail.total) + ' تومان به فاکتور جلسه اضافه شد', detail.total);
         setMessage(`فروش ${money(detail.total)} تومان به فاکتور ${station.name} اضافه شد`);
       } else setMessage('جلسه فعالی نیست؛ فروش مستقل ثبت کنید');
     };
