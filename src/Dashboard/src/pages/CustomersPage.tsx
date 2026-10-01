@@ -169,13 +169,13 @@ export function CustomersPage() {
         <div className="rows">{visible.map(customer =>
           <button key={customer.id} type="button" className={`customer-row ${customer.id === selected?.id ? 'active' : ''}`} onClick={() => setSelectedId(customer.id)}>
             <span className={`avatar ${customer.vip}`}>{customer.name.slice(0, 1)}</span>
-            <span className="main"><b>{customer.name}</b><span>کد {customer.code} · @{customer.username} · {customer.alias || 'بدون لقب'}</span></span>
-            <span className="fin"><span className={`vip-tag ${customer.vip}`}>{customer.vip === 'gold' ? 'Gold' : customer.vip === 'silver' ? 'Silver' : 'None'}</span><span className="value green">{money(customer.wallet)} ت</span></span>
+            <span className="main"><b>{customer.name}</b><span>کد {customer.code} · @{customer.username}</span><small>{customer.mobile || 'بدون موبایل'} · {customer.alias || 'بدون لقب'}</small></span>
+            <span className="fin"><span className={`vip-tag ${customer.vip}`}>{customer.vip === 'gold' ? 'طلایی' : customer.vip === 'silver' ? 'نقره‌ای' : 'عادی'}</span><strong className="customer-row-wallet">{money(customer.wallet)} تومان</strong>{customer.debt > 0 && <strong className="customer-row-debt">بدهی {money(customer.debt)} تومان</strong>}<small className={`customer-state ${customer.status}`}>{customer.status === 'active' ? 'فعال' : customer.status === 'warning' ? 'نیازمند توجه' : 'قفل'}</small></span>
           </button>)}</div>
       </section>
 
       {selected && <section className="customer-profile">
-        <div className="profile-head"><div className={`profile-avatar ${selected.vip}`}>{selected.name.slice(0, 1)}</div><div><h3>{selected.name}</h3><div className="sub">کد کاربری {selected.code} · @{selected.username} · {selected.alias || 'بدون لقب'}</div></div><span className={`vip-tag ${selected.vip}`}>{selected.vip.toUpperCase()}</span></div>
+        <div className="profile-head"><div className={`profile-avatar ${selected.vip}`}>{selected.name.slice(0, 1)}</div><div><h3>{selected.name}</h3><div className="sub">کد کاربری {selected.code} · @{selected.username} · {selected.alias || 'بدون لقب'}</div></div><span className={`vip-tag ${selected.vip}`}>{selected.vip === 'gold' ? 'طلایی' : selected.vip === 'silver' ? 'نقره‌ای' : 'عادی'}</span></div>
         <div className="profile-stats">{[['کیف پول', selected.wallet, 'green'], ['بدهی', selected.debt, 'red'], ['اعتبار رایگان', selected.giftCredit, 'blue']].map(([label, value, color]) =>
           <div className="profile-stat" key={label}><span className="label">{label}</span><span className={`value ${color}`}>{money(Number(value))} ت</span></div>)}</div>
 
@@ -196,8 +196,8 @@ export function CustomersPage() {
           </div>
         </div>
 
-        <div className="profile-section"><h4>تاریخچه تراکنش‌ها</h4>{(selected.transactionHistory ?? []).map((item, index) =>
-          <div className="info-row" key={`${item}-${index}`}><span>{item}</span><strong>ثبت‌شده</strong></div>)}</div>
+        <div className="profile-section"><div className="profile-section-head"><h4>تاریخچه تراکنش‌ها</h4><span>{selected.transactionHistory?.length ?? 0} مورد</span></div><div className="customer-history-list">{(selected.transactionHistory ?? []).map((item, index) =>
+          <div className="customer-history-item" key={`${item}-${index}`}><span className="customer-history-dot" /><div><strong>{item}</strong><small>{index === 0 ? 'آخرین فعالیت' : 'ثبت‌شده در سابقه مشتری'}</small></div></div>)}</div></div>
 
         <div className="customer-actions">
           <button className="btn sm" onClick={() => openAction('edit')}>ویرایش</button>
@@ -219,7 +219,7 @@ export function CustomersPage() {
           <label>نام کامل<input autoFocus value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} /></label>
           <label>لقب<input value={draft.alias} onChange={event => setDraft(current => ({ ...current, alias: event.target.value }))} /></label>
           <div className="modal-grid-2"><label>موبایل<input dir="ltr" value={draft.mobile} onChange={event => setDraft(current => ({ ...current, mobile: event.target.value }))} /></label><label>کد ملی<input dir="ltr" value={draft.nationalId} onChange={event => setDraft(current => ({ ...current, nationalId: event.target.value }))} /></label></div>
-          <div className="modal-grid-2"><label>نام کاربری<input dir="ltr" value={draft.username} onChange={event => setDraft(current => ({ ...current, username: event.target.value }))} placeholder="خودکار بر اساس کد" /></label><label>VIP اولیه<select value={draft.vip} onChange={event => setDraft(current => ({ ...current, vip: event.target.value as CustomerRecord['vip'] }))}><option value="none">بدون VIP</option><option value="silver">Silver</option><option value="gold">Gold</option></select></label></div>
+          <div className="modal-grid-2"><label>نام کاربری<input dir="ltr" value={draft.username} onChange={event => setDraft(current => ({ ...current, username: event.target.value }))} placeholder="در صورت نیاز دستی وارد کنید" /></label><label>VIP اولیه<select value={draft.vip} onChange={event => setDraft(current => ({ ...current, vip: event.target.value as CustomerRecord['vip'] }))}><option value="none">بدون VIP</option><option value="silver">Silver</option><option value="gold">Gold</option></select></label></div>
           <label>رمز ورود<input dir="ltr" type="password" value={draft.password} onChange={event => setDraft(current => ({ ...current, password: event.target.value }))} placeholder="اختیاری" /></label>
           <div className="modal-actions"><button className="btn primary" onClick={submitAction}>ساخت مشتری</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
         </>}
@@ -239,7 +239,7 @@ export function CustomersPage() {
         {['wallet', 'debt', 'gift'].includes(action) && <>
           <h2>{({ wallet: 'شارژ کیف پول', debt: 'ثبت بدهی', gift: 'اعتبار رایگان' } as Record<string, string>)[action]} · {selected?.name}</h2>
           <label>مبلغ (تومان)<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label>
-          <div className="amount-presets">{[50000, 100000, 200000, 500000].map(value => <button key={value} className="btn sm" onClick={() => setAmount(String(value))}>{money(value)}</button>)}</div>
+          
           <div className="modal-actions"><button className="btn primary" onClick={submitAction}>ثبت عملیات</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
         </>}
 
