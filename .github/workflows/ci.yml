@@ -7,16 +7,19 @@ on:
 jobs:
   verify:
     runs-on: [self-hosted, windows, x64]
-    env:
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}\.dotnet
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
+      - name: Check local .NET
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'C:\dotnet\dotnet.exe')) {
+            throw 'C:\dotnet\dotnet.exe not found on the self-hosted runner.'
+          }
+          & 'C:\dotnet\dotnet.exe' --info
+          'C:\dotnet' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          'DOTNET_ROOT=C:\dotnet' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Setup Node
         uses: actions/setup-node@v4
