@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ClientExperience.css';
 
 type Game = { id: string; name: string; category: string; icon: string; requiresAccount: boolean; description: string };
@@ -20,6 +20,15 @@ const buffetItems = [
   { name: 'قهوه فوری', price: 45000, icon: '☕' },
   { name: 'پاپ‌کورن', price: 35000, icon: '🍿' },
   { name: 'ساندویچ سرد', price: 90000, icon: '🥪' },
+];
+
+const clientApps = [
+  { icon: '🌐', name: 'Chrome', description: 'مرورگر مجاز' },
+  { icon: '💬', name: 'Discord', description: 'گفت‌وگوی تیمی' },
+  { icon: '✈️', name: 'Telegram', description: 'پیام‌رسان' },
+  { icon: '🎵', name: 'موزیک', description: 'پخش موسیقی' },
+  { icon: '🎥', name: 'OBS', description: 'ضبط و پخش' },
+  { icon: '🧮', name: 'ماشین حساب', description: 'ابزار عمومی' },
 ];
 
 const commands = [
@@ -51,6 +60,8 @@ export function ClientExperience() {
   const [activeGame, setActiveGame] = useState<string | null>(null);
   const [accountGame, setAccountGame] = useState<Game | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
+  const [dockHoverPanel, setDockHoverPanel] = useState<'apps' | null>(null);
+  const dockHoverTimer = useRef<number | null>(null);
   const [context, setContext] = useState<ContextMenu>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
@@ -126,6 +137,13 @@ export function ClientExperience() {
     setNotice(message);
   }
 
+  function scheduleDockHover(target: 'apps' | null) {
+    if (dockHoverTimer.current !== null) window.clearTimeout(dockHoverTimer.current);
+    const delay = target ? 220 : 160;
+    dockHoverTimer.current = window.setTimeout(() => setDockHoverPanel(target), delay);
+  }
+
+
   function signIn(guest = false) {
     if (guest) {
       if (password.trim()) { setLoginError('برای مهمان رمز را خالی بگذارید'); return; }
@@ -159,7 +177,7 @@ export function ClientExperience() {
 
   function runCommand(key: string) {
     setPaletteOpen(false);
-    if (key === 'apps') setPanel('apps');
+    if (key === 'apps') { setPanel('apps'); setDockHoverPanel('apps'); }
     else if (key === 'buffet') setPanel('buffet');
     else if (key === 'account') setPanel('account');
     else if (key === 'my-games') { setMyGamesOnly(true); notify('بازی‌های اخیراً اجراشده نمایش داده شدند'); }
@@ -216,10 +234,61 @@ export function ClientExperience() {
         <aside className="client-side-column">{activeGame && <section className="client-preview"><div className="client-preview-art">{games.find(game => game.id === activeGame)?.icon}</div><div className="client-preview-body"><b>{games.find(game => game.id === activeGame)?.name}</b><p>بازی فعال · اکانت تخصیص‌یافته در زمان توقف آزاد می‌شود.</p><button className="client-button" onClick={() => doContextAction('stop-game')}>■ توقف بازی</button></div></section>}{adVisible && <section className="client-ad"><button className="client-ad-close" onClick={() => setAdVisible(false)} aria-label="بستن تبلیغ">×</button><div className="client-ad-media">🏆</div><div className="client-ad-body"><b>پکیج VIP GameNet</b><p>تخفیف بازی و زمان بیشتر برای اعضای VIP</p><button onClick={() => notify('درخواست فعال‌سازی پکیج VIP ثبت شد')}>درخواست فعال‌سازی</button></div></section>}</aside>
       </main>}
 
-      <nav className="client-dock"><button className="hot" onClick={() => { setPaletteOpen(true); setPaletteQuery(''); }}>⌘ قلنک <kbd>Ctrl+K</kbd></button><button onClick={() => setPanel(panel === 'apps' ? null : 'apps')}>🧩 نرم‌افزارها</button><button onClick={() => setPanel(panel === 'buffet' ? null : 'buffet')}>🛒 منوی بوفه</button><button onClick={() => notify('مسابقات دمو: جام CS2 · ثبت‌نام از صندوق')}>🏆 مسابقات</button><button onClick={() => { setMyGamesOnly(true); setPanel(null); }}>🎮 بازی‌های من</button><button onClick={() => setPanel(panel === 'account' ? null : 'account')}>👤 حساب من</button><button className="dock-spacer" onClick={() => { setPanel('operator'); setContext({ x: 14, y: window.innerHeight - 350 }); }}>🛠 ابزار اپراتور <kbd>Alt+F6</kbd></button><button onClick={() => setAdVisible(value => !value)}>📢 تبلیغات</button></nav>
+      <nav className="client-dock">
+        <button className="hot" onClick={() => { setPaletteOpen(true); setPaletteQuery(''); }}>⌘ قلنک <kbd>Ctrl+K</kbd></button>
+
+        <div className="client-dock-item client-dock-apps"
+          onMouseEnter={() => scheduleDockHover('apps')}
+          onMouseLeave={() => scheduleDockHover(null)}>
+          <button
+            aria-expanded={dockHoverPanel === 'apps' || panel === 'apps'}
+            onClick={() => {
+              const open = panel !== 'apps';
+              setPanel(open ? 'apps' : null);
+              setDockHoverPanel(open ? 'apps' : null);
+            }}
+          >🧩 نرم‌افزارها</button>
+
+          {(dockHoverPanel === 'apps' || panel === 'apps') && (
+            <section
+              className="client-dock-flyout"
+              onMouseEnter={() => scheduleDockHover('apps')}
+              onMouseLeave={() => scheduleDockHover(null)}
+              onClick={event => event.stopPropagation()}
+            >
+              <header>
+                <div>
+                  <b>نرم‌افزارهای مجاز</b>
+                  <small>اجرا فقط از فهرست تأییدشده کلاینت</small>
+                </div>
+                <span>۶ مورد</span>
+              </header>
+              <div className="client-dock-app-grid">
+                {clientApps.map(app => (
+                  <button
+                    key={app.name}
+                    className="client-dock-app"
+                    onClick={() => notify(`درخواست اجرای ${app.name} برای Agent ثبت شد`)}
+                  >
+                    <span className="client-dock-app-icon">{app.icon}</span>
+                    <span><b>{app.name}</b><small>{app.description}</small></span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+
+        <button onClick={() => { setDockHoverPanel(null); setPanel(panel === 'buffet' ? null : 'buffet'); }}>🛒 منوی بوفه</button>
+        <button onClick={() => notify('مسابقات دمو: جام CS2 · ثبت‌نام از صندوق')}>🏆 مسابقات</button>
+        <button onClick={() => { setMyGamesOnly(true); setPanel(null); setDockHoverPanel(null); }}>🎮 بازی‌های من</button>
+        <button onClick={() => { setDockHoverPanel(null); setPanel(panel === 'account' ? null : 'account'); }}>👤 حساب من</button>
+        <button className="dock-spacer" onClick={() => { setPanel('operator'); setDockHoverPanel(null); setContext({ x: 14, y: window.innerHeight - 350 }); }}>🛠 ابزار اپراتور <kbd>Alt+F6</kbd></button>
+        <button onClick={() => setAdVisible(value => !value)}>📢 تبلیغات</button>
+      </nav>
     </>}
 
-    {panel && panel !== 'operator' && <section className="client-panel"><header><b>{panel === 'apps' ? 'نرم‌افزارها' : panel === 'buffet' ? 'منوی بوفه' : 'حساب من'}</b><button onClick={() => setPanel(null)}>×</button></header>{panel === 'apps' ? <div className="client-app-list">{[['🌐', 'Chrome'], ['💬', 'Discord'], ['🎵', 'موزیک'], ['✈️', 'Telegram'], ['🎥', 'OBS'], ['🧮', 'ماشین حساب']].map(([icon, name]) => <button key={name} onClick={() => notify(`درخواست اجرای ${name} برای اپراتور ثبت شد`)}>{icon} {name}</button>)}</div> : panel === 'buffet' ? <div className="client-buffet-list">{buffetItems.map(item => <div key={item.name}><span>{item.icon} {item.name}</span><b>{money(item.price)} ت</b><button onClick={() => notify(`درخواست ${item.name} برای اپراتور ثبت شد`)}>+</button></div>)}</div> : <div className="client-account-info"><div><span>نام کاربری</span><b>{customerCode || 'مهمان'}</b></div><div><span>کیف پول</span><b>{money(wallet)} تومان</b></div><div><span>اعتبار رایگان</span><b>۱۲۰٬۰۰۰ تومان</b></div><div><span>بدهی</span><b>۰ تومان</b></div><button className="client-button" onClick={signOut}>خروج مشتری</button></div>}</section>}
+    {panel && panel !== 'operator' && panel !== 'apps' && <section className="client-panel"><header><b>{panel === 'apps' ? 'نرم‌افزارها' : panel === 'buffet' ? 'منوی بوفه' : 'حساب من'}</b><button onClick={() => setPanel(null)}>×</button></header>panel === 'buffet' ? <div className="client-buffet-list">{buffetItems.map(item => <div key={item.name}><span>{item.icon} {item.name}</span><b>{money(item.price)} ت</b><button onClick={() => notify(`درخواست ${item.name} برای اپراتور ثبت شد`)}>+</button></div>)}</div> : <div className="client-account-info"><div><span>نام کاربری</span><b>{customerCode || 'مهمان'}</b></div><div><span>کیف پول</span><b>{money(wallet)} تومان</b></div><div><span>اعتبار رایگان</span><b>۱۲۰٬۰۰۰ تومان</b></div><div><span>بدهی</span><b>۰ تومان</b></div><button className="client-button" onClick={signOut}>خروج مشتری</button></div>}</section>}
 
     {context && <section className="client-context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}><strong>{activeGame ? `بازی: ${games.find(game => game.id === activeGame)?.name}` : 'ابزار کلاینت'}</strong><button onClick={() => doContextAction('internet')}>🌐 تغییر اینترنت / Online · Offline <kbd>Ctrl+I</kbd></button><button onClick={() => doContextAction('move')}>🔀 جابه‌جایی شناسه به سیستم دیگر <kbd>Ctrl+M</kbd></button><button onClick={() => doContextAction('login')}>🔄 ورود / خروج با شناسه <kbd>Ctrl+L</kbd></button><button onClick={() => doContextAction('charge')}>💰 درخواست شارژ از اپراتور <kbd>Ctrl+R</kbd></button><button onClick={() => doContextAction('message')}>💬 ارسال پیام به اپراتور <kbd>Ctrl+P</kbd></button>{activeGame && <button onClick={() => doContextAction('stop-game')}>■ توقف بازی</button>}<button onClick={() => doContextAction('lock')}>🔒 قفل کردن سیستم <kbd>Win+L</kbd></button><button onClick={() => doContextAction('logout')}>🚪 خروج مشتری و بستن وقت</button><button onClick={() => { setContext(null); setAdminDialog('operator'); }}>🧑‍💼 ورود اپراتور / زمان نامحدود</button><button onClick={() => { setContext(null); setAdminDialog('release'); }}>🔓 آزادسازی Windows · Restart · Shutdown</button></section>}
 
