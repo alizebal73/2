@@ -490,6 +490,36 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
         </div>}
       </section>
     )}
+    <div className="recent-actions-bar">
+      <button type="button" className="recent-actions-trigger" onClick={() => setRecentActionsOpen(value => !value)} aria-expanded={recentActionsOpen}>
+        ◷ آخرین عملیات
+        <span>{sessionTimeline.length ? Math.min(9, sessionTimeline.length).toLocaleString('fa-IR') : '۰'}</span>
+      </button>
+      <span className="recent-actions-summary">{sessionTimeline.length ? 'آخرین تغییرات ثبت‌شده در همین نشست کاری' : 'هنوز عملیاتی در این نشست ثبت نشده است'}</span>
+    </div>
+    {recentActionsOpen && (
+      <section className="recent-actions-panel" aria-label="عملیات اخیر اپراتور">
+        <div className="recent-actions-head">
+          <div><strong>عملیات اخیر اپراتور</strong><small>برای پیگیری سریع کارهای چند دقیقه اخیر، بدون رفتن به گزارش‌ها</small></div>
+          <button type="button" className="btn sm" onClick={() => setRecentActionsOpen(false)}>بستن</button>
+        </div>
+        {sessionTimeline.length === 0 ? <div className="recent-actions-empty">در این نشست هنوز عملیاتی ثبت نشده است.</div> : (
+          <div className="recent-actions-list">
+            {sessionTimeline.slice(0, 9).map(item => {
+              const station = stations.find(row => row.id === item.stationId);
+              return <div className="recent-action-item" key={item.id}>
+                <span className={'recent-action-dot ' + item.kind} />
+                <div className="recent-action-main">
+                  <strong>{item.title}</strong>
+                  <small>{station?.name ?? 'ایستگاه حذف‌شده'} · {item.detail}</small>
+                </div>
+                <time>{new Date(item.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</time>
+              </div>;
+            })}
+          </div>
+        )}
+      </section>
+    )}
 <div className="toolbar dashboard-toolbar">
       <div className="zone-filter">{Object.entries(zoneLabels).map(([key, label]) => <button key={key} type="button" className={zone === key ? 'active' : ''} onClick={() => setZone(key as ZoneKey)}>{label}</button>)}</div>
       <div className="search-box"><input aria-label="جست‌وجوی ایستگاه" value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی ایستگاه…" /></div>
