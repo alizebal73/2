@@ -61,18 +61,6 @@ set "PATH=%NODE_HOME%;%PATH%"
 echo [OK] .NET: %DOTNET_EXE%
 echo [OK] npm  : %NPM_EXE%
 
-"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-NetTCPConnection -LocalPort 5080 -State Listen -ErrorAction SilentlyContinue; if($p){Write-Host '[ERROR] Port 5080 is already in use. Close the previous GameNet Server window first.'; exit 1}"
-if errorlevel 1 (
-  pause
-  exit /b 1
-)
-
-"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$p=Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue; if($p){Write-Host '[ERROR] Port 5173 is already in use. Close the previous GameNet Dashboard window first.'; exit 1}"
-if errorlevel 1 (
-  pause
-  exit /b 1
-)
-
 echo [1/5] Downloading latest main...
 if exist "%DOWNLOAD%" del /q "%DOWNLOAD%" >nul 2>nul
 if exist "%EXTRACT%" rmdir /s /q "%EXTRACT%" >nul 2>nul
