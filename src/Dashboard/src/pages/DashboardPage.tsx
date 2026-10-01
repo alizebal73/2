@@ -7,7 +7,7 @@ const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه�
 const stateLabels: Record<StationState, string> = { free: 'آزاد', busy: 'در حال بازی', reserved: 'رزرو', off: 'خارج از سرویس' };
 const emptyStations: StationDto[] = [];
 type ViewMode = 'v-card' | 'v-compact' | 'v-list';
-type ModalKind = 'start' | 'flow' | 'charge' | 'settle' | null;
+type ModalKind = 'start' | 'flow' | 'charge' | 'settle' | 'extend' | null;
 type Invoice = { station: string; total: number; payment: string; closedAt: string };
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
@@ -42,6 +42,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [message, setMessage] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
+  const [extendMinutes, setExtendMinutes] = useState(30);
+  const [customExtendMinutes, setCustomExtendMinutes] = useState('30');
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [roundingEnabled, setRoundingEnabled] = useState(true);
   const [hotkeys, setHotkeys] = useState<Record<string,string>>(() => { try { return JSON.parse(localStorage.getItem('gamenet-hotkeys-v1') || '{}'); } catch { return {}; } });
 
   const stations = stationOverrides ?? snapshot?.stations ?? emptyStations;
@@ -149,6 +153,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     setAmount('');
     setChargeTarget('session');
     setCustomerCode(station?.customerCode ?? '');
+    setDiscountPercent(0);
+    setRoundingEnabled(true);
+    setExtendMinutes(30);
+    setCustomExtendMinutes('30');
     setContext(null);
     setModal(kind);
   }
@@ -162,17 +170,67 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     if (!activeStation) return;
     const elapsed = duration(activeStation);
     const timeCost = (activeStation.sessionRate ?? activeStation.ratePerHour) * elapsed / 60;
-    const total = Math.max(0, Math.round(timeCost + (activeStation.buffetTotal ?? 0)));
+    const baseTotal = Math.max(0, Math.round(timeCost + (activeStation.buffetTotal ?? 0)));
+    const discount = Math.min(baseTotal, Math.round(baseTotal * Math.max(0, Math.min(100, discountPercent)) / 100));
+    const discountedTotal = Math.max(0, baseTotal - discount);
+    const finalTotal = roundingEnabled ? Math.round(discountedTotal / 1000) * 1000 : discountedTotal;
     const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
-    if (method === 'wallet' && (!customer || customer.wallet < total)) { setMessage('موجودی کیف پول کافی نیست'); return; }
+    if (method === 'wallet' && (!customer || customer.wallet < finalTotal)) { setMessage('موجودی کیف پول کافی نیست'); return; }
     const closedAt = new Date().toISOString();
-    setInvoices(items => [{ station: activeStation.name, total, payment: method, closedAt }, ...items]);
-    void mockService.addReportRow({ id: crypto.randomUUID(), station: activeStation.name, timeAmount: Math.round(timeCost), buffet: activeStation.buffetTotal ?? 0, packageAmount: 0, amount: total, method: method === 'cash' ? 'cash' : method === 'card' ? 'card' : 'wallet', operator: 'علی محمدی', type: 'time', closedAt });
-    if (method === 'wallet' && customer) setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet - total, transactionHistory: ['تسویه کیف پول · ' + money(total) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
-    updateStation(activeStation.id, { state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined, customerCode: undefined, persons: undefined, buffetTotal: undefined });
+    setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt }, ...items]);
+    void mockService.addReportRow({
+      id: crypto.randomUUID(),
+      station: activeStation.name,
+      timeAmount: Math.round(timeCost),
+      buffet: activeStation.buffetTotal ?? 0,
+      packageAmount: 0,
+      amount: finalTotal,
+      method: method === 'cash' ? 'cash' : method === 'card' ? 'card' : 'wallet',
+      operator: 'علی محمدی',
+      type: 'time',
+      closedAt
+    });
+    if (method === 'wallet' && customer) {
+      setCustomers(current => current.map(item => item.id === customer.id
+        ? { ...item, wallet: item.wallet - finalTotal, transactionHistory: ['تسویه کیف پول · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
+        : item));
+    }
+    updateStation(activeStation.id, {
+      state: 'free',
+      startedAt: undefined,
+      sessionMinutes: undefined,
+      sessionRate: undefined,
+      amountSoFar: undefined,
+      customerCode: undefined,
+      persons: undefined,
+      buffetTotal: undefined
+    });
     setModal(null);
-    setMessage('تسویه ' + money(total) + ' تومان ثبت شد؛ فاکتور در تاریخچه باقی ماند');
+    setMessage('تسویه ' + money(finalTotal) + ' تومان ثبت شد؛ فاکتور در تاریخچه باقی ماند');
   }
+
+  function completeExtend() {
+    if (!activeStation || activeStation.state !== 'busy') {
+      setMessage('جلسه فعالی برای تمدید وجود ندارد');
+      setModal(null);
+      return;
+    }
+    const minutes = extendMinutes === -1
+      ? Math.max(1, Number(customExtendMinutes.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))) || 0)
+      : extendMinutes;
+    if (!minutes) {
+      setMessage('مدت تمدید معتبر نیست');
+      return;
+    }
+    const nextMinutes = duration(activeStation) + minutes;
+    updateStation(activeStation.id, {
+      sessionMinutes: nextMinutes,
+      startedAt: new Date(Date.now() - nextMinutes * 60000).toISOString()
+    });
+    setModal(null);
+    setMessage(`${money(minutes)} دقیقه به جلسه ${activeStation.name} اضافه شد`);
+  }
+
   function applyCharge(method: string) {
     const value = number(amount);
     if (!value || !activeStation) { setMessage('مبلغ معتبر وارد کنید'); return; }
@@ -204,6 +262,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     setContext(null);
     if (!station) return;
     if (action === 'settle') { open('settle', station); return; }
+    if (action === 'extend') { open('extend', station); return; }
     if (action === 'offline') {
       updateStation(station.id, { state: station.state === 'off' ? 'free' : 'off', outOfServiceReason: station.state === 'off' ? undefined : 'تعمیر و نگهداری' });
       setMessage(station.state === 'off' ? 'ایستگاه فعال شد' : 'ایستگاه خارج از سرویس شد'); return;
@@ -253,14 +312,21 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       return <section key={key}><div className="section-title">{title} · {items.length}</div><div className={`station-grid ${view}`} style={{ '--card-min': `${(view === 'v-compact' ? 128 : 168) * zoom / 100}px` } as CSSProperties}>{items.map(renderStation)}</div></section>;
     }) : <div className={`station-grid ${view}`} style={{ '--card-min': `${(view === 'v-compact' ? 128 : 168) * zoom / 100}px` } as CSSProperties}>{visibleStations.map(renderStation)}</div>}
 
-    {context && <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}><strong>{context.station.name} · {stateLabels[context.station.state as StationState]}</strong><button onClick={() => contextAction('settle')}>🧾 تسویه و بستن جلسه</button><button onClick={() => contextAction('switch-net')}>🌐 تغییر اینترنت ۱ ↔ ۲</button><button onClick={() => contextAction('move-user')}>🔀 جابه‌جایی یوزر</button><button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button><button onClick={() => contextAction('login-id')}>🔑 ورود با شناسه</button><button onClick={() => contextAction('message')}>💬 پیام به مشتری</button><button onClick={() => contextAction('screenshot')}>📸 اسکرین‌شات</button><button onClick={() => contextAction('restart-shell')}>🔄 ری‌استارت Shell</button><button onClick={() => contextAction('restart')}>⏻ ری‌استارت Windows</button><button onClick={() => contextAction('shutdown')}>⛔ خاموش کردن</button><button onClick={() => contextAction('offline')}>🛠 خارج از سرویس / فعال‌سازی</button><button onClick={() => contextAction('settings')}>⚙ تنظیمات کامل کلاینت</button></div>}
+    {context && <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}><strong>{context.station.name} · {stateLabels[context.station.state as StationState]}</strong><button onClick={() => contextAction('settle')}>🧾 تسویه و بستن جلسه</button><button onClick={() => contextAction('extend')}>⏱ تمدید وقت</button><button onClick={() => contextAction('switch-net')}>🌐 تغییر اینترنت ۱ ↔ ۲</button><button onClick={() => contextAction('move-user')}>🔀 جابه‌جایی یوزر</button><button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button><button onClick={() => contextAction('login-id')}>🔑 ورود با شناسه</button><button onClick={() => contextAction('message')}>💬 پیام به مشتری</button><button onClick={() => contextAction('screenshot')}>📸 اسکرین‌شات</button><button onClick={() => contextAction('restart-shell')}>🔄 ری‌استارت Shell</button><button onClick={() => contextAction('restart')}>⏻ ری‌استارت Windows</button><button onClick={() => contextAction('shutdown')}>⛔ خاموش کردن</button><button onClick={() => contextAction('offline')}>🛠 خارج از سرویس / فعال‌سازی</button><button onClick={() => contextAction('settings')}>⚙ تنظیمات کامل کلاینت</button></div>}
     {modal && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setModal(null)}><section className="operation-modal" role="dialog" aria-modal="true">
       <button className="modal-close" onClick={() => setModal(null)} aria-label="بستن">×</button>
-      {modal === 'start' && <><h2>شروع جلسه · {activeStation?.name ?? 'انتخاب ایستگاه آزاد'}</h2><label>ایستگاه<select value={activeStation?.id ?? ''} onChange={event => setActiveStation(stations.find(item => item.id === event.target.value) ?? null)}>{stations.filter(item => item.state === 'free').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>مشتری<select value={customerCode} onChange={event => setCustomerCode(event.target.value)}><option value="">مهمان</option>{customers.map(item => <option key={item.id} value={item.username}>{item.code ?? item.username} · {item.name}</option>)}</select></label><label>تعرفه<select><option value="station">تعرفه ایستگاه · {money(activeStation?.ratePerHour ?? 0)} تومان</option><option value="night">تعرفه شبانه</option></select></label><div className="person-choice">{[1, 2, 3, 4].map(item => <button key={item} className={persons === item ? 'active' : ''} onClick={() => setPersons(item)}>{money(item)} نفر</button>)}</div><div className="person-choice"><button className={paymentMode === 'settle-later' ? 'active' : ''} onClick={() => setPaymentMode('settle-later')}>تسویه بعد از بازی</button><button className={paymentMode === 'prepaid' ? 'active' : ''} onClick={() => setPaymentMode('prepaid')}>پیش‌پرداخت / شارژی</button></div><div className="modal-actions"><button className="btn primary" onClick={startSession}>▶ شروع بازی</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
+      {modal === 'start' && <><h2>شروع جلسه · {activeStation?.name ?? 'انتخاب ایستگاه آزاد'}</h2><label>ایستگاه<select value={activeStation?.id ?? ''} onChange={event => setActiveStation(stations.find(item => item.id === event.target.value) ?? null)}>{stations.filter(item => item.state === 'free').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>مشتری<select value={customerCode} onChange={event => setCustomerCode(event.target.value)}><option value="">مهمان</option>{customers.map(item => <option key={item.id} value={item.username}>{item.code ?? item.username} · {item.name}</option>)}</select></label>{customerCode && (() => { const selectedCustomer = customers.find(item => item.username === customerCode || item.code === customerCode); if (!selectedCustomer) return null; const used = selectedCustomer.hoursUsedToday ?? 0; const cap = selectedCustomer.dailyHourCap ?? 0; const remaining = Math.max(0, cap - used); return <div className="package-box"><div className="title"><strong>{selectedCustomer.packageName ?? 'بدون پکیج VIP'}</strong><span className={`vip-tag ${selectedCustomer.vip}`}>{selectedCustomer.vip === 'gold' ? 'Gold' : selectedCustomer.vip === 'silver' ? 'Silver' : 'None'}</span></div><div className="info-row"><span>مصرف امروز</span><strong>{used} ساعت</strong></div><div className="info-row"><span>باقی‌مانده روزانه</span><strong>{selectedCustomer.packageName ? `${remaining} ساعت` : 'بدون سقف پکیج'}</strong></div>{selectedCustomer.packageName && used >= cap && <strong className="limit-warning">سقف روزانه تکمیل شده؛ زمان مازاد طبق قانون پکیج محاسبه می‌شود.</strong>}</div>; })()}<label>تعرفه<select><option value="station">تعرفه ایستگاه · {money(activeStation?.ratePerHour ?? 0)} تومان</option><option value="night">تعرفه شبانه</option></select></label><div className="person-choice">{[1, 2, 3, 4].map(item => <button key={item} className={persons === item ? 'active' : ''} onClick={() => setPersons(item)}>{money(item)} نفر</button>)}</div><div className="person-choice"><button className={paymentMode === 'settle-later' ? 'active' : ''} onClick={() => setPaymentMode('settle-later')}>تسویه بعد از بازی</button><button className={paymentMode === 'prepaid' ? 'active' : ''} onClick={() => setPaymentMode('prepaid')}>پیش‌پرداخت / شارژی</button></div><div className="modal-actions"><button className="btn primary" onClick={startSession}>▶ شروع بازی</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
       {modal === 'flow' && <><h2>⚡ فلوی سرعت · F1</h2>{flowStep === 1 ? <><label>شناسه مشتری<input autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && setFlowStep(2)} placeholder="کد، نام، لقب یا موبایل" /></label><button className="btn primary" onClick={() => setFlowStep(2)}>نمایش پروفایل</button></> : <><p>{customers.find(item => [item.username, item.mobile, item.id, item.name].some(value => value.includes(customerCode)))?.name ?? 'مشتری مهمان'} · {activeStation?.name ?? 'بدون دستگاه'}</p><label>مبلغ (تومان)<input id="flow-amount" inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label><div className="amount-presets">{[50000, 100000, 200000, 500000].map(value => <button key={value} onClick={() => setAmount(String(value))}>{money(value)}</button>)}</div><div className="modal-actions">{[['F5', 'شارژ مستقیم'], ['F6', 'ثبت بدهی'], ['F7', 'کسر از کیف پول'], ['F8', 'کسر کیف پول + بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyFlow(key)}>{key} {label}</button>)}</div></>}</>}
       {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><div className="amount-presets">{[50000, 100000, 200000, 500000].map(value => <button key={value} onClick={() => setAmount(String(value))}>{money(value)}</button>)}</div><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول'], ['debt', 'ثبت در بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
-      {modal === 'settle' && activeStation && <><h2>تسویه جلسه · {activeStation.name}</h2><div className="info-row"><span>مدت جلسه</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="info-row"><span>مبلغ زمان</span><strong>{money((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60)} تومان</strong></div><div className="info-row"><span>مبلغ بوفه</span><strong>{money(activeStation.buffetTotal ?? 0)} تومان</strong></div><div className="info-row"><span>مبلغ نهایی</span><strong>{money((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60 + (activeStation.buffetTotal ?? 0))} تومان</strong></div><div className="modal-actions"><button className="btn" onClick={() => finishSession('cash')}>پرداخت نقدی</button><button className="btn" onClick={() => finishSession('card')}>کارتخوان</button><button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button><button className="btn" onClick={() => window.print()}>چاپ فاکتور</button><button className="btn" onClick={() => { updateStation(activeStation.id, { sessionMinutes: duration(activeStation) + 30, startedAt: new Date(Date.now() - (duration(activeStation) + 30) * 60000).toISOString() }); setModal(null); setMessage('۳۰ دقیقه تمدید شد'); }}>تمدید وقت</button></div></>}
+      {modal === 'settle' && activeStation && (() => {
+      const baseTotal = Math.max(0, Math.round((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60 + (activeStation.buffetTotal ?? 0)));
+      const discount = Math.min(baseTotal, Math.round(baseTotal * Math.max(0, Math.min(100, discountPercent)) / 100));
+      const discounted = Math.max(0, baseTotal - discount);
+      const finalTotal = roundingEnabled ? Math.round(discounted / 1000) * 1000 : discounted;
+      return <><h2>تسویه جلسه · {activeStation.name}</h2><div className="info-row"><span>مدت جلسه</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="info-row"><span>مبلغ زمان</span><strong>{money(Math.round((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60))} تومان</strong></div><div className="info-row"><span>مبلغ بوفه</span><strong>{money(activeStation.buffetTotal ?? 0)} تومان</strong></div><div className="modal-grid-2"><label>تخفیف (%)<input type="number" min="0" max="100" value={discountPercent} onChange={event => setDiscountPercent(Number(event.target.value))} /></label><label className="setting-item"><span>رند به ۱۰۰۰ تومان</span><input type="checkbox" checked={roundingEnabled} onChange={event => setRoundingEnabled(event.target.checked)} /></label></div><div className="info-row"><span>تخفیف</span><strong>{money(discount)} تومان</strong></div><div className="info-row"><span>مبلغ نهایی</span><strong>{money(finalTotal)} تومان</strong></div><div className="modal-actions"><button className="btn" onClick={() => finishSession('cash')}>پرداخت نقدی</button><button className="btn" onClick={() => finishSession('card')}>کارتخوان</button><button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button><button className="btn" onClick={() => window.print()}>چاپ فاکتور</button></div></>;
+    })()}
     </section></div>}
+      {modal === 'extend' && activeStation && <><h2>⏱ تمدید جلسه · {activeStation.name}</h2><div className="info-row"><span>زمان فعلی</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="person-choice">{[[15,'۱۵ دقیقه'],[30,'۳۰ دقیقه'],[60,'۱ ساعت'],[120,'۲ ساعت'],[-1,'مدت دلخواه']].map(([value,label]) => <button key={String(value)} className={extendMinutes === value ? 'active' : ''} onClick={() => setExtendMinutes(Number(value))}>{label}</button>)}</div>{extendMinutes === -1 && <label>مدت دلخواه (دقیقه)<input autoFocus type="number" min="1" value={customExtendMinutes} onChange={event => setCustomExtendMinutes(event.target.value)} /></label>}<div className="modal-actions"><button className="btn primary" onClick={completeExtend}>ثبت تمدید</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
     {message && <div className="operation-toast" role="status">{message}</div>}
     <div className="status-footer">{snapshot?.generatedAt ? `آخرین به‌روزرسانی ${new Date(snapshot.generatedAt).toLocaleTimeString('fa-IR')}` : 'در انتظار دریافت داده'} · {serverInfo?.environment ?? 'Development'} · {invoices.length} فاکتور ثبت‌شده</div>
   </>;
