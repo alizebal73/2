@@ -2289,3 +2289,97 @@ button:focus-visible {
     width: 100%;
   }
 }
+
+
+.session-timeline-panel {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0b1324;
+}
+
+.session-timeline {
+  display: grid;
+  gap: 4px;
+  max-height: 250px;
+  overflow: auto;
+}
+
+.session-timeline-item {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+}
+
+.session-timeline-item:hover {
+  background: #111b30;
+}
+
+.session-timeline-item > div {
+  min-width: 0;
+}
+
+.session-timeline-item strong,
+.session-timeline-item small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-timeline-item strong {
+  font-size: 10.5px;
+}
+
+.session-timeline-item small {
+  margin-top: 2px;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.session-timeline-item time {
+  color: var(--dim);
+  font-size: 8.5px;
+  white-space: nowrap;
+}
+
+.session-timeline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+
+.session-timeline-dot.start,
+.session-timeline-dot.resume {
+  background: var(--green);
+}
+
+.session-timeline-dot.pause {
+  background: var(--orange);
+}
+
+.session-timeline-dot.charge,
+.session-timeline-dot.settle {
+  background: var(--gold);
+}
+
+.session-timeline-dot.extend,
+.session-timeline-dot.reduce {
+  background: var(--purple);
+}
+
+.session-timeline-dot.buffet {
+  background: var(--cyan);
+}
+
+.session-timeline-empty {
+  padding: 18px 10px;
+  color: var(--dim);
+  font-size: 10px;
+  text-align: center;
+}
