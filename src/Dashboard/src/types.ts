@@ -11,7 +11,7 @@ export type PageKey =
   | 'client-shell'
   | 'operations';
 
-export type StationState = 'free' | 'busy' | 'reserved' | 'off';
+export type StationState = 'free' | 'busy' | 'paused' | 'reserved' | 'off';
 export type ZoneKey = 'all' | 'pc' | 'console' | 'table';
 
 export type StationDto = {
@@ -29,6 +29,8 @@ export type StationDto = {
   sessionMinutes?: number;
   sessionRate?: number;
   amountSoFar?: number;
+  pausedAt?: string;
+  pausedMinutes?: number;
   network?: 1 | 2;
   outOfServiceReason?: string;
 };
@@ -51,7 +53,7 @@ export type SessionInvoice = {
   timeAmount: number;
   buffetAmount: number;
   totalAmount: number;
-  paymentMethod: 'cash' | 'card' | 'wallet';
+  paymentMethod: 'cash' | 'card' | 'wallet' | 'debt';
   closedAt: string;
 };
 
@@ -78,6 +80,7 @@ export type CustomerRecord = {
   wallet: number;
   debt: number;
   giftCredit: number;
+  freeTimeMinutes?: number;
   discountLevel: number;
   packageName?: string;
   username: string;
@@ -107,6 +110,17 @@ export type UserRecord = {
   permissions: string[];
 };
 
+export type PricingScheduleRule = {
+  id: string;
+  weekdays: number[];
+  startMinute: number;
+  endMinute: number;
+  pricePerHour: number;
+  minimumCharge?: number;
+  priority?: number;
+  active?: boolean;
+};
+
 export type TariffRecord = {
   id: string;
   title: string;
@@ -118,6 +132,9 @@ export type TariffRecord = {
   nightRate: number;
   nightHours: string;
   active: boolean;
+  minimumCharge?: number;
+  roundingStep?: number;
+  schedule?: PricingScheduleRule[];
 };
 
 export type GameRecord = {
