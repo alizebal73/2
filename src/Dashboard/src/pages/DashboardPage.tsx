@@ -24,7 +24,8 @@ type Props = {
 
 type ContextMenu = { x: number; y: number; station: StationDto } | null;
 type AttentionKind = 'action' | 'warning' | 'info';
-type AttentionItem = { id: string; kind: AttentionKind; station: StationDto; title: string; detail: string; actionLabel: string; };
+type SessionFollowUp = { id: string; stationId: string; stationName: string; customerCode: string; amount: number; createdAt: string; status: 'watching' | 'unpaid' | 'paid'; };
+type AttentionItem = { id: string; kind: AttentionKind; station: StationDto; title: string; detail: string; actionLabel: string; followUpId?: string; };
 
 export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Props) {
   const [stationOverrides, setStationOverrides] = useState<StationDto[] | null>(null);
@@ -38,12 +39,14 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [tariffs, setTariffs] = useState<import('../types').TariffRecord[]>([]);
   const [customerCode, setCustomerCode] = useState('');
-  const [persons, setPersons] = useState(2);
+  const [persons, setPersons] = useState(1);
+  const [manualRate, setManualRate] = useState('');
   const [paymentMode, setPaymentMode] = useState<'settle-later' | 'prepaid'>('settle-later');
   const [amount, setAmount] = useState('');
   const [chargeTarget, setChargeTarget] = useState<'session' | 'wallet' | 'discount'>('session');
   const [context, setContext] = useState<ContextMenu>(null);
   const [attentionOpen, setAttentionOpen] = useState(false);
+  const [sessionFollowUps, setSessionFollowUps] = useState<SessionFollowUp[]>([]);
   const [message, setMessage] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
@@ -159,8 +162,26 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
 
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const items: AttentionItem[] = [];
+    const followUpsByStation = new Map(sessionFollowUps.filter(item => item.status !== 'paid').map(item => [item.stationId, item]));
     for (const station of stations) {
       if (station.state === 'paused') items.push({ id: `paused-${station.id}`, kind: 'action', station, title: `${station.name} · جلسه متوقف`, detail: station.customerCode ? `مشتری ${station.customerCode} منتظر ادامه جلسه است.` : 'جلسه مهمان متوقف شده و نیازمند بررسی است.', actionLabel: 'ادامه جلسه' });
+      if (station.state === 'busy' && station.prepaidEndsAt) {
+        const minutesUntil = Math.ceil((new Date(station.prepaidEndsAt).getTime() - now) / 60000);
+        if (minutesUntil <= 0) items.push({ id: `prepaid-ended-${station.id}`, kind: 'action', station, title: `${station.name} · اعتبار تمام شد`, detail: station.customerCode ? `اعتبار شارژ مشتری ${station.customerCode} تمام شده است؛ تمدید یا پایان جلسه را بررسی کنید.` : 'اعتبار شارژ جلسه تمام شده است؛ تمدید یا پایان جلسه را بررسی کنید.', actionLabel: 'بررسی جلسه' });
+        else if (minutesUntil <= 10) items.push({ id: `prepaid-low-${station.id}`, kind: 'warning', station, title: `${station.name} · کمتر از ${minutesUntil} دقیقه اعتبار`, detail: 'شارژ دستی این جلسه رو به پایان است.', actionLabel: 'مشاهده' });
+      }
+      const followUp = followUpsByStation.get(station.id);
+      if (followUp) {
+        items.push({
+          id: `followup-${followUp.id}`,
+          kind: followUp.status === 'unpaid' ? 'action' : 'info',
+          station,
+          followUpId: followUp.id,
+          title: followUp.status === 'unpaid' ? `${station.name} · پرداخت هنوز مانده` : `${station.name} · شارژ دستی ثبت شده`,
+          detail: `یوزر ${followUp.customerCode || 'مهمان'} · ${money(followUp.amount)} تومان`,
+          actionLabel: followUp.status === 'unpaid' ? 'یادآوری پرداخت' : 'مشاهده',
+        });
+      }
       if (station.state === 'off') items.push({ id: `off-${station.id}`, kind: 'action', station, title: `${station.name} · خارج از سرویس`, detail: station.outOfServiceReason ?? 'ایستگاه برای استفاده عادی در دسترس نیست.', actionLabel: 'بررسی ایستگاه' });
       if (station.state === 'reserved' && station.reservationAt) {
         const reservationMs = new Date(station.reservationAt).getTime();
@@ -169,7 +190,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       }
     }
     return items.sort((a, b) => { const rank: Record<AttentionKind, number> = { action: 0, warning: 1, info: 2 }; return rank[a.kind] - rank[b.kind]; });
-  }, [stations, now]);
+  }, [stations, now, sessionFollowUps]);
 
   const attentionCounts = useMemo(() => ({ total: attentionItems.length, action: attentionItems.filter(item => item.kind === 'action').length, warning: attentionItems.filter(item => item.kind === 'warning').length }), [attentionItems]);
 
@@ -180,6 +201,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     setQuery(item.station.name);
     window.setTimeout(() => { document.getElementById(`station-${item.station.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80);
     if (item.kind === 'action' && item.station.state === 'paused') { resumeSession(item.station); return; }
+    if (item.kind === 'action' && item.station.state === 'busy' && item.station.prepaidEndsAt) { open('charge', item.station); return; }
+    if (item.followUpId && item.kind === 'action') { setMessage('پرداخت این مبلغ را از مشتری پیگیری کنید'); return; }
     if (item.kind === 'action' && item.station.state === 'off') { openContextAt(window.innerWidth / 2, Math.min(window.innerHeight - 80, 260), item.station); return; }
     setMessage(item.detail);
   }
@@ -187,6 +210,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   function open(kind: ModalKind, station: StationDto | null = null) {
     setActiveStation(station);
     setAmount('');
+    setManualRate(station ? String(Math.round(station.ratePerHour)) : '');
+    setPersons(station?.zone === 'pc' ? 1 : 2);
     setChargeTarget('session');
     setCustomerCode(station?.customerCode ?? '');
     setDiscountPercent(0);
@@ -226,10 +251,12 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       roundingStep: roundingEnabled ? (tariff?.roundingStep ?? 1000) : 0,
     });
     const timeCost = billing.timeAmount;
-    const finalTotal = billing.finalAmount;
+    const prepaidUsed = Math.min(billing.finalAmount, activeStation.sessionCredit ?? 0);
+    const finalTotal = Math.max(0, billing.finalAmount - prepaidUsed);
     if (method === 'wallet' && (!customer || customer.wallet < finalTotal)) { setMessage('موجودی کیف پول کافی نیست'); return; }
     const closedAt = new Date().toISOString();
     setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt }, ...items]);
+    setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: method === 'debt' ? 'unpaid' : 'paid' } : item));
     void mockService.addReportRow({
       id: crypto.randomUUID(),
       station: activeStation.name,
@@ -247,6 +274,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
         ? { ...item, wallet: item.wallet - finalTotal, transactionHistory: ['تسویه کیف پول · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
         : item));
     }
+    if (method === 'debt' && customer) {
+      setCustomers(current => current.map(item => item.id === customer.id
+        ? { ...item, debt: item.debt + finalTotal, transactionHistory: ['ثبت بدهی تسویه · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
+        : item));
+    }
     updateStation(activeStation.id, {
       state: 'free',
       startedAt: undefined,
@@ -255,7 +287,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       amountSoFar: undefined,
       customerCode: undefined,
       persons: undefined,
-      buffetTotal: undefined
+      buffetTotal: undefined,
+      sessionCredit: undefined,
+      prepaidEndsAt: undefined
     });
     setModal(null);
     setMessage('تسویه ' + money(finalTotal) + ' تومان ثبت شد؛ فاکتور در تاریخچه باقی ماند');
@@ -321,9 +355,19 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet + value, discountLevel: chargeTarget === 'discount' ? item.discountLevel + 1 : item.discountLevel, transactionHistory: [(chargeTarget === 'discount' ? 'شارژ + تخفیف' : 'شارژ کیف پول') + ' · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
       setMessage(chargeTarget === 'discount' ? 'شارژ + تخفیف ثبت شد' : 'کیف پول شارژ شد');
     } else if (activeStation.state === 'busy') {
-      const extraMinutes = value / ((activeStation.sessionRate ?? activeStation.ratePerHour) / 60);
-      updateStation(activeStation.id, { sessionMinutes: duration(activeStation) + extraMinutes, startedAt: new Date(Date.now() - (duration(activeStation) + extraMinutes) * 60000).toISOString() });
-      setMessage(money(value) + ' تومان به زمان جلسه اضافه شد');
+      const rate = activeStation.sessionRate ?? activeStation.ratePerHour;
+      const extraMinutes = rate > 0 ? value / (rate / 60) : 0;
+      const currentEnd = activeStation.prepaidEndsAt ? new Date(activeStation.prepaidEndsAt).getTime() : Date.now();
+      const base = Math.max(Date.now(), currentEnd);
+      const prepaidEndsAt = new Date(base + Math.max(0, extraMinutes) * 60000).toISOString();
+      updateStation(activeStation.id, {
+        sessionMinutes: duration(activeStation) + extraMinutes,
+        startedAt: new Date(Date.now() - (duration(activeStation) + extraMinutes) * 60000).toISOString(),
+        sessionCredit: (activeStation.sessionCredit ?? 0) + value,
+        prepaidEndsAt,
+      });
+      setSessionFollowUps(current => [...current, { id: crypto.randomUUID(), stationId: activeStation.id, stationName: activeStation.name, customerCode: activeStation.customerCode ?? customer?.code ?? 'مهمان', amount: value, createdAt: new Date().toISOString(), status: 'watching' }]);
+      setMessage(money(value) + ' تومان شارژ شد؛ پیگیری آن در «نیازمند توجه» ثبت شد');
     } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
     setModal(null);
   }
@@ -457,15 +501,15 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     </div>}
     {modal && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setModal(null)}><section className="operation-modal" role="dialog" aria-modal="true">
       <button className="modal-close" onClick={() => setModal(null)} aria-label="بستن">×</button>
-      {modal === 'start' && <><h2>شروع جلسه · {activeStation?.name ?? 'انتخاب ایستگاه آزاد'}</h2><label>ایستگاه<select value={activeStation?.id ?? ''} onChange={event => setActiveStation(stations.find(item => item.id === event.target.value) ?? null)}>{stations.filter(item => item.state === 'free').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>مشتری<select value={customerCode} onChange={event => setCustomerCode(event.target.value)}><option value="">مهمان</option>{customers.map(item => <option key={item.id} value={item.username}>{item.code ?? item.username} · {item.name}</option>)}</select></label>{customerCode && (() => { const selectedCustomer = customers.find(item => item.username === customerCode || item.code === customerCode); if (!selectedCustomer) return null; const used = selectedCustomer.hoursUsedToday ?? 0; const cap = selectedCustomer.dailyHourCap ?? 0; const remaining = Math.max(0, cap - used); return <div className="package-box"><div className="title"><strong>{selectedCustomer.packageName ?? 'بدون پکیج VIP'}</strong><span className={`vip-tag ${selectedCustomer.vip}`}>{selectedCustomer.vip === 'gold' ? 'Gold' : selectedCustomer.vip === 'silver' ? 'Silver' : 'None'}</span></div><div className="info-row"><span>مصرف امروز</span><strong>{used} ساعت</strong></div><div className="info-row"><span>باقی‌مانده روزانه</span><strong>{selectedCustomer.packageName ? `${remaining} ساعت` : 'بدون سقف پکیج'}</strong></div>{selectedCustomer.packageName && used >= cap && <strong className="limit-warning">سقف روزانه تکمیل شده؛ زمان مازاد طبق قانون پکیج محاسبه می‌شود.</strong>}</div>; })()}<label>تعرفه<select><option value="station">تعرفه ایستگاه · {money(activeStation?.ratePerHour ?? 0)} تومان</option><option value="night">تعرفه شبانه</option></select></label><div className="person-choice">{[1, 2, 3, 4].map(item => <button key={item} className={persons === item ? 'active' : ''} onClick={() => setPersons(item)}>{money(item)} نفر</button>)}</div><div className="person-choice"><button className={paymentMode === 'settle-later' ? 'active' : ''} onClick={() => setPaymentMode('settle-later')}>تسویه بعد از بازی</button><button className={paymentMode === 'prepaid' ? 'active' : ''} onClick={() => setPaymentMode('prepaid')}>پیش‌پرداخت / شارژی</button></div><div className="modal-actions"><button className="btn primary" onClick={startSession}>▶ شروع بازی</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
-      {modal === 'flow' && <><h2>⚡ فلوی سرعت · F1</h2>{flowStep === 1 ? <><label>شناسه مشتری<input autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && setFlowStep(2)} placeholder="کد، نام، لقب یا موبایل" /></label><button className="btn primary" onClick={() => setFlowStep(2)}>نمایش پروفایل</button></> : <><p>{customers.find(item => [item.username, item.mobile, item.id, item.name].some(value => value.includes(customerCode)))?.name ?? 'مشتری مهمان'} · {activeStation?.name ?? 'بدون دستگاه'}</p><label>مبلغ (تومان)<input id="flow-amount" inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label><div className="amount-presets">{[50000, 100000, 200000, 500000].map(value => <button key={value} onClick={() => setAmount(String(value))}>{money(value)}</button>)}</div><div className="modal-actions">{[['F5', 'شارژ مستقیم'], ['F6', 'ثبت بدهی'], ['F7', 'کسر از کیف پول'], ['F8', 'کسر کیف پول + بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyFlow(key)}>{key} {label}</button>)}</div></>}</>}
-      {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><div className="amount-presets">{[50000, 100000, 200000, 500000].map(value => <button key={value} onClick={() => setAmount(String(value))}>{money(value)}</button>)}</div><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول'], ['debt', 'ثبت در بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
+      {modal === 'start' && <><h2>شروع جلسه · {activeStation?.name ?? 'انتخاب ایستگاه آزاد'}</h2><label>ایستگاه<select value={activeStation?.id ?? ''} onChange={event => setActiveStation(stations.find(item => item.id === event.target.value) ?? null)}>{stations.filter(item => item.state === 'free').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>مشتری<select value={customerCode} onChange={event => setCustomerCode(event.target.value)}><option value="">مهمان</option>{customers.map(item => <option key={item.id} value={item.username}>{item.code ?? item.username} · {item.name}</option>)}</select></label>{customerCode && (() => { const selectedCustomer = customers.find(item => item.username === customerCode || item.code === customerCode); if (!selectedCustomer) return null; const used = selectedCustomer.hoursUsedToday ?? 0; const cap = selectedCustomer.dailyHourCap ?? 0; const remaining = Math.max(0, cap - used); return <div className="package-box"><div className="title"><strong>{selectedCustomer.packageName ?? 'بدون پکیج VIP'}</strong><span className={`vip-tag ${selectedCustomer.vip}`}>{selectedCustomer.vip === 'gold' ? 'Gold' : selectedCustomer.vip === 'silver' ? 'Silver' : 'None'}</span></div><div className="info-row"><span>مصرف امروز</span><strong>{used} ساعت</strong></div><div className="info-row"><span>باقی‌مانده روزانه</span><strong>{selectedCustomer.packageName ? `${remaining} ساعت` : 'بدون سقف پکیج'}</strong></div>{selectedCustomer.packageName && used >= cap && <strong className="limit-warning">سقف روزانه تکمیل شده؛ زمان مازاد طبق قانون پکیج محاسبه می‌شود.</strong>}</div>; })()}<label>نرخ این جلسه (تومان / ساعت)<input autoFocus inputMode="numeric" value={manualRate} onChange={event => setManualRate(event.target.value)} /></label>{activeStation?.zone === 'pc' ? <div className="single-person-note">رایانه برای هر جلسه فقط ۱ نفر دارد.</div> : <div className="person-choice">{[1, 2, 3, 4].map(item => <button key={item} className={persons === item ? 'active' : ''} onClick={() => setPersons(item)}>{money(item)} نفر</button>)}</div>}<div className="person-choice"><button className={paymentMode === 'settle-later' ? 'active' : ''} onClick={() => setPaymentMode('settle-later')}>تسویه بعد از بازی</button><button className={paymentMode === 'prepaid' ? 'active' : ''} onClick={() => setPaymentMode('prepaid')}>پیش‌پرداخت / شارژی</button></div><div className="modal-actions"><button className="btn primary" onClick={startSession}>▶ شروع بازی</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
+      {modal === 'flow' && <><h2>⚡ فلوی سرعت · F1</h2>{flowStep === 1 ? <><label>شناسه مشتری<input autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && setFlowStep(2)} placeholder="کد، نام، لقب یا موبایل" /></label><button className="btn primary" onClick={() => setFlowStep(2)}>نمایش پروفایل</button></> : <><p>{customers.find(item => [item.username, item.mobile, item.id, item.name].some(value => value.includes(customerCode)))?.name ?? 'مشتری مهمان'} · {activeStation?.name ?? 'بدون دستگاه'}</p><label>مبلغ (تومان)<input id="flow-amount" inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label><div className="modal-actions">{[['F5', 'شارژ مستقیم'], ['F6', 'ثبت بدهی'], ['F7', 'کسر از کیف پول'], ['F8', 'کسر کیف پول + بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyFlow(key)}>{key} {label}</button>)}</div></>}</>}
+      {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول'], ['debt', 'ثبت در بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
       {modal === 'settle' && activeStation && (() => {
       const baseTotal = Math.max(0, Math.round((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60 + (activeStation.buffetTotal ?? 0)));
       const discount = Math.min(baseTotal, Math.round(baseTotal * Math.max(0, Math.min(100, discountPercent)) / 100));
       const discounted = Math.max(0, baseTotal - discount);
       const finalTotal = roundingEnabled ? Math.round(discounted / 1000) * 1000 : discounted;
-      return <><h2>تسویه جلسه · {activeStation.name}</h2><div className="info-row"><span>مدت جلسه</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="info-row"><span>مبلغ زمان</span><strong>{money(Math.round((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60))} تومان</strong></div><div className="info-row"><span>مبلغ بوفه</span><strong>{money(activeStation.buffetTotal ?? 0)} تومان</strong></div><div className="modal-grid-2"><label>تخفیف (%)<input type="number" min="0" max="100" value={discountPercent} onChange={event => setDiscountPercent(Number(event.target.value))} /></label><label className="setting-item"><span>رند به ۱۰۰۰ تومان</span><input type="checkbox" checked={roundingEnabled} onChange={event => setRoundingEnabled(event.target.checked)} /></label></div><div className="info-row"><span>تخفیف</span><strong>{money(discount)} تومان</strong></div><div className="info-row"><span>مبلغ نهایی</span><strong>{money(finalTotal)} تومان</strong></div><div className="modal-actions"><button className="btn" onClick={() => finishSession('cash')}>پرداخت نقدی</button><button className="btn" onClick={() => finishSession('card')}>کارتخوان</button><button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button><button className="btn" onClick={() => window.print()}>چاپ فاکتور</button></div></>;
+      return <><h2>تسویه جلسه · {activeStation.name}</h2><div className="info-row"><span>مدت جلسه</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="info-row"><span>مبلغ زمان</span><strong>{money(Math.round((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60))} تومان</strong></div><div className="info-row"><span>مبلغ بوفه</span><strong>{money(activeStation.buffetTotal ?? 0)} تومان</strong></div><div className="modal-grid-2"><label>تخفیف (%)<input type="number" min="0" max="100" value={discountPercent} onChange={event => setDiscountPercent(Number(event.target.value))} /></label><label className="setting-item"><span>رند به ۱۰۰۰ تومان</span><input type="checkbox" checked={roundingEnabled} onChange={event => setRoundingEnabled(event.target.checked)} /></label></div><div className="info-row"><span>تخفیف</span><strong>{money(discount)} تومان</strong></div><div className="info-row"><span>مبلغ نهایی</span><strong>{money(finalTotal)} تومان</strong></div><div className="modal-actions"><button className="btn" onClick={() => finishSession('cash')}>پرداخت نقدی</button><button className="btn" onClick={() => finishSession('card')}>کارتخوان</button><button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button><button className="btn danger" onClick={() => finishSession('debt')}>پرداخت بعداً / ثبت بدهی</button><button className="btn" onClick={() => window.print()}>چاپ فاکتور</button></div></>;
     })()}
     </section></div>}
       {modal === 'reduce' && activeStation && <><h2>↘ کاهش زمان جلسه · {activeStation.name}</h2><div className="info-row"><span>زمان قابل صورتحساب فعلی</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="person-choice">{[[5,'۵ دقیقه'],[10,'۱۰ دقیقه'],[15,'۱۵ دقیقه'],[30,'۳۰ دقیقه'],[-1,'مدت دلخواه']].map(([value,label]) => <button key={String(value)} className={reduceMinutes === value ? 'active' : ''} onClick={() => setReduceMinutes(Number(value))}>{label}</button>)}</div>{reduceMinutes === -1 && <label>مدت دلخواه (دقیقه)<input autoFocus type="number" min="1" value={customReduceMinutes} onChange={event => setCustomReduceMinutes(event.target.value)} /></label>}<div className="modal-actions"><button className="btn primary" onClick={completeReduce}>ثبت کاهش</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
