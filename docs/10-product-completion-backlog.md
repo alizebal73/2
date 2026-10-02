@@ -481,21 +481,18 @@
 **هستهٔ مرحله ۴ تکمیل شد.** B9 تا B17 مسیرهای اصلی مالی/جلسه را روی Server/SQLite/Audit و CI/Smoke سبز تثبیت کرده‌اند. موارد مشترک Permission/Approval نهایی عمداً به مرحلهٔ ۷ منتقل شده‌اند و موارد Customer Domain که به مدل مشتری مربوط‌اند، در مرحلهٔ ۵ ادامه پیدا می‌کنند.
 
 ## شروع مرحله اصلی ۵ — Customer & VIP Domain
-### پیشروی ثبت‌شدهٔ مرحله ۵
+### پیشروی ثبت‌شدهٔ مرحله ۵ — وضعیت تأییدشده در CI
 
-- **Customer CRUD سروری**: Create/Update + Alias/NationalId/VipTier + Unique validation + Audit + SQLite migration + Dashboard adapter/UI + Persistence Test + CI سبز.
-- **صفحه مشتریان** دیگر برای «مشتری جدید» پیام نمایشی نمی‌دهد؛ ایجاد و ویرایش اصلی به Server متصل است.
-- **VIP Package**: Catalog + ساخت پکیج + تخصیص پکیج + Activation/Expiry + Daily/Total Minutes + Discount در Server/API و UI متصل شده و با Server startup/API smoke محافظت می‌شود.
-- **Stage 5 هنوز باز است** و این موارد نباید تا قبل از پیاده‌سازی + تست تیک بخورند:
-  - Debt به منبع حقیقت سرور و Ledger/Audit واقعی متصل شود؛ وضعیت فعلی بدهی در صفحه مشتری هنوز محلی است.
-  - مصرف روزانه VIP از Session/Client واقعی محاسبه و ذخیره شود؛ hoursUsedToday فعلاً منبع سروری واقعی ندارد.
-  - Password/Credential UX واقعاً به Authentication/credential storage سروری متصل شود؛ Flow فعلی هنوز عملیات واقعی رمز را انجام نمی‌دهد.
-  - Concurrent Login Limit در مسیر Client Login واقعی مصرف و در Integration/E2E تست شود؛ مدل/Guard پایه از قبل وجود دارد.
-  - VipTier نباید مستقل از VIP Package منبع حقیقت دیگری باشد؛ تغییر tier باید با package/activation/expiry سازگار یا محدود شود تا وضعیت مشتری دوگانه نشود.
-  - History/Customer timeline برای عملیات مشتری به داده‌های واقعی سرور متصل و از state محلی جدا شود.
-  - Client Login preparation تا Agent و Server واقعی تکمیل شود.
-
-
+- **Customer CRUD سروری**: Create/Update + Alias/NationalId/VipTier + Unique validation + Audit + SQLite migration + Dashboard adapter/UI + CI سبز ✅
+- **VIP Package**: Catalog + ساخت پکیج + تخصیص پکیج + Activation/Expiry + Daily/Total Minutes + Discount + Audit/API/UI ✅
+- **Debt**: ایجاد بدهی به‌صورت Draft Invoice، نمایش از Server، تسویه با Cash/Card/Wallet، InvoicePayment و Audit؛ مسیر در CI Smoke سبز ✅
+- **Password/Credential**: Password با PBKDF2 ذخیره می‌شود؛ تغییر رمز و Customer Authentication واقعی و در CI Smoke تست‌شده ✅
+- **Concurrent Login Limit**: acquire/release سروری، محدودیت واقعی و CI Smoke برای سقف ورود هم‌زمان ✅
+- **VIP Usage**: مصرف Daily/Total از Sessionهای واقعی Server محاسبه می‌شود؛ بازهٔ مصرف به Activation/Expiry محدود است و CI Smoke کاهش مصرف را اثبات می‌کند ✅
+- **VipTier / VipPackage consistency**: تخصیص پکیج Tier را همگام می‌کند و ویرایش ناسازگار با پکیج فعال را رد می‌کند ✅
+- **Customer History**: Wallet/Benefit/Invoice/Session از Server جمع می‌شوند و CI Smoke ثبت Session جدید را بررسی می‌کند ✅
+- **نتیجه Stage 5 Server-side**: هستهٔ دامنه Customer/VIP از نظر CRUD، مالی، Credential و History تکمیل و با CI/Smoke تثبیت شده است ✅
+- **Carry-over عمدی**: اتصال Login/Session مشتری به Agent واقعی تا مرحلهٔ ۸ (PC Agent Foundation) نگه داشته می‌شود؛ قبل از ساخت Agent، Client واقعی برای اثبات End-to-End وجود ندارد. این مورد به‌عنوان نقص فراموش‌شده محسوب نمی‌شود.
 ### محدوده
 - Customer منبع حقیقت سرور
 - CRUD مشتری
