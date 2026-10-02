@@ -125,3 +125,10 @@ partial class AgentCommandFoundation
 partial class SessionServerTiming
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002220000_AgentLockState")]
+partial class AgentLockState
+{
+}
