@@ -86,3 +86,9 @@ partial class BuffetInventorySettings
 partial class BuffetTransactionPricing
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002183000_InventoryTransactionInvoiceReference")]
+partial class InventoryTransactionInvoiceReference
+{
+}
