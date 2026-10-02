@@ -17,23 +17,4 @@ public static class SessionTiming
             + session.TimeAdjustmentMinutes);
     }
 
-    public static DateTimeOffset? GetProjectedEnd(Session session, DateTimeOffset now)
-    {
-        if (session.State != SessionState.Active)
-            return session.EndAt;
-
-        var remainingAdjustment = session.TimeAdjustmentMinutes;
-        if (remainingAdjustment == 0)
-            return null;
-
-        var pauseMinutes = session.PausedMinutes
-            + (session.PausedAt.HasValue
-                ? (int)Math.Ceiling(Math.Max(0d, (now - session.PausedAt.Value).TotalMinutes))
-                : 0);
-
-        var baseEnd = session.StartAt
-            .AddMinutes(session.TimeAdjustmentMinutes + pauseMinutes + 1);
-
-        return baseEnd;
-    }
 }
