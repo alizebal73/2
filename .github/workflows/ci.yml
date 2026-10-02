@@ -113,7 +113,7 @@ jobs:
             $env:GAMENET_AGENT_DATA_DIR = $agentData
 
             $agentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
-              'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+              'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
             ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $agentStdout -RedirectStandardError $agentStderr
 
             try {
@@ -192,7 +192,7 @@ jobs:
             Remove-Item $secondAgentStdout,$secondAgentStderr -Force -ErrorAction SilentlyContinue
 
             $secondAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
-              'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+              'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
             ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $secondAgentStdout -RedirectStandardError $secondAgentStderr
 
             try {
@@ -313,7 +313,7 @@ jobs:
                   $env:GAMENET_AGENT_NAME = $multiName
                   $env:GAMENET_AGENT_DATA_DIR = $dir
                   $multiProcesses += Start-Process -FilePath 'dotnet' -ArgumentList @(
-                  'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+                  'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
                 ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
                 }
 
