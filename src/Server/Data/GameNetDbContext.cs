@@ -12,6 +12,10 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<AppUserPermission> AppUserPermissions => Set<AppUserPermission>();
+    public DbSet<AppUserSession> AppUserSessions => Set<AppUserSession>();
+    public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
+    public DbSet<EmployeeProfile> EmployeeProfiles => Set<EmployeeProfile>();
+    public DbSet<PayrollLedgerEntry> PayrollLedgerEntries => Set<PayrollLedgerEntry>();
     public DbSet<VipPackage> VipPackages => Set<VipPackage>();
     public DbSet<Game> Games => Set<Game>();
     public DbSet<GameAccount> GameAccounts => Set<GameAccount>();
@@ -30,6 +34,30 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<InvoiceReversal> InvoiceReversals => Set<InvoiceReversal>();
 
+    private void TouchUpdatedAt()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (entry.State == EntityState.Modified)
+                entry.Entity.UpdatedAt = now;
+        }
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        TouchUpdatedAt();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        TouchUpdatedAt();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -43,6 +71,10 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureAppUser(modelBuilder);
         ConfigurePermission(modelBuilder);
         ConfigureAppUserPermission(modelBuilder);
+        ConfigureAppUserSession(modelBuilder);
+        ConfigureApprovalRequest(modelBuilder);
+        ConfigureEmployeeProfile(modelBuilder);
+        ConfigurePayrollLedgerEntry(modelBuilder);
         ConfigureVipPackage(modelBuilder);
         ConfigureGame(modelBuilder);
         ConfigureGameAccount(modelBuilder);
@@ -58,6 +90,14 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureShift(modelBuilder);
         ConfigureExpense(modelBuilder);
         ConfigureAuditLog(modelBuilder);
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes()
+                     .Where(type => typeof(BaseEntity).IsAssignableFrom(type.ClrType)))
+        {
+            var updatedAt = entityType.FindProperty(nameof(BaseEntity.UpdatedAt));
+            if (updatedAt is not null)
+                updatedAt.IsConcurrencyToken = true;
+        }
     }
 
     private static void ConfigureStation(ModelBuilder modelBuilder)
@@ -187,6 +227,79 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         join.HasOne(item => item.Permission)
             .WithMany(item => item.AppUsers)
             .HasForeignKey(item => item.PermissionId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureAppUserSession(ModelBuilder modelBuilder)
+    {
+        var session = modelBuilder.Entity<AppUserSession>();
+        session.HasKey(item => item.Id);
+        session.Property(item => item.TokenHash).HasMaxLength(128).IsRequired();
+        session.HasIndex(item => item.TokenHash).IsUnique();
+        session.Property(item => item.ExpiresAt).IsRequired();
+        session.HasOne(item => item.AppUser)
+            .WithMany()
+            .HasForeignKey(item => item.AppUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureApprovalRequest(ModelBuilder modelBuilder)
+    {
+        var approval = modelBuilder.Entity<ApprovalRequest>();
+        approval.HasKey(item => item.Id);
+        approval.Property(item => item.Action).HasMaxLength(80).IsRequired();
+        approval.Property(item => item.EntityName).HasMaxLength(80).IsRequired();
+        approval.Property(item => item.EntityId).HasMaxLength(120);
+        approval.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+        approval.Property(item => item.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        approval.Property(item => item.DecisionNote).HasMaxLength(500);
+        approval.HasIndex(item => new { item.Status, item.CreatedAt });
+        approval.HasOne(item => item.RequestedByUser)
+            .WithMany()
+            .HasForeignKey(item => item.RequestedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        approval.HasOne(item => item.DecidedByUser)
+            .WithMany()
+            .HasForeignKey(item => item.DecidedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private static void ConfigureEmployeeProfile(ModelBuilder modelBuilder)
+    {
+        var profile = modelBuilder.Entity<EmployeeProfile>();
+        profile.HasKey(item => item.Id);
+        profile.HasIndex(item => item.AppUserId).IsUnique();
+        profile.Property(item => item.Phone).HasMaxLength(20);
+        profile.Property(item => item.PayType).HasMaxLength(20).IsRequired();
+        profile.Property(item => item.HourlyRate).HasColumnType("decimal(18,2)");
+        profile.Property(item => item.MonthlySalary).HasColumnType("decimal(18,2)");
+        profile.Property(item => item.OvertimeRate).HasColumnType("decimal(18,2)");
+        profile.Property(item => item.WorkSchedule).HasMaxLength(120);
+        profile.Property(item => item.Notes).HasMaxLength(500);
+        profile.HasOne(item => item.AppUser)
+            .WithMany()
+            .HasForeignKey(item => item.AppUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigurePayrollLedgerEntry(ModelBuilder modelBuilder)
+    {
+        var entry = modelBuilder.Entity<PayrollLedgerEntry>();
+        entry.HasKey(item => item.Id);
+        entry.HasIndex(item => new { item.EmployeeProfileId, item.Status, item.CreatedAt });
+        entry.HasIndex(item => item.CreatedByUserId);
+        entry.HasIndex(item => item.ApprovedByUserId);
+        entry.Property(item => item.Kind).HasMaxLength(40).IsRequired();
+        entry.Property(item => item.Amount).HasColumnType("decimal(18,2)");
+        entry.Property(item => item.EmployeePayableDelta).HasColumnType("decimal(18,2)");
+        entry.Property(item => item.OwnerReceivableDelta).HasColumnType("decimal(18,2)");
+        entry.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+        entry.Property(item => item.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        entry.Property(item => item.PaymentMethod).HasMaxLength(40);
+        entry.Property(item => item.ReceiptNumber).HasMaxLength(120);
+        entry.HasOne(item => item.EmployeeProfile)
+            .WithMany(item => item.PayrollEntries)
+            .HasForeignKey(item => item.EmployeeProfileId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 

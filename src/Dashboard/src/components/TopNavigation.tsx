@@ -1,24 +1,28 @@
-import type { PageKey } from '../types';
+import type { PageKey, AppUserRecord } from '../types';
+import { hasPermission } from '../services/authService';
 
-const navItems: Array<{ key: PageKey; label: string }> = [
+const navItems: Array<{ key: PageKey; label: string; permissions?: string[] }> = [
   { key: 'dashboard', label: 'داشبورد' },
-  { key: 'customers', label: 'مشتریان' },
-  { key: 'buffet', label: 'بوفه' },
-  { key: 'tariffs', label: 'تعرفه‌ها' },
-  { key: 'games', label: 'بازی‌ها' },
-  { key: 'client-shell', label: 'کلاینت‌ها' },
-  { key: 'accounts', label: 'اکانت‌ها' },
-  { key: 'reports', label: 'گزارش‌ها' },
-  { key: 'users', label: 'کاربران و شیفت' },
-  { key: 'settings', label: 'تنظیمات' },
+  { key: 'customers', label: 'مشتریان', permissions: ['customer.manage'] },
+  { key: 'buffet', label: 'بوفه', permissions: ['buffet.sell', 'buffet.inventory'] },
+  { key: 'tariffs', label: 'تعرفه‌ها', permissions: ['tariff.manage'] },
+  { key: 'games', label: 'بازی‌ها', permissions: ['game.manage'] },
+  { key: 'client-shell', label: 'کلاینت‌ها', permissions: ['client.control'] },
+  { key: 'accounts', label: 'اکانت‌ها', permissions: ['account.manage'] },
+  { key: 'reports', label: 'گزارش‌ها', permissions: ['finance.view'] },
+  { key: 'users', label: 'کاربران و شیفت', permissions: ['user.manage', 'shift.manage'] },
+  { key: 'settings', label: 'تنظیمات', permissions: ['user.manage'] },
 ];
 
-type Props = { activePage: PageKey; onChange: (page: PageKey) => void };
+type Props = { activePage: PageKey; onChange: (page: PageKey) => void; user: AppUserRecord };
 
-export function TopNavigation({ activePage, onChange }: Props) {
+export function TopNavigation({ activePage, onChange, user }: Props) {
+  const visibleItems = navItems.filter(item =>
+    !item.permissions || item.permissions.some(permission => hasPermission(user, permission))
+  );
   return (
     <nav className="top-nav" aria-label="ناوبری اصلی">
-      {navItems.map((item) => (
+      {visibleItems.map((item) => (
         <button
           key={item.key}
           type="button"

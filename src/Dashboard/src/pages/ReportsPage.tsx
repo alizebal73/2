@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { hasPermission } from '../services/authService';
+import type { AppUserRecord } from '../types';
 import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createShiftExpense } from '../services/financeService';
 import { getCurrentShift } from '../services/shiftService';
 import { getServerBuffetProfit } from '../services/buffetService';
@@ -23,7 +25,8 @@ type Period = 'week' | 'month' | 'sixMonths' | 'year' | 'custom';
 type ReportCategory = 'finance' | 'sessions' | 'customers' | 'buffet' | 'users' | 'audit';
 type Role = 'operator' | 'manager' | 'owner';
 
-export function ReportsPage() {
+export function ReportsPage({ user }: { user: AppUserRecord }) {
+  const canManageFinance = hasPermission(user, 'finance.manage');
   const [period, setPeriod] = useState<Period>('week');
   const [reportCategory, setReportCategory] = useState<ReportCategory>('finance');
   const [from, setFrom] = useState('');
@@ -216,7 +219,7 @@ export function ReportsPage() {
           ['custom','بازه دلخواه']
         ] as Array<[Period,string]>).map(([key,label]) => <button key={key} className={period === key ? 'active' : ''} onClick={() => { setPeriod(key); if (key !== 'custom') setRange(null); }}>{label}</button>)}
       </div>
-      <div className="report-actions"><button className="btn" onClick={exportCsv}>📤 خروجی</button><button className="btn" onClick={() => window.print()}>🖨 چاپ</button><button className="btn" onClick={() => void registerExpense()}>➖ ثبت هزینه</button></div>
+      <div className="report-actions"><button className="btn" onClick={exportCsv}>📤 خروجی</button><button className="btn" onClick={() => window.print()}>🖨 چاپ</button>{canManageFinance && <button className="btn" onClick={() => void registerExpense()}>➖ ثبت هزینه</button>}</div>
     </section>
 
     {period === 'custom' && <section className="card-panel report-range-panel"><div className="report-range-grid"><label>از تاریخ<input value={from} onChange={e=>setFrom(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۱"/></label><label>تا تاریخ<input value={to} onChange={e=>setTo(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۹"/></label><label>از ساعت<input type="time" value={fromTime} onChange={e=>setFromTime(e.target.value)}/></label><label>تا ساعت<input type="time" value={toTime} onChange={e=>setToTime(e.target.value)}/></label><button className="btn primary" onClick={applyRange}>اعمال بازه</button><button className="btn" onClick={()=>{setRange(null);setPeriod('week')}}>بازنشانی</button></div><div className="report-presets">{['امروز','دیروز','این هفته','ماه جاری','ماه قبل','۹۰ روز اخیر','امسال'].map(name=><button className="btn sm" key={name} onClick={()=>preset(name)}>{name}</button>)}</div></section>}

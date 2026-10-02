@@ -8,6 +8,7 @@ public static class DatabaseSeeder
     {
         if (await database.Stations.AnyAsync(cancellationToken))
         {
+            await EnsureAuthorizationSeedAsync(database, cancellationToken);
             await EnsureCustomerProfilesAsync(database, cancellationToken);
             return;
         }
@@ -60,7 +61,7 @@ public static class DatabaseSeeder
             FullName = "System Administrator",
             UserName = "admin",
             Email = "admin@gamenet.local",
-            PasswordHash = "hash",
+            PasswordHash = PasswordSecurity.Hash(Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD") ?? "Admin123!"),
             Role = "Admin",
             IsActive = true
         };
@@ -84,6 +85,7 @@ public static class DatabaseSeeder
         database.Customers.Add(customer);
 
         await database.SaveChangesAsync(cancellationToken);
+        await EnsureAuthorizationSeedAsync(database, cancellationToken);
         await EnsureCustomerProfilesAsync(database, cancellationToken);
 
         CreateStations(database, consoleType, hourlyTariff, "PS5", 10, "Zone A", "Console");
@@ -99,6 +101,43 @@ public static class DatabaseSeeder
             Details = "Initial reference data was created.",
             AppUserId = adminUser.Id
         });
+
+        await database.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task EnsureAuthorizationSeedAsync(GameNetDbContext database, CancellationToken cancellationToken)
+    {
+        foreach (var item in AuthorizationService.PermissionCatalog)
+        {
+            var permission = await database.Permissions.FirstOrDefaultAsync(row => row.Name == item.Key, cancellationToken);
+            if (permission is null)
+            {
+                database.Permissions.Add(new Permission
+                {
+                    Name = item.Key,
+                    Description = item.Value
+                });
+            }
+        }
+
+        var admin = await database.AppUsers.FirstOrDefaultAsync(item => item.UserName == "admin", cancellationToken);
+        if (admin is null)
+        {
+            admin = new AppUser
+            {
+                FullName = "مدیر سیستم",
+                UserName = "admin",
+                Email = "admin@gamenet.local",
+                PasswordHash = PasswordSecurity.Hash(Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD") ?? "Admin123!"),
+                Role = "Admin",
+                IsActive = true
+            };
+            database.AppUsers.Add(admin);
+        }
+        else if (string.Equals(admin.PasswordHash, "hash", StringComparison.Ordinal))
+        {
+            admin.PasswordHash = PasswordSecurity.Hash(Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD") ?? "Admin123!");
+        }
 
         await database.SaveChangesAsync(cancellationToken);
     }

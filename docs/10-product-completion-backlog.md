@@ -172,10 +172,34 @@
 13. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
 14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
 
-**جایگاه فعلی:** مرحلهٔ اصلی **۶ — Buffet & Inventory Domain**.  
-مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core) و مرحلهٔ ۵ (Customer & VIP Domain) بسته شده‌اند. موارد Permission/Approval سراسری که عمداً به مرحلهٔ ۷ واگذار شده‌اند، carry-over هستند و مانع ادامهٔ دامنه‌های بعدی نیستند.
+**جایگاه فعلی:** مرحلهٔ اصلی **۷ — Users & Permissions**.  
+مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ در حال تکمیل است؛ احراز هویت/Permission/Approval پایه روی Server پیاده شده و اکنون بخش Payroll، سخت‌گیری کامل Read/Write در UI و Approvalهای باقی‌مانده در حال تکمیل و تست هستند.
 
 این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
+
+## وضعیت اجرایی مرحلهٔ ۷ — Users & Permissions
+
+### برش تأییدشده تا CI #527
+- ✅ احراز هویت واقعی اپراتور با Session سروری، Cookie امن و PBKDF2؛ `/api/auth/login`، `/api/auth/me` و `/api/auth/logout`.
+- ✅ مدل AppUser / Permission / AppUserSession / ApprovalRequest و Migration/Seeder واقعی سرور.
+- ✅ کاتالوگ Permissionهای رسمی پروژه و تخصیص دسترسی به کاربر.
+- ✅ Approval سروری برای ایجاد/تصمیم‌گیری درخواست‌های حساس با Audit.
+- ✅ Dashboard Login Gate و Users/Permissions UI از دادهٔ واقعی Server.
+- ✅ Permission Enforcement روی endpointهای حساس موجود: Customer، VIP، Buffet/Inventory، Debt/Wallet/Benefits، Finance، Shift، Session و Invoice Reverse.
+- ✅ Actor identity دیگر از request.AppUserId برای عملیات حساس پذیرفته نمی‌شود؛ در endpointهای محافظت‌شده شناسهٔ کاربر جاری Server منبع Audit/AppUserId است.
+- ✅ CI Smoke یک Operator محدود را عمداً با Permission ناقص وارد می‌کند و 403 واقعی برای عملیات بدون مجوز را اثبات می‌کند.
+- ✅ Run #520 (تاریخی): Build/Test .NET، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke سبز؛ Approval اجرایی Reverse فاکتور از درخواست اپراتور تا تأیید مدیر و اجرای واقعی تست شد.
+
+### بازمانده‌های مرحلهٔ ۷
+- ✅ Multi-cashier concurrency و conflict handling: `UpdatedAt` به‌عنوان Concurrency Token سروری، به‌روزرسانی خودکار زمان تغییر، تبدیل تعارض EF به HTTP 409 فارسی و تست دو اپراتور روی یک رکورد؛ CI #514 سبز.
+- ✅ Approval اجرایی متصل به Reverse واقعی فاکتور: مسیر درخواست با `finance.manage`، تصمیم با `approval.decide`، اجرای Reverse داخل Transaction تصمیم، Audit، و جلوگیری از تأیید توسط ثبت‌کننده؛ CI #520 سبز.
+- ✅ Hardening اولیهٔ Permission در UI: ناوبری بر اساس Permission واقعی فیلتر می‌شود، Navigation/Command/Hotkey بدون مجوز به صفحه وارد نمی‌شود، و Users & Shift کنترل‌های user.manage و shift.manage را جداگانه رعایت می‌کند؛ نقش‌های Admin/Owner هم مانند Server دسترسی سراسری دارند؛ CI #527 سبز.
+- ✅ Ledger/Payroll واقعی پرسنل و پرداخت حقوق — Server، Ledger، پروفایل حقوق، روش پرداخت/رسید و Approval اجرایی روی head جاری پیاده و با CI #591 در Build/Test، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke تأیید شد.
+- ✅ Hardening Read/Write برای دامنه‌های فعال Server-backed: Customer، Dashboard/Session، Buffet/Inventory، Users/Shift/Payroll و Reports؛ کنترل‌های UI با Permissionهای واقعی هم‌تراز و endpointهای حساس Server-side محافظت شدند.
+- ⬜ صفحات Mock/آینده مثل Accounts، Games، Tariffs و ClientShell تا زمان ساخته‌شدن dependency واقعی همان Stageها بازطراحی امنیتی کامل نمی‌شوند؛ این‌ها عمداً خارج از Stage 7 فعال‌سازی نشده‌اند.
+- ✅ Approvalهای حساس فعال: Invoice Reverse و Wallet Refund دارای مسیر درخواست/تصمیم/اجرای واقعی Server-side، Transaction و Audit هستند؛ Wallet Refund با CI #591 تا اجرای واقعی و Ledger/Reference آن تست شد.
+- ✅ Generic Approval API هم به Actionهای شناخته‌شده و Permission متناظر محدود شد و Action ناشناخته در Smoke با 400 رد می‌شود.
+
 
 ## تکمیل‌های سراسری مرحله ۳ — نیازهای جدید اپراتور
 
@@ -434,7 +458,7 @@
 
 ## فهرست اصلی
 
-> مرحله اصلی فعلی: **۶ — Buffet & Inventory Domain**؛ هستهٔ B9 → B17 در مرحلهٔ ۴ و دامنهٔ Customer/VIP در مرحلهٔ ۵ تکمیل و تست شده‌اند؛ hardening مجوزها در مرحلهٔ ۷ دنبال می‌شود.
+> مرحله اصلی فعلی: **۷ — Users & Permissions**؛ هستهٔ مراحل ۴، ۵ و ۶ تکمیل و تست شده‌اند و باقی‌مانده‌های امنیت/Permission/Approval/Payroll در همین مرحله بسته می‌شوند.
 
 ### A) Operational Intelligence / UX
 1. ✅ مرکز «نیازمند توجه» در داشبورد — پیاده‌سازی و CI سبز شد
@@ -455,7 +479,7 @@
 - برای پرداخت نقدی مبلغ دریافتی قابل ورود است و مبلغ برگشتی محاسبه می‌شود.
 - Free Time در Breakdown لحاظ می‌شود.
 - Split Payment هنوز جداست و در B12 تکمیل می‌شود.
-- Invoice/Settlement واقعی Server هنوز باید مالک نهایی محاسبه و ثبت شود.
+- Invoice/Settlement واقعی Server مالک نهایی ثبت و Transaction/Audit آن روی Server است؛ مسیر Dashboard به endpoint واقعی Settlement متصل است.
 
 ## اجرای مرحله اصلی ۴ — B10 Refund
 
@@ -469,12 +493,11 @@
 - تست Server برای حفظ رکورد اصلی + ثبت Debit + Audit اضافه شد.
 
 ### مرز باقی‌مانده
-- Permission سروری
-- Approval برای Refundهای حساس
-- Reference صریح به تراکنش/Invoice مبدأ
-- Refund واقعی برای Session/Buffet/Package
-- Reverse کامل و چندمرحله‌ای
-این موارد در B10/B11 و مرحله ۷/مالی تکمیل می‌شوند.
+- ✅ Permission سروری و Audit برای Wallet Refund.
+- ✅ Approval اجرایی برای Refund حساس با اجرای واقعی در Transaction.
+- ✅ Reference صریح به تراکنش مبدأ در Ledger Refund.
+- ✅ Reverse واقعی Session/Buffet از مسیر Invoice Reverse؛ Refundهای مستقل Package هنوز دامنهٔ جداگانه محسوب می‌شوند.
+- ⬜ تکمیل سناریوهای مستقل Package Refund، در صورت ورود به دامنهٔ محصول.
 
 ## وضعیت تاریخی مرحله اصلی ۴ — Finance & Session Core
 
@@ -628,7 +651,7 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - در نسخه نهایی Server باید تراکنش Split را به‌صورت atomic ثبت کند و Audit/Permission نیز داشته باشد.
 
 ## وضعیت
-مرحله اصلی ۳ و هستهٔ اصلی مرحلهٔ ۴ بسته شده‌اند. جایگاه فعلی پروژه **مرحلهٔ ۶ — Buffet & Inventory Domain** است؛ موارد Permission/Approval نهایی عمداً به مرحلهٔ ۷ منتقل شده‌اند و موارد باز Stage 5 در بخش بالاتر همین سند ثبت شده‌اند. CI فعلی شامل Build/Test، مهاجرت/Startup سرور، smoke واقعی Customer/VIP API و smoke تعاملی Dashboard است.
+مرحله اصلی ۳ و هستهٔ اصلی مرحلهٔ ۴ بسته شده‌اند. جایگاه فعلی پروژه **مرحلهٔ ۷ — Users & Permissions** است؛ Stage 5 و Stage 6 بسته شده‌اند و فقط باقی‌مانده‌های صریح Stage 7 باید قبل از ورود به Stage 8 بسته و تست شوند. CI فعلی شامل Build/Test، مهاجرت/Startup سرور، smoke واقعی Customer/VIP API و smoke تعاملی Dashboard است.
 
 
 ## قرارداد سراسری Update / Release — از همین مرحله لازم‌الاجرا

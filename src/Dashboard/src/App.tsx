@@ -16,6 +16,9 @@ import { ClientExperience } from './features/client/ClientExperience';
 import { GlobalCommandCenter } from './features/search/GlobalCommandCenter';
 import { OperationsPage } from './pages/OperationsPage';
 import { UserErrorBanner } from './components/UserErrorBanner';
+import { LoginPage } from './pages/LoginPage';
+import { getCurrentUser, logout, hasPermission } from './services/authService';
+import type { AppUserRecord } from './types';
 import { SectionLockDialog } from './components/SectionLockDialog';
 import { readPageLocks } from './services/securityService';
 import type { PageLockMap } from './types';
@@ -25,8 +28,12 @@ import { mockService } from './services/mockService';
 
 type HubState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 type DemoRole = 'operator' | 'manager' | 'owner';
-
 const roleLabels: Record<DemoRole, string> = { operator: 'اپراتور', manager: 'مدیر', owner: 'صاحب' };
+function mapRole(role: string): DemoRole {
+  if (role.toLowerCase() === 'owner' || role.toLowerCase() === 'admin') return 'owner';
+  if (role.toLowerCase() === 'manager') return 'manager';
+  return 'operator';
+}
 
 function formatTime(dateString: string) {
   const date = new Date(dateString);
@@ -37,7 +44,25 @@ function formatPersianDate(date = new Date()) {
   return new Intl.DateTimeFormat('fa-IR-u-ca-persian', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
 
-function DashboardApp() {
+const pagePermissions: Partial<Record<PageKey, string[]>> = {
+  customers: ['customer.manage', 'customer.wallet', 'customer.debt'],
+  buffet: ['buffet.sell', 'buffet.inventory'],
+  tariffs: ['tariff.manage'],
+  games: ['game.manage'],
+  'client-shell': ['client.control'],
+  accounts: ['account.manage'],
+  reports: ['finance.view'],
+  users: ['user.manage', 'shift.manage', 'payroll.view', 'payroll.manage', 'approval.decide'],
+  settings: ['user.manage'],
+};
+
+function canOpenPage(user: AppUserRecord, page: PageKey): boolean {
+  if (page === 'dashboard' || page === 'operations') return true;
+  const required = pagePermissions[page];
+  return !required || required.some(permission => hasPermission(user, permission));
+}
+
+function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () => void }) {
   const [activePage, setActivePage] = useState<PageKey>('dashboard');
   const [snapshot, setSnapshot] = useState<DashboardSnapshotDto | null>(null);
   const [serverInfo, setServerInfo] = useState<ServerInfoDto | null>(null);
@@ -45,7 +70,7 @@ function DashboardApp() {
   const [hubState, setHubState] = useState<HubState>('connecting');
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
-  const [role, setRole] = useState<DemoRole>('operator');
+  const role = mapRole(user.role);
   const [clock, setClock] = useState(() => new Date().toLocaleTimeString('fa-IR'));
   const [commandOpen, setCommandOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -57,10 +82,6 @@ function DashboardApp() {
     { id: 'n2', title: 'به‌روزرسانی کلاینت', detail: '۲ ایستگاه به‌روزرسانی معلق دارند', level: 'warning', read: false },
     { id: 'n3', title: 'رزرو نزدیک', detail: 'رزرو PC ۰۷ تا ۱۵ دقیقه دیگر شروع می‌شود', level: 'info', read: false },
   ]);
-
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent('gamenet-role-change', { detail: role }));
-  }, [role]);
 
   useEffect(() => {
     const onNavigate = (event: Event) => {
@@ -77,6 +98,10 @@ function DashboardApp() {
   }, []);
 
   function requestNavigation(page: PageKey) {
+    if (!canOpenPage(user, page)) {
+      setError('برای مشاهده این بخش دسترسی لازم را ندارید.');
+      return;
+    }
     const rule = pageLocks[page];
     if (rule?.enabled && !unlockedPages.includes(page)) { setLockedPage(page); return; }
     setActivePage(page);
@@ -195,7 +220,7 @@ function DashboardApp() {
           <span>داشبورد مدیریت</span>
         </div>
 
-        <TopNavigation activePage={activePage} onChange={requestNavigation} />
+        <TopNavigation activePage={activePage} onChange={requestNavigation} user={user} />
 
         <div className="connection-list" aria-live="polite">
           <span className="header-clock">🗓 {formatPersianDate()} · 🕒 {clock}</span>
@@ -212,9 +237,9 @@ function DashboardApp() {
           تلاش مجدد
         </button>
 
-        <button type="button" className="user-pill role-switch" onClick={() => setRole(current => current === 'operator' ? 'manager' : current === 'manager' ? 'owner' : 'operator')} title="برای تغییر نقش دمو کلیک کنید">
+        <button type="button" className="user-pill role-switch" onClick={onLogout} title="خروج از حساب">
           <span className="user-dot" />
-          <span>{roleLabels[role]}: {role === 'operator' ? 'علی محمدی' : role === 'manager' ? 'سارا احمدی' : 'محمود رضایی'}</span>
+          <span>{roleLabels[role]}: {user.fullName}</span>
         </button>
         <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 {notifications.filter(item => !item.read).length}</button>
       </header>
@@ -231,15 +256,15 @@ function DashboardApp() {
       )}
 
       <div className="page-shell">
-        <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={snapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={requestNavigation} role={role} /></div>
+        <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={snapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={requestNavigation} role={role} user={user} /></div>
         <div hidden={activePage !== 'games'}><GamesPage /></div>
         <div hidden={activePage !== 'client-shell'}><ClientShellPage /></div>
-        <div hidden={activePage !== 'customers'}><CustomersPage role={role} /></div>
+        <div hidden={activePage !== 'customers'}><CustomersPage user={user} /></div>
         <div hidden={activePage !== 'tariffs'}><TariffsPage /></div>
         <div hidden={activePage !== 'accounts'}><AccountsPage /></div>
-        <div hidden={activePage !== 'buffet'}><BuffetPage /></div>
-        <div hidden={activePage !== 'reports'}><ReportsPage /></div>
-        <div hidden={activePage !== 'users'}><UsersPage /></div>
+        <div hidden={activePage !== 'buffet'}><BuffetPage user={user} /></div>
+        <div hidden={activePage !== 'reports'}><ReportsPage user={user} /></div>
+        <div hidden={activePage !== 'users'}><UsersPage user={user} /></div>
         <div hidden={activePage !== 'settings'}><SettingsPage /></div>
         <div hidden={activePage !== 'operations'}><OperationsPage /></div>
       </div>
@@ -257,7 +282,23 @@ function DashboardApp() {
 
 function App() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  return path === '/client' ? <ClientExperience /> : <DashboardApp />;
+  const [user, setUser] = useState<AppUserRecord | null>(null);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
+  useEffect(() => {
+    if (path === '/client') {
+      setLoadingAuth(false);
+      return;
+    }
+    void getCurrentUser()
+      .then(setUser)
+      .finally(() => setLoadingAuth(false));
+  }, [path]);
+
+  if (path === '/client') return <ClientExperience />;
+  if (loadingAuth) return <main className="app-shell" dir="rtl" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>در حال بررسی دسترسی…</main>;
+  if (!user) return <LoginPage onLoggedIn={setUser} />;
+  return <DashboardApp user={user} onLogout={() => void logout().finally(() => setUser(null))} />;
 }
 
 export default App;

@@ -120,6 +120,33 @@ export type ProductRecord = {
   maxStock: number;
 };
 
+export type AppUserRecord = {
+  id: string;
+  fullName: string;
+  userName: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  lastLoginAt?: string | null;
+  permissions: string[];
+};
+
+export type ApprovalRecord = {
+  id: string;
+  action: string;
+  entityName: string;
+  entityId?: string | null;
+  reason: string;
+  status: string;
+  requestedByUserId: string;
+  requestedBy: string;
+  decidedByUserId?: string | null;
+  decidedBy?: string | null;
+  decisionNote?: string | null;
+  createdAt: string;
+  decidedAt?: string | null;
+};
+
 export type UserRecord = {
   id: string;
   name: string;
@@ -131,6 +158,10 @@ export type UserRecord = {
   hourlyRate?: number;
   monthlySalary?: number;
   overtimeRate?: number;
+  phone?: string;
+  employmentStartDate?: string | null;
+  workSchedule?: string | null;
+  notes?: string | null;
   workStart?: string;
   workEnd?: string;
   bonusTotal?: number;
@@ -375,4 +406,46 @@ export type BuffetProfitReport = {
     wasteCost: number;
     grossProfit: number;
   }>;
+};
+
+
+export type PayrollUserRecord = {
+  userId: string;
+  fullName: string;
+  payType: 'hourly' | 'monthly' | string;
+  phone?: string;
+  hourlyRate: number;
+  monthlySalary: number;
+  overtimeRate: number;
+  employmentStartDate?: string | null;
+  workSchedule?: string | null;
+  notes?: string | null;
+  isActive: boolean;
+  employeePayable: number;
+  ownerReceivable: number;
+  accruedThisMonth: number;
+  paidThisMonth: number;
+  bonusTotal: number;
+  deductionTotal: number;
+  damageTotal: number;
+  advanceTotal: number;
+  lastPaymentAt?: string | null;
+};
+
+export type PayrollLedgerEntry = {
+  id: string;
+  userId: string;
+  userName: string;
+  kind: string;
+  amount: number;
+  employeePayableDelta: number;
+  ownerReceivableDelta: number;
+  reason: string;
+  status: string;
+  createdByUserId: string;
+  createdAt: string;
+  approvedByUserId?: string | null;
+  approvedAt?: string | null;
+  paymentMethod?: string | null;
+  receiptNumber?: string | null;
 };

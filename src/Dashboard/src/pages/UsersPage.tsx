@@ -1,17 +1,29 @@
 import { useEffect, useState } from 'react';
-import { mockService } from '../services/mockService';
+import { decideApproval as decideServerApproval, getApprovals, getPermissions, getUsers, hasPermission, setUserPermissions } from '../services/authService';
+import type { AppUserRecord } from '../types';
 import { userErrorMessage } from '../utils/userError';
 import { closeServerShift, getCurrentShift, getShiftHistory, startServerShift } from '../services/shiftService';
-import type { UserRecord } from '../types';
+import type { ApprovalRecord, PayrollLedgerEntry, PayrollUserRecord, UserRecord } from '../types';
+import { createPayrollEntry, getPayrollLedger, getPayrollUsers, updatePayrollProfile } from '../services/payrollService';
 
-const permissionRows = ['شروع/پایان جلسه','شارژ مستقیم','ثبت بدهی/هدیه','بوفه','مشتریان','گزارش مالی','گزارش کامل','تعرفه‌ها','کاربران','تنظیمات','کنترل کلاینت','Account Pool','تخفیف','بستن شیفت','مدیریت بازی‌ها','پرداخت حقوق','پاداش/کسری','ثبت خسارت'];
-const defaultPermissions: Record<string, boolean[]> = Object.fromEntries(permissionRows.map((name, index) => [name, index < 4 ? [true, true, true] : [true, true, index !== 7 && index !== 8]]));
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(value); }
 
-export function UsersPage() {
+type UsersPageProps = { user: AppUserRecord };
+
+export function UsersPage({ user }: UsersPageProps) {
+  const canManageUsers = hasPermission(user, 'user.manage');
+  const canManageShift = hasPermission(user, 'shift.manage');
+  const canViewPayroll = hasPermission(user, 'payroll.view');
+  const canManagePayroll = hasPermission(user, 'payroll.manage');
+  const canDecideApproval = hasPermission(user, 'approval.decide');
   const [users, setUsers] = useState<UserRecord[]>([]);
-  const [permissions, setPermissions] = useState(defaultPermissions);
+  const [serverUsers, setServerUsers] = useState<AppUserRecord[]>([]);
+  const [permissionCatalog, setPermissionCatalog] = useState<Array<{ id: string; name: string; description?: string }>>([]);
+  const [payrollUsers, setPayrollUsers] = useState<PayrollUserRecord[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRecord[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [shifts, setShifts] = useState<any[]>([]);
   const [notice, setNotice] = useState('');
@@ -19,7 +31,11 @@ export function UsersPage() {
   const [payUserId, setPayUserId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState('');
   const [payReason, setPayReason] = useState('');
-  const [payMode, setPayMode] = useState<'salary' | 'bonus' | 'deduction' | 'damage' | 'advance'>('salary');
+  const [payMode, setPayMode] = useState<'salary' | 'accrual' | 'overtime' | 'bonus' | 'deduction' | 'damage' | 'advance' | 'receivablePayment'>('salary');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'bank'>('cash');
+  const [receiptNumber, setReceiptNumber] = useState('');
+  const [payrollLedger, setPayrollLedger] = useState<PayrollLedgerEntry[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
   const [manualCash, setManualCash] = useState('');
   const [shiftNote, setShiftNote] = useState('');
   const [shiftOperator, setShiftOperator] = useState('');
@@ -29,40 +45,119 @@ export function UsersPage() {
   const [shiftOpeningCash, setShiftOpeningCash] = useState('0');
 
   async function refresh() {
-    const [userRows, saved] = await Promise.all([mockService.getUsers(), mockService.getPermissions()]);
-    setUsers(userRows);
-    if (!shiftOperator && userRows.length) setShiftOperator(userRows.find(user => user.role === 'operator')?.name ?? userRows[0].name);
-
     try {
-      const [serverShift, serverHistory] = await Promise.all([getCurrentShift(), getShiftHistory()]);
-      setCurrentShift(serverShift);
-      setShifts(serverHistory.map(row => ({ ...row, sales: row.cashSales })));
+      if (canManageUsers) {
+        const [serverRows, catalog] = await Promise.all([getUsers(), getPermissions()]);
+        setServerUsers(serverRows);
+        setPermissionCatalog(catalog);
+        const payrollByUser = new Map(payrollUsers.map(row => [row.userId, row]));
+        const userRows: UserRecord[] = serverRows.map(serverUser => {
+          const payroll = payrollByUser.get(serverUser.id);
+          return {
+            id: serverUser.id,
+            name: serverUser.fullName,
+            role: serverUser.role.toLowerCase() === 'owner' ? 'owner' : serverUser.role.toLowerCase() === 'admin' || serverUser.role.toLowerCase() === 'manager' ? 'admin' : 'operator',
+            shift: 'سرور',
+            sales: 0,
+            permissions: serverUser.permissions,
+            payType: payroll?.payType === 'monthly' ? 'monthly' : 'hourly',
+            hourlyRate: payroll?.hourlyRate ?? 0,
+            monthlySalary: payroll?.monthlySalary ?? 0,
+            overtimeRate: payroll?.overtimeRate ?? 0,
+            phone: payroll?.phone ?? '',
+            employmentStartDate: payroll?.employmentStartDate ?? null,
+            workSchedule: payroll?.workSchedule ?? null,
+            notes: payroll?.notes ?? null,
+            paidSalaryTotal: payroll?.paidThisMonth ?? 0,
+            employeePayable: payroll?.employeePayable ?? 0,
+            ownerReceivable: payroll?.ownerReceivable ?? 0,
+            bonusTotal: payroll?.bonusTotal ?? 0,
+            deductionTotal: payroll?.deductionTotal ?? 0,
+            damageTotal: payroll?.damageTotal ?? 0,
+            advanceTotal: payroll?.advanceTotal ?? 0,
+          };
+        });
+        setUsers(userRows);
+        const nextUserId = selectedUserId && serverRows.some(row => row.id === selectedUserId) ? selectedUserId : (serverRows[0]?.id ?? '');
+        setSelectedUserId(nextUserId);
+        const selected = serverRows.find(row => row.id === nextUserId);
+        setSelectedPermissions(selected?.permissions ?? []);
+        if (!shiftOperator && userRows.length) setShiftOperator(userRows.find(row => row.role !== 'owner')?.name ?? userRows[0].name);
+      } else {
+        setServerUsers([]);
+        setPermissionCatalog([]);
+        setUsers([]);
+        setSelectedUserId('');
+        setSelectedPermissions([]);
+        setShiftOperator('کاربر جاری');
+      }
+
+      if (canViewPayroll) {
+        const rows = await getPayrollUsers();
+        setPayrollUsers(rows);
+        if (canManagePayroll && rows.length && !draft) {
+          const currentDraft = rows.find(row => row.userId === selectedUserId);
+          if (!currentDraft) {
+            // Profile remains closed until the operator explicitly opens it.
+          }
+        }
+      } else {
+        setPayrollUsers([]);
+      }
+
+      if (canDecideApproval) {
+        const rows = await getApprovals();
+        setPendingApprovals(rows.filter(row => row.status === 'Pending'));
+      } else {
+        setPendingApprovals([]);
+      }
     } catch (error) {
-      setCurrentShift(null);
-      setShifts([]);
-      setNotice(userErrorMessage(error, 'اطلاعات شیفت از سرور دریافت نشد'));
+      setNotice(userErrorMessage(error, 'اطلاعات کاربران/حقوق از سرور دریافت نشد'));
     }
 
-    const next = { ...defaultPermissions };
-    Object.entries(saved).forEach(([key, value]) => {
-      const split = key.lastIndexOf(':');
-      const name = split >= 0 ? key.slice(0, split) : key;
-      const index = split >= 0 ? Number(key.slice(split + 1)) : -1;
-      if (next[name] && index >= 0) next[name] = next[name].map((item, i) => i === index ? Boolean(value) : item);
-    });
-    setPermissions(next);
+    if (canManageShift) {
+      try {
+        const [serverShift, serverHistory] = await Promise.all([getCurrentShift(), getShiftHistory()]);
+        setCurrentShift(serverShift);
+        setShifts(serverHistory.map(row => ({ ...row, sales: row.cashSales })));
+      } catch (error) {
+        setCurrentShift(null);
+        setShifts([]);
+        setNotice(userErrorMessage(error, 'اطلاعات شیفت از سرور دریافت نشد'));
+      }
+    } else {
+      setCurrentShift(null);
+      setShifts([]);
+    }
   }
-  useEffect(() => { void refresh(); }, []);
+
+  useEffect(() => { void refresh(); }, [canManageUsers, canManageShift, canViewPayroll, canDecideApproval]);
 
   async function saveUser() {
-    if (!draft?.name.trim()) { setNotice('نام کاربر را وارد کنید'); return; }
-    await mockService.saveUser(draft);
-    await refresh();
-    setDraft(null);
-    setNotice('کاربر ذخیره شد');
+    if (!draft?.id || !canManagePayroll) { setNotice('دسترسی مدیریت حقوق ندارید'); return; }
+    try {
+      const schedule = [draft.workStart, draft.workEnd].filter(Boolean).join('-') || draft.workSchedule || null;
+      await updatePayrollProfile(draft.id, {
+        phone: draft.phone ?? '',
+        payType: draft.payType ?? 'hourly',
+        hourlyRate: draft.hourlyRate ?? 0,
+        monthlySalary: draft.monthlySalary ?? 0,
+        overtimeRate: draft.overtimeRate ?? 0,
+        employmentStartDate: draft.employmentStartDate ?? null,
+        workSchedule: schedule,
+        notes: draft.notes ?? null,
+        isActive: true,
+      });
+      await refresh();
+      setDraft(null);
+      setNotice('پروفایل حقوقی روی سرور ذخیره شد');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ذخیره پروفایل حقوقی ناموفق بود'));
+    }
   }
 
   async function openShift() {
+    if (!canManageShift) { setNotice('دسترسی مدیریت شیفت ندارید'); return; }
     try {
       if (!shiftOperator) { setNotice('اپراتور شیفت را انتخاب کنید'); return; }
       const opening = Number(shiftOpeningCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,s]/g, '')) || 0;
@@ -75,6 +170,7 @@ export function UsersPage() {
   }
 
   function openCloseShift() {
+    if (!canManageShift) { setNotice('دسترسی مدیریت شیفت ندارید'); return; }
     if (!currentShift) { setNotice('شیفت بازی برای بستن وجود ندارد'); return; }
     setCountedCash('');
     setHandoverNote('');
@@ -82,7 +178,7 @@ export function UsersPage() {
   }
 
   async function closeShift() {
-    if (!currentShift) return;
+    if (!canManageShift || !currentShift) return;
     const counted = Number(countedCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
     const adjusted = Number(manualCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
     try {
@@ -103,30 +199,122 @@ export function UsersPage() {
     }
   }
 
-  function applyPayAction() {
-    const value = Number(payAmount.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,'')) || 0;
-    if (!payUserId || !value || !payReason.trim()) { setNotice('مبلغ و دلیل را وارد کنید'); return; }
-    setUsers(current => current.map(user => {
-      if (user.id !== payUserId) return user;
-      if (payMode === 'salary') return { ...user, paidSalaryTotal: (user.paidSalaryTotal ?? 0) + value, employeePayable: Math.max(0, (user.employeePayable ?? 0) - value), lastPaymentAt: new Date().toISOString() };
-      if (payMode === 'bonus') return { ...user, bonusTotal: (user.bonusTotal ?? 0) + value, employeePayable: (user.employeePayable ?? 0) + value };
-      if (payMode === 'advance') return { ...user, advanceTotal: (user.advanceTotal ?? 0) + value, ownerReceivable: (user.ownerReceivable ?? 0) + value };
-      if (payMode === 'damage') return { ...user, damageTotal: (user.damageTotal ?? 0) + value, ownerReceivable: (user.ownerReceivable ?? 0) + value };
-      return { ...user, deductionTotal: (user.deductionTotal ?? 0) + value, employeePayable: Math.max(0, (user.employeePayable ?? 0) - value) };
-    }));
-    setPayUserId(null);
-    setNotice(payMode === 'salary' ? 'پرداخت حقوق در نمای آزمایشی ثبت شد.' : 'رویداد حقوقی در نمای آزمایشی ثبت شد.');
+  async function applyPayAction() {
+    const value = Number(payAmount.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
+    if (!payUserId || !value || !payReason.trim() || !canManagePayroll) {
+      setNotice('مبلغ، دلیل و دسترسی مدیریت حقوق الزامی است');
+      return;
+    }
+    const kind = payMode === 'salary'
+      ? 'SalaryPayment'
+      : payMode === 'accrual'
+        ? 'SalaryAccrual'
+        : payMode === 'overtime'
+          ? 'Overtime'
+          : payMode === 'bonus'
+            ? 'Bonus'
+            : payMode === 'deduction'
+              ? 'Deduction'
+              : payMode === 'damage'
+                ? 'Damage'
+                : payMode === 'receivablePayment'
+                  ? 'ReceivablePayment'
+                  : 'Advance';
+    try {
+      const result = await createPayrollEntry(payUserId, {
+        kind,
+        amount: value,
+        reason: payReason.trim(),
+        paymentMethod: payMode === 'salary' ? paymentMethod : undefined,
+        receiptNumber: payMode === 'salary' ? (receiptNumber.trim() || undefined) : undefined,
+      });
+      await refresh();
+      setPayUserId(null);
+      setPayAmount('');
+      setPayReason('');
+      setReceiptNumber('');
+      setPaymentMethod('cash');
+      setNotice(result.status === 'Pending'
+        ? 'عملیات ثبت شد و برای تأیید مسئول مجاز ارسال شد.'
+        : 'عملیات حقوقی ثبت شد.');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ثبت عملیات حقوقی ناموفق بود'));
+    }
+  }
+
+  async function openPayrollProfile(row: PayrollUserRecord | UserRecord) {
+    if (!canViewPayroll) return;
+    const userId = 'userId' in row ? row.userId : row.id;
+    const source = 'userId' in row ? row : payrollUsers.find(item => item.userId === userId);
+    setDraft({
+      id: userId,
+      name: 'fullName' in row ? row.fullName : row.name,
+      role: users.find(item => item.id === userId)?.role ?? 'operator',
+      shift: users.find(item => item.id === userId)?.shift ?? 'سرور',
+      sales: 0,
+      permissions: users.find(item => item.id === userId)?.permissions ?? [],
+      payType: source?.payType === 'monthly' ? 'monthly' : 'hourly',
+      hourlyRate: source?.hourlyRate ?? 0,
+      monthlySalary: source?.monthlySalary ?? 0,
+      overtimeRate: source?.overtimeRate ?? 0,
+      phone: source?.phone ?? '',
+      employmentStartDate: source?.employmentStartDate ?? null,
+      workSchedule: source?.workSchedule ?? null,
+      notes: source?.notes ?? null,
+      workStart: source?.workSchedule?.split('-')[0] ?? '',
+      workEnd: source?.workSchedule?.split('-')[1] ?? '',
+      employeePayable: source?.employeePayable ?? 0,
+      ownerReceivable: source?.ownerReceivable ?? 0,
+      paidSalaryTotal: source?.paidThisMonth ?? 0,
+      bonusTotal: source?.bonusTotal ?? 0,
+      deductionTotal: source?.deductionTotal ?? 0,
+      damageTotal: source?.damageTotal ?? 0,
+      advanceTotal: source?.advanceTotal ?? 0,
+    });
+    setLedgerLoading(true);
+    try {
+      setPayrollLedger(await getPayrollLedger(userId));
+    } catch (error) {
+      setPayrollLedger([]);
+      setNotice(userErrorMessage(error, 'دفتر حقوق پرسنل از سرور دریافت نشد'));
+    } finally {
+      setLedgerLoading(false);
+    }
+  }
+
+  async function decideApproval(id: string, approved: boolean) {
+    if (!canDecideApproval) return;
+    try {
+      await decideServerApproval(id, approved, approved ? 'تأیید عملیات' : 'رد عملیات');
+      await refresh();
+      setNotice(approved ? 'عملیات تأیید و اجرا شد.' : 'عملیات رد شد.');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'تصمیم‌گیری درباره عملیات حقوقی ناموفق بود'));
+    }
   }
 
   async function savePermissions() {
-    const flattened: Record<string, boolean> = {};
-    Object.entries(permissions).forEach(([name, values]) => values.forEach((value, index) => { flattened[name + ':' + index] = value; }));
-    await mockService.savePermissions(flattened);
-    setNotice('ماتریس دسترسی ذخیره شد');
+    if (!canManageUsers) { setNotice('دسترسی مدیریت کاربران ندارید'); return; }
+    if (!selectedUserId) { setNotice('کاربری برای تغییر دسترسی انتخاب نشده است'); return; }
+    try {
+      await setUserPermissions(selectedUserId, selectedPermissions);
+      await refresh();
+      setNotice('دسترسی‌های کاربر روی سرور ذخیره شد');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ذخیره دسترسی‌ها ناموفق بود'));
+    }
   }
 
-  function setPermission(row: string, column: number, checked: boolean) {
-    setPermissions(current => ({ ...current, [row]: current[row].map((value, index) => index === column ? checked : value) }));
+  function selectPermissionUser(id: string) {
+    if (!canManageUsers) return;
+    setSelectedUserId(id);
+    setSelectedPermissions(serverUsers.find(user => user.id === id)?.permissions ?? []);
+  }
+
+  function togglePermission(name: string, checked: boolean) {
+    setSelectedPermissions(current => checked
+      ? Array.from(new Set([...current, name]))
+      : current.filter(item => item !== name));
   }
 
   return <>
@@ -134,9 +322,9 @@ export function UsersPage() {
     <div className="toolbar">
       {!currentShift && <label className="shift-operator-select">اپراتور شیفت<select value={shiftOperator} onChange={event => setShiftOperator(event.target.value)}>{users.filter(user => user.role !== 'owner').map(user => <option key={user.id} value={user.name}>{user.name} · {user.shift}</option>)}</select></label>}
       {!currentShift && <label className="shift-operator-select">صندوق اولیه<input inputMode="numeric" value={shiftOpeningCash} onChange={event => setShiftOpeningCash(event.target.value)} placeholder="۰" /></label>}
-      <button className="btn" onClick={() => void (currentShift ? openCloseShift() : openShift())}>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>
-      <button className="btn danger" onClick={() => openCloseShift()} disabled={!currentShift}>بستن شیفت</button>
-      <button className="btn primary" onClick={() => setDraft({ id: crypto.randomUUID(), name: '', role: 'operator', shift: 'عصر', sales: 0, permissions: [], payType: 'hourly', hourlyRate: 0, monthlySalary: 0, overtimeRate: 0, workStart: '16:00', workEnd: '00:00', bonusTotal: 0, deductionTotal: 0 })}>+ کاربر جدید</button>
+      {canManageShift && <button className="btn" onClick={() => void (currentShift ? openCloseShift() : openShift())}>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>}
+      {canManageShift && <button className="btn danger" onClick={() => openCloseShift()} disabled={!currentShift}>بستن شیفت</button>}
+      <span className="status-pill free">{canManageUsers ? 'کاربران و Permission از Server' : 'دسترسی این حساب فقط به عملیات مجاز محدود شده است'}</span>
     </div>
     <div className="summary-grid">
       {currentShift && <div className="card-panel shift-adjust-panel" style={{gridColumn:'1 / -1',padding:12}}><strong>تطبیق نقدی خارج از سیستم</strong><small>اگر بخشی از وجه نقد گرفته شده اما در نرم‌افزار ثبت نشده، آن را جدا ثبت کن؛ این مبلغ خودکار از حقوق اپراتور کم نمی‌شود.</small><div className="modal-grid-2"><label>مبلغ نقدی ثبت‌نشده<input inputMode="numeric" value={manualCash} onChange={event => setManualCash(event.target.value)} placeholder="۰" /></label><label>توضیح/شماره رسید<input value={shiftNote} onChange={event => setShiftNote(event.target.value)} placeholder="مثلاً رسید دستی صندوق" /></label></div></div>}
@@ -147,18 +335,49 @@ export function UsersPage() {
       <div className="summary-card"><div className="label">طلب مالک</div><div className="value purple">{money(users.reduce((s,u) => s + (u.ownerReceivable ?? 0), 0))} ت</div></div>
     </div>
     <div className="customer-layout">
-      <section className="card-panel" style={{ padding: 14 }}>
+      {canManageUsers && <section className="card-panel" style={{ padding: 14 }}>
         <h3>کاربران سیستم</h3>
-        <div className="bullet-grid">{users.map(user => <div className="user-card" key={user.id}><b>{user.name}</b><div className="meta">نقش: {user.role === 'owner' ? 'صاحب' : user.role === 'admin' ? 'مدیر' : 'اپراتور'}</div><div className="meta">شیفت: {user.shift}</div><div className="meta">فروش: {money(user.sales)} تومان</div><div className="user-pay-summary"><span>{user.payType === 'monthly' ? 'حقوق ماهانه' : 'ساعتی'} · {money(user.payType === 'monthly' ? (user.monthlySalary ?? 0) : (user.hourlyRate ?? 0))} تومان</span><span>پرداخت‌شده {money(user.paidSalaryTotal ?? 0)} · مانده حقوق {money(user.employeePayable ?? 0)}</span><span>طلب مالک {money(user.ownerReceivable ?? 0)} · خسارت {money(user.damageTotal ?? 0)}</span></div><div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{user.permissions.map(permission => <span className="status-pill free" key={permission}>{permission}</span>)}</div><button type="button" className="btn sm" onClick={() => { setDraft({ ...user }); }}>ویرایش / حقوق</button><button type="button" className="btn sm" onClick={() => { setPayUserId(user.id); setPayAmount(''); setPayReason(''); setPayMode('salary'); }}>حقوق/حساب</button></div>)}</div>
-      </section>
-      <section className="card-panel" style={{ padding: 14, overflow: 'auto' }}>
-        <h3>🔐 ماتریس دسترسی‌ها</h3>
-        <table className="data-table"><thead><tr><th>دسترسی</th><th>صاحب</th><th>مدیر</th><th>اپراتور</th></tr></thead><tbody>
-          {permissionRows.map(name => <tr key={name}><td>{name}</td>{[0,1,2].map(column => <td key={column}><input type="checkbox" checked={permissions[name]?.[column] ?? false} disabled={column === 0} onChange={event => setPermission(name,column,event.target.checked)} /></td>)}</tr>)}
-        </tbody></table>
-        <button className="btn primary" onClick={() => void savePermissions()}>💾 ذخیره دسترسی‌ها</button>
-      </section>
+        <div className="bullet-grid">{users.map(user => <div className="user-card" key={user.id}><b>{user.name}</b><div className="meta">نقش: {user.role === 'owner' ? 'صاحب' : user.role === 'admin' ? 'مدیر' : 'اپراتور'}</div><div className="meta">شیفت: {user.shift}</div><div className="meta">فروش: {money(user.sales)} تومان</div><div className="user-pay-summary"><span>{user.payType === 'monthly' ? 'حقوق ماهانه' : 'ساعتی'} · {money(user.payType === 'monthly' ? (user.monthlySalary ?? 0) : (user.hourlyRate ?? 0))} تومان</span><span>پرداخت‌شده {money(user.paidSalaryTotal ?? 0)} · مانده حقوق {money(user.employeePayable ?? 0)}</span><span>طلب مالک {money(user.ownerReceivable ?? 0)} · خسارت {money(user.damageTotal ?? 0)}</span></div><div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{user.permissions.map(permission => <span className="status-pill free" key={permission}>{permission}</span>)}</div><div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}><button type="button" className="btn sm" onClick={() => selectPermissionUser(user.id)}>دسترسی‌ها</button>{canViewPayroll && <button type="button" className="btn sm" onClick={() => void openPayrollProfile(user)}>پروفایل حقوق</button>}{canManagePayroll && <button type="button" className="btn sm" onClick={() => { setPayUserId(user.id); setPayAmount(''); setPayReason(''); setPayMode('salary'); setPaymentMethod('cash'); setReceiptNumber(''); }}>ثبت عملیات</button>}</div></div>)}</div>
+      </section>}
+      {canManageUsers && <section className="card-panel" style={{ padding: 14, overflow: 'auto' }}>
+        <h3>🔐 دسترسی سروری کاربر</h3>
+        <label>کاربر<select value={selectedUserId} onChange={event => selectPermissionUser(event.target.value)}>
+          <option value="">انتخاب کاربر</option>
+          {serverUsers.map(user => <option key={user.id} value={user.id}>{user.fullName} · {user.role}</option>)}
+        </select></label>
+        <div className="data-table" style={{display:'grid',gap:8,marginTop:12}}>
+          {permissionCatalog.map(permission => <label key={permission.name} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderBottom:'1px solid rgba(255,255,255,.06)'}}>
+            <input type="checkbox" checked={selectedPermissions.includes(permission.name)} disabled={!selectedUserId} onChange={event => togglePermission(permission.name,event.target.checked)} />
+            <span><strong>{permission.name}</strong><small style={{display:'block',opacity:.65}}>{permission.description}</small></span>
+          </label>)}
+        </div>
+        <button className="btn primary" disabled={!selectedUserId} onClick={() => void savePermissions()}>💾 ذخیره دسترسی‌های کاربر</button>
+      </section>}
     </div>
+    {canViewPayroll && <section className="card-panel" style={{ margin:'0 22px 20px', padding:14 }}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}>
+        <div><h3 style={{marginBottom:4}}>حساب حقوق و Ledger پرسنل</h3><small>مانده حقوق پرسنل و طلب مالک جدا از اختلاف صندوق نگهداری می‌شود.</small></div>
+        <span className="status-pill free">{payrollUsers.length} نفر</span>
+      </div>
+      <div className="data-table" style={{marginTop:12}}>
+        {payrollUsers.map(row => <div className="info-row" key={row.userId}>
+          <span><strong>{row.fullName}</strong> · {row.payType === 'monthly' ? 'ماهانه' : 'ساعتی'} · حقوق این ماه {money(row.accruedThisMonth)} ت</span>
+          <strong>طلب پرسنل {money(row.employeePayable)} ت · طلب مالک {money(row.ownerReceivable)} ت · پرداخت این ماه {money(row.paidThisMonth)} ت</strong>
+          <div style={{display:'flex',gap:6}}>{canViewPayroll && <button className="btn sm" onClick={() => void openPayrollProfile(row)}>پروفایل</button>}{canManagePayroll && <button className="btn sm" onClick={() => { setPayUserId(row.userId); setPayAmount(''); setPayReason(''); setPayMode('salary'); setPaymentMethod('cash'); setReceiptNumber(''); }}>عملیات</button>}</div>
+        </div>)}
+      </div>
+    </section>}
+    {canDecideApproval && pendingApprovals.length > 0 && <section className="card-panel" style={{ margin:'0 22px 20px', padding:14 }}>
+      <h3>عملیات در انتظار تأیید</h3>
+      {pendingApprovals.map(row => <div className="info-row" key={row.id}>
+        <span><strong>{row.action}</strong> · {row.reason}</span>
+        <span>{row.requestedBy} · {new Date(row.createdAt).toLocaleString('fa-IR')}</span>
+        <div style={{display:'flex',gap:6}}>
+          <button className="btn sm primary" onClick={() => void decideApproval(row.id, true)}>تأیید</button>
+          <button className="btn sm danger" onClick={() => void decideApproval(row.id, false)}>رد</button>
+        </div>
+      </div>)}
+    </section>}
     <section className="card-panel" style={{ margin:'0 22px 20px', padding:14 }}>
       <h3>🕘 شیفت‌های اخیر</h3>
       {shifts.map(shift => <div className="info-row" key={shift.id}><span>{shift.operator} · {new Date(shift.openedAt).toLocaleString('fa-IR')} تا {shift.closedAt ? new Date(shift.closedAt).toLocaleString('fa-IR') : 'باز'}</span><strong>{money(shift.sales ?? 0)} ت · اختلاف {money(shift.difference ?? 0)} ت</strong></div>)}
@@ -191,8 +410,8 @@ export function UsersPage() {
         </section>
       </div>;
     })()}
-    {payUserId && <div className="modal-backdrop"><section className="operation-modal"><button className="modal-close" onClick={() => setPayUserId(null)}>×</button><h2>حساب پرسنل · {users.find(item => item.id === payUserId)?.name}</h2><label>عملیات<select value={payMode} onChange={event => setPayMode(event.target.value as typeof payMode)}><option value="salary">پرداخت حقوق</option><option value="bonus">پاداش</option><option value="deduction">کسری مصوب</option><option value="advance">مساعده</option><option value="damage">ثبت خسارت</option></select></label><label>مبلغ (تومان)<input autoFocus inputMode="numeric" value={payAmount} onChange={event => setPayAmount(event.target.value)} /></label><label>دلیل<input value={payReason} onChange={event => setPayReason(event.target.value)} placeholder="دلیل و توضیح عملیات…" /></label><div className="modal-actions"><button className="btn primary" onClick={applyPayAction}>ثبت عملیات</button><button className="btn" onClick={() => setPayUserId(null)}>انصراف</button></div><small className="security-footnote">نمایش حقوق فعلاً در Preview است؛ اتصال Ledger حقوقی سرور در مرحله Users/Permissions تکمیل خواهد شد.</small></section></div>}
-    {draft && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setDraft(null)}><section className="operation-modal"><button className="modal-close" onClick={() => setDraft(null)}>×</button><h2>{users.some(user => user.id === draft.id) ? 'ویرایش کاربر و حقوق' : 'کاربر جدید'}</h2><label>نام<input value={draft.name} onChange={event => setDraft({...draft,name:event.target.value})} /></label><label>نقش<select value={draft.role} onChange={event => setDraft({...draft,role:event.target.value as UserRecord['role']})}><option value="owner">صاحب</option><option value="admin">مدیر</option><option value="operator">اپراتور</option></select></label><label>شیفت<input value={draft.shift} onChange={event => setDraft({...draft,shift:event.target.value})} /></label><div className="modal-grid-2"><label>نوع حقوق<select value={draft.payType ?? 'hourly'} onChange={event => setDraft({...draft,payType:event.target.value as UserRecord['payType']})}><option value="hourly">ساعتی</option><option value="monthly">ماهانه</option></select></label><label>نرخ ساعتی<input inputMode="numeric" value={draft.hourlyRate ?? 0} onChange={event => setDraft({...draft,hourlyRate:Number(event.target.value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0})} /></label></div><label>حقوق ماهانه<input inputMode="numeric" value={draft.monthlySalary ?? 0} onChange={event => setDraft({...draft,monthlySalary:Number(event.target.value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0})} /></label><div className="modal-grid-2"><label>شروع کار<input type="time" value={draft.workStart ?? ''} onChange={event => setDraft({...draft,workStart:event.target.value})} /></label><label>پایان کار<input type="time" value={draft.workEnd ?? ''} onChange={event => setDraft({...draft,workEnd:event.target.value})} /></label></div><div className="modal-actions"><button className="btn primary" onClick={() => void saveUser()}>ذخیره</button><button className="btn" onClick={() => setDraft(null)}>انصراف</button></div></section></div>}
+    {payUserId && <div className="modal-backdrop"><section className="operation-modal"><button className="modal-close" onClick={() => setPayUserId(null)}>×</button><h2>حساب پرسنل · {users.find(item => item.id === payUserId)?.name}</h2><label>عملیات<select value={payMode} onChange={event => setPayMode(event.target.value as typeof payMode)}><option value="salary">پرداخت حقوق</option><option value="accrual">ثبت حقوق محاسبه‌شده</option><option value="overtime">ثبت اضافه‌کاری</option><option value="bonus">پاداش</option><option value="deduction">کسری مصوب</option><option value="advance">مساعده</option><option value="damage">ثبت خسارت</option><option value="receivablePayment">تسویه طلب مالک</option></select></label><label>مبلغ (تومان)<input autoFocus inputMode="numeric" value={payAmount} onChange={event => setPayAmount(event.target.value)} /></label>{payMode === 'salary' && <><label>روش پرداخت<select value={paymentMethod} onChange={event => setPaymentMethod(event.target.value as typeof paymentMethod)}><option value="cash">نقدی</option><option value="card">کارت</option><option value="bank">واریز بانکی</option></select></label><label>شماره رسید/مرجع (اختیاری)<input dir="ltr" value={receiptNumber} onChange={event => setReceiptNumber(event.target.value)} /></label></>}<label>دلیل<input value={payReason} onChange={event => setPayReason(event.target.value)} placeholder="دلیل و توضیح عملیات…" /></label><div className="modal-actions"><button className="btn primary" onClick={applyPayAction}>ثبت عملیات</button><button className="btn" onClick={() => setPayUserId(null)}>انصراف</button></div><small className="security-footnote">Ledger حقوقی روی Server ثبت می‌شود؛ عملیات حساس تا تأیید مجاز وارد مانده حساب نمی‌شود.</small></section></div>}
+    {draft && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setDraft(null)}><section className="operation-modal"><button className="modal-close" onClick={() => setDraft(null)}>×</button><h2>ویرایش پروفایل حقوق · {draft.name}</h2><label>نام<input value={draft.name} readOnly /></label><label>تلفن<input dir="ltr" value={draft.phone ?? ''} onChange={event => setDraft({...draft,phone:event.target.value})} /></label><div className="modal-grid-2"><label>نوع حقوق<select value={draft.payType ?? 'hourly'} onChange={event => setDraft({...draft,payType:event.target.value as UserRecord['payType']})}><option value="hourly">ساعتی</option><option value="monthly">ماهانه</option></select></label><label>نرخ ساعتی<input inputMode="numeric" value={draft.hourlyRate ?? 0} onChange={event => setDraft({...draft,hourlyRate:Number(event.target.value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,s]/g,''))||0})} /></label></div><label>حقوق ماهانه<input inputMode="numeric" value={draft.monthlySalary ?? 0} onChange={event => setDraft({...draft,monthlySalary:Number(event.target.value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,s]/g,''))||0})} /></label><label>نرخ اضافه‌کاری<input inputMode="numeric" value={draft.overtimeRate ?? 0} onChange={event => setDraft({...draft,overtimeRate:Number(event.target.value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,s]/g,''))||0})} /></label><label>تاریخ شروع همکاری<input type="date" value={draft.employmentStartDate ? draft.employmentStartDate.slice(0,10) : ''} onChange={event => setDraft({...draft,employmentStartDate:event.target.value ? new Date(event.target.value).toISOString() : null})} /></label><div className="modal-grid-2"><label>شروع کار<input type="time" value={draft.workStart ?? ''} onChange={event => setDraft({...draft,workStart:event.target.value})} /></label><label>پایان کار<input type="time" value={draft.workEnd ?? ''} onChange={event => setDraft({...draft,workEnd:event.target.value})} /></label></div><label>یادداشت<textarea rows={3} value={draft.notes ?? ''} onChange={event => setDraft({...draft,notes:event.target.value})} /></label><div className="modal-actions"><button className="btn primary" onClick={() => void saveUser()}>ذخیره پروفایل</button><button className="btn" onClick={() => setDraft(null)}>انصراف</button></div>{ledgerLoading ? <p>در حال دریافت Ledger…</p> : <div className="data-table" style={{marginTop:12}}><strong>آخرین رویدادهای حساب</strong>{payrollLedger.slice(0,12).map(entry => <div className="info-row" key={entry.id}><span>{entry.kind} · {entry.reason}</span><strong>{money(entry.amount)} تومان · {entry.status === 'Approved' ? 'تأیید شده' : entry.status === 'Pending' ? 'در انتظار تأیید' : entry.status}</strong></div>)}</div>}</section></div>}
     {notice && <div className="operation-toast">{notice}<button onClick={() => setNotice('')}>×</button></div>}
   </>;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ProductRecord } from '../types';
+import type { AppUserRecord, ProductRecord } from '../types';
+import { hasPermission } from '../services/authService';
 import { adjustServerStock, createServerProduct, getServerInventoryTransactions, getServerProducts, recordServerBuffetSale, updateServerProduct } from '../services/buffetService';
 import { getServerActiveSessions, type ActiveServerSession } from '../services/sessionService';
 import { userErrorMessage } from '../utils/userError';
@@ -8,7 +9,9 @@ function money(value: number) {
   return new Intl.NumberFormat('fa-IR').format(Math.round(value));
 }
 
-export function BuffetPage() {
+export function BuffetPage({ user }: { user: AppUserRecord }) {
+  const canSellBuffet = hasPermission(user, 'buffet.sell');
+  const canManageInventory = hasPermission(user, 'buffet.inventory');
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [inventoryHistory, setInventoryHistory] = useState<import('../types').InventoryTransactionRecord[]>([]);
   const [activeSessions, setActiveSessions] = useState<ActiveServerSession[]>([]);
@@ -24,10 +27,10 @@ export function BuffetPage() {
 
   async function refresh() {
     try {
-      const [serverProducts, serverHistory, serverSessions] = await Promise.all([
-        getServerProducts(),
-        getServerInventoryTransactions(),
-        getServerActiveSessions(),
+      const serverProducts = await getServerProducts();
+      const [serverHistory, serverSessions] = await Promise.all([
+        canManageInventory ? getServerInventoryTransactions() : Promise.resolve([]),
+        canSellBuffet ? getServerActiveSessions() : Promise.resolve([]),
       ]);
       setProducts(serverProducts);
       setInventoryHistory(serverHistory);
@@ -41,7 +44,7 @@ export function BuffetPage() {
     }
   }
 
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => { void refresh(); }, [canManageInventory, canSellBuffet]);
 
   const categoryValue = category === 'خوراکی' ? 'غذا' : category;
   const visibleProducts = category === 'همه' ? products : products.filter(item => item.category === categoryValue);
@@ -58,6 +61,7 @@ export function BuffetPage() {
   }
 
   async function purchaseProduct(product: ProductRecord) {
+    if (!canManageInventory) { setNotice('دسترسی مدیریت موجودی ندارید'); return; }
     const quantity = numberValue(window.prompt('تعداد خرید', '1') ?? '');
     if (quantity <= 0) { setNotice('تعداد خرید معتبر نیست'); return; }
     const unitCost = numberValue(window.prompt('بهای خرید هر واحد (تومان)', String(product.buyPrice)) ?? '');
@@ -75,6 +79,7 @@ export function BuffetPage() {
   }
 
   async function adjustStock(product: ProductRecord, direction: 'in' | 'out', kind: 'Adjustment' | 'Waste' | 'Return' = 'Adjustment', notesOverride?: string) {
+    if (!canManageInventory) { setNotice('دسترسی مدیریت موجودی ندارید'); return; }
     setBusy(true);
     try {
       const result = await adjustServerStock(product.id, 1, direction, notesOverride ?? (direction === 'in' ? 'ورود بوفه' : 'خروج دستی بوفه'), kind);
@@ -89,6 +94,7 @@ export function BuffetPage() {
   }
 
   async function saveProduct() {
+    if (!canManageInventory) { setNotice('دسترسی مدیریت موجودی ندارید'); return; }
     const price = numberValue(draft.price);
     const buyPrice = numberValue(draft.buyPrice);
     const stock = numberValue(draft.stock);
@@ -136,6 +142,7 @@ export function BuffetPage() {
   }
 
   function startEdit(product: ProductRecord) {
+    if (!canManageInventory) { setNotice('دسترسی مدیریت موجودی ندارید'); return; }
     setEditingProductId(product.id);
     setDraft({
       name: product.name,
@@ -150,6 +157,7 @@ export function BuffetPage() {
   }
 
   async function checkout(destination: 'session' | 'standalone') {
+    if (!canSellBuffet) { setNotice('دسترسی فروش بوفه ندارید'); return; }
     if (cartTotal <= 0) { setNotice('سبد فروش خالی است'); return; }
     if (destination === 'session' && !sessionTargetId) {
       setNotice('ابتدا جلسه فعال مقصد را انتخاب کنید');
@@ -189,11 +197,11 @@ export function BuffetPage() {
     </div>
 
     <div className="toolbar">
-      <button type="button" className="btn primary" onClick={() => { setEditingProductId(null); setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0', minimumStock: '0', unit: 'عدد' }); setProductFormOpen(current => !current); }}>+ محصول جدید</button>
+      {canManageInventory && <button type="button" className="btn primary" onClick={() => { setEditingProductId(null); setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0', minimumStock: '0', unit: 'عدد' }); setProductFormOpen(current => !current); }}>+ محصول جدید</button>}
       <span className="status-pill free">موجودی از Server</span>
     </div>
 
-    {productFormOpen && <section className="card-panel buffet-product-form">
+    {canManageInventory && productFormOpen && <section className="card-panel buffet-product-form">
       <h3>{editingProductId ? 'ویرایش محصول' : 'ثبت محصول'}</h3>
       <div className="modal-grid-2">
         <label>نام محصول<input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} /></label>
@@ -227,13 +235,13 @@ export function BuffetPage() {
               <div className="progress-bar"><span style={{ width }} /></div>
               {low && <small className="low-stock">هشدار موجودی کم</small>}
               <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
-              <button className="btn sm" disabled={busy} onClick={() => startEdit(product)}>ویرایش</button>
-              <button className="btn sm" disabled={busy} onClick={() => void purchaseProduct(product)}>ثبت خرید</button>
+              {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => startEdit(product)}>ویرایش</button>}
+              {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void purchaseProduct(product)}>ثبت خرید</button>}
               <div className="product-stock-actions">
-                <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button>
-                <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out')}>− موجودی</button>
-                <button className="btn sm danger" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out', 'Waste', 'ضایعات بوفه')}>− ضایعات</button>
-                <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in', 'Return', 'مرجوعی بوفه')}>+ مرجوعی</button>
+                {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button>}
+                {canManageInventory && <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out')}>− موجودی</button>}
+                {canManageInventory && <button className="btn sm danger" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out', 'Waste', 'ضایعات بوفه')}>− ضایعات</button>}
+                {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in', 'Return', 'مرجوعی بوفه')}>+ مرجوعی</button>}
               </div>
             </article>;
           })}
@@ -261,7 +269,7 @@ export function BuffetPage() {
         )}
         <div className="cart-items">{cartItems.length ? cartItems.map(item => <div className="cart-item" key={item.id}><span>{item.name} · {money(item.price)}</span><div><button onClick={() => changeQuantity(item.id, -1)} aria-label="کاهش تعداد">−</button><b>{cart[item.id]}</b><button onClick={() => changeQuantity(item.id, 1)} aria-label="افزایش تعداد">+</button></div></div>) : <p className="empty-state">از فهرست کالا انتخاب کنید</p>}</div>
         <div className="cart-total"><span>جمع سبد</span><b>{money(cartTotal)} تومان</b></div>
-        <div className="modal-actions"><button className="btn primary" disabled={busy} onClick={() => void checkout('session')}>افزودن به فاکتور</button><button className="btn" disabled={busy} onClick={() => void checkout('standalone')}>ثبت فروش مستقل</button></div>
+        <div className="modal-actions">{canSellBuffet && <><button className="btn primary" disabled={busy} onClick={() => void checkout('session')}>افزودن به فاکتور</button><button className="btn" disabled={busy} onClick={() => void checkout('standalone')}>ثبت فروش مستقل</button></>}</div>
       </section>
     </div>
 

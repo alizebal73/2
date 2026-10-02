@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { changeServerCustomerPassword, createServerCustomer, createServerCustomerDebt, getCustomerDebts, getCustomerHistory, getCustomerVipUsage, getServerCustomers, settleCustomerDebt, updateServerCustomer } from '../services/customerService';
 import { userErrorMessage } from '../utils/userError';
-import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
+import { getWalletLedger, recordWalletTransaction, requestWalletRefundApproval } from '../services/walletLedgerService';
 import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
 import { assignVipPackage, getVipPackages } from '../services/vipPackageService';
-import type { CustomerRecord, WalletLedgerEntry } from '../types';
-import { ApprovalDialog } from '../components/ApprovalDialog';
+import type { AppUserRecord, CustomerRecord, WalletLedgerEntry } from '../types';
+import { hasPermission } from '../services/authService';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 type Filter = 'all' | 'vip' | 'debt';
@@ -21,7 +21,11 @@ type CustomerDraft = {
   password: string;
 };
 
-export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'manager' | 'owner' }) {
+export function CustomersPage({ user }: { user: AppUserRecord }) {
+  const canManageCustomer = hasPermission(user, 'customer.manage');
+  const canManageWallet = hasPermission(user, 'customer.wallet');
+  const canManageDebt = hasPermission(user, 'customer.debt');
+  const canReadCustomerPage = canManageCustomer || canManageWallet || canManageDebt;
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selectedId, setSelectedId] = useState('c1');
   const [filter, setFilter] = useState<Filter>('all');
@@ -41,12 +45,16 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const [customerDebts, setCustomerDebts] = useState<Array<{ id: string; amount: number; issuedAt: string; description: string }>>([]);
   const [selectedDebtId, setSelectedDebtId] = useState('');
   const [debtPaymentMethod, setDebtPaymentMethod] = useState<'cash' | 'card' | 'wallet'>('cash');
-  const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string; sourceTransactionId?: string } | null>(null);
   const [refundSourceId, setRefundSourceId] = useState('');
   const [vipPackages, setVipPackages] = useState<import('../types').VipPackageRecord[]>([]);
   const [selectedVipPackageId, setSelectedVipPackageId] = useState('');
 
   useEffect(() => {
+    if (!canReadCustomerPage) {
+      setCustomers([]);
+      setVipPackages([]);
+      return;
+    }
     void Promise.all([
       getServerCustomers(),
       getVipPackages().catch(() => []),
@@ -54,7 +62,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       setCustomers(rows);
       setVipPackages(packages);
     }).catch(error => setNotice(userErrorMessage(error, 'دریافت اطلاعات مشتریان انجام نشد')));
-  }, []);
+  }, [canReadCustomerPage]);
   const visible = useMemo(() => customers.filter(customer => {
     const matchesFilter = filter === 'all' || (filter === 'vip' ? customer.vip !== 'none' : customer.debt > 0);
     const search = query.trim().toLowerCase();
@@ -72,11 +80,11 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
     setVipUsage(null);
     setServerHistory([]);
     void Promise.all([
-      getWalletLedger(selected.id),
-      getFreeBenefits(selected.id).catch(() => null),
-      getCustomerVipUsage(selected.id).catch(() => null),
-      getCustomerHistory(selected.id).catch(() => []),
-      getCustomerDebts(selected.id).catch(() => []),
+      canManageWallet ? getWalletLedger(selected.id) : Promise.resolve([]),
+      canManageWallet ? getFreeBenefits(selected.id).catch(() => null) : Promise.resolve(null),
+      canManageCustomer ? getCustomerVipUsage(selected.id).catch(() => null) : Promise.resolve(null),
+      canManageCustomer ? getCustomerHistory(selected.id).catch(() => []) : Promise.resolve([]),
+      canManageDebt ? getCustomerDebts(selected.id).catch(() => []) : Promise.resolve([]),
     ]).then(([rows, benefits, usage, history, debts]) => {
       if (!active) return;
       setWalletLedger(rows);
@@ -92,7 +100,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       } else setServerFreeBenefits(null);
     }).catch(() => { if (active) { setWalletLedger([]); setServerFreeBenefits(null); } });
     return () => { active = false; };
-  }, [selected?.id]);
+  }, [selected?.id, canManageCustomer, canManageWallet, canManageDebt]);
 
 
   const vipCount = customers.filter(customer => customer.vip !== 'none').length;
@@ -100,6 +108,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const packageCount = customers.filter(customer => customer.packageName).length;
 
   function openNewCustomer() {
+    if (!canManageCustomer) { setNotice('دسترسی مدیریت مشتریان ندارید'); return; }
     setDraft({ name: '', alias: '', mobile: '', nationalId: '', username: '', vip: 'none', password: '' });
     setConcurrentLoginLimit(1);
     setActionNote('');
@@ -109,6 +118,15 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   function openAction(nextAction: Exclude<CustomerAction, '' | 'new'>) {
     if (!selected) {
       setNotice('ابتدا یک مشتری را انتخاب کنید');
+      return;
+    }
+    const required = nextAction === 'wallet' || nextAction === 'gift' || nextAction === 'freeTime' || nextAction === 'refund'
+      ? canManageWallet
+      : nextAction === 'debt' || nextAction === 'debtSettle'
+        ? canManageDebt
+        : canManageCustomer;
+    if (!required) {
+      setNotice('دسترسی لازم برای این عملیات را ندارید');
       return;
     }
     setAmount('');
@@ -132,21 +150,18 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       .replace(/[٬,s]/g, '')) || 0;
   }
 
-  async function executeRefund(refundAmount: number, reason: string, sourceTransactionId?: string) {
+  async function requestRefundApproval(refundAmount: number, reason: string, sourceTransactionId?: string) {
+    if (!canManageWallet) { setNotice('دسترسی مدیریت کیف پول ندارید'); return; }
     if (!selected) return;
     try {
-      const entry = await refundWalletTransaction(selected.id, { amount: refundAmount, reason, sourceTransactionId });
-      updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'بازگشت وجه · ' + money(refundAmount) + ' تومان');
-      setWalletLedger(current => [entry, ...current]);
+      await requestWalletRefundApproval(selected.id, { amount: refundAmount, reason, sourceTransactionId });
       setAction('');
       setActionNote('');
-      setRefundApproval(null);
       setRefundSourceId('');
       setAmount('');
-      setNotice('بازگشت وجه ثبت شد و در دفتر کیف پول باقی ماند');
+      setNotice('درخواست بازگشت وجه ثبت شد و برای تأیید کاربر مجاز ارسال شد.');
     } catch (error) {
-      setRefundApproval(null);
-      setNotice(userErrorMessage(error, 'ثبت بازگشت وجه انجام نشد'));
+      setNotice(userErrorMessage(error, 'درخواست بازگشت وجه ثبت نشد'));
     }
   }
 
@@ -210,11 +225,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       if (value > selected.wallet) { setNotice('مبلغ بازگشت بیشتر از موجودی کیف پول مشتری است'); return; }
       if (!actionNote.trim()) { setNotice('دلیل بازگشت وجه را وارد کنید'); return; }
       if (!refundSourceId) { setNotice('تراکنش مبدأ بازگشت وجه را انتخاب کنید'); return; }
-      if (role === 'operator' && value > 100000) {
-        setRefundApproval({ amount: value, reason: actionNote.trim(), sourceTransactionId: refundSourceId });
-        return;
-      }
-      await executeRefund(value, actionNote.trim(), refundSourceId);
+      await requestRefundApproval(value, actionNote.trim(), refundSourceId);
       return;
     }
     if (action === 'password') {
@@ -351,21 +362,26 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
         <div className="head">
           <div className="search-box"><input aria-label="جستجوی مشتری" value={query} onChange={event => setQuery(event.target.value)} placeholder="کد، نام، لقب، موبایل یا کد ملی…" /></div>
           <div className="view-switch">{([['all', 'همه'], ['vip', 'VIP'], ['debt', 'بدهکار']] as [Filter, string][]).map(([key, label]) =>
-            <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{label}</button>)}</div>
+            <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{label}</button> )}</div>
           <button className="btn primary sm" onClick={openNewCustomer}>+ مشتری جدید</button>
         </div>
         <div className="rows">{visible.map(customer =>
           <button key={customer.id} type="button" className={`customer-row ${customer.id === selected?.id ? 'active' : ''}`} onClick={() => setSelectedId(customer.id)}>
             <span className={`avatar ${customer.vip}`}>{customer.name.slice(0, 1)}</span>
             <span className="main"><b>{customer.name}</b><span>کد {customer.code} · @{customer.username}</span><small>{customer.mobile || 'بدون موبایل'} · {customer.alias || 'بدون لقب'}</small></span>
-            <span className="fin"><span className={`vip-tag ${customer.vip}`}>{customer.vip === 'gold' ? 'طلایی' : customer.vip === 'silver' ? 'نقره‌ای' : 'عادی'}</span><strong className="customer-row-wallet">{money(customer.wallet)} تومان</strong>{customer.debt > 0 && <strong className="customer-row-debt">بدهی {money(customer.debt)} تومان</strong>}<small className={`customer-state ${customer.status}`}>{customer.status === 'active' ? 'فعال' : customer.status === 'warning' ? 'نیازمند توجه' : 'قفل'}</small></span>
+            <span className="fin"><span className={`vip-tag ${customer.vip}`}>{customer.vip === 'gold' ? 'طلایی' : customer.vip === 'silver' ? 'نقره‌ای' : 'عادی'}</span>{canManageWallet && <strong className="customer-row-wallet">{money(customer.wallet)} تومان</strong>}{canManageDebt && customer.debt > 0 && <strong className="customer-row-debt">بدهی {money(customer.debt)} تومان</strong>}<small className={`customer-state ${customer.status}`}>{customer.status === 'active' ? 'فعال' : customer.status === 'warning' ? 'نیازمند توجه' : 'قفل'}</small></span>
           </button>)}</div>
       </section>
 
       {selected && <section className="customer-profile">
         <div className="profile-head"><div className={`profile-avatar ${selected.vip}`}>{selected.name.slice(0, 1)}</div><div><h3>{selected.name}</h3><div className="sub">کد کاربری {selected.code} · @{selected.username} · {selected.alias || 'بدون لقب'}</div></div><span className={`vip-tag ${selected.vip}`}>{selected.vip === 'gold' ? 'طلایی' : selected.vip === 'silver' ? 'نقره‌ای' : 'عادی'}</span></div>
-        <div className="profile-stats">{[['کیف پول', selected.wallet, 'green'], ['بدهی', selected.debt, 'red'], ['اعتبار رایگان', selected.giftCredit, 'blue']].map(([label, value, color]) =>
-          <div className="profile-stat" key={label}><span className="label">{label}</span><span className={`value ${color}`}>{money(Number(value))} ت</span></div>)}</div>
+        <div className="profile-stats">
+          {canManageWallet && <>
+            <div className="profile-stat"><span className="label">کیف پول</span><span className="value green">{money(selected.wallet)} ت</span></div>
+            <div className="profile-stat"><span className="label">اعتبار رایگان</span><span className="value blue">{money(selected.giftCredit)} ت</span></div>
+          </>}
+          {canManageDebt && <div className="profile-stat"><span className="label">بدهی</span><span className="value red">{money(selected.debt)} ت</span></div>}
+        </div>
 
         <div className="profile-section"><h4>اطلاعات مشتری</h4>
           <div className="info-row"><span>کد کاربری</span><strong>{selected.code}</strong></div>
@@ -385,7 +401,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           </div>
         </div>
 
-        <div className="profile-section">
+        {canManageWallet && <div className="profile-section">
           <div className="profile-section-head">
             <h4>دفتر کیف پول</h4>
             <span>{walletLedger.length.toLocaleString('fa-IR')} تراکنش</span>
@@ -409,20 +425,20 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
         <div className="profile-section"><div className="profile-section-head"><h4>تاریخچه مشتری</h4><span>{serverHistory.length} مورد</span></div><div className="customer-history-list">{serverHistory.length ? serverHistory.map((item, index) => (
           <div className="customer-history-item" key={item.id + '-' + index}><span className="customer-history-dot" /><div><strong>{item.description}</strong><small>{new Date(item.createdAt).toLocaleString('fa-IR')} · {money(item.amount)} تومان</small></div></div>
         )) : <div className="customer-ledger-empty">هنوز سابقه سروری برای این مشتری ثبت نشده است.</div>}</div></div>
 
         <div className="customer-actions">
-          <button className="btn sm" onClick={() => openAction('wallet')}>شارژ کیف پول</button>
+          {canManageWallet && <><button className="btn sm" onClick={() => openAction('wallet')}>شارژ کیف پول</button>
           <button className="btn sm" onClick={() => openAction('gift')}>اعتبار رایگان</button>
           <button className="btn sm" onClick={() => openAction('freeTime')}>زمان رایگان</button>
-          <button className="btn sm" onClick={() => openAction('refund')}>بازگشت وجه</button>
-          {selected.debt > 0 && <button className="btn sm" onClick={() => openAction('debtSettle')}>تسویه بدهی</button>}
-          <button className="btn sm" onClick={() => openAction('edit')}>ویرایش مشتری</button>
-          <button className="btn sm" onClick={() => openAction('password')}>تغییر رمز</button>
+          <button className="btn sm" onClick={() => openAction('refund')}>بازگشت وجه</button></>}
+          {canManageDebt && selected.debt > 0 && <button className="btn sm" onClick={() => openAction('debtSettle')}>تسویه بدهی</button>}
+          {canManageCustomer && <><button className="btn sm" onClick={() => openAction('edit')}>ویرایش مشتری</button>
+          <button className="btn sm" onClick={() => openAction('password')}>تغییر رمز</button></>}
         </div>     </section>}
     </div>
 
@@ -519,17 +535,6 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
         </>}
       </section>
     </div>}
-
-    {refundApproval && (
-      <ApprovalDialog
-        open
-        title="تأیید بازگشت وجه"
-        detail={'بازگشت ' + money(refundApproval.amount) + ' تومان برای «' + (selected?.name ?? 'مشتری') + '» به تأیید مدیر نیاز دارد. دلیل: ' + refundApproval.reason}
-        requestLabel="تأیید و ثبت بازگشت وجه"
-        onReject={() => setRefundApproval(null)}
-        onApprove={() => executeRefund(refundApproval.amount, refundApproval.reason, refundApproval.sourceTransactionId)}
-      />
-    )}
 
     {notice && <div className="operation-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
   </>;

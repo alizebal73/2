@@ -172,6 +172,72 @@ public sealed class AppUserPermission
     public Permission Permission { get; set; } = default!;
 }
 
+public sealed class AppUserSession : BaseEntity
+{
+    public Guid AppUserId { get; set; }
+    public AppUser AppUser { get; set; } = default!;
+    public required string TokenHash { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+    public DateTimeOffset? LastSeenAt { get; set; }
+}
+
+public enum ApprovalStatus
+{
+    Pending,
+    Approved,
+    Rejected,
+    Cancelled
+}
+
+public sealed class ApprovalRequest : BaseEntity
+{
+    public required string Action { get; set; }
+    public required string EntityName { get; set; }
+    public string? EntityId { get; set; }
+    public required string Reason { get; set; }
+    public Guid RequestedByUserId { get; set; }
+    public AppUser RequestedByUser { get; set; } = default!;
+    public Guid? DecidedByUserId { get; set; }
+    public AppUser? DecidedByUser { get; set; }
+    public ApprovalStatus Status { get; set; } = ApprovalStatus.Pending;
+    public string? DecisionNote { get; set; }
+    public DateTimeOffset? DecidedAt { get; set; }
+}
+
+public sealed class EmployeeProfile : BaseEntity
+{
+    public Guid AppUserId { get; set; }
+    public AppUser AppUser { get; set; } = null!;
+    public string Phone { get; set; } = "";
+    public string PayType { get; set; } = "hourly";
+    public decimal HourlyRate { get; set; }
+    public decimal MonthlySalary { get; set; }
+    public decimal OvertimeRate { get; set; }
+    public DateTimeOffset? EmploymentStartDate { get; set; }
+    public string? WorkSchedule { get; set; }
+    public string? Notes { get; set; }
+    public bool IsActive { get; set; } = true;
+    public ICollection<PayrollLedgerEntry> PayrollEntries { get; set; } = new List<PayrollLedgerEntry>();
+}
+
+public sealed class PayrollLedgerEntry : BaseEntity
+{
+    public Guid EmployeeProfileId { get; set; }
+    public EmployeeProfile EmployeeProfile { get; set; } = null!;
+    public string Kind { get; set; } = "Adjustment";
+    public decimal Amount { get; set; }
+    public decimal EmployeePayableDelta { get; set; }
+    public decimal OwnerReceivableDelta { get; set; }
+    public string Reason { get; set; } = "";
+    public ApprovalStatus Status { get; set; } = ApprovalStatus.Approved;
+    public Guid CreatedByUserId { get; set; }
+    public Guid? ApprovedByUserId { get; set; }
+    public DateTimeOffset? ApprovedAt { get; set; }
+    public string? PaymentMethod { get; set; }
+    public string? ReceiptNumber { get; set; }
+}
+
 public sealed class VipPackage : BaseEntity
 {
     public required string Name { get; set; }

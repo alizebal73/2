@@ -12,6 +12,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
+builder.Services.AddScoped<WalletRefundService>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
 var databasePath = Path.IsPathRooted(databaseFile)
@@ -62,8 +63,927 @@ app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration c
 })
 .WithName("GetReleaseManifest");
 
-app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken cancellationToken) =>
+app.MapPost("/api/auth/login", async (
+    LoginRequest request,
+    GameNetDbContext database,
+    HttpContext context,
+    CancellationToken cancellationToken) =>
 {
+    var username = request.UserName?.Trim();
+    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(request.Password))
+        return Results.BadRequest(new { code = "missing_credentials", message = "نام کاربری و رمز عبور را وارد کنید." });
+
+    var user = await database.AppUsers
+        .Include(item => item.Permissions)
+        .ThenInclude(item => item.Permission)
+        .FirstOrDefaultAsync(item => item.UserName == username && item.IsActive, cancellationToken);
+
+    if (user is null || !PasswordSecurity.Verify(request.Password, user.PasswordHash))
+        return Results.Unauthorized();
+
+    var token = AuthorizationService.CreateToken();
+    var session = new AppUserSession
+    {
+        AppUserId = user.Id,
+        TokenHash = PasswordSecurity.HashToken(token),
+        ExpiresAt = DateTimeOffset.UtcNow.AddHours(AuthorizationService.SessionHours),
+        LastSeenAt = DateTimeOffset.UtcNow
+    };
+
+    user.LastLoginAt = DateTimeOffset.UtcNow;
+    database.AppUserSessions.Add(session);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AppUserLogin",
+        EntityName = "AppUser",
+        EntityId = user.Id.ToString(),
+        AppUserId = user.Id,
+        Details = "ورود اپراتور · " + user.UserName
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    context.Response.Cookies.Append(AuthorizationService.SessionCookieName, token, new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = context.Request.IsHttps,
+        SameSite = SameSiteMode.Lax,
+        Expires = session.ExpiresAt
+    });
+
+    return Results.Ok(ToAppUserDto(user));
+})
+.WithName("AppUserLogin");
+
+app.MapPost("/api/auth/logout", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var user = await AuthorizationService.ResolveUserAsync(context, database, cancellationToken);
+    var token = context.Request.Cookies[AuthorizationService.SessionCookieName];
+    if (!string.IsNullOrWhiteSpace(token))
+    {
+        var hash = PasswordSecurity.HashToken(token);
+        var session = await database.AppUserSessions.FirstOrDefaultAsync(item => item.TokenHash == hash, cancellationToken);
+        if (session is not null)
+        {
+            session.RevokedAt = DateTimeOffset.UtcNow;
+            await database.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    context.Response.Cookies.Delete(AuthorizationService.SessionCookieName);
+    if (user is not null)
+    {
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "AppUserLogout",
+            EntityName = "AppUser",
+            EntityId = user.Id.ToString(),
+            AppUserId = user.Id,
+            Details = "خروج اپراتور · " + user.UserName
+        });
+        await database.SaveChangesAsync(cancellationToken);
+    }
+
+    return Results.Ok(new { success = true });
+})
+.WithName("AppUserLogout");
+
+app.MapGet("/api/auth/me", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var user = await AuthorizationService.ResolveUserAsync(context, database, cancellationToken);
+    return user is null ? Results.Unauthorized() : Results.Ok(ToAppUserDto(user));
+})
+.WithName("GetCurrentAppUser");
+
+app.MapGet("/api/users", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var users = await database.AppUsers
+        .AsNoTracking()
+        .Include(item => item.Permissions)
+        .ThenInclude(item => item.Permission)
+        .OrderBy(item => item.FullName)
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(users.Select(ToAppUserDto).ToList());
+})
+.WithName("GetAppUsers");
+
+app.MapPost("/api/users", async (
+    AppUserWriteRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var username = request.UserName?.Trim();
+    var fullName = request.FullName?.Trim();
+    var email = request.Email?.Trim();
+    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email))
+        return Results.BadRequest(new { code = "missing_user_fields", message = "نام، نام کاربری و ایمیل را کامل کنید." });
+    if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
+        return Results.BadRequest(new { code = "weak_password", message = "رمز عبور باید حداقل ۸ کاراکتر باشد." });
+    if (!AuthorizationService.PermissionCatalog.ContainsKey(request.Role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ? "user.manage" : "session.start"))
+        return Results.BadRequest(new { code = "invalid_role", message = "نقش کاربر معتبر نیست." });
+
+    if (await database.AppUsers.AnyAsync(item => item.UserName == username || item.Email == email, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_user", message = "نام کاربری یا ایمیل قبلاً استفاده شده است." });
+
+    var user = new AppUser
+    {
+        FullName = fullName,
+        UserName = username,
+        Email = email,
+        PasswordHash = PasswordSecurity.Hash(request.Password),
+        Role = request.Role.Trim(),
+        IsActive = true
+    };
+    database.AppUsers.Add(user);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AppUserCreate",
+        EntityName = "AppUser",
+        EntityId = user.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ایجاد کاربر · " + user.UserName
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(ToAppUserDto(user));
+})
+.WithName("CreateAppUser");
+
+app.MapPut("/api/users/{userId:guid}", async (
+    Guid userId,
+    AppUserWriteRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var user = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+    if (user is null) return Results.NotFound(new { code = "user_not_found", message = "کاربر پیدا نشد." });
+
+    var username = request.UserName?.Trim();
+    var fullName = request.FullName?.Trim();
+    var email = request.Email?.Trim();
+    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email))
+        return Results.BadRequest(new { code = "missing_user_fields", message = "نام، نام کاربری و ایمیل را کامل کنید." });
+
+    if (await database.AppUsers.AnyAsync(item => item.Id != userId && (item.UserName == username || item.Email == email), cancellationToken))
+        return Results.Conflict(new { code = "duplicate_user", message = "نام کاربری یا ایمیل قبلاً استفاده شده است." });
+
+    user.FullName = fullName;
+    user.UserName = username;
+    user.Email = email;
+    user.Role = request.Role.Trim();
+    user.IsActive = request.IsActive;
+    if (!string.IsNullOrWhiteSpace(request.Password))
+    {
+        if (request.Password.Length < 8)
+            return Results.BadRequest(new { code = "weak_password", message = "رمز عبور باید حداقل ۸ کاراکتر باشد." });
+        user.PasswordHash = PasswordSecurity.Hash(request.Password);
+    }
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AppUserUpdate",
+        EntityName = "AppUser",
+        EntityId = user.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ویرایش کاربر · " + user.UserName
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(ToAppUserDto(user));
+})
+.WithName("UpdateAppUser");
+
+app.MapGet("/api/permissions", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var permissions = await database.Permissions
+        .AsNoTracking()
+        .OrderBy(item => item.Name)
+        .Select(item => new { id = item.Id, name = item.Name, description = item.Description })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(permissions);
+})
+.WithName("GetPermissions");
+
+app.MapPut("/api/users/{userId:guid}/permissions", async (
+    Guid userId,
+    PermissionAssignmentRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var user = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+    if (user is null) return Results.NotFound(new { code = "user_not_found", message = "کاربر پیدا نشد." });
+
+    var names = request.PermissionNames
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .Select(name => name.Trim().ToLowerInvariant())
+        .Distinct()
+        .ToList();
+
+    var invalid = names.Where(name => !AuthorizationService.PermissionCatalog.ContainsKey(name)).ToList();
+    if (invalid.Count > 0)
+        return Results.BadRequest(new { code = "invalid_permission", message = "یکی از دسترسی‌ها معتبر نیست.", invalid });
+
+    var permissions = await database.Permissions.Where(item => names.Contains(item.Name)).ToListAsync(cancellationToken);
+    var current = await database.AppUserPermissions.Where(item => item.AppUserId == userId).ToListAsync(cancellationToken);
+    database.AppUserPermissions.RemoveRange(current);
+
+    foreach (var permission in permissions)
+        database.AppUserPermissions.Add(new AppUserPermission { AppUserId = userId, PermissionId = permission.Id });
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AppUserPermissionsUpdate",
+        EntityName = "AppUser",
+        EntityId = userId.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "تغییر دسترسی‌ها · " + user.UserName + " · " + string.Join(",", names)
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { userId, permissions = names });
+})
+.WithName("SetAppUserPermissions");
+
+app.MapGet("/api/payroll/users", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "payroll.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var users = await database.AppUsers.AsNoTracking()
+        .OrderBy(item => item.FullName)
+        .Select(item => new { item.Id, item.FullName, item.IsActive })
+        .ToListAsync(cancellationToken);
+
+    var profiles = await database.EmployeeProfiles.AsNoTracking().ToListAsync(cancellationToken);
+    var entries = await database.PayrollLedgerEntries.AsNoTracking()
+        .Where(item => item.Status == ApprovalStatus.Approved)
+        .Include(item => item.EmployeeProfile)
+        .ToListAsync(cancellationToken);
+
+    var now = DateTimeOffset.UtcNow;
+    var monthStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+    var profileByUser = profiles.ToDictionary(item => item.AppUserId);
+    var entryGroups = entries.GroupBy(item => item.EmployeeProfile.AppUserId)
+        .ToDictionary(group => group.Key, group => group.ToList());
+
+    return Results.Ok(users.Select(user =>
+    {
+        profileByUser.TryGetValue(user.Id, out var profile);
+        entryGroups.TryGetValue(user.Id, out var rows);
+        rows ??= new List<PayrollLedgerEntry>();
+        var monthRows = rows.Where(item => item.CreatedAt >= monthStart).ToList();
+        return new
+        {
+            userId = user.Id,
+            fullName = user.FullName,
+            phone = profile?.Phone ?? "",
+            payType = profile?.PayType ?? "hourly",
+            hourlyRate = profile?.HourlyRate ?? 0m,
+            monthlySalary = profile?.MonthlySalary ?? 0m,
+            overtimeRate = profile?.OvertimeRate ?? 0m,
+            employmentStartDate = profile?.EmploymentStartDate,
+            workSchedule = profile?.WorkSchedule,
+            notes = profile?.Notes,
+            isActive = profile?.IsActive ?? user.IsActive,
+            employeePayable = rows.Sum(item => item.EmployeePayableDelta),
+            ownerReceivable = rows.Sum(item => item.OwnerReceivableDelta),
+            accruedThisMonth = monthRows.Where(item => item.Kind is "SalaryAccrual" or "Overtime").Sum(item => item.Amount),
+            paidThisMonth = monthRows.Where(item => item.Kind == "SalaryPayment").Sum(item => item.Amount),
+            bonusTotal = rows.Where(item => item.Kind == "Bonus").Sum(item => item.Amount),
+            deductionTotal = rows.Where(item => item.Kind == "Deduction").Sum(item => item.Amount),
+            damageTotal = rows.Where(item => item.Kind == "Damage").Sum(item => item.Amount),
+            advanceTotal = rows.Where(item => item.Kind == "Advance").Sum(item => item.Amount),
+            lastPaymentAt = rows.Where(item => item.Kind == "SalaryPayment").OrderByDescending(item => item.CreatedAt).Select(item => (DateTimeOffset?)item.CreatedAt).FirstOrDefault()
+        };
+    }));
+})
+.WithName("GetPayrollUsers");
+
+app.MapGet("/api/payroll/users/{userId:guid}/ledger", async (
+    Guid userId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "payroll.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var storedRows = await database.PayrollLedgerEntries.AsNoTracking()
+        .Where(item => item.EmployeeProfile.AppUserId == userId)
+        .Include(item => item.EmployeeProfile)
+        .ThenInclude(item => item.AppUser)
+        .ToListAsync(cancellationToken);
+
+    var rows = storedRows
+        .OrderByDescending(item => item.CreatedAt)
+        .Take(200)
+        .Select(item => new
+        {
+            id = item.Id,
+            userId,
+            userName = item.EmployeeProfile.AppUser.FullName,
+            kind = item.Kind,
+            amount = item.Amount,
+            employeePayableDelta = item.EmployeePayableDelta,
+            ownerReceivableDelta = item.OwnerReceivableDelta,
+            reason = item.Reason,
+            status = item.Status.ToString(),
+            createdByUserId = item.CreatedByUserId,
+            createdAt = item.CreatedAt,
+            approvedByUserId = item.ApprovedByUserId,
+            approvedAt = item.ApprovedAt,
+            paymentMethod = item.PaymentMethod,
+            receiptNumber = item.ReceiptNumber
+        })
+        .ToList();
+
+    return Results.Ok(rows);
+})
+.WithName("GetPayrollLedger");
+
+app.MapPut("/api/payroll/users/{userId:guid}", async (
+    Guid userId,
+    PayrollProfileRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "payroll.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var user = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+    if (user is null) return Results.NotFound(new { code = "user_not_found", message = "کاربر پیدا نشد." });
+    if (request.HourlyRate < 0 || request.MonthlySalary < 0 || request.OvertimeRate < 0)
+        return Results.BadRequest(new { code = "invalid_payroll_profile", message = "مقادیر حقوقی نمی‌توانند منفی باشند." });
+
+    var payType = request.PayType?.Trim().ToLowerInvariant();
+    if (payType is not ("hourly" or "monthly"))
+        return Results.BadRequest(new { code = "invalid_pay_type", message = "نوع حقوق معتبر نیست." });
+
+    var profile = await database.EmployeeProfiles.FirstOrDefaultAsync(item => item.AppUserId == userId, cancellationToken);
+    if (profile is null)
+    {
+        profile = new EmployeeProfile { AppUserId = userId };
+        database.EmployeeProfiles.Add(profile);
+    }
+
+    profile.Phone = request.Phone?.Trim() ?? "";
+    profile.PayType = payType;
+    profile.HourlyRate = request.HourlyRate;
+    profile.MonthlySalary = request.MonthlySalary;
+    profile.OvertimeRate = request.OvertimeRate;
+    profile.EmploymentStartDate = request.EmploymentStartDate;
+    profile.WorkSchedule = string.IsNullOrWhiteSpace(request.WorkSchedule) ? null : request.WorkSchedule.Trim();
+    profile.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+    profile.IsActive = request.IsActive;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "PayrollProfileUpdate",
+        EntityName = "EmployeeProfile",
+        EntityId = profile.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ویرایش پروفایل حقوقی · " + user.FullName
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        userId = user.Id,
+        fullName = user.FullName,
+        phone = profile.Phone,
+        payType = profile.PayType,
+        hourlyRate = profile.HourlyRate,
+        monthlySalary = profile.MonthlySalary,
+        overtimeRate = profile.OvertimeRate,
+        employmentStartDate = profile.EmploymentStartDate,
+        workSchedule = profile.WorkSchedule,
+        notes = profile.Notes,
+        isActive = profile.IsActive
+    });
+})
+.WithName("UpdatePayrollProfile");
+
+app.MapPost("/api/payroll/users/{userId:guid}/entries", async (
+    Guid userId,
+    PayrollEntryRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "payroll.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var target = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+    if (target is null) return Results.NotFound(new { code = "user_not_found", message = "کاربر پیدا نشد." });
+    if (request.Amount <= 0 || string.IsNullOrWhiteSpace(request.Reason))
+        return Results.BadRequest(new { code = "invalid_payroll_entry", message = "مبلغ و دلیل عملیات حقوقی الزامی است." });
+
+    var kind = request.Kind?.Trim();
+    if (kind is not ("SalaryAccrual" or "Overtime" or "SalaryPayment" or "Bonus" or "Deduction" or "Advance" or "Damage" or "ReceivablePayment" or "Adjustment"))
+        return Results.BadRequest(new { code = "invalid_payroll_kind", message = "نوع عملیات حقوقی معتبر نیست." });
+
+    var paymentMethod = request.PaymentMethod?.Trim().ToLowerInvariant();
+    if (kind == "SalaryPayment" && string.IsNullOrWhiteSpace(paymentMethod))
+        return Results.BadRequest(new { code = "missing_payment_method", message = "روش پرداخت حقوق را مشخص کنید." });
+    if (kind == "SalaryPayment" && paymentMethod is not ("cash" or "card" or "bank"))
+        return Results.BadRequest(new { code = "invalid_payment_method", message = "روش پرداخت حقوق معتبر نیست." });
+
+    var profile = await database.EmployeeProfiles.FirstOrDefaultAsync(item => item.AppUserId == userId, cancellationToken);
+    if (profile is null)
+    {
+        profile = new EmployeeProfile { AppUserId = userId };
+        database.EmployeeProfiles.Add(profile);
+    }
+
+    var employeeDelta = request.EmployeePayableDelta ?? kind switch
+    {
+        "SalaryAccrual" or "Overtime" or "Bonus" => request.Amount,
+        "SalaryPayment" or "Deduction" => -request.Amount,
+        _ => 0m
+    };
+    var ownerDelta = request.OwnerReceivableDelta ?? kind switch
+    {
+        "Advance" or "Damage" => request.Amount,
+        "ReceivablePayment" => -request.Amount,
+        _ => 0m
+    };
+
+    if (kind == "Adjustment" && request.EmployeePayableDelta is null && request.OwnerReceivableDelta is null)
+        return Results.BadRequest(new { code = "missing_adjustment_delta", message = "برای اصلاح دستی حداقل یکی از مانده‌ها را مشخص کنید." });
+
+    var sensitive = kind is "SalaryPayment" or "Bonus" or "Deduction" or "Advance" or "Damage" or "ReceivablePayment" or "Adjustment";
+    var entry = new PayrollLedgerEntry
+    {
+        EmployeeProfile = profile,
+        Kind = kind,
+        Amount = request.Amount,
+        EmployeePayableDelta = employeeDelta,
+        OwnerReceivableDelta = ownerDelta,
+        Reason = request.Reason.Trim(),
+        Status = sensitive ? ApprovalStatus.Pending : ApprovalStatus.Approved,
+        CreatedByUserId = auth.User!.Id,
+        PaymentMethod = paymentMethod,
+        ReceiptNumber = string.IsNullOrWhiteSpace(request.ReceiptNumber) ? null : request.ReceiptNumber.Trim()
+    };
+    database.PayrollLedgerEntries.Add(entry);
+
+    string? approvalId = null;
+    if (sensitive)
+    {
+        var approval = new ApprovalRequest
+        {
+            Action = "payroll.entry",
+            EntityName = "PayrollLedgerEntry",
+            EntityId = entry.Id.ToString(),
+            Reason = entry.Reason,
+            RequestedByUserId = auth.User.Id,
+            Status = ApprovalStatus.Pending
+        };
+        database.ApprovalRequests.Add(approval);
+        approvalId = approval.Id.ToString();
+    }
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = sensitive ? "PayrollEntryRequested" : "PayrollEntryCreate",
+        EntityName = "PayrollLedgerEntry",
+        EntityId = entry.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = kind + " · " + request.Amount.ToString("0.##") + " تومان · " + entry.Reason
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { entryId = entry.Id, status = entry.Status.ToString(), approvalId });
+})
+.WithName("CreatePayrollEntry");
+
+app.MapGet("/api/approvals", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var storedApprovals = await database.ApprovalRequests
+        .AsNoTracking()
+        .Include(item => item.RequestedByUser)
+        .Include(item => item.DecidedByUser)
+        .ToListAsync(cancellationToken);
+
+    var approvals = storedApprovals
+        .OrderByDescending(item => item.CreatedAt)
+        .Take(100)
+        .Select(item => new
+        {
+            id = item.Id,
+            action = item.Action,
+            entityName = item.EntityName,
+            entityId = item.EntityId,
+            reason = item.Reason,
+            status = item.Status.ToString(),
+            requestedByUserId = item.RequestedByUserId,
+            requestedBy = item.RequestedByUser.FullName,
+            decidedByUserId = item.DecidedByUserId,
+            decidedBy = item.DecidedByUser == null ? null : item.DecidedByUser.FullName,
+            decisionNote = item.DecisionNote,
+            createdAt = item.CreatedAt,
+            decidedAt = item.DecidedAt
+        })
+        .ToList();
+
+    return Results.Ok(approvals);
+})
+.WithName("GetApprovals");
+
+app.MapPost("/api/approvals", async (
+    ApprovalCreateRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var action = request.Action?.Trim().ToLowerInvariant();
+    if (string.IsNullOrWhiteSpace(action) || string.IsNullOrWhiteSpace(request.EntityName) || string.IsNullOrWhiteSpace(request.Reason))
+        return Results.BadRequest(new { code = "invalid_approval_request", message = "عملیات، موجودیت و دلیل تأیید را وارد کنید." });
+
+    var requiredPermission = action switch
+    {
+        "invoice.reverse" => "finance.manage",
+        "wallet.refund" => "customer.wallet",
+        "payroll.entry" => "payroll.manage",
+        "discount" => "session.settle",
+        _ => null
+    };
+
+    if (requiredPermission is null)
+        return Results.BadRequest(new { code = "unsupported_approval_action", message = "این نوع درخواست تأیید از مسیر عمومی پشتیبانی نمی‌شود." });
+
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, requiredPermission, cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var approval = new ApprovalRequest
+    {
+        Action = action!,
+        EntityName = request.EntityName.Trim(),
+        EntityId = request.EntityId,
+        Reason = request.Reason.Trim(),
+        RequestedByUserId = auth.User!.Id,
+        Status = ApprovalStatus.Pending
+    };
+    database.ApprovalRequests.Add(approval);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ApprovalRequestCreate",
+        EntityName = "ApprovalRequest",
+        EntityId = approval.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = "درخواست تأیید · " + approval.Action + " · " + approval.Reason
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = approval.Id, status = approval.Status.ToString() });
+})
+.WithName("CreateApprovalRequest");
+
+app.MapPost("/api/invoices/{invoiceId:guid}/reverse/request", async (
+    Guid invoiceId,
+    ApprovalOperationRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var reason = request.Reason?.Trim();
+    if (string.IsNullOrWhiteSpace(reason))
+        return Results.BadRequest(new { code = "invalid_reverse", message = "دلیل برگشت عملیات را وارد کنید." });
+
+    var invoice = await database.Invoices
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == invoiceId, cancellationToken);
+    if (invoice is null)
+        return Results.NotFound(new { code = "invoice_not_found", message = "فاکتور پیدا نشد." });
+
+    if (invoice.Status != InvoiceStatus.Paid)
+        return Results.Conflict(new { code = "reverse_conflict", message = "این فاکتور قابل درخواست برگشت نیست." });
+
+    var pending = await database.ApprovalRequests.AnyAsync(item =>
+        item.Action == "invoice.reverse"
+        && item.EntityName == "Invoice"
+        && item.EntityId == invoiceId.ToString()
+        && item.Status == ApprovalStatus.Pending, cancellationToken);
+    if (pending)
+        return Results.Conflict(new { code = "reverse_approval_pending", message = "برای این فاکتور یک درخواست برگشت در انتظار تصمیم است." });
+
+    var approval = new ApprovalRequest
+    {
+        Action = "invoice.reverse",
+        EntityName = "Invoice",
+        EntityId = invoiceId.ToString(),
+        Reason = reason,
+        RequestedByUserId = auth.User!.Id,
+        Status = ApprovalStatus.Pending
+    };
+    database.ApprovalRequests.Add(approval);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "InvoiceReverseApprovalRequest",
+        EntityName = "Invoice",
+        EntityId = invoiceId.ToString(),
+        AppUserId = auth.User.Id,
+        Details = "درخواست تأیید برگشت فاکتور · " + reason
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        id = approval.Id,
+        status = approval.Status.ToString(),
+        action = approval.Action,
+        entityId = invoiceId
+    });
+})
+.WithName("RequestInvoiceReverseApproval");
+
+app.MapPost("/api/approvals/{approvalId:guid}/approve", async (
+    Guid approvalId,
+    ApprovalDecisionRequest request,
+    InvoiceReverseService reverseService,
+    WalletRefundService walletRefundService,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var approval = await database.ApprovalRequests.FirstOrDefaultAsync(item => item.Id == approvalId, cancellationToken);
+    if (approval is null) return Results.NotFound(new { code = "approval_not_found", message = "درخواست تأیید پیدا نشد." });
+    if (approval.Status != ApprovalStatus.Pending)
+        return Results.Conflict(new { code = "approval_not_pending", message = "این درخواست دیگر در وضعیت انتظار نیست." });
+    if (approval.RequestedByUserId == auth.User!.Id)
+        return Results.Conflict(new { code = "approval_self_decision", message = "ثبت‌کننده درخواست نمی‌تواند همان درخواست را تأیید کند." });
+
+    if (approval.Action.Equals("payroll.entry", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!Guid.TryParse(approval.EntityId, out var payrollEntryId))
+            return Results.BadRequest(new { code = "invalid_approval_target", message = "شناسه عملیات حقوقی معتبر نیست." });
+
+        var entry = await database.PayrollLedgerEntries.FirstOrDefaultAsync(item => item.Id == payrollEntryId, cancellationToken);
+        if (entry is null) return Results.NotFound(new { code = "payroll_entry_not_found", message = "رکورد حقوقی پیدا نشد." });
+        if (entry.Status != ApprovalStatus.Pending)
+            return Results.Conflict(new { code = "payroll_entry_not_pending", message = "این عملیات حقوقی دیگر در انتظار تأیید نیست." });
+
+        var approvedRows = await database.PayrollLedgerEntries
+            .Where(item => item.EmployeeProfileId == entry.EmployeeProfileId && item.Status == ApprovalStatus.Approved)
+            .ToListAsync(cancellationToken);
+
+        var nextEmployeePayable = approvedRows.Sum(item => item.EmployeePayableDelta) + entry.EmployeePayableDelta;
+        var nextOwnerReceivable = approvedRows.Sum(item => item.OwnerReceivableDelta) + entry.OwnerReceivableDelta;
+        if (nextEmployeePayable < 0)
+            return Results.Conflict(new { code = "payroll_negative_employee_payable", message = "مانده حقوق پس از این عملیات منفی می‌شود." });
+        if (nextOwnerReceivable < 0)
+            return Results.Conflict(new { code = "payroll_negative_owner_receivable", message = "مانده طلب مالک پس از این عملیات منفی می‌شود." });
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        entry.Status = ApprovalStatus.Approved;
+        entry.ApprovedByUserId = auth.User.Id;
+        entry.ApprovedAt = DateTimeOffset.UtcNow;
+        approval.Status = ApprovalStatus.Approved;
+        approval.DecidedByUserId = auth.User.Id;
+        approval.DecidedAt = DateTimeOffset.UtcNow;
+        approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? "تأیید و اجرا شد" : request.Note.Trim();
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "PayrollEntryApproved",
+            EntityName = "PayrollLedgerEntry",
+            EntityId = entry.Id.ToString(),
+            AppUserId = auth.User.Id,
+            Details = "تأیید عملیات حقوقی · " + entry.Kind + " · " + entry.Amount.ToString("0.##") + " تومان"
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Results.Ok(new { id = approval.Id, status = approval.Status.ToString(), entryId = entry.Id });
+    }
+
+    if (approval.Action.Equals("wallet.refund", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!TryDecodeWalletRefundApprovalTarget(approval.EntityId, out var refundTarget))
+            return Results.BadRequest(new { code = "invalid_approval_target", message = "اطلاعات بازگشت وجه معتبر نیست." });
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var refundResult = await walletRefundService.RefundWithinTransactionAsync(
+                new WalletRefundRequest(refundTarget.CustomerId, refundTarget.Amount, refundTarget.SourceTransactionId, approval.Reason),
+                auth.User.Id,
+                cancellationToken);
+
+            approval.Status = ApprovalStatus.Approved;
+            approval.DecidedByUserId = auth.User.Id;
+            approval.DecidedAt = DateTimeOffset.UtcNow;
+            approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? "تأیید و اجرا شد" : request.Note.Trim();
+
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "WalletRefundApproved",
+                EntityName = "CustomerWallet",
+                EntityId = refundTarget.CustomerId.ToString(),
+                AppUserId = auth.User.Id,
+                Details = refundResult.Amount.ToString("0.##") + " تومان · درخواست " + approval.Id
+            });
+
+            await database.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return Results.Ok(new
+            {
+                id = approval.Id,
+                status = approval.Status.ToString(),
+                operation = refundResult
+            });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.NotFound(new { code = "refund_not_found", message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.Conflict(new { code = "refund_conflict", message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.BadRequest(new { code = "invalid_refund", message = exception.Message });
+        }
+    }
+
+    if (approval.Action.Equals("invoice.reverse", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!Guid.TryParse(approval.EntityId, out var invoiceId))
+            return Results.BadRequest(new { code = "invalid_approval_target", message = "شناسه فاکتور درخواست تأیید معتبر نیست." });
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var reverseResult = await reverseService.ReverseWithinTransactionAsync(
+                invoiceId,
+                new InvoiceReverseRequest(auth.User.Id, approval.Reason),
+                cancellationToken);
+
+            approval.Status = ApprovalStatus.Approved;
+            approval.DecidedByUserId = auth.User.Id;
+            approval.DecidedAt = DateTimeOffset.UtcNow;
+            approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? "تأیید و اجرا شد" : request.Note.Trim();
+
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "ApprovalApproveAndExecute",
+                EntityName = "ApprovalRequest",
+                EntityId = approval.Id.ToString(),
+                AppUserId = auth.User.Id,
+                Details = "تأیید و اجرای برگشت فاکتور · " + invoiceId
+            });
+
+            await database.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return Results.Ok(new
+            {
+                id = approval.Id,
+                status = approval.Status.ToString(),
+                operation = reverseResult
+            });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.NotFound(new { code = "invoice_not_found", message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.Conflict(new { code = "reverse_conflict", message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.BadRequest(new { code = "invalid_reverse", message = exception.Message });
+        }
+    }
+
+    approval.Status = ApprovalStatus.Approved;
+    approval.DecidedByUserId = auth.User.Id;
+    approval.DecidedAt = DateTimeOffset.UtcNow;
+    approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ApprovalApprove",
+        EntityName = "ApprovalRequest",
+        EntityId = approval.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = "تأیید عملیات · " + approval.Action
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = approval.Id, status = approval.Status.ToString() });
+})
+.WithName("ApproveApprovalRequest");
+
+app.MapPost("/api/approvals/{approvalId:guid}/reject", async (
+    Guid approvalId,
+    ApprovalDecisionRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var approval = await database.ApprovalRequests.FirstOrDefaultAsync(item => item.Id == approvalId, cancellationToken);
+    if (approval is null) return Results.NotFound(new { code = "approval_not_found", message = "درخواست تأیید پیدا نشد." });
+    if (approval.Status != ApprovalStatus.Pending)
+        return Results.Conflict(new { code = "approval_not_pending", message = "این درخواست دیگر در وضعیت انتظار نیست." });
+
+    if (approval.Action.Equals("payroll.entry", StringComparison.OrdinalIgnoreCase)
+        && Guid.TryParse(approval.EntityId, out var rejectedPayrollEntryId))
+    {
+        var entry = await database.PayrollLedgerEntries.FirstOrDefaultAsync(item => item.Id == rejectedPayrollEntryId, cancellationToken);
+        if (entry is not null && entry.Status == ApprovalStatus.Pending)
+        {
+            entry.Status = ApprovalStatus.Rejected;
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "PayrollEntryRejected",
+                EntityName = "PayrollLedgerEntry",
+                EntityId = entry.Id.ToString(),
+                AppUserId = auth.User!.Id,
+                Details = "رد عملیات حقوقی · " + entry.Kind
+            });
+        }
+    }
+
+    approval.Status = ApprovalStatus.Rejected;
+    approval.DecidedByUserId = auth.User!.Id;
+    approval.DecidedAt = DateTimeOffset.UtcNow;
+    approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? "رد شد" : request.Note.Trim();
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ApprovalReject",
+        EntityName = "ApprovalRequest",
+        EntityId = approval.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = "رد عملیات · " + approval.Action
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = approval.Id, status = approval.Status.ToString() });
+})
+.WithName("RejectApprovalRequest");
+
+app.MapGet("/api/dashboard", async (HttpContext context,
+    GameNetDbContext database, CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "session.start", "session.manage");
+    if (auth.Error is not null) return auth.Error;
+
     var stations = await database.Stations
         .AsNoTracking()
         .OrderBy(station => station.Zone)
@@ -140,10 +1060,16 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
 .WithName("GetDashboardSnapshot");
 
 
-app.MapGet("/api/customers", async (
+app.MapGet("/api/customers", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "customer.manage", "customer.wallet", "customer.debt");
+    if (auth.Error is not null) return auth.Error;
+
+    var canReadWallet = AuthorizationService.HasPermission(auth.User!, "customer.wallet");
+    var canReadDebt = AuthorizationService.HasPermission(auth.User!, "customer.debt");
+
     var customers = await database.Customers
         .AsNoTracking()
         .OrderBy(item => item.Code)
@@ -158,13 +1084,15 @@ app.MapGet("/api/customers", async (
             nationalId = item.NationalId,
             mobile = item.Phone,
             vip = item.VipTier,
-            wallet = item.Balance,
-            debt = database.Invoices
-                .Where(invoice => invoice.CustomerId == item.Id && invoice.Status == InvoiceStatus.Draft)
-                .Select(invoice => (decimal?)invoice.TotalAmount)
-                .Sum() ?? 0m,
-            giftCredit = item.FreeMoney,
-            freeTimeMinutes = item.FreeTimeMinutes,
+            wallet = canReadWallet ? item.Balance : 0m,
+            debt = canReadDebt
+                ? database.Invoices
+                    .Where(invoice => invoice.CustomerId == item.Id && invoice.Status == InvoiceStatus.Draft)
+                    .Select(invoice => (decimal?)invoice.TotalAmount)
+                    .Sum() ?? 0m
+                : 0m,
+            giftCredit = canReadWallet ? item.FreeMoney : 0m,
+            freeTimeMinutes = canReadWallet ? item.FreeTimeMinutes : 0,
             discountLevel = 0,
             lastSeen = "نامشخص",
             status = "active",
@@ -184,10 +1112,13 @@ app.MapGet("/api/customers", async (
 })
 .WithName("GetCustomers");
 
-app.MapGet("/api/vip-packages", async (
+app.MapGet("/api/vip-packages", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var packages = await database.VipPackages.AsNoTracking()
         .Where(item => item.IsActive)
         .OrderBy(item => item.Price)
@@ -209,11 +1140,14 @@ app.MapGet("/api/vip-packages", async (
 })
 .WithName("GetVipPackages");
 
-app.MapPost("/api/vip-packages", async (
+app.MapPost("/api/vip-packages", async (HttpContext context,
     CreateVipPackageRequest request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var name = request.Name?.Trim();
     if (string.IsNullOrWhiteSpace(name))
         return Results.BadRequest(new { code = "missing_vip_package_name", message = "نام پکیج VIP را وارد کنید." });
@@ -241,7 +1175,8 @@ app.MapPost("/api/vip-packages", async (
         Action = "VipPackageCreate",
         EntityName = "VipPackage",
         EntityId = package.Id.ToString(),
-        Details = "ایجاد پکیج VIP · " + package.Name
+        Details = "ایجاد پکیج VIP · " + package.Name,
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -253,12 +1188,15 @@ app.MapPost("/api/vip-packages", async (
 })
 .WithName("CreateVipPackage");
 
-app.MapPost("/api/customers/{customerId:guid}/vip-package", async (
+app.MapPost("/api/customers/{customerId:guid}/vip-package", async (HttpContext context,
     Guid customerId,
     AssignVipPackageRequest request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
@@ -280,7 +1218,8 @@ app.MapPost("/api/customers/{customerId:guid}/vip-package", async (
         Action = "VipPackageAssign",
         EntityName = "Customer",
         EntityId = customer.Id.ToString(),
-        Details = "تخصیص پکیج VIP · " + package.Name + " · تا " + customer.VipExpiresAt.Value.ToString("O")
+        Details = "تخصیص پکیج VIP · " + package.Name + " · تا " + customer.VipExpiresAt.Value.ToString("O"),
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -300,11 +1239,14 @@ app.MapPost("/api/customers/{customerId:guid}/vip-package", async (
 })
 .WithName("AssignVipPackage");
 
-app.MapPost("/api/customers", async (
+app.MapPost("/api/customers", async (HttpContext context,
     CreateCustomerRequest request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var fullName = request.FullName?.Trim();
     if (string.IsNullOrWhiteSpace(fullName))
         return Results.BadRequest(new { code = "missing_customer_name", message = "نام کامل مشتری را وارد کنید." });
@@ -361,7 +1303,8 @@ app.MapPost("/api/customers", async (
         Action = "CustomerCreate",
         EntityName = "Customer",
         EntityId = customer.Id.ToString(),
-        Details = "ایجاد مشتری · " + customer.Code + " · " + customer.FullName
+        Details = "ایجاد مشتری · " + customer.Code + " · " + customer.FullName,
+        AppUserId = auth.User!.Id
     });
 
     try
@@ -377,12 +1320,15 @@ app.MapPost("/api/customers", async (
 })
 .WithName("CreateCustomer");
 
-app.MapPut("/api/customers/{customerId:guid}", async (
+app.MapPut("/api/customers/{customerId:guid}", async (HttpContext context,
     Guid customerId,
     UpdateCustomerRequest request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
@@ -439,7 +1385,8 @@ app.MapPut("/api/customers/{customerId:guid}", async (
         Action = "CustomerUpdate",
         EntityName = "Customer",
         EntityId = customer.Id.ToString(),
-        Details = "ویرایش مشتری · " + customer.Code + " · " + customer.FullName
+        Details = "ویرایش مشتری · " + customer.Code + " · " + customer.FullName,
+        AppUserId = auth.User!.Id
     });
 
     try
@@ -455,12 +1402,15 @@ app.MapPut("/api/customers/{customerId:guid}", async (
 })
 .WithName("UpdateCustomer");
 
-app.MapPost("/api/customers/{customerId:guid}/password", async (
+app.MapPost("/api/customers/{customerId:guid}/password", async (HttpContext context,
     Guid customerId,
     ChangeCustomerPasswordRequest request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
         return Results.BadRequest(new { code = "invalid_password", message = "رمز عبور باید حداقل ۶ نویسه داشته باشد." });
 
@@ -474,7 +1424,8 @@ app.MapPost("/api/customers/{customerId:guid}/password", async (
         Action = "CustomerPasswordChanged",
         EntityName = "Customer",
         EntityId = customer.Id.ToString(),
-        Details = "تغییر رمز ورود مشتری"
+        Details = "تغییر رمز ورود مشتری",
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -636,10 +1587,13 @@ app.MapPost("/api/customers/{customerId:guid}/login-release", async (
 })
 .WithName("ReleaseCustomerLogin");
 
-app.MapGet("/api/buffet/products", async (
+app.MapGet("/api/buffet/products", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "buffet.sell", "buffet.inventory");
+    if (auth.Error is not null) return auth.Error;
+
     var products = await database.Products
         .AsNoTracking()
         .Where(item => item.IsActive)
@@ -664,11 +1618,14 @@ app.MapGet("/api/buffet/products", async (
 })
 .WithName("GetBuffetProducts");
 
-app.MapPost("/api/buffet/products", async (
+app.MapPost("/api/buffet/products", async (HttpContext context,
     CreateBuffetProductRequest request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     if (string.IsNullOrWhiteSpace(request.Name) || request.UnitPrice < 0 || request.CostPrice < 0 || request.InitialStock < 0)
         return Results.BadRequest(new { code = "invalid_product", message = "اطلاعات محصول معتبر نیست." });
 
@@ -694,7 +1651,7 @@ app.MapPost("/api/buffet/products", async (
             UnitCost = product.CostPrice,
             Direction = TransactionDirection.In,
             Kind = "Initial",
-            AppUserId = request.AppUserId,
+            AppUserId = auth.User!.Id,
             Notes = "موجودی اولیه"
         });
     }
@@ -704,7 +1661,7 @@ app.MapPost("/api/buffet/products", async (
         EntityName = "Product",
         EntityId = product.Id.ToString(),
         Details = product.Name,
-        AppUserId = request.AppUserId
+        AppUserId = auth.User!.Id
     });
     await database.SaveChangesAsync(cancellationToken);
     return Results.Ok(new
@@ -726,9 +1683,14 @@ app.MapPost("/api/buffet/products", async (
 app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
     Guid productId,
     StockAdjustmentRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     if (request.Quantity <= 0)
         return Results.BadRequest(new { code = "invalid_quantity", message = "تعداد باید بیشتر از صفر باشد." });
 
@@ -781,7 +1743,7 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         UnitCost = unitCost,
         Direction = direction,
         Kind = kind,
-        AppUserId = request.AppUserId,
+        AppUserId = auth.User!.Id,
         Notes = request.Notes
     });
     database.AuditLogs.Add(new AuditLog
@@ -790,19 +1752,22 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         EntityName = "Product",
         EntityId = product.Id.ToString(),
         Details = kind + " · " + request.Quantity.ToString() + " · " + (request.Notes ?? ""),
-        AppUserId = request.AppUserId
+        AppUserId = auth.User!.Id
     });
     await database.SaveChangesAsync(cancellationToken);
     return Results.Ok(new { id = product.Id, stock = product.StockQuantity, lowStock = product.StockQuantity <= product.MinimumStock, kind });
 })
 .WithName("AdjustBuffetStock");
  
-app.MapPut("/api/buffet/products/{productId:guid}", async (
+app.MapPut("/api/buffet/products/{productId:guid}", async (HttpContext context,
     Guid productId,
     UpdateBuffetProductRequest request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var product = await database.Products.FirstOrDefaultAsync(item => item.Id == productId, cancellationToken);
     if (product is null)
         return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
@@ -824,7 +1789,7 @@ app.MapPut("/api/buffet/products/{productId:guid}", async (
         EntityName = "Product",
         EntityId = product.Id.ToString(),
         Details = product.Name + " · " + product.UnitPrice.ToString("0.##") + " تومان",
-        AppUserId = request.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -844,10 +1809,13 @@ app.MapPut("/api/buffet/products/{productId:guid}", async (
 })
 .WithName("UpdateBuffetProduct");
 
-app.MapGet("/api/buffet/inventory-transactions", async (
+app.MapGet("/api/buffet/inventory-transactions", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var rows = await database.InventoryTransactions
         .AsNoTracking()
         .Include(item => item.Product)
@@ -876,9 +1844,12 @@ app.MapGet("/api/buffet/inventory-transactions", async (
 .WithName("GetInventoryTransactions");
 
 
-app.MapGet("/api/buffet/reports/profit", async (
+app.MapGet("/api/buffet/reports/profit", async (HttpContext context,
     DateTimeOffset? from, DateTimeOffset? to, GameNetDbContext database, CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var start = from ?? DateTimeOffset.UtcNow.Date.AddDays(-30);
     var end = to ?? DateTimeOffset.UtcNow;
     var inventory = await database.InventoryTransactions
@@ -930,9 +1901,14 @@ app.MapGet("/api/buffet/reports/profit", async (
 
 app.MapPost("/api/buffet/sales", async (
     BuffetSaleRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "buffet.sell", "buffet.inventory");
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     if (request.Items is null || request.Items.Count == 0)
         return Results.BadRequest(new { code = "empty_sale", message = "سبد فروش خالی است." });
 
@@ -965,7 +1941,7 @@ app.MapPost("/api/buffet/sales", async (
             {
                 CustomerId = session.CustomerId,
                 SessionId = session.Id,
-                AppUserId = request.AppUserId,
+                AppUserId = auth.User!.Id,
                 TotalAmount = 0m,
                 Status = InvoiceStatus.Draft,
                 IssuedAt = DateTimeOffset.UtcNow
@@ -1001,7 +1977,7 @@ app.MapPost("/api/buffet/sales", async (
             ReferenceInvoiceId = invoice?.Id,
             Direction = TransactionDirection.Out,
             Kind = "Sale",
-            AppUserId = request.AppUserId,
+            AppUserId = auth.User!.Id,
             Notes = target == "session" ? "فروش به جلسه" : "فروش مستقل"
         });
 
@@ -1028,7 +2004,7 @@ app.MapPost("/api/buffet/sales", async (
         EntityName = target == "session" ? "Invoice" : "Buffet",
         EntityId = invoice?.Id.ToString() ?? Guid.NewGuid().ToString(),
         Details = target + " · " + total.ToString("0.##") + " تومان",
-        AppUserId = request.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -1039,12 +2015,15 @@ app.MapPost("/api/buffet/sales", async (
 })
 .WithName("CreateBuffetSale");
 
-app.MapPost("/api/customers/{customerId:guid}/debt", async (
+app.MapPost("/api/customers/{customerId:guid}/debt", async (HttpContext context,
     Guid customerId,
     CustomerDebtRequest request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.debt", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     if (request.Amount <= 0)
         return Results.BadRequest(new { code = "invalid_debt_amount", message = "مبلغ بدهی باید بیشتر از صفر باشد." });
 
@@ -1059,7 +2038,7 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (
     var invoice = new Invoice
     {
         CustomerId = customer.Id,
-        AppUserId = request.AppUserId,
+        AppUserId = auth.User!.Id,
         TotalAmount = request.Amount,
         Status = InvoiceStatus.Draft,
         IssuedAt = DateTimeOffset.UtcNow,
@@ -1082,7 +2061,7 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (
         EntityName = "Invoice",
         EntityId = invoice.Id.ToString(),
         Details = request.Amount.ToString("0.##") + " تومان · " + description,
-        AppUserId = request.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -1090,11 +2069,14 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (
 })
 .WithName("CreateCustomerDebt");
 
-app.MapGet("/api/customers/{customerId:guid}/debts", async (
+app.MapGet("/api/customers/{customerId:guid}/debts", async (HttpContext context,
     Guid customerId,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.debt", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var debts = await database.Invoices
         .AsNoTracking()
         .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
@@ -1111,13 +2093,16 @@ app.MapGet("/api/customers/{customerId:guid}/debts", async (
 })
 .WithName("GetCustomerDebts");
 
-app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", async (
+app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", async (HttpContext context,
     Guid customerId,
     Guid invoiceId,
     CustomerDebtSettlementRequest request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.debt", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var method = request.Method?.Trim().ToLowerInvariant();
     if (method is not ("cash" or "card" or "wallet"))
         return Results.BadRequest(new { code = "invalid_debt_settlement_method", message = "روش تسویه بدهی معتبر نیست." });
@@ -1161,7 +2146,7 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
         EntityName = "Invoice",
         EntityId = invoice.Id.ToString(),
         Details = invoice.TotalAmount.ToString("0.##") + " تومان · " + method,
-        AppUserId = request.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -1182,11 +2167,14 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
 })
 .WithName("SettleCustomerDebt");
 
-app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
+app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (HttpContext context,
     Guid customerId,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var customer = await database.Customers.AsNoTracking()
         .Include(item => item.VipPackage)
         .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
@@ -1253,11 +2241,14 @@ app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
 })
 .WithName("GetCustomerVipUsage");
 
-app.MapGet("/api/customers/{customerId:guid}/history", async (
+app.MapGet("/api/customers/{customerId:guid}/history", async (HttpContext context,
     Guid customerId,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var exists = await database.Customers.AsNoTracking().AnyAsync(item => item.Id == customerId, cancellationToken);
     if (!exists)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
@@ -1289,18 +2280,22 @@ app.MapGet("/api/customers/{customerId:guid}/history", async (
 })
 .WithName("GetCustomerHistory");
 
-app.MapGet("/api/customers/{customerId:guid}/free-benefits", async (
+app.MapGet("/api/customers/{customerId:guid}/free-benefits", async (HttpContext context,
     Guid customerId,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.wallet", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
 
-    var transactions = await database.BenefitTransactions
+    var transactions = (await database.BenefitTransactions
         .AsNoTracking()
         .Where(item => item.CustomerId == customerId)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.CreatedAt)
         .Take(50)
         .Select(item => new FreeBenefitTransactionDto(
@@ -1310,18 +2305,21 @@ app.MapGet("/api/customers/{customerId:guid}/free-benefits", async (
             item.Minutes,
             item.Description,
             item.CreatedAt))
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     return Results.Ok(new FreeBenefitsSnapshotDto(customer.FreeMoney, customer.FreeTimeMinutes, transactions));
 })
 .WithName("GetCustomerFreeBenefits");
 
-app.MapPost("/api/customers/{customerId:guid}/free-benefits", async (
+app.MapPost("/api/customers/{customerId:guid}/free-benefits", async (HttpContext context,
     Guid customerId,
     FreeBenefitRequestDto request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.wallet", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
@@ -1370,7 +2368,8 @@ app.MapPost("/api/customers/{customerId:guid}/free-benefits", async (
         EntityId = customer.Id.ToString(),
         Details = (mode == "credit" ? "اعطای اعتبار رایگان" : "کسر اعتبار رایگان")
             + " · " + (moneyAmount > 0 ? moneyAmount.ToString("0.##") + " تومان" : minutes + " دقیقه")
-            + " · " + description
+            + " · " + description,
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -1380,11 +2379,14 @@ app.MapPost("/api/customers/{customerId:guid}/free-benefits", async (
 })
 .WithName("ChangeCustomerFreeBenefits");
 
-app.MapGet("/api/customers/{customerId:guid}/wallet-ledger", async (
+app.MapGet("/api/customers/{customerId:guid}/wallet-ledger", async (HttpContext context,
     Guid customerId,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.wallet", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var customer = await database.Customers
         .AsNoTracking()
         .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
@@ -1394,12 +2396,13 @@ app.MapGet("/api/customers/{customerId:guid}/wallet-ledger", async (
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
     }
 
-    var transactions = await database.WalletTransactions
+    var transactions = (await database.WalletTransactions
         .AsNoTracking()
         .Where(item => item.CustomerId == customerId)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.CreatedAt)
         .ThenByDescending(item => item.Id)
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     var running = customer.Balance;
     var result = new List<WalletLedgerEntryDto>(transactions.Count);
@@ -1426,12 +2429,15 @@ app.MapGet("/api/customers/{customerId:guid}/wallet-ledger", async (
 })
 .WithName("GetWalletLedger");
 
-app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (
+app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (HttpContext context,
     Guid customerId,
     WalletTransactionRequestDto request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.wallet", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     if (request.Amount <= 0)
     {
         return Results.BadRequest(new { code = "invalid_amount", message = "مبلغ باید بیشتر از صفر باشد." });
@@ -1489,7 +2495,7 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (
             EntityName = "CustomerWallet",
             EntityId = customer.Id.ToString(),
             Details = request.Amount.ToString("0.##") + " تومان · " + description,
-            AppUserId = request.AppUserId
+            AppUserId = auth.User!.Id
         });
 
         await database.SaveChangesAsync(cancellationToken);
@@ -1514,119 +2520,108 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (
 .WithName("PostWalletTransaction");
 
 
-app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (
+app.MapPost("/api/customers/{customerId:guid}/wallet-refunds/request", async (
+    HttpContext context,
     Guid customerId,
     WalletRefundRequestDto request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    if (request.Amount <= 0)
-    {
-        return Results.BadRequest(new { code = "invalid_amount", message = "مبلغ بازگشت باید بیشتر از صفر باشد." });
-    }
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.wallet", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
 
     var reason = request.Reason?.Trim();
-    if (string.IsNullOrWhiteSpace(reason))
-    {
-        return Results.BadRequest(new { code = "missing_reason", message = "دلیل بازگشت وجه را وارد کنید." });
-    }
+    if (request.Amount <= 0 || string.IsNullOrWhiteSpace(reason))
+        return Results.BadRequest(new { code = "invalid_refund_request", message = "مبلغ و دلیل بازگشت وجه الزامی است." });
 
-    var customer = await database.Customers
-        .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
-
-    if (customer is null)
-    {
+    var customerExists = await database.Customers.AsNoTracking().AnyAsync(item => item.Id == customerId, cancellationToken);
+    if (!customerExists)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
-    }
-
-    if (customer.Balance < request.Amount)
-    {
-        return Results.BadRequest(new { code = "insufficient_balance", message = "موجودی کیف پول برای بازگشت این مبلغ کافی نیست." });
-    }
 
     WalletTransaction? source = null;
     if (request.SourceTransactionId is Guid sourceId)
     {
         source = await database.WalletTransactions
+            .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == sourceId && item.CustomerId == customerId, cancellationToken);
-
         if (source is null)
             return Results.NotFound(new { code = "refund_source_not_found", message = "تراکنش مبدأ بازگشت وجه پیدا نشد." });
-
         if (source.Type != WalletTransactionType.Credit)
             return Results.BadRequest(new { code = "invalid_refund_source", message = "تراکنش انتخاب‌شده قابل بازگشت نیست." });
-
-        var alreadyRefunded = await database.WalletTransactions
-            .Where(item => item.ReferenceTransactionId == source.Id && item.Type == WalletTransactionType.Debit)
-            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-
-        if (alreadyRefunded + request.Amount > source.Amount)
-            return Results.BadRequest(new { code = "refund_exceeds_source", message = "مبلغ بازگشت از مانده قابل بازگشت تراکنش مبدأ بیشتر است." });
     }
 
-    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    var target = EncodeWalletRefundApprovalTarget(customerId, request.Amount, request.SourceTransactionId);
+    var pending = await database.ApprovalRequests.AnyAsync(item =>
+        item.Action == "wallet.refund"
+        && item.EntityName == "CustomerWallet"
+        && item.EntityId == target
+        && item.Status == ApprovalStatus.Pending, cancellationToken);
+    if (pending)
+        return Results.Conflict(new { code = "wallet_refund_approval_pending", message = "برای این بازگشت وجه یک درخواست در انتظار تصمیم وجود دارد." });
 
-    try
+    var approval = new ApprovalRequest
     {
-        customer.Balance -= request.Amount;
-
-        var ledger = new WalletTransaction
-        {
-            CustomerId = customer.Id,
-            Amount = request.Amount,
-            Type = WalletTransactionType.Debit,
-            ReferenceTransactionId = source?.Id,
-            Description = "بازگشت وجه · " + reason
-        };
-
-        database.WalletTransactions.Add(ledger);
-        database.AuditLogs.Add(new AuditLog
-        {
-            Action = "WalletRefund",
-            EntityName = "CustomerWallet",
-            EntityId = customer.Id.ToString(),
-            Details = request.Amount.ToString("0.##") + " تومان · " + reason
-                + (source is null ? "" : " · مرجع " + source.Id),
-            AppUserId = request.AppUserId
-        });
-
-        await database.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return Results.Ok(new WalletLedgerEntryDto(
-            ledger.Id,
-            ledger.CustomerId,
-            ledger.Amount,
-            "Refund",
-            ledger.Description,
-            ledger.CreatedAt,
-            customer.Balance,
-            ledger.ReferenceTransactionId));
-    }
-    catch
+        Action = "wallet.refund",
+        EntityName = "CustomerWallet",
+        EntityId = target,
+        Reason = reason,
+        RequestedByUserId = auth.User!.Id,
+        Status = ApprovalStatus.Pending
+    };
+    database.ApprovalRequests.Add(approval);
+    database.AuditLogs.Add(new AuditLog
     {
-        await transaction.RollbackAsync(cancellationToken);
-        throw;
-    }
+        Action = "WalletRefundApprovalRequest",
+        EntityName = "CustomerWallet",
+        EntityId = customerId.ToString(),
+        AppUserId = auth.User.Id,
+        Details = request.Amount.ToString("0.##") + " تومان · " + reason
+            + (source is null ? "" : " · مرجع " + source.Id)
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = approval.Id, status = approval.Status.ToString(), action = approval.Action, entityId = customerId });
+})
+.WithName("RequestWalletRefundApproval");
+
+app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (
+    Guid customerId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.wallet", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    return Results.Conflict(new
+    {
+        code = "approval_required",
+        message = "بازگشت وجه کیف پول باید ابتدا برای تأیید ثبت شود.",
+        customerId,
+        requiredEndpoint = $"/api/customers/{customerId}/wallet-refunds/request"
+    });
 })
 .WithName("PostWalletRefund");
 
 
-
-app.MapGet("/api/shifts/{shiftId:guid}/expenses", async (
+app.MapGet("/api/shifts/{shiftId:guid}/expenses", async (HttpContext context,
     Guid shiftId,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var exists = await database.Shifts.AsNoTracking().AnyAsync(item => item.Id == shiftId, cancellationToken);
     if (!exists)
     {
         return Results.NotFound(new { code = "shift_not_found", message = "شیفت پیدا نشد." });
     }
 
-    var rows = await database.Expenses
+    var rows = (await database.Expenses
         .AsNoTracking()
         .Where(item => item.ShiftId == shiftId)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.CreatedAt)
         .Select(item => new FinanceExpenseDto(
             item.Id,
@@ -1635,18 +2630,21 @@ app.MapGet("/api/shifts/{shiftId:guid}/expenses", async (
             item.Amount,
             item.Description,
             item.CreatedAt))
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     return Results.Ok(rows);
 })
 .WithName("GetShiftExpenses");
 
-app.MapPost("/api/shifts/{shiftId:guid}/expenses", async (
+app.MapPost("/api/shifts/{shiftId:guid}/expenses", async (HttpContext context,
     Guid shiftId,
     FinanceExpenseRequestDto request,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     if (request.Amount <= 0)
     {
         return Results.BadRequest(new { code = "invalid_amount", message = "مبلغ هزینه باید بیشتر از صفر باشد." });
@@ -1679,7 +2677,7 @@ app.MapPost("/api/shifts/{shiftId:guid}/expenses", async (
         EntityName = "Expense",
         EntityId = expense.Id.ToString(),
         Details = request.Amount.ToString("0.##") + " تومان · " + category + " · " + (expense.Description ?? "بدون شرح"),
-        AppUserId = request.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -1694,12 +2692,15 @@ app.MapPost("/api/shifts/{shiftId:guid}/expenses", async (
 })
 .WithName("CreateShiftExpense");
 
-app.MapGet("/api/finance/summary", async (
+app.MapGet("/api/finance/summary", async (HttpContext context,
     DateTimeOffset? from,
     DateTimeOffset? to,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
@@ -1724,12 +2725,15 @@ app.MapGet("/api/finance/summary", async (
 
 
 
-app.MapGet("/api/finance/transactions", async (
+app.MapGet("/api/finance/transactions", async (HttpContext context,
     DateTimeOffset? from,
     DateTimeOffset? to,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
@@ -1787,10 +2791,13 @@ app.MapGet("/api/finance/transactions", async (
 .WithName("GetFinanceTransactions");
 
 
-app.MapGet("/api/shifts/current", async (
+app.MapGet("/api/shifts/current", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var shift = await database.Shifts
         .AsNoTracking()
         .Include(item => item.AppUser)
@@ -1804,10 +2811,13 @@ app.MapGet("/api/shifts/current", async (
 })
 .WithName("GetCurrentShift");
 
-app.MapGet("/api/shifts/history", async (
+app.MapGet("/api/shifts/history", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var shifts = await database.Shifts
         .AsNoTracking()
         .Include(item => item.AppUser)
@@ -1825,9 +2835,14 @@ app.MapGet("/api/shifts/history", async (
 
 app.MapPost("/api/shifts/start", async (
     StartShiftRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     if (request.CashOpening < 0)
         return Results.BadRequest(new { code = "invalid_cash_opening", message = "مبلغ شروع صندوق نمی‌تواند منفی باشد." });
 
@@ -1835,17 +2850,8 @@ app.MapPost("/api/shifts/start", async (
     if (openExists)
         return Results.Conflict(new { code = "shift_already_open", message = "یک شیفت دیگر هنوز باز است." });
 
-    AppUser? user = null;
-    if (request.AppUserId is not null && request.AppUserId != Guid.Empty)
-        user = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == request.AppUserId.Value && item.IsActive, cancellationToken);
+    var user = auth.User!;
 
-    if (user is null && !string.IsNullOrWhiteSpace(request.OperatorName))
-        user = await database.AppUsers.FirstOrDefaultAsync(item => item.IsActive && item.FullName == request.OperatorName.Trim(), cancellationToken);
-
-    user ??= await database.AppUsers.FirstOrDefaultAsync(item => item.IsActive, cancellationToken);
-
-    if (user is null)
-        return Results.NotFound(new { code = "operator_not_found", message = "کاربر فعال برای باز کردن شیفت پیدا نشد." });
 
     var shift = new Shift
     {
@@ -1873,9 +2879,13 @@ app.MapPost("/api/shifts/start", async (
 app.MapPost("/api/shifts/{shiftId:guid}/close", async (
     Guid shiftId,
     CloseShiftRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     if (request.CashClosing < 0 || request.ExternalCash < 0)
         return Results.BadRequest(new { code = "invalid_cash_value", message = "مبالغ صندوق نمی‌توانند منفی باشند." });
 
@@ -1921,7 +2931,7 @@ app.MapPost("/api/shifts/{shiftId:guid}/close", async (
         EntityName = "Shift",
         EntityId = shift.Id.ToString(),
         Details = "بستن شیفت · فروش نقدی " + cashSales.ToString("0.##") + " · هزینه " + expenseTotal.ToString("0.##") + " · اختلاف " + difference.ToString("0.##"),
-        AppUserId = shift.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -1946,9 +2956,14 @@ app.MapPost("/api/shifts/{shiftId:guid}/close", async (
 
 app.MapPost("/api/sessions", async (
     StartSessionRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.start", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
     if (request.CustomerId == Guid.Empty || request.StationId == Guid.Empty)
@@ -1988,7 +3003,7 @@ app.MapPost("/api/sessions", async (
         CustomerId = request.CustomerId,
         StationId = request.StationId,
         TariffId = request.TariffId,
-        AppUserId = request.AppUserId,
+        AppUserId = auth.User!.Id,
         StartAt = DateTimeOffset.UtcNow,
         State = SessionState.Active,
         TotalAmount = 0m,
@@ -2005,7 +3020,7 @@ app.MapPost("/api/sessions", async (
         EntityName = "Session",
         EntityId = session.Id.ToString(),
         Details = "شروع جلسه · ایستگاه " + station.Name,
-        AppUserId = request.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -2022,9 +3037,13 @@ app.MapPost("/api/sessions", async (
 app.MapMethods("/api/sessions/{sessionId:guid}/details", new[] { "PATCH" }, async (
     Guid sessionId,
     SessionDetailsRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var session = await database.Sessions
         .Include(item => item.Station)
         .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
@@ -2065,10 +3084,13 @@ app.MapMethods("/api/sessions/{sessionId:guid}/details", new[] { "PATCH" }, asyn
 })
 .WithName("UpdateSessionDetails");
 
-app.MapGet("/api/sessions/active", async (
+app.MapGet("/api/sessions/active", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "session.start", "session.manage", "session.settle", "buffet.sell");
+    if (auth.Error is not null) return auth.Error;
+
     var sessions = await database.Sessions
         .AsNoTracking()
         .Where(session => session.State == SessionState.Active)
@@ -2123,9 +3145,13 @@ app.MapGet("/api/sessions/active", async (
 app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
     Guid sessionId,
     SessionTransferRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     if (request.TargetStationId == Guid.Empty)
         return Results.BadRequest(new { code = "invalid_target_station", message = "ایستگاه مقصد معتبر نیست." });
 
@@ -2158,7 +3184,7 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
         EntityName = "Session",
         EntityId = session.Id.ToString(),
         Details = "انتقال از " + source.Name + " به " + target.Name,
-        AppUserId = session.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -2172,8 +3198,14 @@ app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
     Guid sessionId,
     SessionSettlementRequest request,
     SessionSettlementService settlement,
+    HttpContext context,
+    GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.settle", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     try
     {
         var result = await settlement.SettleAsync(sessionId, request, cancellationToken);
@@ -2196,27 +3228,20 @@ app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
 
 app.MapPost("/api/invoices/{invoiceId:guid}/reverse", async (
     Guid invoiceId,
-    InvoiceReverseRequest request,
-    InvoiceReverseService reverseService,
+    HttpContext context,
+    GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    try
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    return Results.Conflict(new
     {
-        var result = await reverseService.ReverseAsync(invoiceId, request, cancellationToken);
-        return Results.Ok(result);
-    }
-    catch (KeyNotFoundException exception)
-    {
-        return Results.NotFound(new { code = "invoice_not_found", message = exception.Message });
-    }
-    catch (InvalidOperationException exception)
-    {
-        return Results.Conflict(new { code = "reverse_conflict", message = exception.Message });
-    }
-    catch (ArgumentException exception)
-    {
-        return Results.BadRequest(new { code = "invalid_reverse", message = exception.Message });
-    }
+        code = "approval_required",
+        message = "برگشت فاکتور باید ابتدا از مسیر درخواست تأیید ثبت شود و سپس توسط کاربر مجاز اجرا شود.",
+        invoiceId,
+        requiredEndpoint = $"/api/invoices/{invoiceId}/reverse/request"
+    });
 })
 .WithName("ReverseInvoice");
 
@@ -2232,6 +3257,36 @@ if (!app.Environment.IsDevelopment())
 app.Run();
 
 
+
+static string EncodeWalletRefundApprovalTarget(Guid customerId, decimal amount, Guid? sourceTransactionId)
+    => string.Join("|",
+        customerId.ToString("D"),
+        amount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        sourceTransactionId?.ToString("D") ?? "");
+
+static bool TryDecodeWalletRefundApprovalTarget(string? value, out WalletRefundApprovalTarget target)
+{
+    target = default!;
+    var parts = value?.Split('|');
+    if (parts is null || parts.Length < 2 || parts.Length > 3)
+        return false;
+
+    if (!Guid.TryParse(parts[0], out var customerId)
+        || !decimal.TryParse(parts[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var amount)
+        || amount <= 0)
+        return false;
+
+    Guid? sourceTransactionId = null;
+    if (parts.Length == 3 && !string.IsNullOrWhiteSpace(parts[2]))
+    {
+        if (!Guid.TryParse(parts[2], out var sourceId))
+            return false;
+        sourceTransactionId = sourceId;
+    }
+
+    target = new WalletRefundApprovalTarget(customerId, amount, sourceTransactionId);
+    return true;
+}
 
 static string HashPassword(string password)
 {
@@ -2351,6 +3406,47 @@ static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
         difference,
         shift.Notes);
 }
+
+static AppUserDto ToAppUserDto(AppUser user)
+    => new(
+        user.Id,
+        user.FullName,
+        user.UserName,
+        user.Email,
+        user.Role,
+        user.IsActive,
+        user.LastLoginAt,
+        user.Permissions.Select(item => item.Permission.Name).OrderBy(name => name).ToArray());
+
+public sealed record LoginRequest(string UserName, string Password);
+public sealed record AppUserDto(Guid Id, string FullName, string UserName, string Email, string Role, bool IsActive, DateTimeOffset? LastLoginAt, IReadOnlyList<string> Permissions);
+public sealed record AppUserWriteRequest(string FullName, string UserName, string Email, string Password, string Role, bool IsActive = true);
+public sealed record PermissionAssignmentRequest(IReadOnlyList<string> PermissionNames);
+public sealed record ApprovalCreateRequest(string Action, string EntityName, string? EntityId, string Reason);
+public sealed record ApprovalOperationRequest(string Reason);
+public sealed record PayrollProfileRequest(
+    string? Phone,
+    string PayType,
+    decimal HourlyRate,
+    decimal MonthlySalary,
+    decimal OvertimeRate,
+    DateTimeOffset? EmploymentStartDate,
+    string? WorkSchedule,
+    string? Notes,
+    bool IsActive = true);
+
+public sealed record PayrollEntryRequest(
+    string Kind,
+    decimal Amount,
+    string Reason,
+    string? PaymentMethod = null,
+    string? ReceiptNumber = null,
+    decimal? EmployeePayableDelta = null,
+    decimal? OwnerReceivableDelta = null);
+
+public sealed record ApprovalDecisionRequest(string? Note);
+public sealed record WalletRefundRequestDto(decimal Amount, string? Reason, Guid? SourceTransactionId);
+public sealed record WalletRefundApprovalTarget(Guid CustomerId, decimal Amount, Guid? SourceTransactionId);
 
 public sealed record StartShiftRequest(
     string? OperatorName,

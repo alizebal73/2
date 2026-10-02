@@ -152,38 +152,21 @@ export async function getServerActiveSessions(): Promise<ActiveServerSession[]> 
   return await response.json() as ActiveServerSession[];
 }
 
-export async function reverseServerInvoice(
+export async function requestServerInvoiceReverseApproval(
   invoiceId: string,
   reason: string,
-): Promise<{
-  invoiceId: string;
-  invoiceStatus: string;
-  walletRestored: number;
-  freeMoneyRestored: number;
-  freeTimeRestored: number;
-  inventoryRestored: number;
-  externalRefundRequired: boolean;
-  reversalId: string;
-}> {
-  const response = await fetch('/api/invoices/' + invoiceId + '/reverse', {
+): Promise<{ id: string; status: string }> {
+  const response = await fetch('/api/invoices/' + invoiceId + '/reverse/request', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ appUserId: null, reason }),
+    credentials: 'include',
+    body: JSON.stringify({ reason }),
   });
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(payload?.message || 'برگشت فاکتور روی سرور انجام نشد');
+    throw new Error(payload?.message || 'درخواست تأیید برگشت فاکتور روی سرور ثبت نشد');
   }
 
-  return await response.json() as {
-    invoiceId: string;
-    invoiceStatus: string;
-    walletRestored: number;
-    freeMoneyRestored: number;
-    freeTimeRestored: number;
-    inventoryRestored: number;
-    externalRefundRequired: boolean;
-    reversalId: string;
-  };
+  return await response.json() as { id: string; status: string };
 }
