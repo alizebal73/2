@@ -41,6 +41,45 @@ jobs:
       - name: Test .NET
         run: dotnet test GameNetManager.sln --no-build --configuration Release
 
+      - name: Server startup and migration smoke
+        shell: pwsh
+        run: |
+          $db = Join-Path $env:RUNNER_TEMP 'gamenet-server-smoke.db'
+          $stdout = Join-Path $env:RUNNER_TEMP 'gamenet-server-smoke.stdout.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'gamenet-server-smoke.stderr.log'
+          Remove-Item $db,$stdout,$stderr -Force -ErrorAction SilentlyContinue
+
+          $env:ASPNETCORE_ENVIRONMENT = 'Development'
+          $env:ASPNETCORE_URLS = 'http://127.0.0.1:5080'
+          $env:Database__FileName = $db
+
+          $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
+            'run','--no-build','--configuration','Release',
+            '--project','src\Server\GameNetManager.Server.csproj',
+            '--no-launch-profile'
+          ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              if ($process.HasExited) { break }
+              try {
+                $response = Invoke-WebRequest -Uri 'http://127.0.0.1:5080/api/health' -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+            if (-not $ready) {
+              Write-Host '--- Server stdout ---'
+              if (Test-Path $stdout) { Get-Content $stdout }
+              Write-Host '--- Server stderr ---'
+              if (Test-Path $stderr) { Get-Content $stderr }
+              throw 'Server did not reach /api/health on port 5080.'
+            }
+            Write-Host 'Server startup, EF migrations and /api/health passed.'
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+          }
       - name: Install Dashboard
         run: npm ci --prefix src/Dashboard
 
