@@ -14,7 +14,8 @@ public sealed record ClientUpdateState(
     string? ActiveVersion,
     string? PreviousVersion,
     string? HealthyVersion,
-    DateTimeOffset? ActivatedAt);
+    DateTimeOffset? ActivatedAt,
+    string? PendingRollbackVersion = null);
 
 public sealed class ClientUpdateManager
 {
@@ -186,7 +187,8 @@ public sealed class ClientUpdateManager
                 ? current?.ActiveVersion
                 : currentVersion,
             current?.HealthyVersion,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            null);
 
         await SaveStateAsync(next, cancellationToken);
     }
@@ -238,14 +240,16 @@ public sealed class ClientUpdateManager
         if (!Directory.Exists(previousRoot))
             throw new DirectoryNotFoundException("نسخهٔ قبلی برای Rollback در دسترس نیست.");
 
+        var rollbackTarget = current.PreviousVersion;
         var next = new ClientUpdateState(
-            current.PreviousVersion,
-            null,
+            rollbackTarget,
+            current.ActiveVersion,
             current.HealthyVersion,
-            DateTimeOffset.UtcNow);
+            DateTimeOffset.UtcNow,
+            rollbackTarget);
 
         await SaveStateAsync(next, cancellationToken);
-        return current.PreviousVersion;
+        return rollbackTarget;
     }
 
     public async Task<ClientUpdateState?> GetStateAsync(CancellationToken cancellationToken)
