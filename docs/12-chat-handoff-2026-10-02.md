@@ -404,11 +404,11 @@ Stage 8:
 
 ## Continuation Update — current Stage 7 head
 
-- Repository: `alizebal73/2` only.
+- Repo: `alizebal73/2` only.
 - Branch: `stage7-users-permissions`.
-- PR: #2 — `Stage 7: real operator auth, users, permissions and approvals`.
-- Current implementation includes server-backed payroll/profile/ledger UI, payment method + receipt handling, permission-scoped customer reads/actions, approval-only invoice reverse, and approval-only wallet refund request/execute flow.
-- Direct wallet refund and direct invoice reverse routes no longer execute sensitive operations; they require the server approval path.
-- CI workflow smoke now covers salary accrual/payment, invalid salary payment validation, invoice reverse bypass, and wallet refund approval execution.
-- The previous verified CI failure (#566) was caused only by Dashboard syntax errors on an older head; those syntax errors were subsequently corrected. A new current-head CI run must be green before any Stage 7 checkbox is marked complete.
-- Do not advance to Stage 8 until current-head Server Build/Test + migration smoke + Dashboard lint/build + browser E2E are green and the remaining Read/Write permission matrix is reviewed.
+- PR: #2 — Stage 7 real operator auth, users, permissions and approvals.
+- Stage 7 current verified state: payroll/employee ledger, salary payment method+receipt, approval flow, wallet refund approval execution, invoice reverse approval, active-domain Read/Write UI hardening, authenticated actor enforcement, and generic approval action allowlist are implemented.
+- Run #591 on head `645f2f9a185119f83c9e0f70f432a19ac463d696` passed .NET Build/Test, migration/server smoke, Dashboard lint/build and browser interaction smoke.
+- Roadmap was updated after that verification to close Payroll and active-domain permission/approval items; future Mock domains remain mapped to their later real Server/Agent stages.
+- Latest documentation head is newer than #591 because the roadmap/PR metadata were updated afterward. A docs-only CI run must be checked before declaring the branch's final CI green.
+- Installer is still local-only and has not been published to GitHub.
