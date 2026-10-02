@@ -1759,6 +1759,46 @@ app.MapPost("/api/customers/{customerId:guid}/password", async (HttpContext cont
 })
 .WithName("ChangeCustomerPassword");
 
+app.MapGet("/api/client/identity", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var remoteIp = context.Connection.RemoteIpAddress;
+    var local = remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
+
+    AgentDevice? device = null;
+    if (remoteIp is not null && !local)
+    {
+        var ipText = remoteIp.ToString();
+        device = await database.AgentDevices
+            .Include(item => item.Station)
+            .Where(item => item.IsActive && item.IsOnline && item.LastIpAddress == ipText)
+            .OrderByDescending(item => item.LastSeenAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+    else
+    {
+        device = await database.AgentDevices
+            .Include(item => item.Station)
+            .Where(item => item.IsActive && item.IsOnline && item.LastSeenAt.HasValue)
+            .OrderByDescending(item => item.LastSeenAt)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    if (device is null)
+        return Results.NotFound(new { code = "client_identity_not_found", message = "Agent این رایانه پیدا نشد." });
+
+    return Results.Ok(new
+    {
+        deviceId = device.DeviceId,
+        stationId = device.StationId,
+        stationName = device.Station?.Name,
+        isOnline = device.IsOnline
+    });
+})
+.WithName("GetClientIdentity");
+
 app.MapPost("/api/customer-auth/login", async (
     CustomerLoginAuthRequest request,
     GameNetDbContext database,
