@@ -144,14 +144,14 @@ public sealed class AgentHub(
 
     private async Task<AgentDevice?> ResolveConnectedDeviceAsync(CancellationToken cancellationToken)
     {
-        if (!Context.Items.TryGetValue(AgentDeviceContextKey, out var value)
-            || value is not Guid deviceId)
+        var connectionId = Context.ConnectionId;
+        if (string.IsNullOrWhiteSpace(connectionId))
             return null;
 
         return await database.AgentDevices
             .Include(item => item.Station)
             .FirstOrDefaultAsync(
-                item => item.Id == deviceId && item.IsActive,
+                item => item.ConnectionId == connectionId && item.IsActive,
                 cancellationToken);
     }
 
