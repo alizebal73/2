@@ -530,3 +530,45 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 - ⏩ Stage 9 اکنون باز است: Lock/Unlock واقعی، Kiosk/Shell و سپس Agent-driven Session Start/End روی همین transport ساخته می‌شوند.
 - ⬜ validation فیزیکی 2–3 PC و rollout 40+ همچنان Gate استقرار واقعی است و قبل از rollout گسترده باید انجام شود.
 
+# Audit Checkpoint — Stages 1–9 — 2026-10-02
+
+این بخش وضعیت ممیزی فعلی را ثبت می‌کند و فقط بر پایهٔ کد و CI تأییدشده نوشته شده است.
+
+## وضعیت تأییدشده
+- Repo: `alizebal73/2` فقط.
+- Stage 1 تا 7: بسته، تست‌شده و Stage 7 در `main` merge شده است.
+- Stage 8 Foundation: با Run #676 سبز و تأیید شده است.
+- Stage 9 Lock/Unlock: در `main` merge شده و مسیر واقعی Lock/Unlock با Run #690 سبز تأیید شده است.
+- Stage 9 Agent Session Start/End: روی branch `stage9-session-agent` با head `a2803c693c32d4072e9f1477d7be003672a5820d` و Run #697 سبز تأیید شده است.
+
+## Stage 9 موارد تأییدشده
+- ✅ Agent command transport با persistence/correlation/ack/result
+- ✅ Permission سروری `client.control` برای فرمان‌های مدیریتی Agent
+- ✅ Lock/Unlock واقعی Client
+- ✅ Server-authoritative lock state و heartbeat reconciliation
+- ✅ timeout/failure handling برای commandهای Agent
+- ✅ Dashboard status/lock state واقعی از Server
+- ✅ Customer Authentication برای شروع Session از Agent
+- ✅ Agent-driven Session Start
+- ✅ Agent-driven Session End
+- ✅ تغییر وضعیت Station و broadcast زنده به Dashboard پس از Session Start/End
+- ✅ settlement همان Session از مسیر Server موجود
+- ✅ CI روی Build/Test، migration/server smoke، Dashboard lint/build و browser smoke سبز است.
+
+## مرزهایی که عمداً هنوز Stage 10 نیستند
+- Update/Rollback چرخهٔ Client
+- Recovery/Updater عملیاتی کامل
+- installer/release publishing
+- Game Library و Account Pool واقعی
+
+این موارد فعلاً نباید فعال یا Mock-مانند وارد محصول شوند.
+
+## Debtهای Cross-Stage که حفظ می‌شوند
+- Tariff بعضی مسیرهای Dashboard هنوز از `mockService.getTariffs()` تغذیه می‌کند؛ تا مرحلهٔ واقعی Tariff، این مورد Debt ثبت‌شده است و قابلیت واقعی Done محسوب نمی‌شود.
+- Mockهای Accounts/Games/Tariffs/ClientShell تا آماده‌شدن dependency واقعی نباید به‌عنوان قابلیت واقعی فعال شوند.
+- Installer همچنان local-only است.
+- Validation فیزیکی روی 2–3 PC واقعی قبل از rollout گستردهٔ 40+ PC هنوز انجام نشده و Gate استقرار فیزیکی محسوب می‌شود.
+
+## تصمیم اجرایی فعلی
+**Stage 10 فعلاً باز نمی‌شود.**
+ابتدا Stage 1 تا 9 روی همین وضعیت تثبیت و مستندسازی می‌شوند؛ سپس فقط بعد از عبور Gateهای واقعی به Stage 10 می‌رویم.
