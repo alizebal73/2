@@ -189,13 +189,16 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }, [stations, duration, updateStation]);
   useEffect(() => {
     const onBuffetSale = (event: Event) => {
-      const detail = (event as CustomEvent<{ total: number }>).detail;
-      const station = stations.find(item => item.state === 'busy');
+      const detail = (event as CustomEvent<{ total: number; sessionId?: string; buffetTotal?: number }>).detail;
+      const station = detail.sessionId
+        ? stations.find(item => item.serverSessionId === detail.sessionId)
+        : undefined;
       if (station) {
-        updateStation(station.id, { buffetTotal: (station.buffetTotal ?? 0) + detail.total });
+        const buffetTotal = detail.buffetTotal ?? ((station.buffetTotal ?? 0) + detail.total);
+        updateStation(station.id, { buffetTotal });
         addSessionTimeline(station.id, 'buffet', 'افزودن بوفه', money(detail.total) + ' تومان به فاکتور جلسه اضافه شد', detail.total);
-        setMessage(`فروش ${money(detail.total)} تومان به فاکتور ${station.name} اضافه شد`);
-      } else setMessage('جلسه فعالی نیست؛ فروش مستقل ثبت کنید');
+        setMessage('فروش ' + money(detail.total) + ' تومان به فاکتور ' + station.name + ' اضافه شد');
+      } else setMessage('جلسه مقصد در داشبورد پیدا نشد؛ داشبورد را تازه‌سازی کنید');
     };
     window.addEventListener('gamenet-buffet-sale', onBuffetSale);
     return () => window.removeEventListener('gamenet-buffet-sale', onBuffetSale);
@@ -724,6 +727,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           [{ method: method as 'cash' | 'card' | 'wallet' | 'gift', amount: finalTotal }],
           undefined,
           Math.min(customer.freeTimeMinutes ?? 0, Math.ceil(elapsed)),
+          billing.timeAmount,
+          billing.discountAmount,
+          prepaidUsed,
         );
         setCustomers(current => current.map(item => item.id === customer.id
           ? {
