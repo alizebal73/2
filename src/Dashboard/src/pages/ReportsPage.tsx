@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createShiftExpense } from '../services/financeService';
+import { getCurrentShift } from '../services/shiftService';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
 function parsePersianDate(value: string): Date | null {
