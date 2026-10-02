@@ -77,6 +77,6 @@ test('dashboard shows actionable Persian error UX', async ({ browser }) => {
   await page.route('**/hubs/**', route => route.abort());
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('alert')).toContainText('ارتباط با سرور برقرار نشد');
-  await expect(page.getByRole('button', { name: 'تلاش مجدد' })).toBeVisible();
+  await expect(page.getByRole('alert').getByRole('button', { name: 'تلاش مجدد' })).toBeVisible();
   await context.close();
 });
