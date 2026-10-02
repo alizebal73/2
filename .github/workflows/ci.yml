@@ -2,7 +2,7 @@ name: GameNet Manager CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, repair/ef-snapshot-and-preview]
 
 concurrency:
   group: gamenet-ci-main
@@ -38,6 +38,75 @@ jobs:
       - name: Build .NET
         run: dotnet build GameNetManager.sln --no-restore --configuration Release
 
+      - name: Probe EF snapshot regeneration
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:GITHUB_WORKSPACE 'src\Server\Data\Migrations'
+          $snapshot = Join-Path $root 'GameNetDbContextModelSnapshot.cs'
+          $backup = Join-Path $env:RUNNER_TEMP 'GameNetDbContextModelSnapshot.bak'
+          $probe = Join-Path $root '__SnapshotProbe'
+          $factory = Join-Path $env:GITHUB_WORKSPACE 'src\Server\DesignTimeDbContextFactory.cs'
+          $artifact = Join-Path $env:GITHUB_WORKSPACE 'ef-snapshot-probe'
+          $log = Join-Path $artifact 'probe.log'
+          $success = $false
+
+          New-Item -ItemType Directory -Force $artifact | Out-Null
+          if (Test-Path $probe) { Remove-Item $probe -Recurse -Force }
+          if (Test-Path $backup) { Remove-Item $backup -Force }
+          if (Test-Path $factory) { Remove-Item $factory -Force }
+
+          $factoryLines = @(
+            'using GameNetManager.Server.Data;',
+            'using Microsoft.EntityFrameworkCore;',
+            'using Microsoft.EntityFrameworkCore.Design;',
+            '',
+            'public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<GameNetDbContext>',
+            '{',
+            '    public GameNetDbContext CreateDbContext(string[] args)',
+            '    {',
+            '        var options = new DbContextOptionsBuilder<GameNetDbContext>()',
+            '            .UseSqlite("Data Source=:memory:")',
+            '            .Options;',
+            '        return new GameNetDbContext(options);',
+            '    }',
+            '}'
+          )
+          Set-Content -Path $factory -Value $factoryLines -Encoding utf8
+          Move-Item $snapshot $backup
+
+          try {
+            New-Item -ItemType Directory -Force $probe | Out-Null
+            dotnet tool restore *>&1 | Tee-Object -FilePath $log -Append
+            dotnet build src\Server\GameNetManager.Server.csproj --no-restore --configuration Release *>&1 | Tee-Object -FilePath $log -Append
+            if ($LASTEXITCODE -eq 0) {
+              dotnet tool run dotnet-ef migrations add SnapshotRebuildProbe --project src\Server --startup-project src\Server --output-dir Data\Migrations\__SnapshotProbe --no-build *>&1 | Tee-Object -FilePath $log -Append
+              if ($LASTEXITCODE -eq 0) {
+                $generated = Get-ChildItem $probe -Filter '*ModelSnapshot.cs' | Select-Object -First 1
+                if ($generated) {
+                  Copy-Item $generated.FullName (Join-Path $artifact 'GameNetDbContextModelSnapshot.cs') -Force
+                  $success = $true
+                }
+              }
+            }
+          } catch {
+            $_ | Out-String | Add-Content $log
+          } finally {
+            if (Test-Path $snapshot) { Remove-Item $snapshot -Force }
+            if (Test-Path $backup) { Move-Item $backup $snapshot -Force }
+            if (Test-Path $probe) { Remove-Item $probe -Recurse -Force }
+            if (Test-Path $factory) { Remove-Item $factory -Force }
+          }
+
+          "SNAPSHOT_PROBE_SUCCESS=$success" | Add-Content $log
+          if (-not $success) { Write-Warning 'EF snapshot probe did not generate a replacement snapshot. Existing snapshot was restored unchanged.' }
+
+      - name: Upload EF snapshot probe
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ef-snapshot-probe
+          path: ef-snapshot-probe
+          if-no-files-found: error
       - name: Test .NET
         run: dotnet test GameNetManager.sln --no-build --configuration Release
 
