@@ -165,6 +165,8 @@ public sealed class SessionSettlementService(GameNetDbContext database)
             invoice.TotalAmount,
             normalizedParts,
             session.Customer.Balance,
+            session.Customer.FreeMoney,
+            session.Customer.FreeTimeMinutes,
             invoice.Status.ToString(),
             invoice.PaidAt ?? DateTimeOffset.UtcNow);
     }
@@ -176,6 +178,8 @@ public sealed record SettlementResult(
     decimal TotalAmount,
     IReadOnlyList<SettlementPart> Parts,
     decimal WalletBalanceAfter,
+    decimal FreeMoneyBalanceAfter,
+    int FreeTimeMinutesAfter,
     string InvoiceStatus,
     DateTimeOffset PaidAt);
 
