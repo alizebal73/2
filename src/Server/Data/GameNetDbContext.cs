@@ -118,6 +118,9 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         device.Property(item => item.CpuUsagePercent).HasColumnType("REAL");
         device.Property(item => item.MemoryAvailableBytes).HasColumnType("INTEGER");
         device.Property(item => item.UptimeSeconds).HasColumnType("INTEGER");
+        device.Property(item => item.LifecycleState).HasMaxLength(30).IsRequired();
+        device.Property(item => item.PendingUpdateVersion).HasMaxLength(60);
+        device.Property(item => item.LastUpdateError).HasMaxLength(500);
         device.Property(item => item.LastIpAddress).HasMaxLength(80);
         device.Property(item => item.ConnectionId).HasMaxLength(200);
         device.HasOne(item => item.Station)
