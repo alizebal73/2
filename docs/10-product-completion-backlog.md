@@ -421,6 +421,7 @@
   - مصرف روزانه VIP از Session/Client واقعی محاسبه و ذخیره شود؛ hoursUsedToday فعلاً منبع سروری واقعی ندارد.
   - Password/Credential UX واقعاً به Authentication/credential storage سروری متصل شود؛ Flow فعلی هنوز عملیات واقعی رمز را انجام نمی‌دهد.
   - Concurrent Login Limit در مسیر Client Login واقعی مصرف و در Integration/E2E تست شود؛ مدل/Guard پایه از قبل وجود دارد.
+  - VipTier نباید مستقل از VIP Package منبع حقیقت دیگری باشد؛ تغییر tier باید با package/activation/expiry سازگار یا محدود شود تا وضعیت مشتری دوگانه نشود.
   - History/Customer timeline برای عملیات مشتری به داده‌های واقعی سرور متصل و از state محلی جدا شود.
   - Client Login preparation تا Agent و Server واقعی تکمیل شود.
 
