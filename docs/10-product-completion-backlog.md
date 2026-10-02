@@ -328,9 +328,9 @@
 **تکمیل شد.** A1 تا A8 همگی پیاده‌سازی شدند و CI + Dashboard Interaction Smoke روی HEAD نهایی سبز است. مرحله اصلی بعدی: **۴ — Finance & Session Core**.
 
 ### B) Finance / Session
-9. [~] Wallet Ledger واقعی — قرارداد مشترک، API پایدار Server/SQLite، Audit، adapter داشبورد و نمایش Ledger مشتری پیاده‌سازی شد؛ اتصال همه عملیات مالی و مهاجرت کامل از Mock باقی مانده
-10. [~] Refund / Reverse واقعی — Refund کیف پول مسیر مستقل Server/API + Audit + UI گرفت؛ Permission/Approval و Reverse کامل مالی مرحله بعدی هنوز باقی است
-11. [~] Settlement کامل + Breakdown + Why this amount? — محاسبه مودال با Billing Engine یکپارچه شد؛ Breakdown/Why/Received/Change اضافه شد؛ اتصال Invoice/Server و تست کامل مالی باقی است
+9. [~] Wallet Ledger واقعی — API/SQLite/Audit/adapter و نمایش Ledger پیاده شد؛ عملیات کیف پول Dashboard به adapter منتقل شده‌اند؛ مهاجرت کامل Customer/Finance از Mock باقی است
+10. [~] Refund / Reverse واقعی — Refund کیف پول مسیر مستقل Server/API + Audit + UI گرفت و تست سرور سبز شد؛ Permission/Approval و Reverse کامل مالی مرحله بعدی هنوز باقی است
+11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change پیاده شد و CI + Smoke سبز است؛ اتصال Invoice/Server و ثبت مالی نهایی باقی است
 12. Split Payment
 13. Shift Settlement + Shift Handover
 14. Session Transfer / Change Tariff / Change Persons
