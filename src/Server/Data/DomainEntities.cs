@@ -72,6 +72,8 @@ public sealed class Tariff : BaseEntity
 public sealed class Customer : BaseEntity
 {
     public required string FullName { get; set; }
+    public string? Code { get; set; }
+    public string? Username { get; set; }
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public bool IsVip { get; set; }
