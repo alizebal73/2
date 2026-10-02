@@ -72,8 +72,22 @@ public sealed class AgentPresenceMonitor(
 
                 if (staleDevices.Count > 0)
                 {
-                    foreach (var device in staleDevices)
+                    foreach (var staleDevice in staleDevices)
                     {
+                        var device = await database.AgentDevices
+                            .FirstOrDefaultAsync(item => item.Id == staleDevice.Id, stoppingToken);
+
+                        if (device is null
+                            || !device.IsActive
+                            || !device.IsOnline
+                            || !device.LastSeenAt.HasValue
+                            || device.LastSeenAt.Value >= cutoff)
+                        {
+                            // The Agent may have reconnected after the stale list was materialized.
+                            // Re-read the authoritative row before forcing an offline transition.
+                            continue;
+                        }
+
                         device.IsOnline = false;
                         device.ConnectionId = null;
 
