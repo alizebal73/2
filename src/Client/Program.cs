@@ -288,8 +288,8 @@ static async Task RunTestSessionFlowAsync(
             new AgentSessionStartRequest(
                 customerId,
                 customerLoginId,
-                null,
-                null,
+                Guid.NewGuid(),
+                1m,
                 1),
             cancellationToken);
 
@@ -297,6 +297,19 @@ static async Task RunTestSessionFlowAsync(
         Console.WriteLine($"AGENT_SESSION_START_OK:{started.SessionId}");
 
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+
+        try
+        {
+            await connection.InvokeAsync<AgentSessionEndResponse>(
+                "EndSession",
+                new AgentSessionEndRequest(started.SessionId, null),
+                cancellationToken);
+            throw new InvalidOperationException("Agent session end without CustomerLoginId unexpectedly succeeded.");
+        }
+        catch (HubException)
+        {
+            Console.WriteLine("AGENT_SESSION_END_AUTH_GUARD_OK");
+        }
 
         var ended = await connection.InvokeAsync<AgentSessionEndResponse>(
             "EndSession",
