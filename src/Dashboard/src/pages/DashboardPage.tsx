@@ -201,8 +201,31 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     return items.sort((a, b) => { const rank: Record<AttentionKind, number> = { action: 0, warning: 1, info: 2 }; return rank[a.kind] - rank[b.kind]; });
   }, [stations, now, sessionFollowUps]);
 
-  const attentionCounts = useMemo(() => ({ total: attentionItems.length, action: attentionItems.filter(item => item.kind === 'action').length, warning: attentionItems.filter(item => item.kind === 'warning').length }), [attentionItems]);
+  const sidebarAttentions = useMemo<SidebarAttentionItem[]>(() => attentionItems.map(item => ({
+    id: item.id,
+    kind: item.kind,
+    title: item.title,
+    detail: item.detail,
+    actionLabel: item.actionLabel,
+  })), [attentionItems]);
 
+  const sidebarPayments = useMemo<SidebarPaymentItem[]>(() => pendingPayments.map(item => ({
+    id: item.id,
+    customerName: item.customerName,
+    customerCode: item.customerCode,
+    stationName: item.stationName,
+    amount: item.amount,
+    createdAt: item.createdAt,
+  })), [pendingPayments]);
+
+  const sidebarRecentActions = useMemo(() => sessionTimeline.map(item => ({
+    id: item.id,
+    title: item.title,
+    station: stations.find(row => row.id === item.stationId)?.name ?? 'ایستگاه حذف‌شده',
+    detail: item.detail,
+    createdAt: item.createdAt,
+    kind: item.kind,
+  })), [sessionTimeline, stations]);
 
   function focusAttentionItem(item: AttentionItem) {
     setZone(item.station.zone as ZoneKey);
@@ -546,7 +569,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     setContext(null);
     if (!station) return;
     if (action === 'details') { openSessionCenter(station); return; }
-    if (action === 'settle') { open('settle', station); return; }
+    if (action === 'settle') { endSessionForPayment(station); return; }
     if (action === 'extend') { open('extend', station); return; }
     if (action === 'pause') { pauseSession(station); return; }
     if (action === 'resume') { resumeSession(station); return; }
@@ -579,7 +602,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
         {station.state === 'free' && <button type="button" className="quick primary" onClick={() => open('start', station)}>▶ شروع</button>}
         {station.state === 'busy' && <button type="button" className="quick" onClick={() => { setActiveStation(station); pauseSession(); }}>⏸ مکث</button>}
         {station.state === 'paused' && <button type="button" className="quick primary" onClick={() => { setActiveStation(station); resumeSession(); }}>▶ ادامه</button>}
-        {(station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => open('settle', station)}>🧾 تسویه</button>}
+        {(station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => endSessionForPayment(station)}>🧾 پایان بازی</button>}
         {(station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => open('extend', station)}>⏱ تمدید</button>}
         <button
           type="button"
@@ -600,76 +623,37 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     <div className="summary-grid">
       {[["ایستگاه آزاد", counts.free, 'green'], ['در حال جلسه', counts.busy + stations.filter(item => item.state === 'paused').length, 'red'], ['رزرو امروز', counts.reserved, 'blue'], ['درآمد امروز', invoices.reduce((sum, item) => sum + item.total, 4820000), 'orange'], ['فروش بوفه', 860000, 'orange'], ['مشتری حاضر', stations.filter(item => item.state === 'busy').reduce((sum, item) => sum + (item.persons ?? 1), 0), 'blue']].map(([label, value, color]) => <div key={label} className="summary-card"><div className="label">{label}</div><div className={`value ${color}`}>{money(Number(value))}{String(label).includes('درآمد') || String(label).includes('فروش') ? ' تومان' : ''}</div></div>)}
     </div>
-        <div className="attention-bar">
-      <button type="button" className={`attention-trigger ${attentionCounts.total ? 'has-items' : ''}`} onClick={() => setAttentionOpen(value => !value)} aria-expanded={attentionOpen}>
-        ⚠ نیازمند توجه
-        <span>{attentionCounts.total ? money(attentionCounts.total) : '۰'}</span>
-      </button>
-      <span className="attention-summary">
-        {attentionCounts.action ? `اقدام لازم: ${money(attentionCounts.action)}` : 'اقدام فوری نداریم'}
-        {attentionCounts.warning ? ` · هشدار: ${money(attentionCounts.warning)}` : ''}
-      </span>
-    </div>
-    {attentionOpen && (
-      <section className="attention-panel" aria-label="مرکز نیازمند توجه">
-        <div className="attention-panel-head">
-          <div><strong>مرکز نیازمند توجه</strong><small>مواردی که از وضعیت فعلی ایستگاه‌ها نیاز به بررسی یا اقدام دارند</small></div>
-          <button type="button" className="btn sm" onClick={() => setAttentionOpen(false)}>بستن</button>
+        <div className="dashboard-workspace">
+      <DashboardAttentionSidebar
+        payments={sidebarPayments}
+        attentions={sidebarAttentions}
+        recentActions={sidebarRecentActions}
+        money={money}
+        onCardPaid={settlePendingPayment}
+        onWallet={deductPendingFromWallet}
+        onDebt={registerPendingDebt}
+        onAttention={id => {
+          const item = attentionItems.find(row => row.id === id);
+          if (item) focusAttentionItem(item);
+        }}
+      />
+      <main className="dashboard-main">
+        <div className="toolbar dashboard-toolbar">
+          <div className="zone-filter">{Object.entries(zoneLabels).map(([key, label]) => <button key={key} type="button" className={zone === key ? 'active' : ''} onClick={() => setZone(key as ZoneKey)}>{label}</button>)}</div>
+          <div className="search-box"><input aria-label="جست‌وجوی ایستگاه" value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی ایستگاه…" /></div>
+          <div className="view-switch" aria-label="حالت نمایش">{(['v-card', 'v-compact', 'v-list'] as ViewMode[]).map((item, index) => <button key={item} type="button" className={view === item ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(item)}>{['▦', '▤', '☰'][index]}</button>)}</div>
+          <label className="zoom-control">اندازه <input type="range" min="70" max="130" step="5" value={zoom} onChange={event => setZoom(Number(event.target.value))} />{money(zoom)}٪</label>
+          <button type="button" className="btn primary" onClick={() => open('start', stations.find(item => item.state === 'free') ?? null)}>+ شروع جلسه</button>
         </div>
-        {attentionItems.length === 0 ? <div className="attention-empty">در حال حاضر موردی نیازمند توجه نیست.</div> : <div className="attention-list">
-          {attentionItems.map(item => <div className={`attention-item ${item.kind}`} key={item.id}>
-            <span className="attention-dot" aria-hidden="true" />
-            <div className="attention-content"><strong>{item.title}</strong><span>{item.detail}</span></div>
-            <button type="button" className="btn sm" onClick={() => focusAttentionItem(item)}>{item.actionLabel}</button>
-          </div>)}
-        </div>}
-      </section>
-    )}
-    <div className="recent-actions-bar">
-      <button type="button" className="recent-actions-trigger" onClick={() => setRecentActionsOpen(value => !value)} aria-expanded={recentActionsOpen}>
-        ◷ آخرین عملیات
-        <span>{sessionTimeline.length ? Math.min(9, sessionTimeline.length).toLocaleString('fa-IR') : '۰'}</span>
-      </button>
-      <span className="recent-actions-summary">{sessionTimeline.length ? 'آخرین تغییرات ثبت‌شده در همین نشست کاری' : 'هنوز عملیاتی در این نشست ثبت نشده است'}</span>
+        {apiState === 'loading' && <p className="empty-state">در حال دریافت اطلاعات از سرور…</p>}
+        {apiState === 'online' && !visibleStations.length && <p className="empty-state">ایستگاهی با این جست‌وجو پیدا نشد.</p>}
+        {zone === 'all' ? groups.map(([key, title]) => {
+          const items = visibleStations.filter(item => item.zone === key);
+          if (!items.length) return null;
+          return <section key={key}><div className="section-title">{title} · {items.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{items.map(renderStation)}</div></section>;
+        }) : <div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{visibleStations.map(renderStation)}</div>}
+      </main>
     </div>
-    {recentActionsOpen && (
-      <section className="recent-actions-panel" aria-label="عملیات اخیر اپراتور">
-        <div className="recent-actions-head">
-          <div><strong>عملیات اخیر اپراتور</strong><small>برای پیگیری سریع کارهای چند دقیقه اخیر، بدون رفتن به گزارش‌ها</small></div>
-          <button type="button" className="btn sm" onClick={() => setRecentActionsOpen(false)}>بستن</button>
-        </div>
-        {sessionTimeline.length === 0 ? <div className="recent-actions-empty">در این نشست هنوز عملیاتی ثبت نشده است.</div> : (
-          <div className="recent-actions-list">
-            {sessionTimeline.slice(0, 9).map(item => {
-              const station = stations.find(row => row.id === item.stationId);
-              return <div className="recent-action-item" key={item.id}>
-                <span className={'recent-action-dot ' + item.kind} />
-                <div className="recent-action-main">
-                  <strong>{item.title}</strong>
-                  <small>{station?.name ?? 'ایستگاه حذف‌شده'} · {item.detail}</small>
-                </div>
-                <time>{new Date(item.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</time>
-              </div>;
-            })}
-          </div>
-        )}
-      </section>
-    )}
-<div className="toolbar dashboard-toolbar">
-      <div className="zone-filter">{Object.entries(zoneLabels).map(([key, label]) => <button key={key} type="button" className={zone === key ? 'active' : ''} onClick={() => setZone(key as ZoneKey)}>{label}</button>)}</div>
-      <div className="search-box"><input aria-label="جست‌وجوی ایستگاه" value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی ایستگاه…" /></div>
-      <div className="view-switch" aria-label="حالت نمایش">{(['v-card', 'v-compact', 'v-list'] as ViewMode[]).map((item, index) => <button key={item} type="button" className={view === item ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(item)}>{['▦', '▤', '☰'][index]}</button>)}</div>
-      <label className="zoom-control">اندازه <input type="range" min="70" max="130" step="5" value={zoom} onChange={event => setZoom(Number(event.target.value))} />{money(zoom)}٪</label>
-      <button type="button" className="btn" onClick={() => setMessage('۲ اعلان جدید')}>🔔 ۲</button>
-      <button type="button" className="btn primary" onClick={() => open('start', stations.find(item => item.state === 'free') ?? null)}>+ شروع جلسه</button>
-    </div>
-    {apiState === 'loading' && <p className="empty-state">در حال دریافت DTO از سرور…</p>}
-    {apiState === 'online' && !visibleStations.length && <p className="empty-state">ایستگاهی با این جست‌وجو پیدا نشد.</p>}
-    {zone === 'all' ? groups.map(([key, title]) => {
-      const items = visibleStations.filter(item => item.zone === key);
-      if (!items.length) return null;
-      return <section key={key}><div className="section-title">{title} · {items.length}</div><div className={`station-grid ${view}`} style={{ '--card-min': `${(view === 'v-compact' ? 128 : 168) * zoom / 100}px` } as CSSProperties}>{items.map(renderStation)}</div></section>;
-    }) : <div className={`station-grid ${view}`} style={{ '--card-min': `${(view === 'v-compact' ? 128 : 168) * zoom / 100}px` } as CSSProperties}>{visibleStations.map(renderStation)}</div>}
 
     {liveSessionCenterStation && <SessionCenter
       station={liveSessionCenterStation}
@@ -682,7 +666,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       onCharge={() => { setSessionCenterStation(null); open('charge', liveSessionCenterStation); }}
       onExtend={() => { setSessionCenterStation(null); open('extend', liveSessionCenterStation); }}
       onReduce={() => { setSessionCenterStation(null); open('reduce', liveSessionCenterStation); }}
-      onSettle={() => { setSessionCenterStation(null); open('settle', liveSessionCenterStation); }}
+      onSettle={() => endSessionForPayment(liveSessionCenterStation)}
       timeline={sessionTimeline.filter(item => item.stationId === liveSessionCenterStation.id)}
     />}
     {context && <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}>
@@ -707,7 +691,49 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     </div>}
     {modal && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setModal(null)}><section className="operation-modal" role="dialog" aria-modal="true">
       <button className="modal-close" onClick={() => setModal(null)} aria-label="بستن">×</button>
-      {modal === 'start' && <><h2>شروع جلسه · {activeStation?.name ?? 'انتخاب ایستگاه آزاد'}</h2><label>ایستگاه<select value={activeStation?.id ?? ''} onChange={event => setActiveStation(stations.find(item => item.id === event.target.value) ?? null)}>{stations.filter(item => item.state === 'free').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>مشتری<select value={customerCode} onChange={event => setCustomerCode(event.target.value)}><option value="">مهمان</option>{customers.map(item => <option key={item.id} value={item.username}>{item.code ?? item.username} · {item.name}</option>)}</select></label>{customerCode && (() => { const selectedCustomer = customers.find(item => item.username === customerCode || item.code === customerCode); if (!selectedCustomer) return null; const used = selectedCustomer.hoursUsedToday ?? 0; const cap = selectedCustomer.dailyHourCap ?? 0; const remaining = Math.max(0, cap - used); return <div className="package-box"><div className="title"><strong>{selectedCustomer.packageName ?? 'بدون پکیج VIP'}</strong><span className={`vip-tag ${selectedCustomer.vip}`}>{selectedCustomer.vip === 'gold' ? 'Gold' : selectedCustomer.vip === 'silver' ? 'Silver' : 'None'}</span></div><div className="info-row"><span>مصرف امروز</span><strong>{used} ساعت</strong></div><div className="info-row"><span>باقی‌مانده روزانه</span><strong>{selectedCustomer.packageName ? `${remaining} ساعت` : 'بدون سقف پکیج'}</strong></div>{selectedCustomer.packageName && used >= cap && <strong className="limit-warning">سقف روزانه تکمیل شده؛ زمان مازاد طبق قانون پکیج محاسبه می‌شود.</strong>}</div>; })()}<label>نرخ این جلسه (تومان / ساعت)<input autoFocus inputMode="numeric" value={manualRate} onChange={event => setManualRate(event.target.value)} /></label>{activeStation?.zone === 'pc' ? <div className="single-person-note">رایانه برای هر جلسه فقط ۱ نفر دارد.</div> : <div className="person-choice">{[1, 2, 3, 4].map(item => <button key={item} className={persons === item ? 'active' : ''} onClick={() => setPersons(item)}>{money(item)} نفر</button>)}</div>}<div className="person-choice"><button className={paymentMode === 'settle-later' ? 'active' : ''} onClick={() => setPaymentMode('settle-later')}>تسویه بعد از بازی</button><button className={paymentMode === 'prepaid' ? 'active' : ''} onClick={() => setPaymentMode('prepaid')}>پیش‌پرداخت / شارژی</button></div><div className="modal-actions"><button className="btn primary" onClick={startSession}>▶ شروع بازی</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
+      {modal === 'start' && <><h2>ورود یوزر · {activeStation?.name ?? 'انتخاب ایستگاه آزاد'}</h2>
+        <label>ایستگاه
+          <select value={activeStation?.id ?? ''} onChange={event => setActiveStation(stations.find(item => item.id === event.target.value) ?? null)}>
+            {stations.filter(item => item.state === 'free').map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>
+        <label>یوزر / کد مشتری
+          <input
+            autoFocus
+            value={customerCode}
+            onChange={event => setCustomerCode(event.target.value)}
+            onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); lookupStartCustomer(); } }}
+            placeholder="یوزر یا کد را وارد کنید و Enter بزنید"
+          />
+        </label>
+        {customerCode && (() => {
+          const selectedCustomer = findCustomer(customerCode);
+          if (!selectedCustomer) return <div className="start-customer-warning">این یوزر پیدا نشد. کد، نام کاربری یا موبایل را بررسی کنید.</div>;
+          const walletEmpty = selectedCustomer.wallet <= 0;
+          return <div className="start-customer-result">
+            <div className="start-customer-main">
+              <div><strong>{selectedCustomer.name}</strong><span>کد {selectedCustomer.code} · @{selectedCustomer.username}</span></div>
+              <span className={'vip-tag ' + selectedCustomer.vip}>{selectedCustomer.vip === 'gold' ? 'طلایی' : selectedCustomer.vip === 'silver' ? 'نقره‌ای' : 'عادی'}</span>
+            </div>
+            <div className="start-customer-money">
+              <span>کیف پول</span><strong>{money(selectedCustomer.wallet)} تومان</strong>
+              <span>بدهی</span><strong className={selectedCustomer.debt > 0 ? 'debt-value' : ''}>{money(selectedCustomer.debt)} تومان</strong>
+            </div>
+            {walletEmpty && <div className="start-wallet-warning">
+              کیف پول این مشتری شارژ نیست. می‌توانید کیف پول را شارژ کنید یا جلسه را با «تسویه بعد از بازی» شروع کنید.
+              <div className="start-wallet-actions">
+                <button type="button" className="btn sm" onClick={openCustomerProfile}>رفتن به پروفایل / شارژ</button>
+              </div>
+            </div>}
+            <div className="start-session-note">{activeStation?.zone === 'pc' ? 'این رایانه فقط یک نفر دارد.' : 'تعداد نفرات برای این دستگاه در مرحله شروع قابل تنظیم است.'}</div>
+          </div>;
+        })()}
+        {activeStation?.zone !== 'pc' && <div className="person-choice">{[1, 2, 3, 4].map(item => <button key={item} className={persons === item ? 'active' : ''} onClick={() => setPersons(item)}>{money(item)} نفر</button>)}</div>}
+        <div className="modal-actions">
+          <button className="btn primary" onClick={startSession}>▶ ورود و شروع بازی</button>
+          <button className="btn" onClick={() => setModal(null)}>لغو</button>
+        </div>
+      </>}
       {modal === 'flow' && <><h2>⚡ فلوی سرعت · F1</h2>{flowStep === 1 ? <><label>شناسه مشتری<input autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && setFlowStep(2)} placeholder="کد، نام، لقب یا موبایل" /></label><button className="btn primary" onClick={() => setFlowStep(2)}>نمایش پروفایل</button></> : <><p>{customers.find(item => [item.username, item.mobile, item.id, item.name].some(value => value.includes(customerCode)))?.name ?? 'مشتری مهمان'} · {activeStation?.name ?? 'بدون دستگاه'}</p><label>مبلغ (تومان)<input id="flow-amount" inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label><div className="modal-actions">{[['F5', 'شارژ مستقیم'], ['F6', 'ثبت بدهی'], ['F7', 'کسر از کیف پول'], ['F8', 'کسر کیف پول + بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyFlow(key)}>{key} {label}</button>)}</div></>}</>}
       {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول'], ['debt', 'ثبت در بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
       {modal === 'settle' && activeStation && (() => {
