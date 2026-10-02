@@ -53,7 +53,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.Property<string>("UserName")
                         .IsRequired()
@@ -113,7 +114,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -172,7 +174,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -216,7 +219,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -257,7 +261,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -291,7 +296,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -359,7 +365,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.Property<string>("Username")
                         .HasMaxLength(60)
@@ -428,7 +435,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -462,7 +470,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -493,7 +502,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -535,7 +545,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -591,7 +602,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -637,7 +649,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -681,7 +694,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -712,7 +726,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -745,7 +760,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -776,7 +792,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -826,7 +843,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -873,7 +891,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -934,7 +953,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -978,7 +998,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -1024,7 +1045,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.Property<string>("Zone")
                         .IsRequired()
@@ -1064,7 +1086,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -1102,7 +1125,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -1158,7 +1182,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
@@ -1200,7 +1225,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
 
                     b.HasKey("Id");
 
