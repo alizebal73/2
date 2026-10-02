@@ -680,6 +680,7 @@ static bool IsMigrationRecoveryCandidate(Exception exception)
         || exception.Message.Contains("SQLite Error 19", StringComparison.OrdinalIgnoreCase);
 }
 
+
 public partial class Program { }
 
 
@@ -757,3 +758,5 @@ public sealed record ShiftSnapshotDto(
     decimal ExpectedCash,
     decimal Difference,
     string? Note);
+
+public partial class Program { }
