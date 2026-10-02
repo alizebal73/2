@@ -3603,3 +3603,86 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+
+.session-rate-editor {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed #1a2540;
+}
+
+.session-rate-editor > div {
+  display: flex;
+  gap: 5px;
+}
+
+.session-rate-editor input {
+  min-width: 0;
+  flex: 1;
+}
+
+.session-rate-editor small {
+  color: #6f7d9f;
+  font-size: 8.5px;
+}
+
+.session-person-editor {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 0;
+}
+
+.session-person-editor > div {
+  display: flex;
+  gap: 4px;
+}
+
+.session-transfer-popover {
+  position: absolute;
+  inset-inline-end: 0;
+  bottom: calc(100% + 7px);
+  width: 240px;
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0d1526;
+  box-shadow: 0 16px 45px #000a;
+  z-index: 5;
+}
+
+.session-transfer-popover strong {
+  font-size: 10.5px;
+  margin-bottom: 2px;
+}
+
+.session-transfer-popover small {
+  color: var(--dim);
+  padding: 7px 2px;
+  font-size: 9px;
+}
+
+.session-transfer-popover button {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: #121d32;
+  color: var(--txt);
+  cursor: pointer;
+  text-align: right;
+  font-size: 9.5px;
+}
+
+.session-transfer-popover button:hover {
+  border-color: #2a3b63;
+  background: #18233a;
+}
+
+.session-action-strip {
+  position: relative;
+}
