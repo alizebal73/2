@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { mockService } from '../services/mockService';
-import { getPermissions, getUsers, setUserPermissions } from '../services/authService';
+import { getPermissions, getUsers, hasPermission, setUserPermissions } from '../services/authService';
 import type { AppUserRecord } from '../types';
 import { userErrorMessage } from '../utils/userError';
 import { closeServerShift, getCurrentShift, getShiftHistory, startServerShift } from '../services/shiftService';
@@ -9,11 +9,11 @@ import type { UserRecord } from '../types';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(value); }
 
-type UsersPageProps = { permissions: string[]; userId: string };
+type UsersPageProps = { user: AppUserRecord };
 
-export function UsersPage({ permissions, userId }: UsersPageProps) {
-  const canManageUsers = permissions.includes('user.manage');
-  const canManageShift = permissions.includes('shift.manage');
+export function UsersPage({ user }: UsersPageProps) {
+  const canManageUsers = hasPermission(user, 'user.manage');
+  const canManageShift = hasPermission(user, 'shift.manage');
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [serverUsers, setServerUsers] = useState<AppUserRecord[]>([]);
   const [permissionCatalog, setPermissionCatalog] = useState<Array<{ id: string; name: string; description?: string }>>([]);
@@ -77,7 +77,7 @@ export function UsersPage({ permissions, userId }: UsersPageProps) {
       setUsers([]);
       setSelectedUserId('');
       setSelectedPermissions([]);
-      setShiftOperator('');
+      setShiftOperator('کاربر جاری');
     }
 
     if (canManageShift) {
