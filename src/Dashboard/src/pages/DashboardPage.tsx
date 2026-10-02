@@ -243,6 +243,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       }
       setSelectionRect(null);
       selectionDragRef.current = null;
+      window.setTimeout(() => {
+        suppressNextStationClickRef.current = false;
+      }, 0);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
