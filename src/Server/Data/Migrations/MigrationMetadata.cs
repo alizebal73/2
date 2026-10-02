@@ -146,3 +146,10 @@ partial class AgentKioskPolicy
 partial class AgentStationAssignment
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002232000_ClientLifecycleState")]
+partial class ClientLifecycleState
+{
+}
