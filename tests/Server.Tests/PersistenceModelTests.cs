@@ -48,6 +48,7 @@ public sealed class PersistenceModelTests : IDisposable
             CustomerId = customer.Id,
             Amount = 75000m,
             Type = WalletTransactionType.Debit,
+            ReferenceTransactionId = original.Id,
             Description = "بازگشت وجه · لغو شارژ"
         };
         db.WalletTransactions.Add(refund);
@@ -72,6 +73,7 @@ public sealed class PersistenceModelTests : IDisposable
         Assert.Equal(WalletTransactionType.Debit, transactions[1].Type);
         Assert.Equal(125000m, customer.Balance);
         Assert.Equal("WalletRefund", audit.Action);
+        Assert.Equal(original.Id, transactions[1].ReferenceTransactionId);
     }
 
     [Fact]
