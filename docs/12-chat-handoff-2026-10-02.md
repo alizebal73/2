@@ -8,7 +8,7 @@
 - ریپوهای دیگر را برای این پروژه بررسی/ویرایش نکن.
 - محصول: GameNet Manager / GameNet Pro برای مدیریت یک GameNet واقعی، با هدف اجرای پایدار روی 40+ دستگاه.
 - معماری مرجع: Server منبع حقیقت است؛ Dashboard و Client نباید state مالی/عملیاتی مستقل و authoritative داشته باشند.
-- branch فعال: `stage8-pc-agent-foundation`
+- branch فعال: `stage10-client-lifecycle`
 - base merge commit: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
 - branch Stage 8 از merge موفق Stage 7 ساخته شده است؛ head جدید باید قبل از هر تغییر دوباره از GitHub خوانده شود.
 - PR #2 — `Stage 7: real operator auth, users, permissions and approvals` — **merged** در `main`.
@@ -616,18 +616,34 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 - This checkpoint is intended to force one more full CI verification of the exact post-audit state before any Stage 10 work is started.
 
 
-# Stage 10 — Client Lifecycle — opening checkpoint
+# Stage 10 — Client Lifecycle — verified checkpoint
 
+- Repo: `alizebal73/2` only.
 - Branch: `stage10-client-lifecycle`
-- Base: final Stage 1–9 audit checkpoint on `main`.
-- First vertical slice in progress:
+- PR #9: open, not merged.
+- Current verified head: `46ca0311392a00f4910fcae8527f214910eb60fa`
+- Run #806: **success** on the exact current head.
+- Stage 10 verified slice includes:
   - persisted Client lifecycle state on AgentDevice
-  - Agent heartbeat reports lifecycle/recovery metadata
-  - Server persists LastHealthyAt / PendingUpdateVersion / LastUpdateError
-  - `/api/agent/devices/{id}/lifecycle` returns Server-authoritative compatibility against ProductVersion/MinimumClientVersion/RecommendedClientVersion
-  - App release defaults are explicit in appsettings
-  - CI smoke added for healthy lifecycle state + release compatibility
-- No automatic package download/install/overwrite exists yet.
-- No rollback is marked complete yet.
-- Installer remains local-only.
-- Stage 10 is not Done until migration smoke, Build/Test, Dashboard build/lint and E2E remain green on the exact current head.
+  - Server-authoritative release compatibility
+  - real package download
+  - SHA256 and package-size verification
+  - version-isolated install
+  - persisted previous healthy version
+  - controlled restart/watchdog
+  - fresh post-restart health confirmation
+  - rollback to the previous version
+  - fresh post-rollback health confirmation
+  - lifecycle degraded/recovery smoke
+  - Dashboard lint/build/browser smoke
+- Update command payload parsing is case-insensitive and validates required fields before staging.
+- AgentPresenceMonitor re-reads the authoritative device row before applying a stale transition so a fresh reconnect cannot be overwritten by an old stale snapshot.
+- CI cleanup explicitly terminates restarted Agent descendants before the offline/recovery gate.
+- Installer remains local-only; no installer/package artifact is uploaded as a GitHub release asset.
+- Stage 10 is now ready to move from Update/Health/Rollback into **Release Safety / Canary Gate hardening**.
+- Next execution path:
+  1. Manifest/package release gate
+  2. CI canary gate on one real CI Agent
+  3. release compatibility/health/rollback safety assertions
+  4. only then evaluate PR #9 readiness for merge
+- Do not mark the Stage 10/Release Safety path Done without a green CI run on the exact current head.
