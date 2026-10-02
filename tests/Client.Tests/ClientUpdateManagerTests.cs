@@ -110,6 +110,30 @@ public sealed class ClientUpdateManagerTests
         }
     }
 
+    [Fact]
+    public void UpdateCommandParser_accepts_camel_case_payload()
+    {
+        const string json = """{"version":"0.7.1","packageUrl":"https://test.local/client.zip","sha256":"abc","sizeBytes":123,"activate":true}""";
+
+        var payload = ClientUpdateCommandParser.Parse(json);
+
+        Assert.Equal("0.7.1", payload.Version);
+        Assert.Equal("https://test.local/client.zip", payload.PackageUrl);
+        Assert.Equal("abc", payload.Sha256);
+        Assert.Equal(123, payload.SizeBytes);
+        Assert.True(payload.Activate);
+    }
+
+    [Theory]
+    [InlineData("""{"packageUrl":"https://test.local/client.zip","sha256":"abc","sizeBytes":123}""")]
+    [InlineData("""{"version":"0.7.1","sha256":"abc","sizeBytes":123}""")]
+    [InlineData("""{"version":"0.7.1","packageUrl":"https://test.local/client.zip","sizeBytes":123}""")]
+    [InlineData("""{"version":"0.7.1","packageUrl":"https://test.local/client.zip","sha256":"abc","sizeBytes":0}""")]
+    public void UpdateCommandParser_rejects_incomplete_payload(string json)
+    {
+        Assert.Throws<InvalidOperationException>(() => ClientUpdateCommandParser.Parse(json));
+    }
+
     private static byte[] CreatePackage(string version)
     {
         var root = CreateTempDirectory();
