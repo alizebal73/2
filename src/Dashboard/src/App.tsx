@@ -262,8 +262,8 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
         <div hidden={activePage !== 'customers'}><CustomersPage role={role} /></div>
         <div hidden={activePage !== 'tariffs'}><TariffsPage /></div>
         <div hidden={activePage !== 'accounts'}><AccountsPage /></div>
-        <div hidden={activePage !== 'buffet'}><BuffetPage /></div>
-        <div hidden={activePage !== 'reports'}><ReportsPage /></div>
+        <div hidden={activePage !== 'buffet'}><BuffetPage user={user} /></div>
+        <div hidden={activePage !== 'reports'}><ReportsPage user={user} /></div>
         <div hidden={activePage !== 'users'}><UsersPage user={user} /></div>
         <div hidden={activePage !== 'settings'}><SettingsPage /></div>
         <div hidden={activePage !== 'operations'}><OperationsPage /></div>
