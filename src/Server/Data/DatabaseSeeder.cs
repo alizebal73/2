@@ -61,7 +61,7 @@ public static class DatabaseSeeder
             FullName = "System Administrator",
             UserName = "admin",
             Email = "admin@gamenet.local",
-            PasswordHash = PasswordSecurity.Hash(Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD") ?? "Admin123!"),
+            PasswordHash = PasswordSecurity.Hash(GetAdminPassword()),
             Role = "Admin",
             IsActive = true
         };
@@ -128,19 +128,22 @@ public static class DatabaseSeeder
                 FullName = "مدیر سیستم",
                 UserName = "admin",
                 Email = "admin@gamenet.local",
-                PasswordHash = PasswordSecurity.Hash(Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD") ?? "Admin123!"),
+                PasswordHash = PasswordSecurity.Hash(GetAdminPassword()),
                 Role = "Admin",
                 IsActive = true
             };
             database.AppUsers.Add(admin);
         }
-        else if (string.Equals(admin.PasswordHash, "hash", StringComparison.Ordinal))
+        else if (PasswordSecurity.Verify("Admin123!", admin.PasswordHash) || string.Equals(admin.PasswordHash, "hash", StringComparison.Ordinal))
         {
-            admin.PasswordHash = PasswordSecurity.Hash(Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD") ?? "Admin123!");
+            admin.PasswordHash = PasswordSecurity.Hash(GetAdminPassword());
         }
 
         await database.SaveChangesAsync(cancellationToken);
     }
+
+    private static string GetAdminPassword()
+        => Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD") ?? "123456";
 
     private static void CreateStations(GameNetDbContext database, StationType stationType, Tariff tariff, string prefix, int count, string zone, string type)
     {
