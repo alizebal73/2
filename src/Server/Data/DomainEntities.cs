@@ -76,12 +76,32 @@ public sealed class Customer : BaseEntity
     public string? Email { get; set; }
     public bool IsVip { get; set; }
     public decimal Balance { get; set; }
+    public decimal FreeMoney { get; set; }
+    public int FreeTimeMinutes { get; set; }
     public string? Notes { get; set; }
     public ICollection<Session> Sessions { get; set; } = new List<Session>();
     public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
     public ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
     public ICollection<GameAccount> GameAccounts { get; set; } = new List<GameAccount>();
     public ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
+}
+
+public enum BenefitTransactionType
+{
+    FreeMoneyCredit,
+    FreeMoneyDebit,
+    FreeTimeCredit,
+    FreeTimeDebit
+}
+
+public sealed class BenefitTransaction : BaseEntity
+{
+    public Guid CustomerId { get; set; }
+    public Customer Customer { get; set; } = default!;
+    public BenefitTransactionType Type { get; set; }
+    public decimal MoneyAmount { get; set; }
+    public int Minutes { get; set; }
+    public string Description { get; set; } = string.Empty;
 }
 
 public sealed class Product : BaseEntity
