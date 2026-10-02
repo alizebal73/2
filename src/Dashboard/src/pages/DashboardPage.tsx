@@ -5,7 +5,7 @@ import { mockService } from '../services/mockService';
 import { getServerCustomers } from '../services/customerService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
-import { isServerGuid, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
+import { isServerGuid, reverseServerInvoice, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
 import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
@@ -94,8 +94,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     const pausedMinutes = station.pausedMinutes ?? 0;
     return Math.max(0, (referenceNow - new Date(station.startedAt).getTime()) / 60000 - pausedMinutes);
   }, [now]);
-  function addSessionTimeline(stationId: string, kind: SessionTimelineEvent['kind'], title: string, detail: string, amount?: number) {
-    setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId, createdAt: new Date().toISOString(), kind, title, detail, amount }, ...current].slice(0, 300));
+  function addSessionTimeline(stationId: string, kind: SessionTimelineEvent['kind'], title: string, detail: string, amount?: number, serverReferenceId?: string) {
+    setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId, createdAt: new Date().toISOString(), kind, title, detail, amount, serverReferenceId }, ...current].slice(0, 300));
   }
 
   const applyFlow = useCallback(async (action: string) => {
@@ -600,7 +600,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         if (wallet > 0) {
           setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: serverResult.walletBalanceAfter } : item));
         }
-        addSessionTimeline(activeStation.id, 'settle', 'تسویه ترکیبی سروری', parts.map(item => (item.method === 'cash' ? 'نقدی' : item.method === 'card' ? 'کارتخوان' : 'کیف پول') + ' ' + money(item.amount)).join(' · '), finalTotal);
+        addSessionTimeline(activeStation.id, 'settle', 'تسویه ترکیبی سروری', parts.map(item => (item.method === 'cash' ? 'نقدی' : item.method === 'card' ? 'کارتخوان' : 'کیف پول') + ' ' + money(item.amount)).join(' · '), finalTotal, serverResult.invoiceId);
         updateStation(activeStation.id, {
           state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined,
           customerCode: undefined, persons: undefined, buffetTotal: undefined, sessionCredit: undefined,
@@ -703,7 +703,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
               ],
             }
           : item));
-        addSessionTimeline(activeStation.id, 'settle', 'تسویه سروری', money(finalTotal) + ' تومان · ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : method === 'wallet' ? 'کیف پول' : 'اعتبار رایگان'), finalTotal);
+        addSessionTimeline(activeStation.id, 'settle', 'تسویه سروری', money(finalTotal) + ' تومان · ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : method === 'wallet' ? 'کیف پول' : 'اعتبار رایگان'), finalTotal, serverResult.invoiceId);
         setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt: new Date().toISOString() }, ...items]);
         setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: 'paid' } : item));
         updateStation(activeStation.id, {
@@ -942,7 +942,30 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       setMessage(userErrorMessage(error, 'ثبت شارژ انجام نشد'));
     }
   }
-  function reverseTimelineEvent(event: SessionTimelineEvent) {
+  async function reverseTimelineEvent(event: SessionTimelineEvent) {
+    if (event.serverReferenceId) {
+      try {
+        const result = await reverseServerInvoice(event.serverReferenceId, 'برگشت عملیات از تایم‌لاین جلسه: ' + event.title);
+        setReversedEventIds(current => [...current, event.id]);
+        addSessionTimeline(
+          event.stationId,
+          'note',
+          'برگشت سروری',
+          result.externalRefundRequired
+            ? 'فاکتور در سرور معکوس شد؛ بازپرداخت نقد/کارت باید خارج از سیستم انجام شود.'
+            : 'فاکتور در سرور معکوس شد و تراکنش‌های مالی مربوطه برگشت خوردند.',
+          event.amount,
+          result.reversalId,
+        );
+        setReverseRequest(null);
+        setMessage(result.externalRefundRequired ? 'برگشت سروری ثبت شد؛ بازپرداخت نقد/کارت را انجام دهید.' : 'برگشت سروری با موفقیت ثبت شد.');
+        return;
+      } catch (error) {
+        setMessage(userErrorMessage(error, 'برگشت عملیات روی سرور انجام نشد'));
+        return;
+      }
+    }
+
     const station = stations.find(item => item.id === event.stationId);
     if (!station || event.amount === undefined) {
       setMessage('این عملیات در وضعیت فعلی قابل برگشت نیست');
