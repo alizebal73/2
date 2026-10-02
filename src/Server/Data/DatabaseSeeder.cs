@@ -28,11 +28,17 @@ public static class DatabaseSeeder
         };
         database.Tariffs.Add(hourlyTariff);
 
+        var vipActivatedAt = DateTimeOffset.UtcNow;
         var vipPackage = new VipPackage
         {
             Name = "Gold",
+            Tier = "gold",
             Price = 1200000m,
             DurationDays = 30,
+            DailyMinutes = 120,
+            TotalMinutes = 3600,
+            DiscountPercent = 10m,
+            OverflowRule = "half-hourly",
             Description = "VIP access for 30 days",
             IsActive = true
         };
@@ -68,6 +74,10 @@ public static class DatabaseSeeder
             Phone = "09123456789",
             Email = "reza@gamenet.local",
             IsVip = true,
+            VipTier = "gold",
+            VipPackage = vipPackage,
+            VipActivatedAt = vipActivatedAt,
+            VipExpiresAt = vipActivatedAt.AddDays(vipPackage.DurationDays),
             Balance = 450000m,
             Notes = "Gold VIP"
         };
@@ -124,6 +134,10 @@ public static class DatabaseSeeder
 
         foreach (var profile in profiles)
         {
+            var goldPackage = await database.VipPackages
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Name == "Gold" && item.IsActive, cancellationToken);
+
             var customer = await database.Customers.FirstOrDefaultAsync(item => item.Code == profile.Code || item.Phone == profile.Phone, cancellationToken);
             if (customer is null)
             {
@@ -135,6 +149,10 @@ public static class DatabaseSeeder
                     Phone = profile.Phone,
                     Email = profile.Email,
                     IsVip = profile.IsVip,
+                    VipTier = profile.IsVip ? "gold" : "none",
+                    VipPackageId = profile.IsVip ? goldPackage?.Id : null,
+                    VipActivatedAt = profile.IsVip && goldPackage is not null ? DateTimeOffset.UtcNow : null,
+                    VipExpiresAt = profile.IsVip && goldPackage is not null ? DateTimeOffset.UtcNow.AddDays(goldPackage.DurationDays) : null,
                     Balance = profile.Balance,
                     Notes = profile.IsVip ? "VIP" : null,
                 });
@@ -146,6 +164,18 @@ public static class DatabaseSeeder
             if (string.IsNullOrWhiteSpace(customer.FullName)) customer.FullName = profile.FullName;
             customer.Phone ??= profile.Phone;
             customer.Email ??= profile.Email;
+            if (profile.IsVip && (string.IsNullOrWhiteSpace(customer.VipTier) || customer.VipTier == "none"))
+            {
+                customer.IsVip = true;
+                customer.VipTier = "gold";
+                if (customer.VipPackageId is null && goldPackage is not null)
+                {
+                    var activatedAt = customer.VipActivatedAt ?? DateTimeOffset.UtcNow;
+                    customer.VipPackageId = goldPackage.Id;
+                    customer.VipActivatedAt = activatedAt;
+                    customer.VipExpiresAt = activatedAt.AddDays(goldPackage.DurationDays);
+                }
+            }
         }
 
         await database.SaveChangesAsync(cancellationToken);
