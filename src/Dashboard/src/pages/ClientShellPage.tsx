@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ClientRecord } from '../types';
 import { mockService } from '../services/mockService';
 
@@ -9,6 +9,8 @@ export function ClientShellPage() {
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [lastIndex, setLastIndex] = useState<number | null>(null);
+  const [selectionRect, setSelectionRect] = useState<{ startX:number; startY:number; endX:number; endY:number } | null>(null);
+  const dragRef = useRef<{ startX:number; startY:number; dragging:boolean; ctrl:boolean } | null>(null);
   const [context, setContext] = useState<ContextMenu>(null);
   const [settingsTarget, setSettingsTarget] = useState<string[]>([]);
   const [settings, setSettings] = useState<ClientSettings | null>(null);
@@ -38,6 +40,41 @@ export function ClientShellPage() {
   function updateClients(ids: string[], update: Partial<ClientRecord>) {
     setClients(current => current.map(client => ids.includes(client.id) ? { ...client, ...update } : client));
   }
+
+  useEffect(() => {
+    const onMove = (event: MouseEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const moved = Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY);
+      if (!drag.dragging && moved < 6) return;
+      drag.dragging = true;
+      setSelectionRect({ startX: drag.startX, startY: drag.startY, endX: event.clientX, endY: event.clientY });
+    };
+    const onUp = () => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      if (drag.dragging && selectionRect) {
+        const left = Math.min(selectionRect.startX, selectionRect.endX);
+        const right = Math.max(selectionRect.startX, selectionRect.endX);
+        const top = Math.min(selectionRect.startY, selectionRect.endY);
+        const bottom = Math.max(selectionRect.startY, selectionRect.endY);
+        const ids = Array.from(document.querySelectorAll<HTMLElement>('[data-client-id]'))
+          .filter(node => {
+            const rect = node.getBoundingClientRect();
+            return rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom;
+          })
+          .map(node => node.dataset.clientId)
+          .filter((id): id is string => Boolean(id));
+        setSelected(current => drag.ctrl ? new Set([...current, ...ids]) : new Set(ids));
+        setLastIndex(null);
+      }
+      setSelectionRect(null);
+      dragRef.current = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, [selectionRect]);
 
   function selectClient(event: React.MouseEvent, client: ClientRecord, index: number) {
     if (event.shiftKey && lastIndex !== null) {
@@ -125,9 +162,9 @@ export function ClientShellPage() {
       <button className="btn primary" onClick={() => { updateClients(clients.map(item => item.id), { dns1: '178.22.122.100', dns2: '185.51.200.2' }); setNotice('DNS پیش‌فرض برای همه کلاینت‌ها ارسال شد'); }}>📤 ارسال DNS به همه</button>
     </div>
     {selected.size > 0 && <div className="selection-bar"><strong>{selected.size} کلاینت انتخاب شده</strong><span>راست‌کلیک روی دستگاه انتخابی، عملیات را برای همه اعمال می‌کند</span><button className="btn sm" onClick={() => { setSelected(new Set()); setLastIndex(null); }}>پاک کردن انتخاب‌ها</button></div>}
-    <div className="client-hint">کلیک: انتخاب · Ctrl+کلیک: چندانتخاب · Shift+کلیک: انتخاب بازه · دابل‌کلیک: تنظیمات کلاینت · راست‌کلیک: عملیات</div>
+    <div className="client-hint">کلیک: انتخاب · Ctrl+کلیک: چندانتخاب · Shift+کلیک: انتخاب بازه · Drag: انتخاب گروهی · دابل‌کلیک: تنظیمات کلاینت · راست‌کلیک: عملیات</div>
     <div className="client-grid">
-      {visible.map((client, index) => <article key={client.id} className={`client-card ${selected.has(client.id) ? 'selected' : ''} ${client.online ? '' : 'offline'}`} onClick={event => selectClient(event, client, index)} onDoubleClick={() => openSettings([client.id])} onContextMenu={event => showContext(event, client)}>
+      {visible.map((client, index) => <article key={client.id} data-client-id={client.id} className={`client-card ${selected.has(client.id) ? 'selected' : ''} ${client.online ? '' : 'offline'}`} onMouseDown={event => { if (event.button !== 0) return; event.preventDefault(); dragRef.current = { startX: event.clientX, startY: event.clientY, dragging: false, ctrl: event.ctrlKey || event.metaKey }; window.getSelection()?.removeAllRanges(); }} onDragStart={event => event.preventDefault()} onClick={event => selectClient(event, client, index)} onDoubleClick={() => openSettings([client.id])} onContextMenu={event => showContext(event, client)}>
         <div className="client-card-head"><b>{client.name}</b><span className={`status-pill ${client.online ? 'online' : 'offline'}`}>{client.online ? 'آنلاین' : 'آفلاین'}</span></div>
         <div className="meta ltr">IP {client.ip} · DNS {client.dns1}</div>
         <div className="meta">{client.user ? `یوزر: ${client.user} · ${client.game || 'بدون بازی'}` : client.locked ? 'سیستم قفل است' : 'بدون کاربر'}</div>
@@ -135,6 +172,7 @@ export function ClientShellPage() {
         <div className="client-flags">{client.updatePending && <span className="status-pill pending">Update pending</span>}<span className="meta">Sync: {client.lastSync}</span></div>
       </article>)}
     </div>
+    {selectionRect && <div className="selection-rect" style={{ left: Math.min(selectionRect.startX, selectionRect.endX), top: Math.min(selectionRect.startY, selectionRect.endY), width: Math.abs(selectionRect.endX - selectionRect.startX), height: Math.abs(selectionRect.endY - selectionRect.startY) }} />}
     {context && <div className="context-menu client-context" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}><strong>{selected.size > 1 ? `${selected.size} کلاینت انتخابی` : context.client.name}</strong><button onClick={() => action('switch-network')}>🌐 تغییر اینترنت ۱ ↔ ۲</button><button onClick={() => action('toggle-internet')}>🔌 قطع / وصل اینترنت</button><button onClick={() => action('move-user')}>🔀 جابه‌جایی یوزر</button><button onClick={() => action('logout')}>🚪 خروج یوزر و قفل</button><button onClick={() => action('login')}>🔑 ورود با شناسه</button><button onClick={() => action('message')}>💬 ارسال پیام</button><button onClick={() => action('screenshot')}>📸 Screenshot</button><button onClick={() => action('restart-shell')}>🔄 Restart Shell</button><button onClick={() => action('restart')}>⏻ Restart Windows</button><button onClick={() => action('shutdown')}>⛔ Shutdown</button><button onClick={() => action('settings')}>⚙ تنظیمات کامل کلاینت</button></div>}
     {settings && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setSettings(null)}><section className="operation-modal wide" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setSettings(null)}>×</button><h2>تنظیمات {settingsTarget.length > 1 ? `${settingsTarget.length} کلاینت` : clients.find(item => item.id === settingsTarget[0])?.name}</h2><div className="settings-form-grid">
       {([['ip', 'IP محلی'], ['systemNumber', 'شماره سیستم'], ['dns1', 'DNS ۱'], ['dns2', 'DNS ۲'], ['serverAddress', 'آدرس سرور']] as const).map(([field, label]) => <label key={field}>{label}<input value={settings[field]} onChange={event => setSettings({ ...settings, [field]: field === 'systemNumber' ? Number(event.target.value) : event.target.value })} /></label>)}
