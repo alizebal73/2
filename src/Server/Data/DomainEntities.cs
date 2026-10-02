@@ -133,6 +133,8 @@ public sealed class Product : BaseEntity
     public decimal UnitPrice { get; set; }
     public decimal CostPrice { get; set; }
     public int StockQuantity { get; set; }
+    public int MinimumStock { get; set; } = 0;
+    public string Unit { get; set; } = "عدد";
     public bool IsActive { get; set; } = true;
     public ICollection<InvoiceItem> InvoiceItems { get; set; } = new List<InvoiceItem>();
     public ICollection<InventoryTransaction> InventoryTransactions { get; set; } = new List<InventoryTransaction>();
@@ -311,6 +313,7 @@ public sealed class InventoryTransaction : BaseEntity
     public AppUser? AppUser { get; set; }
     public int Quantity { get; set; }
     public TransactionDirection Direction { get; set; }
+    public string Kind { get; set; } = "Adjustment";
     public string? Notes { get; set; }
 }
 
