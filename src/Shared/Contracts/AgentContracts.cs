@@ -31,7 +31,10 @@ public sealed record AgentHeartbeatRequest(
     double? CpuUsagePercent,
     long? MemoryAvailableBytes,
     long? UptimeSeconds,
-    bool IsLocked);
+    bool IsLocked,
+    string? LifecycleState = null,
+    string? PendingUpdateVersion = null,
+    string? LastUpdateError = null);
 
 public sealed record AgentHeartbeatResponse(
     Guid AgentId,
@@ -55,7 +58,12 @@ public sealed record AgentStatusDto(
     string? OsVersion,
     double? CpuUsagePercent,
     long? MemoryAvailableBytes,
-    long? UptimeSeconds);
+    long? UptimeSeconds,
+    string LifecycleState,
+    string? PendingUpdateVersion,
+    string? LastUpdateError,
+    DateTimeOffset? LastHealthyAt,
+    DateTimeOffset? LifecycleStateChangedAt);
 
 
 public static class AgentCommandTypes
@@ -64,9 +72,11 @@ public static class AgentCommandTypes
     public const string Lock = "lock";
     public const string Unlock = "unlock";
     public const string LogoutLock = "logout-lock";
+    public const string Update = "update";
+    public const string Rollback = "rollback";
 
     public static bool IsSupported(string? commandType)
-        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock;
+        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock or Update or Rollback;
 }
 
 public sealed record AgentCommandRequest(

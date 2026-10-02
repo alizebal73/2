@@ -1,6 +1,6 @@
 import type { AgentCommandStatusDto, AgentStatusDto } from '../types';
 
-export type AgentCommandType = 'ping' | 'lock' | 'unlock' | 'logout-lock';
+export type AgentCommandType = 'ping' | 'lock' | 'unlock' | 'logout-lock' | 'update' | 'rollback';
 
 export async function getAgentStatuses(): Promise<AgentStatusDto[]> {
   const response = await fetch('/api/agent/devices', {
@@ -62,4 +62,33 @@ export async function updateAgentPolicy(
   }
 
   return await response.json() as { agentId: string; kioskEnabled: boolean; lockOnDisconnect: boolean };
+}
+
+
+export async function requestAgentUpdate(agentId: string): Promise<AgentCommandStatusDto> {
+  const response = await fetch('/api/agent/devices/' + agentId + '/update', {
+    method: 'POST',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(body?.message || 'درخواست به‌روزرسانی Agent انجام نشد.');
+  }
+
+  return await response.json() as AgentCommandStatusDto;
+}
+
+export async function requestAgentRollback(agentId: string): Promise<AgentCommandStatusDto> {
+  const response = await fetch('/api/agent/devices/' + agentId + '/rollback', {
+    method: 'POST',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(body?.message || 'درخواست Rollback Agent انجام نشد.');
+  }
+
+  return await response.json() as AgentCommandStatusDto;
 }

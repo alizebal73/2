@@ -5,7 +5,7 @@ import { mockService } from '../services/mockService';
 import { createServerCustomerDebt, getServerCustomers } from '../services/customerService';
 import { hasPermission } from '../services/authService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
-import { getAgentCommand, sendAgentCommand, updateAgentPolicy } from '../services/agentService';
+import { getAgentCommand, requestAgentRollback, requestAgentUpdate, sendAgentCommand, updateAgentPolicy } from '../services/agentService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { adjustServerSessionTime, isServerGuid, pauseServerSession, requestServerInvoiceReverseApproval, resumeServerSession, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
@@ -112,6 +112,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
               agentLocked: serverStation.agentLocked,
               agentKioskEnabled: serverStation.agentKioskEnabled,
               agentLockOnDisconnect: serverStation.agentLockOnDisconnect,
+              agentLifecycleState: serverStation.agentLifecycleState,
+              agentPendingUpdateVersion: serverStation.agentPendingUpdateVersion,
+              agentLastUpdateError: serverStation.agentLastUpdateError,
+              agentLastHealthyAt: serverStation.agentLastHealthyAt,
               sessionStartedAt: serverStation.sessionStartedAt,
               sessionPausedAt: serverStation.sessionPausedAt,
               sessionPausedMinutes: serverStation.sessionPausedMinutes,
@@ -1223,6 +1227,60 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     }
   }
 
+  async function setAgentUpdate(station: StationDto) {
+    if (!canControlClient || !station.agentId || station.agentOnline !== true) {
+      setMessage('Agent این دستگاه آنلاین نیست؛ Update ارسال نشد.');
+      return;
+    }
+
+    try {
+      setMessage('درخواست به‌روزرسانی Client ارسال شد…');
+      const command = await requestAgentUpdate(station.agentId);
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const status = await getAgentCommand(command.commandId);
+        if (status.status === 'Succeeded') {
+          setMessage('درخواست Update اجرا شد؛ Client در حال راه‌اندازی نسخه جدید است.');
+          return;
+        }
+        if (status.status === 'Failed') {
+          setMessage(status.resultMessage || 'به‌روزرسانی Client ناموفق بود.');
+          return;
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 500));
+      }
+      setMessage('Agent به درخواست Update پاسخ نداد؛ وضعیت Client را بررسی کنید.');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'درخواست به‌روزرسانی Client انجام نشد'));
+    }
+  }
+
+  async function setAgentRollback(station: StationDto) {
+    if (!canControlClient || !station.agentId || station.agentOnline !== true) {
+      setMessage('Agent این دستگاه آنلاین نیست؛ Rollback ارسال نشد.');
+      return;
+    }
+
+    try {
+      setMessage('درخواست Rollback Client ارسال شد…');
+      const command = await requestAgentRollback(station.agentId);
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const status = await getAgentCommand(command.commandId);
+        if (status.status === 'Succeeded') {
+          setMessage('Rollback اجرا شد؛ Client در حال بازیابی نسخه قبلی است.');
+          return;
+        }
+        if (status.status === 'Failed') {
+          setMessage(status.resultMessage || 'Rollback Client ناموفق بود.');
+          return;
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 500));
+      }
+      setMessage('Agent به درخواست Rollback پاسخ نداد؛ وضعیت Client را بررسی کنید.');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'درخواست Rollback Client انجام نشد'));
+    }
+  }
+
   async function setAgentKioskPolicy(station: StationDto, enabled: boolean) {
     if (!canControlClient || !station.agentId) {
       setMessage('دسترسی کنترل Agent ندارید.');
@@ -1258,6 +1316,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     if (action === 'unlock') { void setAgentLock(station, false); return; }
     if (action === 'logout-lock') { void setAgentLogoutLock(station); return; }
     if (action === 'kiosk-toggle') { void setAgentKioskPolicy(station, !Boolean(station.agentKioskEnabled)); return; }
+    if (action === 'agent-update') { void setAgentUpdate(station); return; }
+    if (action === 'agent-rollback') { void setAgentRollback(station); return; }
     setMessage('فرمان پشتیبانی‌نشده درخواست شد.');
   }
 
@@ -1350,6 +1410,23 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
             title={station.agentLastSeenAt ? `آخرین ارتباط Agent: ${new Date(station.agentLastSeenAt).toLocaleTimeString('fa-IR')}` : 'Agent هنوز heartbeat معتبر ندارد'}
           >
             · Agent {station.agentOnline ? 'متصل' : 'آفلاین'}{station.agentLocked ? ' · قفل' : ''}
+          </span>
+        )}
+        {station.zone === 'pc' && station.agentLifecycleState && (
+          <span
+            className="agent-state lifecycle"
+            title={station.agentLastUpdateError || (station.agentLastHealthyAt ? `آخرین سلامت Client: ${new Date(station.agentLastHealthyAt).toLocaleTimeString('fa-IR')}` : 'وضعیت Lifecycle ثبت نشده')}
+          >
+            {' · ' + (
+              station.agentLifecycleState === 'Running' ? 'Client سالم' :
+              station.agentLifecycleState === 'Updating' ? 'در حال به‌روزرسانی' :
+              station.agentLifecycleState === 'UpdatePending' ? 'در انتظار به‌روزرسانی' :
+              station.agentLifecycleState === 'Recovering' ? 'در حال بازیابی' :
+              station.agentLifecycleState === 'Degraded' ? 'Client نیازمند بررسی' :
+              station.agentLifecycleState === 'Failed' ? 'Client خطا دارد' :
+              'در حال راه‌اندازی'
+            )}
+            {station.agentPendingUpdateVersion ? ` · نسخه ${station.agentPendingUpdateVersion}` : ''}
           </span>
         )}
       </span>
@@ -1497,6 +1574,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
       {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentLocked && <button onClick={() => contextAction('unlock')}>🔓 باز کردن قفل</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && <button onClick={() => contextAction('kiosk-toggle')}>{context.station.agentKioskEnabled ? '🖥️ غیرفعال‌کردن Kiosk' : '🖥️ فعال‌کردن Kiosk'}</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && !['Updating', 'UpdatePending'].includes(context.station.agentLifecycleState ?? '') && <button onClick={() => contextAction('agent-update')}>⬆️ به‌روزرسانی Client</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && <button onClick={() => contextAction('agent-rollback')}>↩️ Rollback Client</button>}
     </div>}
     {reverseRequest && <ReverseDialog open={Boolean(reverseRequest)} title={reverseRequest.title} detail={reverseRequest.detail} onCancel={() => setReverseRequest(null)} onConfirm={() => reverseTimelineEvent(reverseRequest)} />}
     {approval && <ApprovalDialog

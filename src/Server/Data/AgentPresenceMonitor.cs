@@ -1,3 +1,4 @@
+using GameNetManager.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace GameNetManager.Server.Data;
@@ -23,6 +24,14 @@ public sealed class AgentPresenceMonitor(
                 configuration.GetValue("Agent:CommandTimeoutSeconds", 15),
                 5,
                 120);
+            var updateCommandTimeoutSeconds = Math.Clamp(
+                configuration.GetValue("Agent:UpdateCommandTimeoutSeconds", 180),
+                30,
+                600);
+            var rollbackCommandTimeoutSeconds = Math.Clamp(
+                configuration.GetValue("Agent:RollbackCommandTimeoutSeconds", 60),
+                15,
+                300);
 
             try
             {
@@ -32,31 +41,80 @@ public sealed class AgentPresenceMonitor(
                 var cutoff = now.AddSeconds(-offlineAfter);
                 var commandCutoff = now.AddSeconds(-commandTimeoutSeconds);
 
-                var staleDevices = await database.AgentDevices
+                var onlineDevices = await database.AgentDevices
                     .Where(item => item.IsActive
                         && item.IsOnline
-                        && item.LastSeenAt.HasValue
-                        && item.LastSeenAt.Value < cutoff)
+                        && item.LastSeenAt.HasValue)
                     .ToListAsync(stoppingToken);
 
-                var timedOutCommands = await database.AgentCommands
-                    .Where(command =>
-                        (command.Status == "Pending" || command.Status == "Sent")
-                        && (command.SentAt ?? command.RequestedAt) < commandCutoff)
+                var staleDevices = onlineDevices
+                    .Where(item => item.LastSeenAt!.Value < cutoff)
+                    .ToList();
+
+                var pendingCommands = await database.AgentCommands
+                    .Where(command => command.Status == "Pending" || command.Status == "Sent")
                     .ToListAsync(stoppingToken);
+
+                var timedOutCommands = pendingCommands
+                    .Where(command =>
+                    {
+                        var timeoutSeconds = command.CommandType switch
+                        {
+                            AgentCommandTypes.Update => updateCommandTimeoutSeconds,
+                            AgentCommandTypes.Rollback => rollbackCommandTimeoutSeconds,
+                            _ => commandTimeoutSeconds
+                        };
+
+                        return (command.SentAt ?? command.RequestedAt)
+                            < now.AddSeconds(-timeoutSeconds);
+                    })
+                    .ToList();
 
                 if (staleDevices.Count > 0)
                 {
-                    foreach (var device in staleDevices)
+                    foreach (var staleDevice in staleDevices)
                     {
-                        device.IsOnline = false;
-                        device.ConnectionId = null;
+                        var observedConnectionId = staleDevice.ConnectionId;
+                        var observedLastSeenAt = staleDevice.LastSeenAt;
 
-                        if (device.LockOnDisconnect && !device.IsLocked)
+                        if (!staleDevice.IsActive
+                            || !staleDevice.IsOnline
+                            || !observedLastSeenAt.HasValue
+                            || observedLastSeenAt.Value >= cutoff)
                         {
-                            device.IsLocked = true;
-                            device.LockedAt = now;
+                            continue;
+                        }
 
+                        var affected = await database.AgentDevices
+                            .Where(device => device.Id == staleDevice.Id
+                                && device.IsActive
+                                && device.IsOnline
+                                && device.ConnectionId == observedConnectionId
+                                && device.LastSeenAt == observedLastSeenAt)
+                            .ExecuteUpdateAsync(setters => setters
+                                .SetProperty(device => device.IsOnline, false)
+                                .SetProperty(device => device.ConnectionId, (string?)null)
+                                .SetProperty(device => device.LifecycleState, ClientLifecycleStates.Degraded)
+                                .SetProperty(device => device.LifecycleStateChangedAt, now)
+                                .SetProperty(device => device.IsLocked, device => device.LockOnDisconnect ? true : device.IsLocked)
+                                .SetProperty(device => device.LockedAt, device => device.LockOnDisconnect ? now : device.LockedAt),
+                                stoppingToken);
+
+                        if (affected == 0)
+                        {
+                            // A fresh Agent connection/heartbeat changed the row after the stale list was materialized.
+                            continue;
+                        }
+
+                        var device = await database.AgentDevices
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(item => item.Id == staleDevice.Id, stoppingToken);
+
+                        if (device is null)
+                            continue;
+
+                        if (device.LockOnDisconnect && device.IsLocked)
+                        {
                             database.AuditLogs.Add(new AuditLog
                             {
                                 Action = "AgentAutoLockOnDisconnect",

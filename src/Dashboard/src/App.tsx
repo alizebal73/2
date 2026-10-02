@@ -263,6 +263,10 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
               agentLocked: agent.isLocked,
               agentKioskEnabled: agent.kioskEnabled,
               agentLockOnDisconnect: agent.lockOnDisconnect,
+              agentLifecycleState: agent.lifecycleState,
+              agentPendingUpdateVersion: agent.pendingUpdateVersion ?? null,
+              agentLastUpdateError: agent.lastUpdateError ?? null,
+              agentLastHealthyAt: agent.lastHealthyAt ?? null,
             }
           : station;
       }),

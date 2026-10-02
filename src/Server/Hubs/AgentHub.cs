@@ -29,6 +29,10 @@ public sealed class AgentHub(
         device.ConnectedAt = now;
         device.ConnectionId = Context.ConnectionId;
         device.LastIpAddress = Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString();
+        device.LifecycleState = ClientLifecycleStates.Running;
+        device.LifecycleStateChangedAt = now;
+        device.LastHealthyAt = now;
+        device.LastUpdateError = null;
         await database.SaveChangesAsync(Context.ConnectionAborted);
 
         await Clients.Caller.SendAsync(
@@ -49,21 +53,48 @@ public sealed class AgentHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var device = await ResolveConnectedDeviceAsync(CancellationToken.None);
-        if (device is not null && device.ConnectionId == Context.ConnectionId)
-        {
-            device.IsOnline = false;
-            device.ConnectionId = null;
-            device.ConnectedAt = null;
-            if (device.LockOnDisconnect)
-            {
-                device.IsLocked = true;
-                device.LockedAt = DateTimeOffset.UtcNow;
-                logger.LogWarning("Agent {DeviceId} disconnected; LockOnDisconnect policy locked the device.", device.DeviceId);
-            }
-            await database.SaveChangesAsync();
+        var now = DateTimeOffset.UtcNow;
+        var connectionId = Context.ConnectionId;
 
-            await BroadcastStatusAsync(device, DateTimeOffset.UtcNow, CancellationToken.None);
+        if (Context.Items.TryGetValue(AgentDeviceContextKey, out var rawDeviceId)
+            && rawDeviceId is Guid deviceId)
+        {
+            var disconnected = await database.AgentDevices
+                .Where(item => item.Id == deviceId
+                    && item.IsActive
+                    && item.IsOnline
+                    && item.ConnectionId == connectionId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.IsOnline, false)
+                    .SetProperty(item => item.ConnectionId, (string?)null)
+                    .SetProperty(item => item.ConnectedAt, (DateTimeOffset?)null)
+                    .SetProperty(item => item.LifecycleState, ClientLifecycleStates.Degraded)
+                    .SetProperty(item => item.LifecycleStateChangedAt, now)
+                    .SetProperty(item => item.IsLocked, item => item.LockOnDisconnect || item.IsLocked)
+                    .SetProperty(item => item.LockedAt, item => item.LockOnDisconnect ? now : item.LockedAt));
+
+            if (disconnected > 0)
+            {
+                var device = await database.AgentDevices
+                    .AsNoTracking()
+                    .Include(item => item.Station)
+                    .FirstOrDefaultAsync(item => item.Id == deviceId);
+
+                if (device is not null)
+                {
+                    if (device.LockOnDisconnect)
+                        logger.LogWarning("Agent {DeviceId} disconnected; LockOnDisconnect policy locked the device.", device.DeviceId);
+
+                    await BroadcastStatusAsync(device, now, CancellationToken.None);
+                }
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Ignoring stale Agent disconnect. DeviceId={DeviceId}, ConnectionId={ConnectionId}",
+                    deviceId,
+                    connectionId);
+            }
         }
 
         await base.OnDisconnectedAsync(exception);
@@ -102,10 +133,45 @@ public sealed class AgentHub(
                 : null;
             device.MemoryAvailableBytes = request.MemoryAvailableBytes is > 0
                 ? request.MemoryAvailableBytes
-                : null;
-            device.UptimeSeconds = request.UptimeSeconds is >= 0
+                : null;            device.UptimeSeconds = request.UptimeSeconds is >= 0
                 ? request.UptimeSeconds
                 : null;
+            if (!string.IsNullOrWhiteSpace(request.LifecycleState) && ClientLifecycleStates.IsKnown(request.LifecycleState))
+            {
+                var lifecycle = request.LifecycleState.Trim();
+                var serverOwnsConnectionState = device.IsOnline;
+
+                if (lifecycle is ClientLifecycleStates.UpdatePending
+                    or ClientLifecycleStates.Updating
+                    or ClientLifecycleStates.Failed)
+                {
+                    if (!string.Equals(device.LifecycleState, lifecycle, StringComparison.Ordinal))
+                    {
+                        device.LifecycleState = lifecycle;
+                        device.LifecycleStateChangedAt = now;
+                    }
+                }
+                else if (serverOwnsConnectionState
+                    && !string.Equals(device.LifecycleState, ClientLifecycleStates.Running, StringComparison.Ordinal))
+                {
+                    device.LifecycleState = ClientLifecycleStates.Running;
+                    device.LifecycleStateChangedAt = now;
+                }
+
+                if (string.Equals(device.LifecycleState, ClientLifecycleStates.Running, StringComparison.Ordinal))
+                    device.LastHealthyAt = now;
+            }
+
+            if (request.PendingUpdateVersion is not null)
+                device.PendingUpdateVersion = string.IsNullOrWhiteSpace(request.PendingUpdateVersion)
+                    ? null
+                    : request.PendingUpdateVersion.Trim();
+
+            if (request.LastUpdateError is not null)
+                device.LastUpdateError = string.IsNullOrWhiteSpace(request.LastUpdateError)
+                    ? null
+                    : request.LastUpdateError.Trim()[..Math.Min(500, request.LastUpdateError.Trim().Length)];
+
             device.ConnectionId = Context.ConnectionId;
 
             if (request.IsLocked && !device.IsLocked)
@@ -562,6 +628,11 @@ public sealed class AgentHub(
             device.OsVersion,
             device.CpuUsagePercent,
             device.MemoryAvailableBytes,
-            device.UptimeSeconds);
+            device.UptimeSeconds,
+            device.LifecycleState,
+            device.PendingUpdateVersion,
+            device.LastUpdateError,
+            device.LastHealthyAt,
+            device.LifecycleStateChangedAt);
     }
 }

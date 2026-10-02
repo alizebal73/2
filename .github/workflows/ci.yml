@@ -63,6 +63,21 @@ jobs:
           $env:Agent__HeartbeatIntervalSeconds = '3'
           $env:Agent__OfflineAfterSeconds = '6'
           $env:Agent__CommandTimeoutSeconds = '5'
+          $env:Agent__UpdateCommandTimeoutSeconds = '120'
+          $env:Agent__RollbackCommandTimeoutSeconds = '60'
+
+          $releaseRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage10-release'
+          $releaseClient = Join-Path $releaseRoot 'client'
+          $releasePackage = Join-Path $releaseRoot 'GameNetManager.Client-0.7.1.zip'
+          Remove-Item $releaseRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $releaseClient -Force | Out-Null
+          dotnet publish src/Client/GameNetManager.Client.csproj --configuration Release --output $releaseClient --no-restore
+          '0.7.1' | Out-File -FilePath (Join-Path $releaseClient 'client-version.txt') -Encoding ascii
+          Compress-Archive -Path (Join-Path $releaseClient '*') -DestinationPath $releasePackage -Force
+          $releaseHash = (Get-FileHash -Algorithm SHA256 -Path $releasePackage).Hash.ToLowerInvariant()
+          $env:App__ClientPackageVersion = '0.7.1'
+          $env:App__ClientPackagePath = $releasePackage
+          $env:App__ClientPackageSha256 = $releaseHash
 
           $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
             'run','--no-build','--configuration','Release',
@@ -165,24 +180,169 @@ jobs:
               }
 
               Write-Host ("Stage 8 Agent heartbeat smoke passed: deviceId={0}; lastSeen={1}" -f $agentRow.deviceId, $agentRow.lastSeenAt)
+
+              $lifecycleStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+              if ($lifecycleStatus.lifecycleState -ne 'Running') {
+                throw "Agent lifecycle state was not Running after healthy connection: $($lifecycleStatus.lifecycleState)"
+              }
+              if (-not $lifecycleStatus.compatibility.compatible) {
+                throw 'Agent release compatibility smoke failed for the current client.'
+              }
+              Write-Host ("Stage 10 lifecycle compatibility smoke passed: state={0}; compatible={1}; recommended={2}" -f $lifecycleStatus.lifecycleState, $lifecycleStatus.compatibility.compatible, $lifecycleStatus.compatibility.updateRecommended)
+
+              # Release Safety / Canary gate: exactly one online CI Agent plus a server-authoritative release manifest.
+              if (@($agentRows | Where-Object { $_.isOnline }).Count -ne 1) { throw 'Canary gate requires exactly one online Agent target.' }
+              $releaseManifest = Invoke-RestMethod -Uri "$baseUrl/api/release/manifest" -Method Get
+              if (-not $releaseManifest.clientPackage) { throw 'Release manifest did not expose a Client package.' }
+              if ($releaseManifest.clientPackage.version -ne $env:App__ClientPackageVersion) { throw 'Release manifest package version does not match the configured package.' }
+              if ([int64]$releaseManifest.clientPackage.sizeBytes -ne (Get-Item $env:App__ClientPackagePath).Length) { throw 'Release manifest package size does not match the package on Server.' }
+              if ($releaseManifest.clientPackage.sha256 -ne $env:App__ClientPackageSha256) { throw 'Release manifest package hash does not match the package on Server.' }
+              Write-Host ("Stage 10 release safety/canary manifest gate passed: target={0}; version={1}" -f $agentRow.deviceId, $releaseManifest.clientPackage.version)
+
+              $baselineAgentVersion = $agentRow.agentVersion
+              $updatePayload = @{
+                commandType = 'update'
+                payloadJson = (@{
+                  version = '0.7.1'
+                  packageUrl = "$baseUrl/api/release/client-package?version=0.7.1"
+                  sha256 = $env:App__ClientPackageSha256
+                  sizeBytes = (Get-Item $env:App__ClientPackagePath).Length
+                  activate = $true
+                } | ConvertTo-Json -Compress)
+              } | ConvertTo-Json -Compress
+
+              $updateCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body $updatePayload
+              $updateCompleted = $false
+              $updateStatus = $null
+              for ($i = 0; $i -lt 240; $i++) {
+                $updateStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($updateCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($updateStatus.status -in @('Succeeded','Failed')) { $updateCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $updateCompleted -or $updateStatus.status -ne 'Succeeded') {
+                Write-Host ("Stage 10 update command did not complete. Status={0}; Result={1}" -f $updateStatus.status, $updateStatus.resultMessage)
+                Write-Host '--- Agent stdout before update failure ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr before update failure ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                Write-Host '--- Server stdout before update failure ---'
+                if (Test-Path $stdout) { Get-Content $stdout }
+                Write-Host '--- Server stderr before update failure ---'
+                if (Test-Path $stderr) { Get-Content $stderr }
+                throw 'Stage 10 update command did not complete successfully.'
+              }
+              Write-Host ("Stage 10 update command succeeded: commandId={0}" -f $updateCommand.commandId)
+
+              $updatedAgent = $null
+              $updatedReady = $false
+              for ($i = 0; $i -lt 45; $i++) {
+                try {
+                  $agentRowsAfterUpdate = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $updatedAgent = @($agentRowsAfterUpdate | Where-Object { $_.agentId -eq $agentRow.agentId })[0]
+                  if ($updatedAgent -and $updatedAgent.isOnline -and $updatedAgent.lifecycleState -eq 'Running' -and $updatedAgent.agentVersion -eq '0.7.1') {
+                    $updatedReady = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+              if (-not $updatedReady) {
+                throw "Stage 10 update did not restart into the new healthy version. Current=$($updatedAgent | ConvertTo-Json -Depth 5 -Compress)"
+              }
+
+              $updatedLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+              if (-not $updatedLifecycle.compatibility.compatible -or $updatedLifecycle.lifecycleState -ne 'Running') {
+                throw 'Stage 10 updated client failed release compatibility or healthy lifecycle checks.'
+              }
+
+              $rollbackCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/rollback" -Method Post -WebSession $adminSession | ConvertTo-Json -Compress
+              $rollbackCommand = $rollbackCommand | ConvertFrom-Json
+              $rollbackCompleted = $false
+              $rollbackStatus = $null
+              for ($i = 0; $i -lt 120; $i++) {
+                $rollbackStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($rollbackCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($rollbackStatus.status -in @('Succeeded','Failed')) { $rollbackCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $rollbackCompleted -or $rollbackStatus.status -ne 'Succeeded') {
+                throw 'Stage 10 rollback command did not complete successfully.'
+              }
+
+              $rollbackReady = $false
+              $rolledBackAgent = $null
+              for ($i = 0; $i -lt 45; $i++) {
+                try {
+                  $rollbackRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $rolledBackAgent = @($rollbackRows | Where-Object { $_.agentId -eq $agentRow.agentId })[0]
+                  if ($rolledBackAgent -and $rolledBackAgent.isOnline -and $rolledBackAgent.lifecycleState -eq 'Running' -and $rolledBackAgent.agentVersion -eq $baselineAgentVersion) {
+                    $rollbackReady = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+              if (-not $rollbackReady) {
+                Write-Host '--- Agent stdout after rollback failure ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr after rollback failure ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                Write-Host '--- Persisted Agent state after rollback failure ---'
+                $agentStatePath = Join-Path $agentData 'agent-state.json'
+                if (Test-Path $agentStatePath) { Get-Content $agentStatePath }
+                Write-Host '--- Update state after rollback failure ---'
+                $updateStatePath = Join-Path $agentData 'update-active.json'
+                if (Test-Path $updateStatePath) { Get-Content $updateStatePath }
+                Write-Host '--- Server Agent row after rollback failure ---'
+                if ($rolledBackAgent) { $rolledBackAgent | ConvertTo-Json -Depth 5 }
+                throw "Stage 10 rollback did not restore the previous healthy version. Current=$($rolledBackAgent | ConvertTo-Json -Depth 5 -Compress)"
+              }
+
+              Write-Host ("Stage 10 update and rollback smoke passed: baseline={0}; updated=0.7.1; restored={1}" -f $baselineAgentVersion, $rolledBackAgent.agentVersion)
             }
             finally {
               if (-not $agentProcess.HasExited) {
                 Stop-Process -Id $agentProcess.Id -Force -ErrorAction SilentlyContinue
               }
+
+              $agentDataPattern = [regex]::Escape($agentData)
+              Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+                Where-Object {
+                  ($_.ProcessId -ne $PID) -and $_.CommandLine -and ($_.CommandLine -match $agentDataPattern)
+                } |
+                ForEach-Object {
+                  Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue
+                }
+
+              Start-Sleep -Seconds 2
+            }
+
+            $offlineRow = $null
+            $offlineReady = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              try {
+                $offlineRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                $offlineRow = @($offlineRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+                if ($offlineRow -and -not $offlineRow.isOnline) {
+                  $offlineReady = $true
+                  break
+                }
+              } catch {}
               Start-Sleep -Seconds 1
             }
 
-            Start-Sleep -Seconds 8
-            $offlineRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
-            $offlineRow = @($offlineRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
-            if (-not $offlineRow -or $offlineRow.isOnline) {
+            if (-not $offlineReady) {
               Write-Host '--- Agent stdout ---'
               if (Test-Path $agentStdout) { Get-Content $agentStdout }
               Write-Host '--- Agent stderr ---'
               if (Test-Path $agentStderr) { Get-Content $agentStderr }
               throw 'Stage 8 Agent did not transition to offline after disconnect.'
             }
+
+            $offlineLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($offlineRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+            if ($offlineLifecycle.lifecycleState -ne 'Degraded') {
+              throw "Agent lifecycle state was not Degraded after offline transition: $($offlineLifecycle.lifecycleState)"
+            }
+            Write-Host ("Stage 10 degraded lifecycle smoke passed: state={0}" -f $offlineLifecycle.lifecycleState)
 
             Write-Host 'Stage 8 Agent registration, SignalR connection, heartbeat and offline transition smoke passed.'
 
@@ -226,6 +386,29 @@ jobs:
               }
 
               Write-Host ("Stage 8 Agent persisted identity smoke passed: deviceId={0}" -f $secondRow.deviceId)
+
+              $recoveredLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+              if ($recoveredLifecycle.lifecycleState -ne 'Running' -or -not $recoveredLifecycle.lastHealthyAt) {
+                Write-Host '--- Recovery lifecycle response ---'
+                $recoveredLifecycle | ConvertTo-Json -Depth 5
+                Write-Host '--- Second Agent stdout ---'
+                if (Test-Path $secondAgentStdout) { Get-Content $secondAgentStdout }
+                Write-Host '--- Second Agent stderr ---'
+                if (Test-Path $secondAgentStderr) { Get-Content $secondAgentStderr }
+                Write-Host '--- Persisted second Agent state ---'
+                $secondAgentStatePath = Join-Path $agentData 'agent-state.json'
+                if (Test-Path $secondAgentStatePath) { Get-Content $secondAgentStatePath }
+                Write-Host '--- Server Agent rows at recovery failure ---'
+                try {
+                  Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession | ConvertTo-Json -Depth 8
+                } catch {}
+                Write-Host '--- Server stdout at recovery failure ---'
+                if (Test-Path $stdout) { Get-Content $stdout }
+                Write-Host '--- Server stderr at recovery failure ---'
+                if (Test-Path $stderr) { Get-Content $stderr }
+                throw "Agent lifecycle did not recover to Running with a healthy timestamp: $($recoveredLifecycle.lifecycleState)"
+              }
+              Write-Host ("Stage 10 recovery lifecycle smoke passed: state={0}; lastHealthyAt={1}" -f $recoveredLifecycle.lifecycleState, $recoveredLifecycle.lastHealthyAt)
 
               $clientIdentity = Invoke-RestMethod -Uri "$baseUrl/api/client/identity" -Method Get
               if ($clientIdentity.deviceId -ne $secondRow.deviceId -or -not $clientIdentity.isOnline) {

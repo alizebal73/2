@@ -48,6 +48,10 @@ export type StationDto = {
   agentLocked?: boolean;
   agentKioskEnabled?: boolean;
   agentLockOnDisconnect?: boolean;
+  agentLifecycleState?: string | null;
+  agentPendingUpdateVersion?: string | null;
+  agentLastUpdateError?: string | null;
+  agentLastHealthyAt?: string | null;
   sessionStartedAt?: string | null;
   sessionPausedAt?: string | null;
   sessionPausedMinutes?: number;
@@ -100,6 +104,11 @@ export type AgentStatusDto = {
   cpuUsagePercent?: number | null;
   memoryAvailableBytes?: number | null;
   uptimeSeconds?: number | null;
+  lifecycleState: string;
+  pendingUpdateVersion?: string | null;
+  lastUpdateError?: string | null;
+  lastHealthyAt?: string | null;
+  lifecycleStateChangedAt?: string | null;
 };
 
 export type AgentCommandStatusDto = {

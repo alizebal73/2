@@ -1,3 +1,4 @@
+using GameNetManager.Shared.Contracts;
 using System.ComponentModel.DataAnnotations;
 
 namespace GameNetManager.Server.Data;
@@ -30,5 +31,10 @@ public sealed class AgentDevice : BaseEntity
     public DateTimeOffset? LockedAt { get; set; }
     public bool KioskEnabled { get; set; }
     public bool LockOnDisconnect { get; set; } = true;
+    public string LifecycleState { get; set; } = ClientLifecycleStates.Starting;
+    public string? PendingUpdateVersion { get; set; }
+    public string? LastUpdateError { get; set; }
+    public DateTimeOffset? LastHealthyAt { get; set; }
+    public DateTimeOffset? LifecycleStateChangedAt { get; set; }
     public bool IsActive { get; set; } = true;
 }

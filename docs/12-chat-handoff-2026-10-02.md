@@ -8,7 +8,7 @@
 - ریپوهای دیگر را برای این پروژه بررسی/ویرایش نکن.
 - محصول: GameNet Manager / GameNet Pro برای مدیریت یک GameNet واقعی، با هدف اجرای پایدار روی 40+ دستگاه.
 - معماری مرجع: Server منبع حقیقت است؛ Dashboard و Client نباید state مالی/عملیاتی مستقل و authoritative داشته باشند.
-- branch فعال: `stage8-pc-agent-foundation`
+- branch فعال: `stage10-client-lifecycle`
 - base merge commit: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
 - branch Stage 8 از merge موفق Stage 7 ساخته شده است؛ head جدید باید قبل از هر تغییر دوباره از GitHub خوانده شود.
 - PR #2 — `Stage 7: real operator auth, users, permissions and approvals` — **merged** در `main`.
@@ -614,3 +614,51 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 - Tariff Server-domain replacement for remaining `mockService.getTariffs()` callers remains a tracked cross-stage debt and must not be treated as forgotten work.
 - Installer/Updater/Rollback remains local-only/deferred per release architecture.
 - This checkpoint is intended to force one more full CI verification of the exact post-audit state before any Stage 10 work is started.
+
+
+# Stage 10 — Client Lifecycle — verified checkpoint
+
+- Repo: `alizebal73/2` only.
+- Branch: `stage10-client-lifecycle`
+- PR #9: open, not merged.
+- Last fully verified product head: `46ca0311392a00f4910fcae8527f214910eb60fa`
+- Run #806: **success** on the exact verified product head.
+- Stage 10 verified slice includes:
+  - persisted Client lifecycle state on AgentDevice
+  - Server-authoritative release compatibility
+  - real package download
+  - SHA256 and package-size verification
+  - version-isolated install
+  - persisted previous healthy version
+  - controlled restart/watchdog
+  - fresh post-restart health confirmation
+  - rollback to the previous version
+  - fresh post-rollback health confirmation
+  - lifecycle degraded/recovery smoke
+  - Dashboard lint/build/browser smoke
+- Update command payload parsing is case-insensitive and validates required fields before staging.
+- AgentPresenceMonitor re-reads the authoritative device row before applying a stale transition so a fresh reconnect cannot be overwritten by an old stale snapshot.
+- CI cleanup explicitly terminates restarted Agent descendants before the offline/recovery gate.
+- Installer remains local-only; no installer/package artifact is uploaded as a GitHub release asset.
+- Stage 10 Update/Health/Rollback is verified.
+- Release Safety / Canary Gate is the next scope.
+- The existing green CI workflow remains the release baseline; do not declare Canary/Release Safety Done until a dedicated gate is implemented and the exact head is green.
+- Next execution path:
+  1. Manifest/package release gate
+  2. CI canary gate on one real CI Agent
+  3. release compatibility/health/rollback safety assertions
+  4. only then evaluate PR #9 readiness for merge
+- Do not mark the Stage 10/Release Safety path Done without a green CI run on the exact current head.
+
+
+# Stage 10 — Release Safety / Canary — verified checkpoint
+- Branch: `stage10-client-lifecycle`
+- PR #9: open, `mergeable=true`, `behind_by=0` against `main` at audit time.
+- Verified head: `145feebf041e5ab0de5dd7caff4b8eb22f427bc7`
+- Run #826: **success** on the exact verified head.
+- Release Safety gate now verifies: one online CI Agent as the canary target, server release manifest presence, package version match, package size match, and package SHA256 match.
+- The existing CI update path then performs the actual single-Agent canary flow: Update → fresh Running/compatible health → Rollback → restored baseline version/health.
+- No installer/package artifact is uploaded to GitHub; the package remains runner-local for this smoke.
+- Watchdog restart now waits for the previous Agent process to exit before starting the new version, and Client update-state writes use unique temp files plus serialized in-process writes.
+- Server Agent disconnect handling now uses an atomic connection-owner compare-and-set, so stale/old SignalR connections cannot demote a newer healthy Agent to `Degraded`.
+- Stage 10 Foundation + Client Lifecycle Update/Rollback + Release Safety/Canary are now verified on the same current head.
