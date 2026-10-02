@@ -211,6 +211,14 @@ public sealed class Invoice : BaseEntity
     public ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();
 }
 
+public sealed class InvoicePayment : BaseEntity
+{
+    public Guid InvoiceId { get; set; }
+    public Invoice Invoice { get; set; } = default!;
+    public required string Method { get; set; }
+    public decimal Amount { get; set; }
+}
+
 public sealed class InvoiceItem : BaseEntity
 {
     public Guid InvoiceId { get; set; }
