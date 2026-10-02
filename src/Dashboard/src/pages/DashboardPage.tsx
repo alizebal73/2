@@ -1194,8 +1194,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       {station.state === 'off' && <small>{station.outOfServiceReason ?? 'در تعمیر'}</small>}
       <div className="station-hover-actions" draggable={false} onMouseDown={event => { event.stopPropagation(); window.getSelection()?.removeAllRanges(); }} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
         {canStartSession && station.state === 'free' && <button type="button" className="quick primary" onClick={() => open('start', station)}>▶ شروع</button>}
-        {station.state === 'busy' && <button type="button" className="quick" onClick={() => { setActiveStation(station); pauseSession(); }}>⏸ مکث</button>}
-        {station.state === 'paused' && <button type="button" className="quick primary" onClick={() => { setActiveStation(station); resumeSession(); }}>▶ ادامه</button>}
+        {canManageSession && station.state === 'busy' && <button type="button" className="quick" onClick={() => { setActiveStation(station); pauseSession(); }}>⏸ مکث</button>}
+        {canManageSession && station.state === 'paused' && <button type="button" className="quick primary" onClick={() => { setActiveStation(station); resumeSession(); }}>▶ ادامه</button>}
         {canSettleSession && (station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => endSessionForPayment(station)}>🧾 پایان بازی</button>}
         {canManageSession && (station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => open('extend', station)}>⏱ تمدید</button>}
         <button
