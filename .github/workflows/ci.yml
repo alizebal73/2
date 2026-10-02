@@ -120,22 +120,23 @@ jobs:
               throw 'AppUser permission assignment smoke failed.'
             }
 
-            $approval = Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+            $selfApproval = Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               action = 'discount'
               entityName = 'Session'
               entityId = ([Guid]::NewGuid().ToString())
-              reason = 'Stage 7 approval smoke'
+              reason = 'Stage 7 self-approval guard smoke'
             } | ConvertTo-Json)
-            $approvalDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($approval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
-              note = 'Stage 7 smoke approved'
-            } | ConvertTo-Json)
-            if ($approvalDecision.status -ne 'Approved') { throw 'Approval decision smoke failed.' }
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($selfApproval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                note = 'Should be rejected'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Approval requester was allowed to approve its own request.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
 
             # Prove a non-admin operator cannot start a session without the permission.
-            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
-              permissionNames = @('buffet.sell')
-            } | ConvertTo-Json) | Out-Null
-
             $operatorSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
             Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
               userName = $managedUser.userName
@@ -151,7 +152,19 @@ jobs:
               $status = $_.Exception.Response.StatusCode.value__
               if ($status -ne 403) { throw }
             }
+
+            $approval = Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
+              action = 'discount'
+              entityName = 'Session'
+              entityId = ([Guid]::NewGuid().ToString())
+              reason = 'Stage 7 approval smoke'
+            } | ConvertTo-Json)
             Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorSession | Out-Null
+
+            $approvalDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($approval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 smoke approved'
+            } | ConvertTo-Json)
+            if ($approvalDecision.status -ne 'Approved') { throw 'Approval decision smoke failed.' }
 
 
             $customers = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Get -WebSession $adminSession
@@ -379,12 +392,30 @@ jobs:
               throw 'Session settlement did not finalize the buffet draft invoice.'
             }
 
-            $reversed = Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
-              reason = 'Stage 6 buffet reverse smoke'
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('finance.manage')
+            } | ConvertTo-Json) | Out-Null
+
+            $operatorFinanceSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorFinanceSession -ContentType 'application/json' -Body (@{
+              userName = $managedUser.userName
+              password = 'Operator123!'
+            } | ConvertTo-Json) | Out-Null
+
+            $reverseApproval = Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse/request" -Method Post -WebSession $operatorFinanceSession -ContentType 'application/json' -Body (@{
+              reason = 'Stage 7 executable approval reverse smoke'
+            } | ConvertTo-Json)
+            if ($reverseApproval.status -ne 'Pending' -or -not $reverseApproval.id) {
+              throw 'Invoice reverse approval request smoke failed.'
+            }
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorFinanceSession | Out-Null
+
+            $reversed = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($reverseApproval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 reverse approved and executed'
             } | ConvertTo-Json)
 
-            if (-not $reversed.externalRefundRequired -or [int]$reversed.inventoryRestored -ne 1) {
-              throw 'Buffet invoice reverse smoke failed.'
+            if ($reversed.status -ne 'Approved' -or $reversed.operation.invoiceStatus -ne 'Cancelled' -or [int]$reversed.operation.inventoryRestored -ne 1) {
+              throw 'Executable invoice reverse approval smoke failed.'
             }
 
             $profitAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/reports/profit" -Method Get -WebSession $adminSession
