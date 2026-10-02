@@ -20,7 +20,8 @@ public sealed record AgentReadyDto(
     Guid AgentId,
     string DeviceId,
     DateTimeOffset ServerUtcNow,
-    int HeartbeatIntervalSeconds);
+    int HeartbeatIntervalSeconds,
+    bool IsLocked);
 
 public sealed record AgentHeartbeatRequest(
     string AgentVersion,
@@ -54,9 +55,11 @@ public sealed record AgentStatusDto(
 public static class AgentCommandTypes
 {
     public const string Ping = "ping";
+    public const string Lock = "lock";
+    public const string Unlock = "unlock";
 
     public static bool IsSupported(string? commandType)
-        => string.Equals(commandType?.Trim(), Ping, StringComparison.OrdinalIgnoreCase);
+        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock;
 }
 
 public sealed record AgentCommandRequest(
