@@ -49,11 +49,13 @@ export async function recordWalletTransaction(
     description: string;
     createdAt: string;
     balanceAfter: number;
+    referenceTransactionId?: string | null;
   };
   return {
     ...row,
     direction: row.type.toLowerCase() === 'credit' ? 'credit' : 'debit',
     type: row.type.toLowerCase() === 'credit' ? 'charge' : 'debit',
+    referenceTransactionId: row.referenceTransactionId ?? undefined,
   };
 }
 
