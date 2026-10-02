@@ -3355,3 +3355,31 @@ button:focus-visible {
 .client-card { user-select:none; -webkit-user-select:none; -webkit-user-drag:none; cursor:pointer; }
 .client-card.selected { border-color:rgba(58,169,255,.8); box-shadow:0 0 0 2px rgba(58,169,255,.14); }
 .selection-rect { position:fixed; z-index:999; pointer-events:none; border:1px dashed var(--blue); background:rgba(58,169,255,.10); }
+
+
+.games-master-detail,.accounts-master-detail{display:grid;grid-template-columns:minmax(300px,1fr) minmax(360px,1.15fr);gap:12px;padding:0 22px 24px}
+.games-list-panel,.game-detail-panel,.account-platform-nav,.account-list-panel,.account-detail-panel{min-width:0;background:linear-gradient(165deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:14px;padding:12px}
+.games-list-head,.account-list-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;border-bottom:1px solid var(--line);color:var(--dim);font-size:10px}
+.games-list,.account-list{display:grid;gap:3px;margin-top:7px;max-height:620px;overflow:auto}
+.game-list-row,.account-list-row{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--txt);text-align:right;cursor:pointer}
+.game-list-row:hover,.game-list-row.active,.account-list-row:hover,.account-list-row.active{background:#111b30;border-color:#2a3b63}
+.game-list-cover,.account-platform-badge{width:34px;height:34px;display:grid;place-items:center;border-radius:8px;background:#0b1324;border:1px solid var(--line);font-size:16px}
+.game-list-row span:nth-child(2),.account-list-row span:nth-child(2){min-width:0}
+.game-list-row strong,.game-list-row small,.account-list-row strong,.account-list-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.game-list-row strong,.account-list-row strong{font-size:10.5px}
+.game-list-row small,.account-list-row small{margin-top:2px;color:var(--dim);font-size:8.8px}
+.game-list-row em,.account-list-row em{font-style:normal;font-size:8.5px;color:var(--dim)}
+.account-list-row em.free,.account-detail-status.free{color:var(--green)}.account-list-row em.in-use,.account-detail-status.in-use{color:var(--blue)}.account-list-row em.locked,.account-detail-status.locked{color:var(--red)}
+.game-detail-hero,.account-detail-head{display:flex;align-items:center;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.game-detail-cover{width:74px;height:74px;display:grid;place-items:center;border-radius:12px;background:#0b1324;border:1px solid var(--line);font-size:31px}
+.game-detail-kicker{color:var(--green);font-size:9px}
+.game-detail-hero h2,.account-detail-head h2{margin:2px 0;font-size:18px}.game-detail-hero p,.account-detail-head p{margin:0;color:var(--dim);font-size:9.5px}
+.game-detail-grid,.account-detail-grid{display:grid;gap:2px;margin-top:10px}
+.game-detail-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.account-platform-nav{display:grid;align-content:start;gap:4px}
+.account-platform-title{color:var(--dim);font-size:10px;padding:3px 5px 7px}
+.account-platform-nav button{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--txt);cursor:pointer;text-align:right}
+.account-platform-nav button:hover,.account-platform-nav button.active{background:#111b30;border-color:#2a3b63}
+.account-platform-nav button span{min-width:22px;padding:2px 5px;border-radius:99px;background:#1a2540;color:var(--dim);font-size:8.5px;text-align:center}
+.account-detail-status{margin-right:auto;padding:4px 8px;border-radius:99px;background:#0b1324;border:1px solid var(--line);font-size:9px}
+@media(max-width:900px){.games-master-detail,.accounts-master-detail{grid-template-columns:1fr}.game-detail-panel,.account-detail-panel{min-height:280px}}
