@@ -60,6 +60,8 @@ jobs:
           $env:ASPNETCORE_URLS = $baseUrl
           $env:Database__FileName = $db
           $env:Agent__RegistrationToken = 'Stage8CiRegistrationToken!'
+          $env:Agent__HeartbeatIntervalSeconds = '3'
+          $env:Agent__OfflineAfterSeconds = '6'
 
           $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
             'run','--no-build','--configuration','Release',
@@ -166,9 +168,10 @@ jobs:
               if (-not $agentProcess.HasExited) {
                 Stop-Process -Id $agentProcess.Id -Force -ErrorAction SilentlyContinue
               }
-              Start-Sleep -Seconds 2
+              Start-Sleep -Seconds 1
             }
 
+            Start-Sleep -Seconds 8
             $offlineRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
             $offlineRow = @($offlineRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
             if (-not $offlineRow -or $offlineRow.isOnline) {
