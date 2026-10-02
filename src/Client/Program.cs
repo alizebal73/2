@@ -208,7 +208,7 @@ try
             state = state with { LifecycleState = ClientLifecycleStates.Recovering };
             await SaveStateAsync(statePath, state);
             Console.WriteLine($"Agent دوباره متصل شد ({connectionId}).");
-            var heartbeat = await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, shutdown.Token);
+            var heartbeat = await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, state, shutdown.Token);
             if (heartbeat.HasValue)
             {
                 state = state with
@@ -255,6 +255,7 @@ try
                     agentVersion,
                     osVersion,
                     lockScreen,
+                    state,
                     shutdown.Token);
 
                 if (heartbeatSeconds.HasValue)
@@ -423,6 +424,7 @@ static async Task<int?> SendHeartbeatAsync(
     string agentVersion,
     string osVersion,
     AgentLockScreenController lockScreen,
+    AgentState state,
     CancellationToken cancellationToken)
 {
     if (connection.State != HubConnectionState.Connected)
@@ -438,7 +440,10 @@ static async Task<int?> SendHeartbeatAsync(
                 null,
                 GC.GetGCMemoryInfo().TotalAvailableMemoryBytes,
                 Environment.TickCount64 / 1000,
-                lockScreen.IsLocked));
+                lockScreen.IsLocked,
+                state.LifecycleState,
+                state.PendingUpdateVersion,
+                state.LastUpdateError));
 
         Console.WriteLine($"Heartbeat موفق؛ زمان سرور: {response.ServerUtcNow:HH:mm:ss}.");
         return response.HeartbeatIntervalSeconds;
