@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { HubConnectionBuilder } from '@microsoft/signalr';
 import './App.css';
 import { TopNavigation } from './components/TopNavigation';
@@ -22,9 +22,10 @@ import type { AppUserRecord } from './types';
 import { SectionLockDialog } from './components/SectionLockDialog';
 import { readPageLocks } from './services/securityService';
 import type { PageLockMap } from './types';
-import type { DashboardSnapshotDto, PageKey, ServerInfoDto, StationDto } from './types';
+import type { AgentStatusDto, DashboardSnapshotDto, PageKey, ServerInfoDto, StationDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
 import { mockService } from './services/mockService';
+import { getAgentStatuses } from './services/agentService';
 
 type HubState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 type DemoRole = 'operator' | 'manager' | 'owner';
@@ -65,6 +66,7 @@ function canOpenPage(user: AppUserRecord, page: PageKey): boolean {
 function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () => void }) {
   const [activePage, setActivePage] = useState<PageKey>('dashboard');
   const [snapshot, setSnapshot] = useState<DashboardSnapshotDto | null>(null);
+  const [agentStatuses, setAgentStatuses] = useState<AgentStatusDto[]>([]);
   const [serverInfo, setServerInfo] = useState<ServerInfoDto | null>(null);
   const [apiState, setApiState] = useState<'loading' | 'online' | 'offline'>('loading');
   const [hubState, setHubState] = useState<HubState>('connecting');
@@ -134,6 +136,31 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+
+  useEffect(() => {
+    if (!hasPermission(user, 'client.control')) {
+      setAgentStatuses([]);
+      return;
+    }
+
+    let active = true;
+    const loadAgentStatuses = async () => {
+      try {
+        const data = await getAgentStatuses();
+        if (active) setAgentStatuses(data);
+      } catch {
+        if (active) setAgentStatuses([]);
+      }
+    };
+
+    void loadAgentStatuses();
+    const interval = window.setInterval(() => void loadAgentStatuses(), 5000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [user, retry]);
 
   useEffect(() => {
     let active = true;
@@ -211,6 +238,29 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
     };
   }, [retry]);
 
+  const agentByStationId = useMemo(
+    () => new Map(agentStatuses.filter(item => item.stationId).map(item => [item.stationId!, item])),
+    [agentStatuses],
+  );
+
+  const dashboardSnapshot = useMemo<DashboardSnapshotDto | null>(() => {
+    if (!snapshot) return null;
+    return {
+      ...snapshot,
+      stations: snapshot.stations.map(station => {
+        const agent = agentByStationId.get(station.id);
+        return agent
+          ? {
+              ...station,
+              agentOnline: agent.isOnline,
+              agentLastSeenAt: agent.lastSeenAt ?? null,
+              agentVersion: agent.agentVersion ?? null,
+            }
+          : station;
+      }),
+    };
+  }, [snapshot, agentByStationId]);
+
   return (
     <div className="app-shell" dir="rtl">
       <header className="topbar">
@@ -256,7 +306,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
       )}
 
       <div className="page-shell">
-        <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={snapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={requestNavigation} role={role} user={user} /></div>
+        <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={dashboardSnapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={requestNavigation} role={role} user={user} /></div>
         <div hidden={activePage !== 'games'}><GamesPage /></div>
         <div hidden={activePage !== 'client-shell'}><ClientShellPage /></div>
         <div hidden={activePage !== 'customers'}><CustomersPage user={user} /></div>
@@ -269,7 +319,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
         <div hidden={activePage !== 'operations'}><OperationsPage /></div>
       </div>
 
-      <GlobalCommandCenter open={commandOpen} stations={snapshot?.stations ?? []} onNavigate={requestNavigation} onClose={() => setCommandOpen(false)} />
+      <GlobalCommandCenter open={commandOpen} stations={dashboardSnapshot?.stations ?? []} onNavigate={requestNavigation} onClose={() => setCommandOpen(false)} />
 
       <SectionLockDialog page={lockedPage} onClose={() => setLockedPage(null)} onUnlock={page => { setUnlockedPages(current => current.includes(page) ? current : [...current, page]); setActivePage(page); setLockedPage(null); }} />
 

@@ -67,7 +67,7 @@ public sealed class SessionSettlementService(GameNetDbContext database)
             .Where(item => item.Method == "gift")
             .Sum(item => item.Amount);
 
-        var elapsedMinutes = Math.Max(0, (DateTimeOffset.UtcNow - session.StartAt).TotalMinutes);
+        var elapsedMinutes = SessionTiming.GetBillableMinutes(session, DateTimeOffset.UtcNow);
         if (request.FreeTimeMinutes < 0 || request.FreeTimeMinutes > Math.Ceiling(elapsedMinutes))
             throw new InvalidOperationException("دقیقه اعتبار رایگان مصرف‌شده با زمان جلسه سازگار نیست.");
         if (request.TimeAmount is < 0 || request.DiscountAmount is < 0 || request.PrepaidAmount is < 0)

@@ -170,3 +170,32 @@ export async function requestServerInvoiceReverseApproval(
 
   return await response.json() as { id: string; status: string };
 }
+
+
+export async function pauseServerSession(sessionId: string): Promise<void> {
+  const response = await fetch('/api/sessions/' + sessionId + '/pause', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'توقف جلسه روی سرور انجام نشد');
+  }
+}
+
+export async function resumeServerSession(sessionId: string): Promise<void> {
+  const response = await fetch('/api/sessions/' + sessionId + '/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'ادامه جلسه روی سرور انجام نشد');
+  }
+}
+
+export async function adjustServerSessionTime(sessionId: string, minutes: number): Promise<void> {
+  const response = await fetch('/api/sessions/' + sessionId + '/time-adjustment', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ minutes }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'تغییر زمان جلسه روی سرور انجام نشد');
+  }
+}

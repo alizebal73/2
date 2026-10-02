@@ -1,9 +1,11 @@
 using GameNetManager.Server.Data;
 using GameNetManager.Server.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using GameNetManager.Shared.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -13,6 +15,7 @@ builder.Services.AddSignalR();
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
+builder.Services.AddHostedService<AgentPresenceMonitor>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
 var databasePath = Path.IsPathRooted(databaseFile)
@@ -47,6 +50,268 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
 app.MapGet("/api/server-info", (IWebHostEnvironment environment) =>
     Results.Ok(new ServerInfoDto("GameNet Manager", environment.EnvironmentName, DateTimeOffset.UtcNow)))
     .WithName("GetServerInfo");
+
+app.MapPost("/api/agent/register", async (
+    AgentRegistrationRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    var configuredToken = configuration["Agent:RegistrationToken"];
+    var suppliedToken = context.Request.Headers["X-GameNet-Registration-Token"].ToString().Trim();
+
+    if (string.IsNullOrWhiteSpace(configuredToken)
+        || string.IsNullOrWhiteSpace(suppliedToken)
+        || !CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(configuredToken),
+            Encoding.UTF8.GetBytes(suppliedToken)))
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+    var deviceId = request.DeviceId?.Trim();
+    var name = request.Name?.Trim();
+    var agentVersion = request.AgentVersion?.Trim();
+    var osVersion = request.OsVersion?.Trim();
+
+    if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 120)
+        return Results.BadRequest(new { code = "invalid_device_id", message = "شناسه دستگاه معتبر نیست." });
+
+    if (string.IsNullOrWhiteSpace(name) || name.Length > 120)
+        return Results.BadRequest(new { code = "invalid_device_name", message = "نام دستگاه معتبر نیست." });
+
+    if (string.IsNullOrWhiteSpace(agentVersion) || agentVersion.Length > 60)
+        return Results.BadRequest(new { code = "invalid_agent_version", message = "نسخه Agent معتبر نیست." });
+
+    if (request.StationId.HasValue
+        && !await database.Stations.AnyAsync(item => item.Id == request.StationId.Value && item.IsActive, cancellationToken))
+        return Results.BadRequest(new { code = "station_not_found", message = "ایستگاه انتخاب‌شده پیدا نشد." });
+
+    var device = await database.AgentDevices
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.DeviceId == deviceId, cancellationToken);
+
+    if (device is null)
+    {
+        device = new AgentDevice
+        {
+            DeviceId = deviceId,
+            Name = name,
+            IsActive = true
+        };
+        database.AgentDevices.Add(device);
+    }
+
+    var token = AuthorizationService.CreateToken();
+    device.Name = name;
+    device.StationId = request.StationId;
+    device.AgentTokenHash = PasswordSecurity.HashToken(token);
+    device.AgentVersion = agentVersion;
+    device.OsVersion = osVersion;
+    device.IsActive = true;
+    device.IsOnline = false;
+    device.ConnectionId = null;
+    device.ConnectedAt = null;
+    device.LastSeenAt = null;
+    device.LastIpAddress = context.Connection.RemoteIpAddress?.ToString();
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AgentRegistered",
+        EntityName = "AgentDevice",
+        EntityId = device.Id.ToString(),
+        Details = "ثبت/صدور مجدد دسترسی Agent · " + device.DeviceId
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    await database.Entry(device).Reference(item => item.Station).LoadAsync(cancellationToken);
+
+    var heartbeatInterval = Math.Clamp(configuration.GetValue("Agent:HeartbeatIntervalSeconds", 10), 3, 60);
+    var offlineAfter = Math.Clamp(
+        configuration.GetValue("Agent:OfflineAfterSeconds", 30),
+        heartbeatInterval * 2,
+        300);
+
+    return Results.Ok(new AgentRegistrationResponse(
+        device.Id,
+        device.DeviceId,
+        token,
+        device.Station?.Name,
+        DateTimeOffset.UtcNow,
+        heartbeatInterval,
+        offlineAfter));
+})
+.WithName("RegisterAgent");
+
+app.MapGet("/api/agent/devices", async (
+    HttpContext context,
+    GameNetDbContext database,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var now = DateTimeOffset.UtcNow;
+    var heartbeatInterval = Math.Clamp(
+        configuration.GetValue("Agent:HeartbeatIntervalSeconds", 10),
+        3,
+        60);
+    var offlineAfter = Math.Clamp(
+        configuration.GetValue("Agent:OfflineAfterSeconds", 30),
+        heartbeatInterval * 2,
+        300);
+
+    var devices = await database.AgentDevices
+        .AsNoTracking()
+        .Include(item => item.Station)
+        .OrderBy(item => item.Name)
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(devices.Select(device => new AgentStatusDto(
+        device.Id,
+        device.DeviceId,
+        device.Name,
+        device.StationId,
+        device.Station?.Name,
+        device.IsActive
+            && device.LastSeenAt.HasValue
+            && now - device.LastSeenAt.Value <= TimeSpan.FromSeconds(offlineAfter),
+        device.LastSeenAt,
+        device.ConnectedAt,
+        device.AgentVersion,
+        device.OsVersion,
+        device.CpuUsagePercent,
+        device.MemoryAvailableBytes,
+        device.UptimeSeconds)).ToList());
+})
+.WithName("GetAgentDevices");
+
+
+
+app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
+    Guid deviceId,
+    AgentCommandRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    IHubContext<AgentHub> agentHub,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var commandType = request.CommandType?.Trim().ToLowerInvariant();
+    if (!AgentCommandTypes.IsSupported(commandType))
+        return Results.BadRequest(new { code = "unsupported_agent_command", message = "فرمان Agent پشتیبانی نمی‌شود." });
+
+    var device = await database.AgentDevices
+        .FirstOrDefaultAsync(item => item.Id == deviceId && item.IsActive, cancellationToken);
+
+    if (device is null)
+        return Results.NotFound(new { code = "agent_not_found", message = "Agent پیدا نشد." });
+
+    if (!device.IsOnline || string.IsNullOrWhiteSpace(device.ConnectionId))
+        return Results.Conflict(new { code = "agent_offline", message = "Agent آفلاین است و فرمان ارسال نشد." });
+
+    if (!string.IsNullOrWhiteSpace(request.PayloadJson) && request.PayloadJson.Length > 4000)
+        return Results.BadRequest(new { code = "command_payload_too_large", message = "دادهٔ فرمان بیش از حد مجاز است." });
+
+    var now = DateTimeOffset.UtcNow;
+    var command = new AgentCommand
+    {
+        AgentDeviceId = device.Id,
+        RequestedByAppUserId = auth.User!.Id,
+        CommandType = commandType!,
+        PayloadJson = request.PayloadJson,
+        Status = "Sent",
+        RequestedAt = now,
+        SentAt = now,
+        AgentConnectionId = device.ConnectionId
+    };
+
+    database.AgentCommands.Add(command);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AgentCommandRequested",
+        EntityName = "AgentCommand",
+        EntityId = command.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = $"فرمان {command.CommandType} برای Agent {device.DeviceId}"
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    try
+    {
+        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+            "AgentCommand",
+            new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
+            cancellationToken);
+    }
+    catch (Exception exception)
+    {
+        command.Status = "Failed";
+        command.Succeeded = false;
+        command.CompletedAt = DateTimeOffset.UtcNow;
+        command.ResultMessage = "ارسال فرمان به Agent انجام نشد.";
+        await database.SaveChangesAsync(CancellationToken.None);
+        return Results.Problem(
+            detail: command.ResultMessage,
+            statusCode: StatusCodes.Status502BadGateway,
+            title: "ارسال فرمان Agent ناموفق بود.");
+    }
+
+    return Results.Ok(new AgentCommandStatusDto(
+        command.Id,
+        command.AgentDeviceId,
+        command.CommandType,
+        command.Status,
+        command.RequestedAt,
+        command.SentAt,
+        command.CompletedAt,
+        command.Succeeded,
+        command.ResultMessage));
+})
+.WithName("SendAgentCommand");
+
+app.MapGet("/api/agent/commands/{commandId:guid}", async (
+    Guid commandId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var command = await database.AgentCommands
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == commandId, cancellationToken);
+
+    if (command is null)
+        return Results.NotFound(new { code = "agent_command_not_found", message = "فرمان Agent پیدا نشد." });
+
+    return Results.Ok(new AgentCommandStatusDto(
+        command.Id,
+        command.AgentDeviceId,
+        command.CommandType,
+        command.Status,
+        command.RequestedAt,
+        command.SentAt,
+        command.CompletedAt,
+        command.Succeeded,
+        command.ResultMessage));
+})
+.WithName("GetAgentCommand");
 
 app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration configuration) =>
 {
@@ -1004,7 +1269,12 @@ app.MapGet("/api/dashboard", async (HttpContext context,
                 .Where(invoice => invoice.CustomerId == session.CustomerId && invoice.Status == InvoiceStatus.Draft)
                 .Select(invoice => (decimal?)invoice.TotalAmount)
                 .Sum() ?? 0m,
-            session.EndAt
+            session.StartAt,
+            session.EndAt,
+            session.PausedAt,
+            session.PausedMinutes,
+            session.TimeAdjustmentMinutes,
+            session.PrepaidAmount
         })
         .ToListAsync(cancellationToken);
 
@@ -1044,7 +1314,7 @@ app.MapGet("/api/dashboard", async (HttpContext context,
             station.Zone,
             station.Type,
             (long)station.RatePerHour,
-            station.State.ToString(),
+            active?.PausedAt is not null ? "Paused" : station.State.ToString(),
             active?.CustomerUsername,
             active?.CustomerFullName,
             active?.CustomerDebt ?? 0m,
@@ -1052,7 +1322,14 @@ app.MapGet("/api/dashboard", async (HttpContext context,
             remaining,
             null,
             active?.Id,
-            active is not null && buffetTotals.TryGetValue(active.Id, out var dashboardBuffetTotal) ? dashboardBuffetTotal : 0m);
+            active is not null && buffetTotals.TryGetValue(active.Id, out var dashboardBuffetTotal) ? dashboardBuffetTotal : 0m,
+            null,
+            null,
+            active?.StartAt,
+            active?.PausedAt,
+            active?.PausedMinutes ?? 0,
+            active?.TimeAdjustmentMinutes ?? 0,
+            active?.PrepaidAmount ?? 0m);
     }).ToList();
 
     return Results.Ok(new DashboardSnapshotDto(dtos.Count, dtos, now));
@@ -3084,6 +3361,134 @@ app.MapMethods("/api/sessions/{sessionId:guid}/details", new[] { "PATCH" }, asyn
 })
 .WithName("UpdateSessionDetails");
 
+app.MapPost("/api/sessions/{sessionId:guid}/pause", async (
+    Guid sessionId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var session = await database.Sessions
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+
+    if (session is null)
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+
+    if (session.State != SessionState.Active)
+        return Results.Conflict(new { code = "session_not_active", message = "این جلسه فعال نیست." });
+
+    if (session.PausedAt.HasValue)
+        return Results.Conflict(new { code = "session_already_paused", message = "جلسه از قبل متوقف است." });
+
+    session.PausedAt = DateTimeOffset.UtcNow;
+    session.Station.State = StationState.Occupied;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "SessionPause",
+        EntityName = "Session",
+        EntityId = session.Id.ToString(),
+        Details = "توقف جلسه · ایستگاه " + session.Station.Name,
+        AppUserId = auth.User!.Id
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { sessionId = session.Id, pausedAt = session.PausedAt });
+})
+.WithName("PauseSession");
+
+app.MapPost("/api/sessions/{sessionId:guid}/resume", async (
+    Guid sessionId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var session = await database.Sessions
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+
+    if (session is null)
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+
+    if (session.State != SessionState.Active)
+        return Results.Conflict(new { code = "session_not_active", message = "این جلسه فعال نیست." });
+
+    if (!session.PausedAt.HasValue)
+        return Results.Conflict(new { code = "session_not_paused", message = "جلسه متوقف نیست." });
+
+    var now = DateTimeOffset.UtcNow;
+    session.PausedMinutes += Math.Max(0, (int)Math.Ceiling((now - session.PausedAt.Value).TotalMinutes));
+    session.PausedAt = null;
+    session.Station.State = StationState.Occupied;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "SessionResume",
+        EntityName = "Session",
+        EntityId = session.Id.ToString(),
+        Details = "ادامه جلسه · ایستگاه " + session.Station.Name,
+        AppUserId = auth.User!.Id
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { sessionId = session.Id, pausedMinutes = session.PausedMinutes });
+})
+.WithName("ResumeSession");
+
+app.MapPost("/api/sessions/{sessionId:guid}/time-adjustment", async (
+    Guid sessionId,
+    SessionTimeAdjustmentRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    if (request.Minutes == 0 || Math.Abs(request.Minutes) > 1440)
+        return Results.BadRequest(new { code = "invalid_time_adjustment", message = "تغییر زمان باید بین ۱ تا ۱۴۴۰ دقیقه باشد." });
+
+    var session = await database.Sessions
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+
+    if (session is null)
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+
+    if (session.State != SessionState.Active)
+        return Results.Conflict(new { code = "session_not_active", message = "این جلسه فعال نیست." });
+
+    var currentMinutes = SessionTiming.GetBillableMinutes(session, DateTimeOffset.UtcNow);
+    if (request.Minutes < 0 && Math.Abs(request.Minutes) >= currentMinutes)
+        return Results.BadRequest(new { code = "invalid_time_reduction", message = "کاهش زمان نمی‌تواند به صفر یا کمتر برسد." });
+
+    session.TimeAdjustmentMinutes += request.Minutes;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = request.Minutes > 0 ? "SessionExtend" : "SessionReduce",
+        EntityName = "Session",
+        EntityId = session.Id.ToString(),
+        Details = (request.Minutes > 0 ? "تمدید " : "کاهش ") + Math.Abs(request.Minutes) + " دقیقه · " + session.Station.Name,
+        AppUserId = auth.User!.Id
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        sessionId = session.Id,
+        timeAdjustmentMinutes = session.TimeAdjustmentMinutes,
+        billableMinutes = SessionTiming.GetBillableMinutes(session, DateTimeOffset.UtcNow)
+    });
+})
+.WithName("AdjustSessionTime");
+
 app.MapGet("/api/sessions/active", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
@@ -3246,6 +3651,7 @@ app.MapPost("/api/invoices/{invoiceId:guid}/reverse", async (
 .WithName("ReverseInvoice");
 
 app.MapHub<DashboardHub>("/hubs/dashboard");
+app.MapHub<AgentHub>("/hubs/agent");
 
 if (!app.Environment.IsDevelopment())
 {
@@ -3461,6 +3867,7 @@ public sealed record CloseShiftRequest(
 
 public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId, decimal? HourlyRateOverride, int? Persons);
 public sealed record SessionDetailsRequest(decimal? HourlyRate, int? Persons);
+public sealed record SessionTimeAdjustmentRequest(int Minutes);
 public sealed record SessionTransferRequest(Guid TargetStationId);
 public sealed record SessionTransferResultDto(Guid SessionId, Guid StationId);
 public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, DateTimeOffset StartAt);

@@ -1,5 +1,4 @@
 name: GameNet Manager CI
-
 on:
   push:
     branches: [main]
@@ -60,6 +59,9 @@ jobs:
           $env:ASPNETCORE_ENVIRONMENT = 'Development'
           $env:ASPNETCORE_URLS = $baseUrl
           $env:Database__FileName = $db
+          $env:Agent__RegistrationToken = 'Stage8CiRegistrationToken!'
+          $env:Agent__HeartbeatIntervalSeconds = '3'
+          $env:Agent__OfflineAfterSeconds = '6'
 
           $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
             'run','--no-build','--configuration','Release',
@@ -86,12 +88,245 @@ jobs:
             }
             Write-Host 'Server startup, EF migrations and /api/health passed.'
 
+
             $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
             $adminLogin = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               userName = 'admin'
-              password = 'Admin123!'
+              password = '123456'
             } | ConvertTo-Json)
-            if (-not $adminLogin.id -or $adminLogin.role -ne 'Admin') { throw 'Server operator authentication smoke failed.' }
+            if (-not $adminLogin.id -or $adminLogin.role -ne 'Admin') { throw 'Server operator authentication smoke failed before Agent smoke.' }
+
+            $meBeforeAgent = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
+            if ($meBeforeAgent.userName -ne 'admin') { throw 'Current operator endpoint failed before Agent smoke.' }
+
+            # Stage 8: prove a real Client Agent can register, connect to the dedicated SignalR hub,
+            # persist a heartbeat, and become offline again after disconnect.
+            $agentData = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent'
+            $agentStdout = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent.stdout.log'
+            $agentStderr = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent.stderr.log'
+            Remove-Item $agentData,$agentStdout,$agentStderr -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $agentData -Force | Out-Null
+
+            $env:GAMENET_SERVER_URL = $baseUrl
+            $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
+            $env:GAMENET_AGENT_NAME = 'CI Agent Stage 8'
+            $env:GAMENET_AGENT_DATA_DIR = $agentData
+
+            $agentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+              'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+            ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $agentStdout -RedirectStandardError $agentStderr
+
+            try {
+              $agentOnline = $false
+              $agentRow = $null
+              for ($i = 0; $i -lt 30; $i++) {
+                if ($agentProcess.HasExited) { break }
+                try {
+                  $agentRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $agentRow = @($agentRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+                  if ($agentRow -and $agentRow.isOnline -and $agentRow.lastSeenAt) {
+                    $agentOnline = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $agentOnline) {
+                Write-Host ("Agent process exited: {0}; exit code: {1}" -f $agentProcess.HasExited, $agentProcess.ExitCode)
+                Write-Host '--- Agent stdout ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                if (Test-Path (Join-Path $agentData 'agent-state.json')) {
+                  $agentState = Get-Content (Join-Path $agentData 'agent-state.json') | ConvertFrom-Json
+                  Write-Host ("Agent state persisted: DeviceId={0}; Name={1}; StationId={2}; HasToken={3}" -f $agentState.DeviceId, $agentState.Name, $agentState.StationId, (-not [string]::IsNullOrWhiteSpace($agentState.AgentToken)))
+                }
+                Write-Host '--- Server Agent rows ---'
+                try {
+                  $currentAgentRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $currentAgentRows | ConvertTo-Json -Depth 5
+                } catch {
+                  Write-Host ("Agent status API failed: {0}" -f $_.Exception.Message)
+                }
+                Write-Host '--- Server stdout ---'
+                if (Test-Path $stdout) { Get-Content $stdout }
+                Write-Host '--- Server stderr ---'
+                if (Test-Path $stderr) { Get-Content $stderr }
+                try {
+                  $health = Invoke-WebRequest -Uri "$baseUrl/api/health" -UseBasicParsing -TimeoutSec 2
+                  Write-Host ("Server health after Agent failure: {0}" -f $health.StatusCode)
+                } catch {
+                  Write-Host ("Server health failed after Agent failure: {0}" -f $_.Exception.Message)
+                }
+                throw 'Stage 8 Agent did not register/connect and publish an online heartbeat.'
+              }
+
+              Write-Host ("Stage 8 Agent heartbeat smoke passed: deviceId={0}; lastSeen={1}" -f $agentRow.deviceId, $agentRow.lastSeenAt)
+            }
+            finally {
+              if (-not $agentProcess.HasExited) {
+                Stop-Process -Id $agentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+              Start-Sleep -Seconds 1
+            }
+
+            Start-Sleep -Seconds 8
+            $offlineRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+            $offlineRow = @($offlineRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+            if (-not $offlineRow -or $offlineRow.isOnline) {
+              Write-Host '--- Agent stdout ---'
+              if (Test-Path $agentStdout) { Get-Content $agentStdout }
+              Write-Host '--- Agent stderr ---'
+              if (Test-Path $agentStderr) { Get-Content $agentStderr }
+              throw 'Stage 8 Agent did not transition to offline after disconnect.'
+            }
+
+            Write-Host 'Stage 8 Agent registration, SignalR connection, heartbeat and offline transition smoke passed.'
+
+            # Restart from the persisted Agent state without the bootstrap registration token.
+            $firstDeviceId = $offlineRow.deviceId
+            $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+            $secondAgentStdout = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent-second.stdout.log'
+            $secondAgentStderr = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent-second.stderr.log'
+            Remove-Item $secondAgentStdout,$secondAgentStderr -Force -ErrorAction SilentlyContinue
+
+            $secondAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+              'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+            ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $secondAgentStdout -RedirectStandardError $secondAgentStderr
+
+            try {
+              $secondOnline = $false
+              $secondRow = $null
+              for ($i = 0; $i -lt 30; $i++) {
+                if ($secondAgentProcess.HasExited) { break }
+                try {
+                  $secondRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $secondRow = @($secondRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+                  if ($secondRow -and $secondRow.isOnline -and $secondRow.lastSeenAt) {
+                    $secondOnline = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $secondOnline) {
+                Write-Host '--- Second Agent stdout ---'
+                if (Test-Path $secondAgentStdout) { Get-Content $secondAgentStdout }
+                Write-Host '--- Second Agent stderr ---'
+                if (Test-Path $secondAgentStderr) { Get-Content $secondAgentStderr }
+                throw 'Persisted Agent identity could not reconnect without the bootstrap registration token.'
+              }
+
+              if ($secondRow.deviceId -ne $firstDeviceId) {
+                throw "Agent identity changed after restart: first=$firstDeviceId second=$($secondRow.deviceId)"
+              }
+
+              Write-Host ("Stage 8 Agent persisted identity smoke passed: deviceId={0}" -f $secondRow.deviceId)
+
+              $commandRequestBody = @{
+                commandType = 'ping'
+                payloadJson = $null
+              } | ConvertTo-Json
+              $command = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body $commandRequestBody
+              if (-not $command.commandId -or $command.status -ne 'Sent') {
+                throw 'Stage 8 Agent command dispatch did not return a sent command.'
+              }
+
+              $commandCompleted = $false
+              $commandStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                try {
+                  $commandStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($command.commandId)" -Method Get -WebSession $adminSession
+                  if ($commandStatus.status -in @('Succeeded', 'Failed')) {
+                    $commandCompleted = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Milliseconds 500
+              }
+
+              if (-not $commandCompleted -or $commandStatus.status -ne 'Succeeded' -or $commandStatus.succeeded -ne $true) {
+                Write-Host '--- Second Agent stdout after command ---'
+                if (Test-Path $secondAgentStdout) { Get-Content $secondAgentStdout }
+                Write-Host '--- Second Agent stderr after command ---'
+                if (Test-Path $secondAgentStderr) { Get-Content $secondAgentStderr }
+                Write-Host '--- Command status ---'
+                if ($commandStatus) { $commandStatus | ConvertTo-Json -Depth 5 }
+                throw 'Stage 8 Agent ping command was not acknowledged successfully.'
+              }
+
+              Write-Host ("Stage 8 Agent command transport smoke passed: commandId={0}; result={1}" -f $commandStatus.commandId, $commandStatus.resultMessage)
+
+              $multiProcesses = @()
+              try {
+                $multiAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-multi-agent'
+                New-Item -ItemType Directory -Path $multiAgentRoot -Force | Out-Null
+                $multiNames = @('CI Agent Stage 8 B', 'CI Agent Stage 8 C')
+                $multiStdout = @{}
+                $multiStderr = @{}
+                foreach ($multiName in $multiNames) {
+                  $safe = ($multiName -replace '[^A-Za-z0-9]+','-').Trim('-').ToLowerInvariant()
+                  $dir = Join-Path $multiAgentRoot $safe
+                  New-Item -ItemType Directory -Path $dir -Force | Out-Null
+                  $out = Join-Path $multiAgentRoot ($safe + '.stdout.log')
+                  $err = Join-Path $multiAgentRoot ($safe + '.stderr.log')
+                  $multiStdout[$multiName] = $out
+                  $multiStderr[$multiName] = $err
+                  $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
+                  $env:GAMENET_AGENT_NAME = $multiName
+                  $env:GAMENET_AGENT_DATA_DIR = $dir
+                  $multiProcesses += Start-Process -FilePath 'dotnet' -ArgumentList @(
+                  'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+                ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+                }
+
+                $allMultiOnline = $false
+              $multiRows = @()
+                for ($i = 0; $i -lt 30; $i++) {
+                  try {
+                    $rows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                    $multiRows = @($rows | Where-Object { $_.name -in $multiNames })
+                    if ($multiRows.Count -eq $multiNames.Count -and @($multiRows | Where-Object { $_.isOnline -and $_.lastSeenAt }).Count -eq $multiNames.Count) {
+                      $allMultiOnline = $true
+                      break
+                    }
+                  } catch {}
+                  Start-Sleep -Seconds 1
+                }
+
+                if (-not $allMultiOnline) {
+                  foreach ($multiName in $multiNames) {
+                    Write-Host ("--- {0} stdout ---" -f $multiName)
+                    if (Test-Path $multiStdout[$multiName]) { Get-Content $multiStdout[$multiName] }
+                    Write-Host ("--- {0} stderr ---" -f $multiName)
+                    if (Test-Path $multiStderr[$multiName]) { Get-Content $multiStderr[$multiName] }
+                  }
+                  throw 'Stage 8 multi-Agent concurrent online smoke failed.'
+                }
+
+                $multiDeviceIds = @($multiRows | Select-Object -ExpandProperty deviceId)
+                if ($multiDeviceIds.Count -ne @($multiDeviceIds | Select-Object -Unique).Count) {
+                  throw 'Stage 8 multi-Agent smoke detected duplicate device identities.'
+                }
+
+                Write-Host ("Stage 8 multi-Agent concurrency smoke passed: {0} agents online." -f $multiNames.Count)
+              } finally {
+                foreach ($process in $multiProcesses) {
+                  if (-not $process.HasExited) {
+                    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                  }
+                }
+                $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+              }
+            }
+            finally {
+              if (-not $secondAgentProcess.HasExited) {
+                Stop-Process -Id $secondAgentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+              Start-Sleep -Seconds 1
+            }
 
             $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($me.userName -ne 'admin') { throw 'Current operator endpoint returned the wrong user.' }
@@ -329,6 +564,23 @@ jobs:
             if (-not $startedSession.sessionId) { throw 'VIP usage session smoke did not return a session id.' }
 
             Start-Sleep -Milliseconds 1200
+
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/pause") -Method Post -WebSession $adminSession | Out-Null
+            $pausedDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $pausedStation = @($pausedDashboard.stations | Where-Object { $_.serverSessionId -eq $startedSession.sessionId })[0]
+            if (-not $pausedStation -or $pausedStation.state -ne 'Paused' -or -not $pausedStation.sessionPausedAt) {
+              throw 'Server session pause did not surface as authoritative dashboard state.'
+            }
+
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/resume") -Method Post -WebSession $adminSession | Out-Null
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/time-adjustment") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ minutes = 2 } | ConvertTo-Json) | Out-Null
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/time-adjustment") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ minutes = -1 } | ConvertTo-Json) | Out-Null
+
+            $timedDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $timedStation = @($timedDashboard.stations | Where-Object { $_.serverSessionId -eq $startedSession.sessionId })[0]
+            if (-not $timedStation -or [int]$timedStation.sessionTimeAdjustmentMinutes -ne 1) {
+              throw 'Server session time adjustment did not persist correctly.'
+            }
 
             $usageAfterSession = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get -WebSession $adminSession
             if ([int]$usageAfterSession.usedTotalMinutes -lt 1 -or [int]$usageAfterSession.usedTodayMinutes -lt 1) {

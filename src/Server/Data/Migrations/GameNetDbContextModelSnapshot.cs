@@ -17,6 +17,146 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("GameNetManager.Server.Data.AgentDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentVersion")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ConnectedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ConnectionId")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("CpuUsagePercent")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeviceId")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsOnline")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastIpAddress")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LastSeenAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("MemoryAvailableBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OsVersion")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("StationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("UptimeSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId")
+                        .IsUnique();
+
+                    b.HasIndex("StationId");
+
+                    b.ToTable("AgentDevices");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AgentCommand", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AgentDeviceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentConnectionId")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CommandType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("RequestedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("RequestedByAppUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool?>("Succeeded")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentDeviceId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("AgentCommands");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -53,8 +193,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("UserName")
                         .IsRequired()
@@ -114,8 +254,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -141,14 +281,14 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("DecisionNote")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTimeOffset?>("DecidedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("DecidedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DecisionNote")
+                        .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("EntityId")
@@ -174,8 +314,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -219,8 +359,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -261,8 +401,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -296,8 +436,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -365,8 +505,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Username")
                         .HasMaxLength(60)
@@ -435,8 +575,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -447,13 +587,59 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
             modelBuilder.Entity("GameNetManager.Server.Data.EmployeeProfile", b =>
                 {
-                    b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
-                        .WithMany()
-                        .HasForeignKey("AppUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
 
-                    b.Navigation("AppUser");
+                    b.Property<Guid>("AppUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("EmploymentStartDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("HourlyRate")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("MonthlySalary")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("OvertimeRate")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("PayType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Phone")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WorkSchedule")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppUserId")
+                        .IsUnique();
+
+                    b.ToTable("EmployeeProfiles");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Expense", b =>
@@ -481,34 +667,14 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ShiftId");
 
                     b.ToTable("Expenses");
-                });
-
-            modelBuilder.Entity("GameNetManager.Server.Data.EmployeeProfile", b =>
-                {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("TEXT");
-                    b.Property<Guid>("AppUserId").HasColumnType("TEXT");
-                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("TEXT");
-                    b.Property<DateTimeOffset?>("EmploymentStartDate").HasColumnType("TEXT");
-                    b.Property<decimal>("HourlyRate").HasColumnType("decimal(18,2)");
-                    b.Property<bool>("IsActive").HasColumnType("INTEGER");
-                    b.Property<decimal>("MonthlySalary").HasColumnType("decimal(18,2)");
-                    b.Property<string>("Notes").HasMaxLength(500).HasColumnType("TEXT");
-                    b.Property<decimal>("OvertimeRate").HasColumnType("decimal(18,2)");
-                    b.Property<string>("PayType").IsRequired().HasMaxLength(20).HasColumnType("TEXT");
-                    b.Property<string>("Phone").IsRequired().HasMaxLength(20).HasColumnType("TEXT");
-                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("TEXT").IsConcurrencyToken();
-                    b.Property<string>("WorkSchedule").HasMaxLength(120).HasColumnType("TEXT");
-                    b.HasKey("Id");
-                    b.HasIndex("AppUserId").IsUnique();
-                    b.ToTable("EmployeeProfiles");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Game", b =>
@@ -533,8 +699,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -576,8 +742,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -613,15 +779,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("ReferenceInvoiceId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("UnitCost")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("UnitPrice")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<string>("Notes")
                         .HasMaxLength(250)
                         .HasColumnType("TEXT");
@@ -632,9 +789,18 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<int>("Quantity")
                         .HasColumnType("INTEGER");
 
+                    b.Property<Guid?>("ReferenceInvoiceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("UnitCost")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -680,8 +846,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -725,8 +891,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -757,8 +923,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -791,8 +957,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -806,25 +972,69 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
             modelBuilder.Entity("GameNetManager.Server.Data.PayrollLedgerEntry", b =>
                 {
-                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("TEXT");
-                    b.Property<DateTimeOffset?>("ApprovedAt").HasColumnType("TEXT");
-                    b.Property<Guid?>("ApprovedByUserId").HasColumnType("TEXT");
-                    b.Property<decimal>("Amount").HasColumnType("decimal(18,2)");
-                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("TEXT");
-                    b.Property<Guid>("CreatedByUserId").HasColumnType("TEXT");
-                    b.Property<decimal>("EmployeePayableDelta").HasColumnType("decimal(18,2)");
-                    b.Property<Guid>("EmployeeProfileId").HasColumnType("TEXT");
-                    b.Property<string>("Kind").IsRequired().HasMaxLength(40).HasColumnType("TEXT");
-                    b.Property<decimal>("OwnerReceivableDelta").HasColumnType("decimal(18,2)");
-                    b.Property<string>("PaymentMethod").HasMaxLength(40).HasColumnType("TEXT");
-                    b.Property<string>("Reason").IsRequired().HasMaxLength(500).HasColumnType("TEXT");
-                    b.Property<string>("ReceiptNumber").HasMaxLength(120).HasColumnType("TEXT");
-                    b.Property<string>("Status").IsRequired().HasMaxLength(20).HasColumnType("TEXT");
-                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("TEXT").IsConcurrencyToken();
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTimeOffset?>("ApprovedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ApprovedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("EmployeePayableDelta")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("EmployeeProfileId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("OwnerReceivableDelta")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("PaymentMethod")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ReceiptNumber")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
                     b.HasIndex("ApprovedByUserId");
+
                     b.HasIndex("CreatedByUserId");
+
                     b.HasIndex("EmployeeProfileId", "Status", "CreatedAt");
+
                     b.ToTable("PayrollLedgerEntries");
                 });
 
@@ -847,8 +1057,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -856,16 +1066,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .IsUnique();
 
                     b.ToTable("Permissions");
-                });
-
-            modelBuilder.Entity("GameNetManager.Server.Data.PayrollLedgerEntry", b =>
-                {
-                    b.HasOne("GameNetManager.Server.Data.EmployeeProfile", "EmployeeProfile")
-                        .WithMany("PayrollEntries")
-                        .HasForeignKey("EmployeeProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-                    b.Navigation("EmployeeProfile");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Product", b =>
@@ -888,15 +1088,15 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("MinimumStock")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("StockQuantity")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("MinimumStock")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Unit")
@@ -908,8 +1108,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -956,8 +1156,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -993,6 +1193,15 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<decimal?>("HourlyRateOverride")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<DateTimeOffset?>("PausedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PausedMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("PrepaidAmount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
@@ -1002,6 +1211,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.Property<DateTimeOffset>("StartAt")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("TimeAdjustmentMinutes")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("State")
                         .IsRequired()
@@ -1018,8 +1230,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1063,8 +1275,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1110,8 +1322,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Zone")
                         .IsRequired()
@@ -1151,8 +1363,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1190,8 +1402,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1247,8 +1459,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1290,8 +1502,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT")
-                        .IsConcurrencyToken();
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
@@ -1300,6 +1512,46 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.HasIndex("ReferenceInvoiceId");
 
                     b.ToTable("WalletTransactions");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AgentDevice", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AgentCommand", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AgentDevice", "AgentDevice")
+                        .WithMany()
+                        .HasForeignKey("AgentDeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AgentDevice");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AppUserPermission", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
+                        .WithMany("Permissions")
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GameNetManager.Server.Data.Permission", "Permission")
+                        .WithMany("AppUsers")
+                        .HasForeignKey("PermissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
+
+                    b.Navigation("Permission");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.AppUserSession", b =>
@@ -1329,25 +1581,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Navigation("DecidedByUser");
 
                     b.Navigation("RequestedByUser");
-                });
-
-            modelBuilder.Entity("GameNetManager.Server.Data.AppUserPermission", b =>
-                {
-                    b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
-                        .WithMany("Permissions")
-                        .HasForeignKey("AppUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("GameNetManager.Server.Data.Permission", "Permission")
-                        .WithMany("AppUsers")
-                        .HasForeignKey("PermissionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("AppUser");
-
-                    b.Navigation("Permission");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.AuditLog", b =>
@@ -1390,6 +1623,17 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .IsRequired();
 
                     b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.EmployeeProfile", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Expense", b =>
@@ -1503,6 +1747,17 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Navigation("AppUser");
 
                     b.Navigation("Invoice");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.PayrollLedgerEntry", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.EmployeeProfile", "EmployeeProfile")
+                        .WithMany("PayrollEntries")
+                        .HasForeignKey("EmployeeProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("EmployeeProfile");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Reservation", b =>
@@ -1644,6 +1899,11 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Navigation("WalletTransactions");
                 });
 
+            modelBuilder.Entity("GameNetManager.Server.Data.EmployeeProfile", b =>
+                {
+                    b.Navigation("PayrollEntries");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.Game", b =>
                 {
                     b.Navigation("GameAccounts");
@@ -1652,11 +1912,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
             modelBuilder.Entity("GameNetManager.Server.Data.Invoice", b =>
                 {
                     b.Navigation("Items");
-                });
-
-            modelBuilder.Entity("GameNetManager.Server.Data.EmployeeProfile", b =>
-                {
-                    b.Navigation("PayrollEntries");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Permission", b =>

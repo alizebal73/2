@@ -105,3 +105,23 @@ partial class UserAuthorizationAndApprovals
 partial class EmployeePayroll
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002194500_AgentDeviceFoundation")]
+partial class AgentDeviceFoundation
+{
+}
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002203000_AgentCommandFoundation")]
+partial class AgentCommandFoundation
+{
+}
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002210000_SessionServerTiming")]
+partial class SessionServerTiming
+{
+}

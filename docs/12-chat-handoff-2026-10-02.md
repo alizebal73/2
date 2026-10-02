@@ -8,14 +8,15 @@
 - ریپوهای دیگر را برای این پروژه بررسی/ویرایش نکن.
 - محصول: GameNet Manager / GameNet Pro برای مدیریت یک GameNet واقعی، با هدف اجرای پایدار روی 40+ دستگاه.
 - معماری مرجع: Server منبع حقیقت است؛ Dashboard و Client نباید state مالی/عملیاتی مستقل و authoritative داشته باشند.
-- branch فعال: `stage7-users-permissions`
-- head فعلی: `4c283e9698e5cbc6341a4bf527c355b9fb0f0d1b`
-- آخرین commit: `Fix dashboard permission button JSX syntax`
-- PR: #2 — `Stage 7: real operator auth, users, permissions and approvals`
-- PR به `main` باز است و mergeable/clean است.
-- آخرین CI برای head فعلی: Run #555 / workflow id `37025656340` → **success**
+- branch فعال: `stage8-pc-agent-foundation`
+- base merge commit: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
+- branch Stage 8 از merge موفق Stage 7 ساخته شده است؛ head جدید باید قبل از هر تغییر دوباره از GitHub خوانده شود.
+- PR #2 — `Stage 7: real operator auth, users, permissions and approvals` — **merged** در `main`.
+- Merge commit: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`.
+- Stage 8 branch: `stage8-pc-agent-foundation`.
+- CI مبنای بسته‌شدن Stage 7: Run #593 روی head `a7135fe...` → **success**.
 - CI Run #504 که قبلاً در حال اجرا بود مربوط به head قدیمی `6b05f292...` بود؛ مبنای فعلی نیست. مبنای معتبر فعلی Run #555 روی `4c283e...` است.
-- main فعلی قبل از merge Stage 7: `fa68c6e8740f8165789e711e56b2024e76e20921`
+- main پس از merge Stage 7: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
 
 ## 1) قوانین غیرقابل شکستن پروژه
 
@@ -132,7 +133,7 @@
 - Stage 6 merge to main: `fa68c6e8740f8165789e711e56b2024e76e20921`
 
 ### Stage 7 — Users & Permissions
-**مرحله فعلی و هنوز بسته نشده است.**
+**بسته و merge شده است.**
 
 پیاده‌سازی و تست‌شده:
 - AppUser
@@ -168,9 +169,40 @@
   - Admin/Owner retain global server authorization behavior
 - latest head CI #555 is green.
 
-## 4) Stage 7 — موارد باقیمانده که باید اول کامل شوند
+## 4) Stage 7 — وضعیت نهایی
 
-این‌ها نباید بدون تکمیل و تست رها شوند:
+موارد Stage 7 که روی head نهایی پیاده‌سازی و با CI سبز تأیید شدند:
+- Payroll/employee ledger و salary payment/receipt/approval
+- Read/Write Permission hardening در دامنه‌های فعال Server-backed
+- Approval اجرایی Invoice Reverse و Wallet Refund
+- actor identity از Server session
+- generic approval action allowlist
+- multi-cashier stale-write / HTTP 409
+
+Mockهای Accounts/Games/Tariffs/ClientShell عمداً برای Stageهای دارای dependency واقعی نگه داشته شدند.
+
+## 4.5) Stage 8 — PC Agent Foundation
+
+هدف این مرحله ساخت اولین **Vertical Slice واقعی PC** است، نه پرکردن UI با Mock.
+
+ترتیب:
+1. قرارداد هویت Agent و Device Registration در Server/Shared
+2. Heartbeat و Online/Offline state سروری
+3. Health/Telemetry پایه با timestamp و last-seen
+4. اتصال پایدار SignalR با reconnect و تشخیص stale connection
+5. Lock/Unlock و Session Start/End به‌عنوان اولین فرمان‌های واقعی
+6. Timer زنده بر مبنای دادهٔ معتبر Server
+7. قطع/وصل سرور و رفتار امن Offline
+8. تست عملی روی 2–3 PC واقعی، سپس مقیاس‌دادن الگو برای 40+ دستگاه
+
+قواعد Stage 8:
+- Server منبع حقیقت Device/Session state است.
+- Agent اجازه ندارد state مالی/اعتباری را authoritative کند.
+- هر فرمان دارای correlation/idempotency و نتیجهٔ قابل ممیزی باشد.
+- در قطع ارتباط، Agent باید fail-safe باشد و آخرین وضعیت را از live state متمایز کند.
+- هیچ Mock Agent به‌عنوان قابلیت واقعی پذیرفته نمی‌شود.
+
+## 4) Stage 7 — سابقهٔ موارد تکمیل‌شده
 
 1. **Full server-backed payroll/employee ledger and salary payments**
    - پرسنل/حقوق واقعی، نه UI نمایشی.
@@ -315,10 +347,10 @@ Manifest:
 
 ## 10) ترتیب اجرای پیشنهادی از همین نقطه
 
-**اول فقط عقب‌افتادگی Stage 7 را تمام کن.**
+**Stage 7 بسته شده؛ اکنون فقط Stage 8 را اجرا کن.**
 
-گام A:
-- بررسی کد فعلی payroll/employee domain و completion واقعی آن.
+گام A: Stage 8 foundation
+- قرارداد Device/Agent را از Shared تا Server نهایی کن.
 - کامل‌کردن server persistence + APIs + ledger + payments.
 - جایگزینی mock UI مربوط به payroll فقط وقتی backend واقعی حاضر است.
 
@@ -334,7 +366,7 @@ Manifest:
 - CI smoke و E2E جامع Stage 7.
 - فقط پس از Green واقعی، Stage 7 را Done/merge کن.
 
-**بعد از بسته شدن Stage 7 برو Stage 8.**
+**اکنون Stage 8 فعال است.**
 
 Stage 8:
 - PC Agent Foundation
@@ -390,17 +422,18 @@ Stage 8:
 
 در چت جدید این جمله را بده:
 
-«ریپوی فقط `alizebal73/2` را بررسی کن. اول `docs/12-chat-handoff-2026-10-02.md`، `docs/10-product-completion-backlog.md` و `docs/11-update-release-architecture.md` را بخوان، سپس head/PR/CI و فایل‌های واقعی را با آن‌ها تطبیق بده. وضعیت را از فایل‌ها حدس نزن. اول هر عقب‌افتادگی Stage 7 را کامل و تست کن، بعد مسیر Stage 8 را ادامه بده. هیچ موردی را Done حساب نکن مگر واقعاً تست شده باشد.»
+«ریپوی فقط `alizebal73/2` را بررسی کن. اول `docs/12-chat-handoff-2026-10-02.md`، `docs/10-product-completion-backlog.md` و `docs/11-update-release-architecture.md` را بخوان، سپس head/PR/CI و فایل‌های واقعی را با آن‌ها تطبیق بده. وضعیت را از فایل‌ها حدس نزن. Stage 7 را فقط از commit/CI واقعی تطبیق بده؛ سپس مستقیماً Stage 8 را از branch `stage8-pc-agent-foundation` ادامه بده. هیچ موردی را Done حساب نکن مگر واقعاً تست شده باشد.»
 
 ## 14) وضعیت لحظهٔ ثبت این فایل
 
 - تاریخ: 2026-10-02
-- branch: `stage7-users-permissions`
-- head: `4c283e9698e5cbc6341a4bf527c355b9fb0f0d1b`
-- PR #2: open
-- latest head CI: #555 / `37025656340` = success
-- merge to main هنوز انجام نشده است.
-- Stage 7 هنوز کامل/Done اعلام نشده؛ payroll کامل، permission hardening کامل و approvalهای حساس باقی‌مانده باید بررسی/تکمیل/تست شوند.
+- main merge commit بعد از Stage 7: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
+- PR #2: **merged**
+- Stage 8 branch: `stage8-pc-agent-foundation`
+- Stage 7: **Done و merge شده**؛ CI نهایی سبز است.
+- Stage 8 Foundation: **Done و با Run #676 سبز تأیید شده**
+- Stage 8 verified head: `4ef20a3facf2aaa613e1d20f52bf977f2570fde5`
+- مرحلهٔ بعدی: **Stage 9 — Real Client Commands & Kiosk**
 
 ## Continuation Update — current Stage 7 head
 
@@ -412,3 +445,88 @@ Stage 8:
 - Roadmap was updated after that verification to close Payroll and active-domain permission/approval items; future Mock domains remain mapped to their later real Server/Agent stages.
 - Latest documentation head is newer than #591 because the roadmap/PR metadata were updated afterward. A docs-only CI run must be checked before declaring the branch's final CI green.
 - Installer is still local-only and has not been published to GitHub.
+
+# Audit Checkpoint — Stages 1–8 — 2026-10-02
+
+این بخش «حقیقت فعلی ممیزی» است و بر یادداشت‌های تاریخی قدیمی‌تر اولویت دارد.
+
+## نتیجه کلی
+- Repo مورد بررسی فقط `alizebal73/2`.
+- Stage 1 تا Stage 7: بسته، تست‌شده و Stage 7 با PR #2 به `main` merge شده است.
+- Stage 8 Foundation: **Done و با CI Run #676 سبز تأیید شد.**
+- Current verified Stage 8 head: `4ef20a3facf2aaa613e1d20f52bf977f2570fde5`.
+- CI Run #676: Build/Test، Migration/Server Smoke، Dashboard Lint/Build، Preview و Browser Interaction Smoke همگی `success`.
+- Stage 8 دیگر شامل Lock/Unlock، Agent-driven Session Start/End، Kiosk/Shell و rollout فیزیکی نیست؛ این‌ها عمداً Stage 9+ هستند.
+
+## ممیزی Stage 1 تا 7
+- Stage 1 Foundation: ✅
+- Stage 2 Prototype & Behavior Transfer: ✅
+- Stage 3 Operational Completion: ✅
+- Stage 4 Finance & Session Core: ✅
+- Stage 5 Customer & VIP Domain: ✅
+- Stage 6 Buffet & Inventory Domain: ✅
+- Stage 7 Users/Permissions/Approvals: ✅ Merge شده در `bc4307f73edb0e535f7a57061aace9dac95e3c1e` و با CI نهایی سبز.
+
+## Stage 8 — موارد تأییدشده
+- ✅ Agent Device identity و registration token
+- ✅ persistent per-device token و restart بدون bootstrap token
+- ✅ dedicated `/hubs/agent` و authenticated Agent connection
+- ✅ heartbeat، LastSeen، basic telemetry
+- ✅ stale presence monitor و online/offline state واقعی Dashboard
+- ✅ resilient Agent reconnect و atomic local state
+- ✅ persisted `AgentCommands` با Server-side `client.control`
+- ✅ SignalR command dispatch و acknowledgement/result persistence با `ping`
+- ✅ smoke هم‌زمان چند Agent و unique DeviceId
+- ✅ Server-authoritative Session timing
+- ✅ Pause/Resume و TimeAdjustment سروری + Migration/Audit
+- ✅ Dashboard merge بر اساس Server truth
+- ✅ Run #676 سبز روی Build/Test/Server smoke/Dashboard lint-build/E2E
+
+## Stage 8 — موارد عمداً Stage 9+
+- ⏩ Lock/Unlock واقعی
+- ⏩ Agent-driven Session Start/End
+- ⏩ Kiosk/Shell policy و full Client command catalog
+- ⏩ Safe Offline/Recovery عملیاتی سطح Client
+- ⬜ تست فیزیکی 2–3 PC و rollout 40+ به‌عنوان validation/deployment gate
+
+## تصمیم ورود به Stage 9
+Stage 8 Foundation بسته است. Stage 9 از همین merge commit شروع می‌شود و هدفش تبدیل Command Transport موجود به فرمان‌های واقعی Client/Kiosk است؛ اولین برش باید Lock/Unlock واقعی با Permission، persistence، acknowledgement، timeout/failure و audit باشد و سپس Session Start/End از Agent به آن متصل شود.
+
+## یافته‌های ممیزی Cross-Stage
+- `Tariff` هنوز در Dashboard برای برخی مسیرها از `mockService.getTariffs()` می‌آید؛ تا Stage واقعی Tariff به‌عنوان قابلیت واقعی Done محسوب نمی‌شود.
+- Mockهای Accounts/Games/Tariffs/ClientShell عمداً به Stageهای بعدی منتقل شده‌اند.
+- Timeline/UX محلی فقط تا جایی مجاز است که منبع حقیقت مالی/مجوز/دامنه نباشد.
+- Release/Update architecture و migration safety باید در تمام Stageهای بعد حفظ شود.
+
+## قاعده ادامه
+- هیچ آیتم Stage 9 را قبل از تست واقعی Done علامت نزن.
+- Server همچنان منبع حقیقت است.
+- هر command: Permission → persistence/correlation → SignalR dispatch → acknowledgement/result → Audit.
+- قبل از rollout گسترده، validation فیزیکی 2–3 PC الزامی است.
+
+## یافته‌های Cross-Stage که نباید گم شوند
+
+### 1) Tariff source
+Dashboard در حال حاضر برای بارگذاری تعرفه از `mockService.getTariffs()` استفاده می‌کند، در حالی که Session توسط Server ثبت می‌شود و نرخ نهایی در Session سروری قابل ذخیره/اصلاح است.
+
+نتیجه ممیزی:
+- این مورد به‌عنوان «فراموش‌شده» حذف نمی‌شود.
+- باید به‌عنوان debt معماری در مسیر واقعی‌سازی Tariff Server/Domain ثبت بماند.
+- Accounts / Games / Tariffs / ClientShell طبق تصمیم معماری هنوز در Stageهای بعدی هستند و نباید با Mock به‌عنوان قابلیت واقعی Done تلقی شوند.
+
+### 2) Mock UX در مقابل Server authority
+در برخی صفحات هنوز state محلی برای Timeline/UX وجود دارد؛ این موضوع فقط تا جایی قابل‌قبول است که منبع حقیقت مالی/مجوز/دامنه نباشد.
+هر عملیات مالی یا حساس جدید باید همان مسیر Server → Permission → Domain → Persistence → Audit → SignalR را طی کند.
+
+### 3) Release / Migration
+Release Manifest، version contracts و migration safety در معماری ثبت شده‌اند.
+Installer هنوز local-only است و نباید وارد GitHub شود.
+Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می‌ماند.
+
+## Gate برای ورود به Stage 9 — Current
+
+- ✅ Run #676 سبز و Stage 8 Foundation بسته شده است.
+- ✅ Command Transport پایه، persistence و acknowledgement آماده و تست شده‌اند.
+- ⏩ Stage 9 اکنون باز است: Lock/Unlock واقعی، Kiosk/Shell و سپس Agent-driven Session Start/End روی همین transport ساخته می‌شوند.
+- ⬜ validation فیزیکی 2–3 PC و rollout 40+ همچنان Gate استقرار واقعی است و قبل از rollout گسترده باید انجام شود.
+

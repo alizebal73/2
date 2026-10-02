@@ -5,6 +5,8 @@ namespace GameNetManager.Server.Data;
 public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options) : DbContext(options)
 {
     public DbSet<Station> Stations => Set<Station>();
+    public DbSet<AgentDevice> AgentDevices => Set<AgentDevice>();
+    public DbSet<AgentCommand> AgentCommands => Set<AgentCommand>();
     public DbSet<StationType> StationTypes => Set<StationType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
     public DbSet<Customer> Customers => Set<Customer>();
@@ -63,6 +65,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         base.OnModelCreating(modelBuilder);
 
         ConfigureStation(modelBuilder);
+        ConfigureAgentDevice(modelBuilder);
+        ConfigureAgentCommand(modelBuilder);
         ConfigureStationType(modelBuilder);
         ConfigureTariff(modelBuilder);
         ConfigureCustomer(modelBuilder);
@@ -98,6 +102,46 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             if (updatedAt is not null)
                 updatedAt.IsConcurrencyToken = true;
         }
+    }
+
+    private static void ConfigureAgentDevice(ModelBuilder modelBuilder)
+    {
+        var device = modelBuilder.Entity<AgentDevice>();
+        device.HasKey(item => item.Id);
+        device.HasIndex(item => item.DeviceId).IsUnique();
+        device.HasIndex(item => item.StationId);
+        device.Property(item => item.DeviceId).HasMaxLength(120).IsRequired();
+        device.Property(item => item.Name).HasMaxLength(120).IsRequired();
+        device.Property(item => item.AgentTokenHash).HasMaxLength(128).IsRequired();
+        device.Property(item => item.AgentVersion).HasMaxLength(60);
+        device.Property(item => item.OsVersion).HasMaxLength(200);
+        device.Property(item => item.CpuUsagePercent).HasColumnType("REAL");
+        device.Property(item => item.MemoryAvailableBytes).HasColumnType("INTEGER");
+        device.Property(item => item.UptimeSeconds).HasColumnType("INTEGER");
+        device.Property(item => item.LastIpAddress).HasMaxLength(80);
+        device.Property(item => item.ConnectionId).HasMaxLength(200);
+        device.HasOne(item => item.Station)
+            .WithMany()
+            .HasForeignKey(item => item.StationId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private static void ConfigureAgentCommand(ModelBuilder modelBuilder)
+    {
+        var command = modelBuilder.Entity<AgentCommand>();
+        command.HasKey(item => item.Id);
+        command.HasIndex(item => item.AgentDeviceId);
+        command.HasIndex(item => item.Status);
+        command.Property(item => item.CommandType).HasMaxLength(80).IsRequired();
+        command.Property(item => item.PayloadJson).HasMaxLength(4000);
+        command.Property(item => item.Status).HasMaxLength(30).IsRequired();
+        command.Property(item => item.ResultMessage).HasMaxLength(500);
+        command.Property(item => item.AgentConnectionId).HasMaxLength(200);
+        command.Property(item => item.RequestedAt).IsRequired();
+        command.HasOne(item => item.AgentDevice)
+            .WithMany()
+            .HasForeignKey(item => item.AgentDeviceId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureStation(ModelBuilder modelBuilder)
@@ -383,6 +427,9 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         session.HasKey(item => item.Id);
         session.Property(item => item.TotalAmount).HasColumnType("decimal(18,2)");
         session.Property(item => item.HourlyRateOverride).HasColumnType("decimal(18,2)");
+        session.Property(item => item.PausedMinutes).IsRequired();
+        session.Property(item => item.TimeAdjustmentMinutes).IsRequired();
+        session.Property(item => item.PrepaidAmount).HasColumnType("decimal(18,2)");
         session.Property(item => item.Persons).IsRequired();
         session.Property(item => item.State).HasConversion<string>().HasMaxLength(20);
         session.Property(item => item.Notes).HasMaxLength(500);

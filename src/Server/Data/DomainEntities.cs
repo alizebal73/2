@@ -309,6 +309,10 @@ public sealed class Session : BaseEntity
     public AppUser? AppUser { get; set; }
     public DateTimeOffset StartAt { get; set; }
     public DateTimeOffset? EndAt { get; set; }
+    public DateTimeOffset? PausedAt { get; set; }
+    public int PausedMinutes { get; set; }
+    public int TimeAdjustmentMinutes { get; set; }
+    public decimal PrepaidAmount { get; set; }
     public decimal TotalAmount { get; set; }
     public decimal? HourlyRateOverride { get; set; }
     public int Persons { get; set; } = 1;

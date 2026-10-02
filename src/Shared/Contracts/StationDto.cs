@@ -14,4 +14,11 @@ public sealed record StationDto(
     int? RemainingMinutes = null,
     int? Network = null,
     Guid? ServerSessionId = null,
-    decimal BuffetTotal = 0);
+    decimal BuffetTotal = 0,
+    bool? AgentOnline = null,
+    DateTimeOffset? AgentLastSeenAt = null,
+    DateTimeOffset? SessionStartedAt = null,
+    DateTimeOffset? SessionPausedAt = null,
+    int SessionPausedMinutes = 0,
+    int SessionTimeAdjustmentMinutes = 0,
+    decimal SessionPrepaidAmount = 0);

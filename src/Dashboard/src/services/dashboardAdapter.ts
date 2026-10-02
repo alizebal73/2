@@ -12,6 +12,7 @@ const stateMap: Record<string, StationState> = {
   inuse: 'busy',
   in_use: 'busy',
   busy: 'busy',
+  paused: 'paused',
   reserved: 'reserved',
   resv: 'reserved',
   maintenance: 'off',

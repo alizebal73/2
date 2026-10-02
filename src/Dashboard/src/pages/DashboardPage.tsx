@@ -6,7 +6,7 @@ import { createServerCustomerDebt, getServerCustomers } from '../services/custom
 import { hasPermission } from '../services/authService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
-import { isServerGuid, requestServerInvoiceReverseApproval, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
+import { adjustServerSessionTime, isServerGuid, pauseServerSession, requestServerInvoiceReverseApproval, resumeServerSession, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
 import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
@@ -91,16 +91,47 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   const selectionDragRef = useRef<{ stationId: string; startX: number; startY: number; dragging: boolean; ctrlKey: boolean; shiftKey: boolean } | null>(null);
   const suppressNextStationClickRef = useRef(false);
 
-  const stations = stationOverrides ?? snapshot?.stations ?? emptyStations;
+  const stations = stationOverrides
+    ? stationOverrides.map(station => {
+        const serverStation = snapshot?.stations.find(item => item.id === station.id);
+        return serverStation
+          ? {
+              ...station,
+              state: serverStation.state,
+              customerUsername: serverStation.customerUsername,
+              customerFullName: serverStation.customerFullName,
+              customerDebt: serverStation.customerDebt,
+              customerNote: serverStation.customerNote,
+              remainingMinutes: serverStation.remainingMinutes,
+              serverSessionId: serverStation.serverSessionId,
+              buffetTotal: serverStation.buffetTotal,
+              agentOnline: serverStation.agentOnline,
+              agentLastSeenAt: serverStation.agentLastSeenAt,
+              agentVersion: serverStation.agentVersion,
+              sessionStartedAt: serverStation.sessionStartedAt,
+              sessionPausedAt: serverStation.sessionPausedAt,
+              sessionPausedMinutes: serverStation.sessionPausedMinutes,
+              sessionTimeAdjustmentMinutes: serverStation.sessionTimeAdjustmentMinutes,
+              sessionPrepaidAmount: serverStation.sessionPrepaidAmount,
+            }
+          : station;
+      })
+    : snapshot?.stations ?? emptyStations;
   const liveSessionCenterStation = sessionCenterStation ? stations.find(item => item.id === sessionCenterStation.id) ?? null : null;
   const updateStation = useCallback((id: string, update: Partial<StationDto>) => {
     setStationOverrides(items => (items ?? snapshot?.stations ?? emptyStations).map(item => item.id === id ? { ...item, ...update } : item));
   }, [snapshot?.stations]);
   const duration = useCallback((station: StationDto) => {
-    if (!station.startedAt) return station.sessionMinutes ?? 0;
-    const referenceNow = station.state === 'paused' && station.pausedAt ? new Date(station.pausedAt).getTime() : now;
-    const pausedMinutes = station.pausedMinutes ?? 0;
-    return Math.max(0, (referenceNow - new Date(station.startedAt).getTime()) / 60000 - pausedMinutes);
+    const startedAt = station.startedAt ?? station.sessionStartedAt ?? undefined;
+    if (!startedAt) return station.sessionMinutes ?? 0;
+    const pausedAt = station.pausedAt ?? station.sessionPausedAt ?? undefined;
+    const pausedMinutes = station.pausedMinutes ?? station.sessionPausedMinutes ?? 0;
+    const timeAdjustment = station.sessionTimeAdjustmentMinutes ?? 0;
+    const referenceNow = station.state === 'paused' && pausedAt ? new Date(pausedAt).getTime() : now;
+    const activePauseMinutes = station.state === 'paused' && pausedAt
+      ? Math.max(0, (referenceNow - new Date(pausedAt).getTime()) / 60000)
+      : 0;
+    return Math.max(0, (referenceNow - new Date(startedAt).getTime()) / 60000 - pausedMinutes - activePauseMinutes + timeAdjustment);
   }, [now]);
   function addSessionTimeline(stationId: string, kind: SessionTimelineEvent['kind'], title: string, detail: string, amount?: number, serverReferenceId?: string) {
     setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId, createdAt: new Date().toISOString(), kind, title, detail, amount, serverReferenceId }, ...current].slice(0, 300));
@@ -816,40 +847,68 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setMessage('تسویه ' + money(finalTotal) + ' تومان ثبت شد؛ فاکتور در تاریخچه باقی ماند');
   }
 
-  function pauseSession(stationOverride?: StationDto) {
+  async function pauseSession(stationOverride?: StationDto) {
     if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     const station = stationOverride ?? activeStation;
     if (!station || station.state !== 'busy') { setMessage('فقط جلسه در حال بازی قابل توقف است'); return; }
-    updateStation(station.id, { state: 'paused', pausedAt: new Date().toISOString() });
-    addSessionTimeline(station.id, 'pause', 'توقف جلسه', 'جلسه موقتاً متوقف شد');
-    setModal(null);
-    setMessage('جلسه متوقف موقت شد؛ زمان صورتحساب جلو نمی‌رود');
+    try {
+      if (station.serverSessionId) await pauseServerSession(station.serverSessionId);
+      const pausedAt = new Date().toISOString();
+      updateStation(station.id, { state: 'paused', pausedAt, sessionPausedAt: pausedAt });
+      addSessionTimeline(station.id, 'pause', 'توقف جلسه', 'جلسه موقتاً متوقف شد');
+      setModal(null);
+      setMessage(station.serverSessionId ? 'جلسه روی سرور متوقف شد.' : 'جلسه متوقف موقت شد؛ زمان صورتحساب جلو نمی‌رود');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'توقف جلسه روی سرور ثبت نشد'));
+    }
   }
 
-  function resumeSession(stationOverride?: StationDto) {
+  async function resumeSession(stationOverride?: StationDto) {
     if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     const station = stationOverride ?? activeStation;
-    if (!station || station.state !== 'paused' || !station.pausedAt) { setMessage('جلسه متوقفی برای ادامه وجود ندارد'); return; }
-    const currentPaused = (Date.now() - new Date(station.pausedAt).getTime()) / 60000;
-    updateStation(station.id, { state: 'busy', pausedAt: undefined, pausedMinutes: (station.pausedMinutes ?? 0) + Math.max(0, currentPaused) });
-    addSessionTimeline(station.id, 'resume', 'ادامه جلسه', 'توقف ' + money(currentPaused) + ' دقیقه محاسبه شد');
-    setMessage('جلسه ادامه پیدا کرد');
+    const pausedAt = station?.pausedAt ?? station?.sessionPausedAt;
+    if (!station || station.state !== 'paused' || !pausedAt) { setMessage('جلسه متوقفی برای ادامه وجود ندارد'); return; }
+    const currentPaused = (Date.now() - new Date(pausedAt).getTime()) / 60000;
+    try {
+      if (station.serverSessionId) await resumeServerSession(station.serverSessionId);
+      updateStation(station.id, {
+        state: 'busy',
+        pausedAt: undefined,
+        sessionPausedAt: undefined,
+        pausedMinutes: (station.pausedMinutes ?? station.sessionPausedMinutes ?? 0) + Math.max(0, currentPaused),
+      });
+      addSessionTimeline(station.id, 'resume', 'ادامه جلسه', 'توقف ' + money(currentPaused) + ' دقیقه محاسبه شد');
+      setMessage(station.serverSessionId ? 'جلسه روی سرور ادامه پیدا کرد.' : 'جلسه ادامه پیدا کرد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'ادامه جلسه روی سرور ثبت نشد'));
+    }
   }
 
-  function completeReduce() {
+  async function completeReduce() {
     if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     if (!activeStation || !['busy', 'paused'].includes(activeStation.state)) { setMessage('فقط جلسه فعال یا متوقف قابل کاهش زمان است'); return; }
     const minutes = reduceMinutes === -1 ? Math.max(1, Number(customReduceMinutes.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))) || 0) : reduceMinutes;
     const current = duration(activeStation);
     if (!minutes || minutes >= current) { setMessage('زمان کاهش باید کمتر از زمان استفاده‌شده باشد'); return; }
-    const nextStartedAt = new Date(new Date(activeStation.startedAt ?? Date.now()).getTime() + minutes * 60000).toISOString();
-    updateStation(activeStation.id, { startedAt: nextStartedAt, sessionMinutes: Math.max(0, current - minutes) });
-    addSessionTimeline(activeStation.id, 'reduce', 'کاهش زمان', money(minutes) + ' دقیقه از زمان صورتحساب کم شد', minutes);
-    setModal(null);
-    setMessage(money(minutes) + ' دقیقه از زمان قابل صورتحساب کم شد');
+    try {
+      if (activeStation.serverSessionId) await adjustServerSessionTime(activeStation.serverSessionId, -minutes);
+      const currentStartedAt = activeStation.startedAt ?? activeStation.sessionStartedAt ?? new Date().toISOString();
+      const nextStartedAt = new Date(new Date(currentStartedAt).getTime() + minutes * 60000).toISOString();
+      updateStation(activeStation.id, {
+        startedAt: nextStartedAt,
+        sessionStartedAt: nextStartedAt,
+        sessionMinutes: Math.max(0, current - minutes),
+        sessionTimeAdjustmentMinutes: (activeStation.sessionTimeAdjustmentMinutes ?? 0) - minutes,
+      });
+      addSessionTimeline(activeStation.id, 'reduce', 'کاهش زمان', money(minutes) + ' دقیقه از زمان صورتحساب کم شد', minutes);
+      setModal(null);
+      setMessage(money(minutes) + ' دقیقه از زمان قابل صورتحساب کم شد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'کاهش زمان روی سرور ثبت نشد'));
+    }
   }
 
-  function completeExtend() {
+  async function completeExtend() {
     if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     if (!activeStation || activeStation.state !== 'busy') {
       setMessage('جلسه فعالی برای تمدید وجود ندارد');
@@ -863,11 +922,22 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       setMessage('مدت تمدید معتبر نیست');
       return;
     }
-    const nextStartedAt = new Date(new Date(activeStation.startedAt ?? Date.now()).getTime() - minutes * 60000).toISOString();
-    updateStation(activeStation.id, { sessionMinutes: duration(activeStation) + minutes, startedAt: nextStartedAt });
-    addSessionTimeline(activeStation.id, 'extend', 'تمدید جلسه', money(minutes) + ' دقیقه به جلسه اضافه شد', minutes);
-    setModal(null);
-    setMessage(`${money(minutes)} دقیقه به جلسه ${activeStation.name} اضافه شد`);
+    try {
+      if (activeStation.serverSessionId) await adjustServerSessionTime(activeStation.serverSessionId, minutes);
+      const currentStartedAt = activeStation.startedAt ?? activeStation.sessionStartedAt ?? new Date().toISOString();
+      const nextStartedAt = new Date(new Date(currentStartedAt).getTime() - minutes * 60000).toISOString();
+      updateStation(activeStation.id, {
+        sessionMinutes: duration(activeStation) + minutes,
+        startedAt: nextStartedAt,
+        sessionStartedAt: nextStartedAt,
+        sessionTimeAdjustmentMinutes: (activeStation.sessionTimeAdjustmentMinutes ?? 0) + minutes,
+      });
+      addSessionTimeline(activeStation.id, 'extend', 'تمدید جلسه', money(minutes) + ' دقیقه به جلسه اضافه شد', minutes);
+      setModal(null);
+      setMessage(money(minutes) + ' دقیقه به جلسه ' + activeStation.name + ' اضافه شد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'تمدید جلسه روی سرور ثبت نشد'));
+    }
   }
 
   async function changeSessionRate(station: StationDto, rate: number) {
@@ -1188,7 +1258,17 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           {station.state === 'busy' && <div className="station-remaining">{remaining == null ? 'جلسه باز' : remaining <= 0 ? 'زمان تمام‌شده' : 'باقی‌مانده: ' + money(remaining) + ' دقیقه'}</div>}
         </div>;
       })()}
-      <span className="type">{station.type} · اینترنت {station.network ?? 1}</span>
+      <span className="type">
+        {station.type} · اینترنت {station.network ?? 1}
+        {station.zone === 'pc' && station.agentOnline !== undefined && (
+          <span
+            className={`agent-state ${station.agentOnline ? 'online' : 'offline'}`}
+            title={station.agentLastSeenAt ? `آخرین ارتباط Agent: ${new Date(station.agentLastSeenAt).toLocaleTimeString('fa-IR')}` : 'Agent هنوز heartbeat معتبر ندارد'}
+          >
+            · Agent {station.agentOnline ? 'متصل' : 'آفلاین'}
+          </span>
+        )}
+      </span>
       <div className="time">{station.state === 'busy' ? `${money(Math.floor(minutes / 60)).padStart(2, '۰')}:${money(Math.floor(minutes % 60)).padStart(2, '۰')}` : station.state === 'reserved' ? 'رزرو' : station.state === 'off' ? '⛔' : '--:--'}</div>
       {station.state === 'busy' && <><div className="person-dots">{'● '.repeat(station.persons ?? 1)}</div><div className="progress-bar"><span style={{ width: `${Math.min(100, minutes % 60 / 60 * 100)}%` }} /></div><span className="pulse" /></>}
       {station.state === 'off' && <small>{station.outOfServiceReason ?? 'در تعمیر'}</small>}
