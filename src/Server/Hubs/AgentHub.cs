@@ -37,7 +37,8 @@ public sealed class AgentHub(
                 device.Id,
                 device.DeviceId,
                 now,
-                HeartbeatIntervalSeconds()),
+                HeartbeatIntervalSeconds(),
+                device.IsLocked),
             Context.ConnectionAborted);
 
         await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
@@ -167,6 +168,12 @@ public sealed class AgentHub(
             ? null
             : acknowledgement.Message.Trim();
 
+        if (acknowledgement.Success && command.CommandType is AgentCommandTypes.Lock or AgentCommandTypes.Unlock)
+        {
+            device.IsLocked = command.CommandType == AgentCommandTypes.Lock;
+            device.LockedAt = device.IsLocked ? command.CompletedAt : null;
+        }
+
         database.AuditLogs.Add(new AuditLog
         {
             Action = acknowledgement.Success ? "AgentCommandSucceeded" : "AgentCommandFailed",
@@ -265,6 +272,7 @@ public sealed class AgentHub(
             device.StationId,
             device.Station?.Name,
             online,
+            device.IsLocked,
             device.LastSeenAt,
             device.ConnectedAt,
             device.AgentVersion,
