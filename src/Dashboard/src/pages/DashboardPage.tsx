@@ -5,6 +5,7 @@ import { mockService } from '../services/mockService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { SessionCenter } from '../features/session/SessionCenter';
+import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
 import { ApprovalDialog } from '../components/ApprovalDialog';
 import { ReverseDialog } from '../components/ReverseDialog';
@@ -117,7 +118,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       }
       setModal(null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'ثبت تراکنش کیف پول انجام نشد');
+      setMessage(userErrorMessage(error, 'ثبت تراکنش کیف پول انجام نشد'));
     }
   }, [amount, customers, customerCode]);
   useEffect(() => { void Promise.all([mockService.getCustomers(), mockService.getTariffs()]).then(([customerRows, tariffRows]) => { setCustomers(customerRows); setTariffs(tariffRows); }); const onHotkeys = (event: Event) => setHotkeys((event as CustomEvent<Record<string,string>>).detail || {}); window.addEventListener('gamenet-hotkeys-changed', onHotkeys); return () => window.removeEventListener('gamenet-hotkeys-changed', onHotkeys); }, []);
@@ -487,7 +488,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       addSessionTimeline(payment.stationId, 'settle', difference > 0 ? 'کیف پول + بدهی' : 'تسویه از کیف پول', money(walletAmount) + ' تومان از کیف پول' + (difference > 0 ? ' و ' + money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد' : ' کسر شد'), payment.amount);
       setMessage(difference > 0 ? money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد.' : 'مبلغ کامل از کیف پول کسر شد.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'کسر از کیف پول انجام نشد');
+      setMessage(userErrorMessage(error, 'کسر از کیف پول انجام نشد'));
     }
   }
 
@@ -551,7 +552,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['تسویه کیف پول · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
           : item));
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : 'تسویه از کیف پول انجام نشد');
+        setMessage(userErrorMessage(error, 'تسویه از کیف پول انجام نشد'));
         return;
       }
     }
@@ -659,7 +660,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
       setModal(null);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'ثبت شارژ انجام نشد');
+      setMessage(userErrorMessage(error, 'ثبت شارژ انجام نشد'));
     }
   }
   function reverseTimelineEvent(event: SessionTimelineEvent) {
