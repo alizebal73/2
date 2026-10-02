@@ -77,12 +77,6 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const debtCount = customers.filter(customer => customer.debt > 0).length;
   const packageCount = customers.filter(customer => customer.packageName).length;
 
-  function openNewCustomer() {
-    setDraft({ name: '', alias: '', mobile: '', nationalId: '', username: '', vip: 'none', password: '' });
-    setActionNote('');
-    setAction('new');
-  }
-
   function openAction(nextAction: Exclude<CustomerAction, '' | 'new'>) {
     if (!selected) {
       setNotice('ابتدا یک مشتری را انتخاب کنید');
