@@ -102,7 +102,7 @@ jobs:
 
             $agentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
               'run','--no-build','--configuration','Release',
-              '--project','srcClientGameNetManager.Client.csproj',
+              '--project','src/Client/GameNetManager.Client.csproj',
               '--no-launch-profile'
             ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $agentStdout -RedirectStandardError $agentStderr
 
