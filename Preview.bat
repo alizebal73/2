@@ -68,10 +68,10 @@ if not exist "%DASHBOARD%\node_modules" (
 )
 
 echo [INFO] Starting Server on http://localhost:5080 ...
-start "GameNet Server" cmd /k "cd /d ""%PREVIEW%\src\Server"" && dotnet run --project ""%SERVER_PROJECT%"""
+start "GameNet Server" /D "%PREVIEW%\src\Server" dotnet run --project "%SERVER_PROJECT%"
 
 echo [INFO] Starting Dashboard on http://localhost:5173 ...
-start "GameNet Dashboard" cmd /k "cd /d ""%DASHBOARD%"" && npm run dev -- --host 0.0.0.0"
+start "GameNet Dashboard" /D "%DASHBOARD%" npm run dev -- --host 0.0.0.0
 
 echo [INFO] Waiting for Server...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5080 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
