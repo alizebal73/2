@@ -4,6 +4,7 @@ using GameNetManager.Shared.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -47,6 +48,143 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
 app.MapGet("/api/server-info", (IWebHostEnvironment environment) =>
     Results.Ok(new ServerInfoDto("GameNet Manager", environment.EnvironmentName, DateTimeOffset.UtcNow)))
     .WithName("GetServerInfo");
+
+app.MapPost("/api/agent/register", async (
+    AgentRegistrationRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    var configuredToken = configuration["Agent:RegistrationToken"];
+    var suppliedToken = context.Request.Headers["X-GameNet-Registration-Token"].ToString().Trim();
+
+    if (string.IsNullOrWhiteSpace(configuredToken)
+        || string.IsNullOrWhiteSpace(suppliedToken)
+        || !CryptographicOperations.FixedTimeEquals(
+            Encoding.UTF8.GetBytes(configuredToken),
+            Encoding.UTF8.GetBytes(suppliedToken)))
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+    var deviceId = request.DeviceId?.Trim();
+    var name = request.Name?.Trim();
+    var agentVersion = request.AgentVersion?.Trim();
+    var osVersion = request.OsVersion?.Trim();
+
+    if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 120)
+        return Results.BadRequest(new { code = "invalid_device_id", message = "شناسه دستگاه معتبر نیست." });
+
+    if (string.IsNullOrWhiteSpace(name) || name.Length > 120)
+        return Results.BadRequest(new { code = "invalid_device_name", message = "نام دستگاه معتبر نیست." });
+
+    if (string.IsNullOrWhiteSpace(agentVersion) || agentVersion.Length > 60)
+        return Results.BadRequest(new { code = "invalid_agent_version", message = "نسخه Agent معتبر نیست." });
+
+    if (request.StationId.HasValue
+        && !await database.Stations.AnyAsync(item => item.Id == request.StationId.Value && item.IsActive, cancellationToken))
+        return Results.BadRequest(new { code = "station_not_found", message = "ایستگاه انتخاب‌شده پیدا نشد." });
+
+    var device = await database.AgentDevices
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.DeviceId == deviceId, cancellationToken);
+
+    if (device is null)
+    {
+        device = new AgentDevice
+        {
+            DeviceId = deviceId,
+            Name = name,
+            IsActive = true
+        };
+        database.AgentDevices.Add(device);
+    }
+
+    var token = AuthorizationService.CreateToken();
+    device.Name = name;
+    device.StationId = request.StationId;
+    device.AgentTokenHash = PasswordSecurity.HashToken(token);
+    device.AgentVersion = agentVersion;
+    device.OsVersion = osVersion;
+    device.IsActive = true;
+    device.IsOnline = false;
+    device.ConnectionId = null;
+    device.ConnectedAt = null;
+    device.LastSeenAt = null;
+    device.LastIpAddress = context.Connection.RemoteIpAddress?.ToString();
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AgentRegistered",
+        EntityName = "AgentDevice",
+        EntityId = device.Id.ToString(),
+        Details = "ثبت/صدور مجدد دسترسی Agent · " + device.DeviceId
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    await database.Entry(device).Reference(item => item.Station).LoadAsync(cancellationToken);
+
+    var heartbeatInterval = Math.Clamp(configuration.GetValue("Agent:HeartbeatIntervalSeconds", 10), 3, 60);
+    var offlineAfter = Math.Clamp(
+        configuration.GetValue("Agent:OfflineAfterSeconds", 30),
+        heartbeatInterval * 2,
+        300);
+
+    return Results.Ok(new AgentRegistrationResponse(
+        device.Id,
+        device.DeviceId,
+        token,
+        device.Station?.Name,
+        DateTimeOffset.UtcNow,
+        heartbeatInterval,
+        offlineAfter));
+})
+.WithName("RegisterAgent");
+
+app.MapGet("/api/agent/devices", async (
+    HttpContext context,
+    GameNetDbContext database,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var now = DateTimeOffset.UtcNow;
+    var offlineAfter = Math.Clamp(
+        configuration.GetValue("Agent:OfflineAfterSeconds", 30),
+        10,
+        300);
+
+    var devices = await database.AgentDevices
+        .AsNoTracking()
+        .Include(item => item.Station)
+        .OrderBy(item => item.Name)
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(devices.Select(device => new AgentStatusDto(
+        device.Id,
+        device.DeviceId,
+        device.Name,
+        device.StationId,
+        device.Station?.Name,
+        device.IsActive
+            && device.LastSeenAt.HasValue
+            && now - device.LastSeenAt.Value <= TimeSpan.FromSeconds(offlineAfter),
+        device.LastSeenAt,
+        device.ConnectedAt,
+        device.AgentVersion,
+        device.OsVersion,
+        device.CpuUsagePercent,
+        device.MemoryAvailableBytes,
+        device.UptimeSeconds)).ToList());
+})
+.WithName("GetAgentDevices");
+
+
 
 app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration configuration) =>
 {
@@ -3246,6 +3384,7 @@ app.MapPost("/api/invoices/{invoiceId:guid}/reverse", async (
 .WithName("ReverseInvoice");
 
 app.MapHub<DashboardHub>("/hubs/dashboard");
+app.MapHub<AgentHub>("/hubs/agent");
 
 if (!app.Environment.IsDevelopment())
 {

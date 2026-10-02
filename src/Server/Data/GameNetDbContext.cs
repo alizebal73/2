@@ -5,6 +5,7 @@ namespace GameNetManager.Server.Data;
 public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options) : DbContext(options)
 {
     public DbSet<Station> Stations => Set<Station>();
+    public DbSet<AgentDevice> AgentDevices => Set<AgentDevice>();
     public DbSet<StationType> StationTypes => Set<StationType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
     public DbSet<Customer> Customers => Set<Customer>();
@@ -63,6 +64,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         base.OnModelCreating(modelBuilder);
 
         ConfigureStation(modelBuilder);
+        ConfigureAgentDevice(modelBuilder);
         ConfigureStationType(modelBuilder);
         ConfigureTariff(modelBuilder);
         ConfigureCustomer(modelBuilder);
@@ -98,6 +100,28 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             if (updatedAt is not null)
                 updatedAt.IsConcurrencyToken = true;
         }
+    }
+
+    private static void ConfigureAgentDevice(ModelBuilder modelBuilder)
+    {
+        var device = modelBuilder.Entity<AgentDevice>();
+        device.HasKey(item => item.Id);
+        device.HasIndex(item => item.DeviceId).IsUnique();
+        device.HasIndex(item => item.StationId);
+        device.Property(item => item.DeviceId).HasMaxLength(120).IsRequired();
+        device.Property(item => item.Name).HasMaxLength(120).IsRequired();
+        device.Property(item => item.AgentTokenHash).HasMaxLength(128).IsRequired();
+        device.Property(item => item.AgentVersion).HasMaxLength(60);
+        device.Property(item => item.OsVersion).HasMaxLength(200);
+        device.Property(item => item.CpuUsagePercent).HasColumnType("REAL");
+        device.Property(item => item.MemoryAvailableBytes).HasColumnType("INTEGER");
+        device.Property(item => item.UptimeSeconds).HasColumnType("INTEGER");
+        device.Property(item => item.LastIpAddress).HasMaxLength(80);
+        device.Property(item => item.ConnectionId).HasMaxLength(200);
+        device.HasOne(item => item.Station)
+            .WithMany()
+            .HasForeignKey(item => item.StationId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
     private static void ConfigureStation(ModelBuilder modelBuilder)

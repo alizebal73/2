@@ -17,6 +17,80 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
 
+            modelBuilder.Entity("GameNetManager.Server.Data.AgentDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("CpuUsagePercent")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeviceId")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentTokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentVersion")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ConnectedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsOnline")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastIpAddress")
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LastSeenAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("MemoryAvailableBytes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ConnectionId")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("StationId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("UptimeSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .IsConcurrencyToken();
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeviceId")
+                        .IsUnique();
+
+                    b.HasIndex("StationId");
+
+                    b.ToTable("AgentDevices");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -125,6 +199,16 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .IsUnique();
 
                     b.ToTable("AppUserSessions");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AgentDevice", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Station");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.ApprovalRequest", b =>
@@ -1678,6 +1762,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
             modelBuilder.Entity("GameNetManager.Server.Data.Station", b =>
                 {
+                    b.Navigation("AgentDevices");
+
                     b.Navigation("Reservations");
 
                     b.Navigation("Sessions");
