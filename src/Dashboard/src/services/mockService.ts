@@ -53,9 +53,9 @@ const products: ProductRecord[] = [
 ];
 
 const users: UserRecord[] = [
-  { id: 'u1', name: 'رضا احمدی', role: 'owner', shift: 'صبح', sales: 18450000, permissions: ['مدیریت', 'گزارش', 'تنظیمات', 'کارمزد'] },
-  { id: 'u2', name: 'نرگس علیزاده', role: 'admin', shift: 'عصر', sales: 12240000, permissions: ['ایستگاه‌ها', 'مشتریان', 'بوفه', 'گزارش'] },
-  { id: 'u3', name: 'حسین گل‌زاده', role: 'operator', shift: 'شب', sales: 9800000, permissions: ['ایستگاه‌ها', 'بوفه'] },
+  { id: 'u1', name: 'رضا احمدی', role: 'owner', shift: 'صبح', sales: 18450000, permissions: ['مدیریت', 'گزارش', 'تنظیمات', 'کارمزد'], payType: 'monthly', monthlySalary: 0, paidSalaryTotal: 0, employeePayable: 0, ownerReceivable: 0, damageTotal: 0, advanceTotal: 0 },
+  { id: 'u2', name: 'نرگس علیزاده', role: 'admin', shift: 'عصر', sales: 12240000, permissions: ['ایستگاه‌ها', 'مشتریان', 'بوفه', 'گزارش'], payType: 'monthly', monthlySalary: 18000000, paidSalaryTotal: 9000000, employeePayable: 9000000, ownerReceivable: 0, damageTotal: 0, advanceTotal: 0, bonusTotal: 500000, deductionTotal: 0 },
+  { id: 'u3', name: 'حسین گل‌زاده', role: 'operator', shift: 'شب', sales: 9800000, permissions: ['ایستگاه‌ها', 'بوفه'], payType: 'hourly', hourlyRate: 85000, monthlySalary: 0, paidSalaryTotal: 4500000, employeePayable: 2100000, ownerReceivable: 350000, damageTotal: 600000, advanceTotal: 1250000, bonusTotal: 200000, deductionTotal: 100000 },
 ];
 
 const tariffs: TariffRecord[] = [
