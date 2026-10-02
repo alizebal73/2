@@ -45,7 +45,7 @@ function formatPersianDate(date = new Date()) {
 }
 
 const pagePermissions: Partial<Record<PageKey, string[]>> = {
-  customers: ['customer.manage'],
+  customers: ['customer.manage', 'customer.wallet', 'customer.debt'],
   buffet: ['buffet.sell', 'buffet.inventory'],
   tariffs: ['tariff.manage'],
   games: ['game.manage'],
