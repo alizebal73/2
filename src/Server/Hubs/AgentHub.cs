@@ -11,6 +11,7 @@ public sealed class AgentHub(
     IHubContext<DashboardHub> dashboardHub,
     ILogger<AgentHub> logger) : Hub
 {
+    private const string AgentDeviceContextKey = "GameNet.AgentDeviceId";
     public override async Task OnConnectedAsync()
     {
         var device = await ResolveDeviceAsync(Context, Context.ConnectionAborted);
@@ -19,6 +20,8 @@ public sealed class AgentHub(
             Context.Abort();
             return;
         }
+
+        Context.Items[AgentDeviceContextKey] = device.Id;
 
         var now = DateTimeOffset.UtcNow;
         device.IsOnline = true;
@@ -43,7 +46,7 @@ public sealed class AgentHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var device = await ResolveDeviceAsync(Context, CancellationToken.None);
+        var device = await ResolveConnectedDeviceAsync(CancellationToken.None);
         if (device is not null && device.ConnectionId == Context.ConnectionId)
         {
             device.IsOnline = false;
@@ -60,7 +63,7 @@ public sealed class AgentHub(
         AgentHeartbeatRequest request,
         CancellationToken cancellationToken = default)
     {
-        var device = await ResolveDeviceAsync(Context, cancellationToken);
+        var device = await ResolveConnectedDeviceAsync(cancellationToken);
         if (device is null || !device.IsActive)
             throw new HubException("دستگاه مجاز نیست.");
 
@@ -136,6 +139,19 @@ public sealed class AgentHub(
                 item => item.DeviceId == deviceId
                     && item.AgentTokenHash == tokenHash
                     && item.IsActive,
+                cancellationToken);
+    }
+
+    private async Task<AgentDevice?> ResolveConnectedDeviceAsync(CancellationToken cancellationToken)
+    {
+        if (!Context.Items.TryGetValue(AgentDeviceContextKey, out var value)
+            || value is not Guid deviceId)
+            return null;
+
+        return await database.AgentDevices
+            .Include(item => item.Station)
+            .FirstOrDefaultAsync(
+                item => item.Id == deviceId && item.IsActive,
                 cancellationToken);
     }
 
