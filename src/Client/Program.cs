@@ -33,7 +33,8 @@ if (Guid.TryParse(stationText, out var parsedStationId))
 var agentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.1.0";
 var osVersion = Environment.OSVersion.VersionString;
 
-Console.WriteLine($"پیکربندی Agent: Server={serverUrl}; DeviceId={state.DeviceId}; Name={state.Name}; StationId={stationId?.ToString() ?? "none"}");
+Console.WriteLine(
+    $"پیکربندی Agent: Server={serverUrl}; DeviceId={state.DeviceId}; Name={state.Name}; StationId={stationId?.ToString() ?? "none"}");
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
@@ -63,28 +64,14 @@ try
         if (string.IsNullOrWhiteSpace(registrationToken))
             throw new InvalidOperationException("توکن ثبت اولیه Agent در تنظیمات سیستم وارد نشده است.");
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "api/agent/register");
-        request.Headers.Add("X-GameNet-Registration-Token", registrationToken);
-        request.Content = JsonContent.Create(new AgentRegistrationRequest(
-            state.DeviceId,
-            state.Name,
-            stationId,
+        state = await RegisterAgentAsync(
+            httpClient,
+            state,
+            registrationToken,
             agentVersion,
-            osVersion));
+            osVersion,
+            shutdown.Token);
 
-        using var response = await httpClient.SendAsync(request, shutdown.Token);
-        if (!response.IsSuccessStatusCode)
-        {
-            var responseBody = await response.Content.ReadAsStringAsync(shutdown.Token);
-            throw new InvalidOperationException(
-                $"ثبت Agent در سرور با کد {(int)response.StatusCode} رد شد. {responseBody}");
-        }
-
-        var registration = await response.Content.ReadFromJsonAsync<AgentRegistrationResponse>(
-            cancellationToken: shutdown.Token)
-            ?? throw new InvalidOperationException("پاسخ ثبت Agent از سرور نامعتبر بود.");
-
-        state = state with { AgentToken = registration.AgentToken };
         await SaveStateAsync(statePath, state);
         Console.WriteLine($"Agent با شناسه {state.DeviceId} در سرور ثبت شد.");
     }
@@ -94,50 +81,82 @@ try
     }
 
     var hubUrl = $"{serverUrl.TrimEnd('/')}/hubs/agent";
-    await using var connection = new HubConnectionBuilder()
-        .WithUrl(hubUrl, options =>
-        {
-            options.Headers["X-GameNet-Device-Id"] = state.DeviceId;
-            options.AccessTokenProvider = () => Task.FromResult<string?>(state.AgentToken);
-        })
-        .WithAutomaticReconnect()
-        .Build();
-
-    connection.On<AgentReadyDto>("AgentReady", ready =>
-        Console.WriteLine($"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}"));
-
-    connection.Reconnecting += error =>
-    {
-        Console.WriteLine($"ارتباط Agent با سرور قطع شد؛ تلاش برای اتصال مجدد. {error?.Message ?? string.Empty}".Trim());
-        return Task.CompletedTask;
-    };
-
-    connection.Reconnected += async connectionId =>
-    {
-        Console.WriteLine($"Agent دوباره متصل شد ({connectionId}).");
-        await SendHeartbeatAsync(connection, agentVersion, osVersion, shutdown.Token);
-    };
-
-    connection.Closed += error =>
-    {
-        if (!shutdown.IsCancellationRequested)
-            Console.WriteLine($"اتصال Agent بسته شد: {error?.Message ?? "علت نامشخص"}");
-        return Task.CompletedTask;
-    };
-
-    await connection.StartAsync(shutdown.Token);
-    Console.WriteLine($"Agent GameNet روی {hubUrl} فعال شد.");
 
     while (!shutdown.IsCancellationRequested)
     {
-        var heartbeatSeconds = await SendHeartbeatAsync(
-            connection,
-            agentVersion,
-            osVersion,
-            shutdown.Token);
+        await using var connection = CreateConnection(hubUrl, state);
 
-        await Task.Delay(TimeSpan.FromSeconds(
-            Math.Clamp(heartbeatSeconds ?? 10, 3, 60)), shutdown.Token);
+        connection.On<AgentReadyDto>("AgentReady", ready =>
+            Console.WriteLine(
+                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}"));
+
+        connection.Reconnecting += error =>
+        {
+            Console.WriteLine(
+                $"ارتباط Agent با سرور قطع شد؛ تلاش برای اتصال مجدد. {error?.Message ?? string.Empty}".Trim());
+            return Task.CompletedTask;
+        };
+
+        connection.Reconnected += async connectionId =>
+        {
+            Console.WriteLine($"Agent دوباره متصل شد ({connectionId}).");
+            await SendHeartbeatAsync(connection, agentVersion, osVersion, shutdown.Token);
+        };
+
+        connection.Closed += error =>
+        {
+            if (!shutdown.IsCancellationRequested)
+                Console.WriteLine(
+                    $"اتصال Agent بسته شد؛ چرخهٔ اتصال دوباره شروع می‌شود. {error?.Message ?? "علت نامشخص"}".Trim());
+            return Task.CompletedTask;
+        };
+
+        try
+        {
+            await connection.StartAsync(shutdown.Token);
+            Console.WriteLine($"Agent GameNet روی {hubUrl} فعال شد.");
+
+            while (!shutdown.IsCancellationRequested
+                && connection.State != HubConnectionState.Disconnected)
+            {
+                var heartbeatSeconds = await SendHeartbeatAsync(
+                    connection,
+                    agentVersion,
+                    osVersion,
+                    shutdown.Token);
+
+                var delaySeconds = Math.Clamp(heartbeatSeconds ?? 10, 3, 60);
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), shutdown.Token);
+            }
+        }
+        catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+        {
+            break;
+        }
+        catch (Exception exception)
+        {
+            Console.WriteLine($"چرخهٔ اتصال Agent با خطا پایان یافت: {exception.Message}");
+        }
+        finally
+        {
+            if (connection.State != HubConnectionState.Disconnected)
+            {
+                try
+                {
+                    await connection.StopAsync();
+                }
+                catch
+                {
+                    // The next cycle will create a fresh connection.
+                }
+            }
+        }
+
+        if (!shutdown.IsCancellationRequested)
+        {
+            Console.WriteLine("Agent در وضعیت آفلاین است؛ ۵ ثانیه بعد اتصال دوباره امتحان می‌شود.");
+            await Task.Delay(TimeSpan.FromSeconds(5), shutdown.Token);
+        }
     }
 }
 catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
@@ -148,6 +167,56 @@ catch (Exception exception)
 {
     Console.Error.WriteLine($"اجرای Agent با خطا متوقف شد: {exception.Message}");
     Environment.ExitCode = 1;
+}
+
+static HubConnection CreateConnection(string hubUrl, AgentState state)
+{
+    return new HubConnectionBuilder()
+        .WithUrl(hubUrl, options =>
+        {
+            options.Headers["X-GameNet-Device-Id"] = state.DeviceId;
+            options.AccessTokenProvider = () => Task.FromResult<string?>(state.AgentToken);
+        })
+        .WithAutomaticReconnect(new[]
+        {
+            TimeSpan.Zero,
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(5),
+            TimeSpan.FromSeconds(10),
+        })
+        .Build();
+}
+
+static async Task<AgentState> RegisterAgentAsync(
+    HttpClient httpClient,
+    AgentState state,
+    string registrationToken,
+    string agentVersion,
+    string osVersion,
+    CancellationToken cancellationToken)
+{
+    using var request = new HttpRequestMessage(HttpMethod.Post, "api/agent/register");
+    request.Headers.Add("X-GameNet-Registration-Token", registrationToken);
+    request.Content = JsonContent.Create(new AgentRegistrationRequest(
+        state.DeviceId,
+        state.Name,
+        state.StationId,
+        agentVersion,
+        osVersion));
+
+    using var response = await httpClient.SendAsync(request, cancellationToken);
+    if (!response.IsSuccessStatusCode)
+    {
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        throw new InvalidOperationException(
+            $"ثبت Agent در سرور با کد {(int)response.StatusCode} رد شد. {responseBody}");
+    }
+
+    var registration = await response.Content.ReadFromJsonAsync<AgentRegistrationResponse>(
+        cancellationToken: cancellationToken)
+        ?? throw new InvalidOperationException("پاسخ ثبت Agent از سرور نامعتبر بود.");
+
+    return state with { AgentToken = registration.AgentToken };
 }
 
 static async Task<int?> SendHeartbeatAsync(
@@ -176,7 +245,7 @@ static async Task<int?> SendHeartbeatAsync(
     catch (Exception exception) when (
         exception is HubException or HttpRequestException or InvalidOperationException)
     {
-        Console.WriteLine($"Heartbeat ارسال نشد؛ اتصال دوباره بررسی می‌شود. {exception.Message}");
+        Console.WriteLine($"Heartbeat ارسال نشد؛ وضعیت اتصال دوباره بررسی می‌شود. {exception.Message}");
         return null;
     }
 }
@@ -192,8 +261,9 @@ static async Task<AgentState> LoadStateAsync(string path)
         return JsonSerializer.Deserialize<AgentState>(json)
             ?? new AgentState(string.Empty, string.Empty, string.Empty, null);
     }
-    catch
+    catch (Exception exception)
     {
+        Console.WriteLine($"فایل وضعیت Agent خوانده نشد؛ Agent با هویت جدید/قابل‌بازیابی ادامه می‌دهد: {exception.Message}");
         return new AgentState(string.Empty, string.Empty, string.Empty, null);
     }
 }
@@ -203,7 +273,27 @@ static async Task SaveStateAsync(string path, AgentState state)
     var json = JsonSerializer.Serialize(
         state,
         new JsonSerializerOptions { WriteIndented = true });
-    await File.WriteAllTextAsync(path, json);
+
+    var tempPath = path + ".tmp";
+    await File.WriteAllTextAsync(tempPath, json);
+
+    try
+    {
+        File.Move(tempPath, path, overwrite: true);
+    }
+    catch
+    {
+        try
+        {
+            File.Delete(tempPath);
+        }
+        catch
+        {
+            // Preserve the original state file when replacement cannot complete.
+        }
+
+        throw;
+    }
 }
 
 record AgentState(string DeviceId, string Name, string AgentToken, Guid? StationId);
