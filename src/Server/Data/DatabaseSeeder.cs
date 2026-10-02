@@ -110,7 +110,7 @@ public static class DatabaseSeeder
             });
         }
     }
-}
+
 
     private static async Task EnsureCustomerProfilesAsync(GameNetDbContext database, CancellationToken cancellationToken)
     {
