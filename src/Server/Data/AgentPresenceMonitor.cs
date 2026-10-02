@@ -1,3 +1,4 @@
+using GameNetManager.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;
 
 namespace GameNetManager.Server.Data;
