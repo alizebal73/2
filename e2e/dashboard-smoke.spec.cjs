@@ -214,10 +214,10 @@ test('Games & Accounts real API contract UI', async ({ page }) => {
   await page.route('**/hubs/**', route => route.abort());
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('gamenet-navigate', { detail: 'games' })));
+  await page.getByRole('button', { name: 'بازی‌ها' }).click();
   await expect(page.getByRole('heading', { name: 'بازی‌ها' })).toBeVisible();
   await expect(page.getByText('Counter Test')).toBeVisible();
-  await page.evaluate(() => window.dispatchEvent(new CustomEvent('gamenet-navigate', { detail: 'accounts' })));
-  await expect(page.getByRole('heading', { name: 'حساب‌ها' })).toBeVisible();
+  await page.getByRole('button', { name: 'اکانت‌ها' }).click();
+  await expect(page.getByRole('heading', { name: 'اکانت‌ها' })).toBeVisible();
   await expect(page.getByText('Steam Pool 01')).toBeVisible();
 });
