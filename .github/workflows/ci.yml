@@ -259,7 +259,8 @@ jobs:
 
               Write-Host ("Stage 8 Agent command transport smoke passed: commandId={0}; result={1}" -f $commandStatus.commandId, $commandStatus.resultMessage)
 
-              $multiAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-multi-agent'
+              try {
+                $multiAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-multi-agent'
               New-Item -ItemType Directory -Path $multiAgentRoot -Force | Out-Null
               $multiNames = @('CI Agent Stage 8 B', 'CI Agent Stage 8 C')
               $multiProcesses = @()
@@ -316,7 +317,15 @@ jobs:
                   Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
                 }
               }
-              $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+                $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+              } finally {
+                foreach ($process in $multiProcesses) {
+                  if (-not $process.HasExited) {
+                    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                  }
+                }
+                $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+              }
             }
             finally {
               if (-not $secondAgentProcess.HasExited) {
