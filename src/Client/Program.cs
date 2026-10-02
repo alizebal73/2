@@ -86,6 +86,9 @@ try
     {
         await using var connection = CreateConnection(hubUrl, state);
 
+        connection.On<AgentCommandEnvelope>("AgentCommand", command =>
+            HandleAgentCommandAsync(connection, command, shutdown.Token));
+
         connection.On<AgentReadyDto>("AgentReady", ready =>
             Console.WriteLine(
                 $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}"));
@@ -297,3 +300,33 @@ static async Task SaveStateAsync(string path, AgentState state)
 }
 
 record AgentState(string DeviceId, string Name, string AgentToken, Guid? StationId);
+static async Task HandleAgentCommandAsync(
+    HubConnection connection,
+    AgentCommandEnvelope command,
+    CancellationToken cancellationToken)
+{
+    var success = AgentCommandTypes.IsSupported(command.CommandType);
+    var message = success
+        ? "Agent فرمان را دریافت کرد."
+        : "فرمان Agent ناشناخته است.";
+
+    if (success && string.Equals(command.CommandType, AgentCommandTypes.Ping, StringComparison.OrdinalIgnoreCase))
+        Console.WriteLine($"فرمان ping دریافت شد؛ CommandId={command.CommandId}.");
+
+    try
+    {
+        await connection.InvokeAsync(
+            "AcknowledgeCommand",
+            new AgentCommandAcknowledgement(
+                command.CommandId,
+                success,
+                message,
+                DateTimeOffset.UtcNow),
+            cancellationToken);
+    }
+    catch (Exception exception) when (
+        exception is HubException or HttpRequestException or InvalidOperationException)
+    {
+        Console.WriteLine($"پاسخ فرمان Agent ارسال نشد: {exception.Message}");
+    }
+}
