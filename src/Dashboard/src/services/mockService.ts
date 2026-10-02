@@ -328,10 +328,11 @@ export const mockService = {
     currentShift = { id: crypto.randomUUID(), operator, openedAt: new Date().toISOString() };
     return { ...currentShift };
   },
-  closeShift: async (countedCash: number) => {
+  closeShift: async (countedCash: number, manualCashAdjustment = 0, note = '') => {
     if (!currentShift) throw new Error('شیفت بازی برای بستن وجود ندارد');
     const expectedCash = reportRows.filter(row => row.operator === currentShift!.operator && row.method === 'cash').reduce((sum, row) => sum + row.amount, 0);
-    const closed = { ...currentShift, closedAt: new Date().toISOString(), expectedCash, countedCash, difference: countedCash - expectedCash, sales: reportRows.filter(row => row.operator === currentShift!.operator).reduce((sum, row) => sum + row.amount, 0) };
+    const adjustedExpectedCash = expectedCash + manualCashAdjustment;
+    const closed = { ...currentShift, closedAt: new Date().toISOString(), expectedCash: adjustedExpectedCash, rawExpectedCash: expectedCash, countedCash, manualCashAdjustment, note, difference: countedCash - adjustedExpectedCash, sales: reportRows.filter(row => row.operator === currentShift!.operator).reduce((sum, row) => sum + row.amount, 0) };
     shifts.unshift(closed);
     currentShift = null;
     return closed;
