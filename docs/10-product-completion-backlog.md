@@ -336,7 +336,7 @@
 14. [~] Session Transfer / Change Tariff / Change Persons — انتقال جلسه، تغییر نرخ همان جلسه و تغییر نفرات به Session Center اضافه شد؛ منتظر CI
 15. [~] Free Time + Free Money کامل — Free Time در Billing و Free Money در تسویه/گزارش جدا شد؛ منتظر CI
 16. Concurrent Login Limit
-17. Expense / Profit واقعی و قابل ممیزی
+17. [~] Expense / Profit واقعی و قابل ممیزی — Expense و خلاصه سود عملیاتی از Server/SQLite + Audit اضافه شد؛ CI و اتصال کامل همه گزارش‌ها باقی
 
 ### C) Client / Agent
 18. Client Health / Heartbeat / Telemetry
