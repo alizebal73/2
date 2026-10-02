@@ -90,3 +90,27 @@ public sealed record AgentCommandStatusDto(
     DateTimeOffset? CompletedAt,
     bool? Succeeded,
     string? ResultMessage);
+
+
+public sealed record AgentSessionStartRequest(
+    Guid CustomerId,
+    Guid CustomerLoginId,
+    Guid? TariffId,
+    decimal? HourlyRateOverride,
+    int? Persons);
+
+public sealed record AgentSessionStartResponse(
+    Guid SessionId,
+    Guid StationId,
+    Guid CustomerId,
+    DateTimeOffset StartAt);
+
+public sealed record AgentSessionEndRequest(
+    Guid SessionId,
+    Guid? CustomerLoginId);
+
+public sealed record AgentSessionEndResponse(
+    Guid SessionId,
+    Guid StationId,
+    DateTimeOffset EndAt,
+    string State);
