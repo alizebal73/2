@@ -330,7 +330,7 @@
 ### B) Finance / Session
 9. [~] Wallet Ledger واقعی — API/SQLite/Audit/adapter و نمایش Ledger پیاده شد؛ عملیات کیف پول Dashboard به adapter منتقل شده‌اند؛ مهاجرت کامل Customer/Finance از Mock باقی است
 10. [~] Refund / Reverse واقعی — Refund کیف پول مسیر مستقل Server/API + Audit + UI گرفت و تست سرور سبز شد؛ Permission/Approval و Reverse کامل مالی مرحله بعدی هنوز باقی است
-11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change پیاده شد و CI + Smoke سبز است؛ اتصال Invoice/Server و ثبت مالی نهایی باقی است
+11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change + Server Atomic Settlement + Invoice/Wallet/Audit + تست اتمیک و Smoke سبز؛ اتصال مستقیم Dashboard به Session/Invoice سرور و Permission نهایی باقی
 12. [~] Split Payment — UI + Build/Test + Dashboard Smoke سبز؛ ثبت atomic سروری، Invoice و Audit نهایی باقی
 13. [~] Shift Settlement + Shift Handover — فرم + Mock/محاسبه + Build/Test/Smoke سبز؛ Shift Close سروری و Audit/Handover نهایی باقی
 14. [~] Session Transfer / Change Tariff / Change Persons — Session Center + Build/Test/Smoke سبز؛ Transaction/Audit/Permission سروری باقی
@@ -408,6 +408,18 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - یادداشت تحویل شیفت برای مشکلات دستگاه، بدهی، سفارش باز یا هر موضوع منتقل‌شونده ثبت می‌شود.
 - وجه خارج از سیستم جدا از فروش نرم‌افزاری ثبت می‌شود و نباید به‌صورت پنهان از حقوق کم شود.
 - در نسخه سروری نهایی: Shift Close + Handover باید Transaction/Audit/Permission داشته باشد.
+
+## قرارداد اجرایی B11 — Server Atomic Settlement
+
+- سرویس `SessionSettlementService` تسویه را در یک transaction ثبت می‌کند.
+- مجموع سهم‌های پرداخت باید دقیقاً با مبلغ نهایی برابر باشد.
+- سهم کیف پول ابتدا موجودی را بررسی و سپس WalletTransaction از نوع Debit ثبت می‌کند.
+- Invoice با Status=Paid و InvoiceItem برای جلسه ثبت می‌شود.
+- Session به Completed می‌رود و EndAt/TotalAmount ثبت می‌شود.
+- AuditLog با روش‌ها و مبلغ‌های پرداخت ثبت می‌شود.
+- دو تست سرور اضافه شده: تسویه ترکیبی واقعی و رد split نامعتبر بدون تغییر Session/Wallet.
+- endpoint: POST /api/sessions/{sessionId}/settle
+- اتصال Dashboard هنوز باید Session واقعی سرور را به این endpoint متصل کند.
 
 ## قرارداد اجرایی B12 — Split Payment
 
