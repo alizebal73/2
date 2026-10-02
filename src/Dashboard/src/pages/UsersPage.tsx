@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { mockService } from '../services/mockService';
 import { userErrorMessage } from '../utils/userError';
+import { closeServerShift, getCurrentShift, getShiftHistory, startServerShift } from '../services/shiftService';
 import type { UserRecord } from '../types';
 
 const permissionRows = ['شروع/پایان جلسه','شارژ مستقیم','ثبت بدهی/هدیه','بوفه','مشتریان','گزارش کامل','تعرفه‌ها','کاربران','تنظیمات','کنترل کلاینت','Account Pool','تخفیف','بستن شیفت','مدیریت بازی‌ها'];
@@ -24,13 +25,23 @@ export function UsersPage() {
   const [closeShiftOpen, setCloseShiftOpen] = useState(false);
   const [countedCash, setCountedCash] = useState('');
   const [handoverNote, setHandoverNote] = useState('');
+  const [shiftOpeningCash, setShiftOpeningCash] = useState('0');
 
   async function refresh() {
-    const [userRows, shift, history, saved] = await Promise.all([mockService.getUsers(), mockService.getCurrentShift(), mockService.getShifts(), mockService.getPermissions()]);
+    const [userRows, saved] = await Promise.all([mockService.getUsers(), mockService.getPermissions()]);
     setUsers(userRows);
     if (!shiftOperator && userRows.length) setShiftOperator(userRows.find(user => user.role === 'operator')?.name ?? userRows[0].name);
-    setCurrentShift(shift);
-    setShifts(history);
+
+    try {
+      const [serverShift, serverHistory] = await Promise.all([getCurrentShift(), getShiftHistory()]);
+      setCurrentShift(serverShift);
+      setShifts(serverHistory.map(row => ({ ...row, sales: row.cashSales })));
+    } catch (error) {
+      setCurrentShift(null);
+      setShifts([]);
+      setNotice(userErrorMessage(error, 'اطلاعات شیفت از سرور دریافت نشد'));
+    }
+
     const next = { ...defaultPermissions };
     Object.entries(saved).forEach(([key, value]) => {
       const split = key.lastIndexOf(':');
@@ -53,9 +64,12 @@ export function UsersPage() {
   async function openShift() {
     try {
       if (!shiftOperator) { setNotice('اپراتور شیفت را انتخاب کنید'); return; }
-      const result = await mockService.startShift(shiftOperator);
+      const opening = Number(shiftOpeningCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,s]/g, '')) || 0;
+      const result = await startServerShift({ operatorName: shiftOperator, cashOpening: opening, note: shiftNote.trim() || undefined });
       setCurrentShift(result);
-      setNotice('شیفت جدید باز شد');
+      setShiftOpeningCash('0');
+      setShiftNote('');
+      setNotice('شیفت روی سرور باز شد');
     } catch (error) { setNotice(userErrorMessage(error, 'باز کردن شیفت ناموفق بود')); }
   }
 
@@ -71,7 +85,15 @@ export function UsersPage() {
     const counted = Number(countedCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
     const adjusted = Number(manualCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
     try {
-      const result = await mockService.closeShift(counted, adjusted, [shiftNote.trim(), handoverNote.trim()].filter(Boolean).join(' · '));
+      if (!currentShift?.id || !/^[0-9a-f-]{36}$/i.test(currentShift.id)) {
+        setNotice('شیفت فعال از سرور شناخته نشد؛ ابتدا صفحه را تازه کنید.');
+        return;
+      }
+      const result = await closeServerShift(currentShift.id, {
+        cashClosing: counted,
+        externalCash: adjusted,
+        note: [shiftNote.trim(), handoverNote.trim()].filter(Boolean).join(' · ') || undefined,
+      });
       await refresh();
       setManualCash(''); setShiftNote(''); setHandoverNote(''); setCountedCash(''); setCloseShiftOpen(false);
       setNotice('شیفت بسته شد؛ اختلاف ثبت‌شده ' + money(result.difference ?? 0) + ' تومان');
@@ -95,6 +117,7 @@ export function UsersPage() {
     <div className="page-header"><div><p>کاربران، دسترسی و شیفت</p><h1>کاربران و شیفت</h1></div></div>
     <div className="toolbar">
       {!currentShift && <label className="shift-operator-select">اپراتور شیفت<select value={shiftOperator} onChange={event => setShiftOperator(event.target.value)}>{users.filter(user => user.role !== 'owner').map(user => <option key={user.id} value={user.name}>{user.name} · {user.shift}</option>)}</select></label>}
+      {!currentShift && <label className="shift-operator-select">صندوق اولیه<input inputMode="numeric" value={shiftOpeningCash} onChange={event => setShiftOpeningCash(event.target.value)} placeholder="۰" /></label>}
       <button className="btn" onClick={() => void (currentShift ? openCloseShift() : openShift())}>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>
       <button className="btn danger" onClick={() => openCloseShift()} disabled={!currentShift}>بستن شیفت</button>
       <button className="btn primary" onClick={() => setDraft({ id: crypto.randomUUID(), name: '', role: 'operator', shift: 'عصر', sales: 0, permissions: [], payType: 'hourly', hourlyRate: 0, monthlySalary: 0, overtimeRate: 0, workStart: '16:00', workEnd: '00:00', bonusTotal: 0, deductionTotal: 0 })}>+ کاربر جدید</button>
