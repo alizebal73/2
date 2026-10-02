@@ -365,6 +365,57 @@ jobs:
             } | ConvertTo-Json)
             if ([int]$settled.debtRemaining -ne 0) { throw 'Customer debt settlement smoke failed.' }
 
+            $walletCredit = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/wallet-transactions") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              amount = 120000
+              type = 'credit'
+              description = 'Stage 7 wallet refund approval smoke'
+            } | ConvertTo-Json)
+            if ([int]$walletCredit.balanceAfter -ne 120000) { throw 'Wallet credit setup for refund approval smoke failed.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('customer.wallet')
+            } | ConvertTo-Json) | Out-Null
+
+            $operatorWalletSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorWalletSession -ContentType 'application/json' -Body (@{
+              userName = $managedUser.userName
+              password = 'Operator123!'
+            } | ConvertTo-Json) | Out-Null
+
+            try {
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/wallet-refunds") -Method Post -WebSession $operatorWalletSession -ContentType 'application/json' -Body (@{
+                amount = 50000
+                reason = 'Stage 7 direct wallet refund bypass smoke'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Direct wallet refund endpoint bypassed approval.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
+
+            $refundApproval = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/wallet-refunds/request") -Method Post -WebSession $operatorWalletSession -ContentType 'application/json' -Body (@{
+              amount = 50000
+              reason = 'Stage 7 executable wallet refund approval smoke'
+              sourceTransactionId = $walletCredit.id
+            } | ConvertTo-Json)
+            if ($refundApproval.status -ne 'Pending' -or -not $refundApproval.id) { throw 'Wallet refund approval request smoke failed.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorWalletSession | Out-Null
+            $walletRefundDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($refundApproval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 wallet refund approved'
+            } | ConvertTo-Json)
+            if ($walletRefundDecision.status -ne 'Approved' -or [int]$walletRefundDecision.operation.amount -ne 50000) { throw 'Wallet refund approval execution smoke failed.' }
+
+            $walletAfterRefund = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/wallet-ledger") -Method Get -WebSession $adminSession
+            $refundRow = @($walletAfterRefund | Where-Object { $_.id -eq $walletRefundDecision.operation.transactionId -and $_.type -eq 'Refund' })[0]
+            if (-not $refundRow -or [int]$refundRow.balanceAfter -ne 70000 -or $refundRow.referenceTransactionId -ne $walletCredit.id) {
+              throw 'Approved wallet refund did not persist the correct ledger result.'
+            }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('finance.manage')
+            } | ConvertTo-Json) | Out-Null
+
             $inventoryProducts = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get -WebSession $adminSession
             if (@($inventoryProducts).Count -lt 1) { throw 'Buffet product API returned no products.' }
 
