@@ -191,6 +191,130 @@ app.MapGet("/api/agent/devices", async (
 
 
 
+app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
+    Guid deviceId,
+    AgentCommandRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    IHubContext<AgentHub> agentHub,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var commandType = request.CommandType?.Trim().ToLowerInvariant();
+    if (!AgentCommandTypes.IsSupported(commandType))
+        return Results.BadRequest(new { code = "unsupported_agent_command", message = "فرمان Agent پشتیبانی نمی‌شود." });
+
+    var device = await database.AgentDevices
+        .FirstOrDefaultAsync(item => item.Id == deviceId && item.IsActive, cancellationToken);
+
+    if (device is null)
+        return Results.NotFound(new { code = "agent_not_found", message = "Agent پیدا نشد." });
+
+    if (!device.IsOnline || string.IsNullOrWhiteSpace(device.ConnectionId))
+        return Results.Conflict(new { code = "agent_offline", message = "Agent آفلاین است و فرمان ارسال نشد." });
+
+    if (!string.IsNullOrWhiteSpace(request.PayloadJson) && request.PayloadJson.Length > 4000)
+        return Results.BadRequest(new { code = "command_payload_too_large", message = "دادهٔ فرمان بیش از حد مجاز است." });
+
+    var now = DateTimeOffset.UtcNow;
+    var command = new AgentCommand
+    {
+        AgentDeviceId = device.Id,
+        RequestedByAppUserId = auth.User!.Id,
+        CommandType = commandType!,
+        PayloadJson = request.PayloadJson,
+        Status = "Pending",
+        RequestedAt = now,
+        AgentConnectionId = device.ConnectionId
+    };
+
+    database.AgentCommands.Add(command);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AgentCommandRequested",
+        EntityName = "AgentCommand",
+        EntityId = command.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = $"فرمان {command.CommandType} برای Agent {device.DeviceId}"
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    try
+    {
+        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+            "AgentCommand",
+            new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
+            cancellationToken);
+
+        command.Status = "Sent";
+        command.SentAt = DateTimeOffset.UtcNow;
+        await database.SaveChangesAsync(cancellationToken);
+    }
+    catch (Exception exception)
+    {
+        command.Status = "Failed";
+        command.Succeeded = false;
+        command.CompletedAt = DateTimeOffset.UtcNow;
+        command.ResultMessage = "ارسال فرمان به Agent انجام نشد.";
+        await database.SaveChangesAsync(CancellationToken.None);
+        return Results.Problem(
+            detail: command.ResultMessage,
+            statusCode: StatusCodes.Status502BadGateway,
+            title: "ارسال فرمان Agent ناموفق بود.");
+    }
+
+    return Results.Ok(new AgentCommandStatusDto(
+        command.Id,
+        command.AgentDeviceId,
+        command.CommandType,
+        command.Status,
+        command.RequestedAt,
+        command.SentAt,
+        command.CompletedAt,
+        command.Succeeded,
+        command.ResultMessage));
+})
+.WithName("SendAgentCommand");
+
+app.MapGet("/api/agent/commands/{commandId:guid}", async (
+    Guid commandId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var command = await database.AgentCommands
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == commandId, cancellationToken);
+
+    if (command is null)
+        return Results.NotFound(new { code = "agent_command_not_found", message = "فرمان Agent پیدا نشد." });
+
+    return Results.Ok(new AgentCommandStatusDto(
+        command.Id,
+        command.AgentDeviceId,
+        command.CommandType,
+        command.Status,
+        command.RequestedAt,
+        command.SentAt,
+        command.CompletedAt,
+        command.Succeeded,
+        command.ResultMessage));
+})
+.WithName("GetAgentCommand");
+
 app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration configuration) =>
 {
     var schemaVersion = database.Database.GetAppliedMigrations().LastOrDefault() ?? "unknown";
