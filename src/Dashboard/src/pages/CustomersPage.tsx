@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getServerCustomers } from '../services/customerService';
+import { createServerCustomer, getServerCustomers, updateServerCustomer } from '../services/customerService';
 import { userErrorMessage } from '../utils/userError';
 import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
 import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
@@ -32,6 +32,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const [draft, setDraft] = useState<CustomerDraft>({ name: '', alias: '', mobile: '', nationalId: '', username: '', vip: 'none', password: '' });
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [concurrentLoginLimit, setConcurrentLoginLimit] = useState(1);
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([]);
   const [serverFreeBenefits, setServerFreeBenefits] = useState<{ freeMoney: number; freeTimeMinutes: number } | null>(null);
   const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string; sourceTransactionId?: string } | null>(null);
@@ -77,6 +78,13 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const debtCount = customers.filter(customer => customer.debt > 0).length;
   const packageCount = customers.filter(customer => customer.packageName).length;
 
+  function openNewCustomer() {
+    setDraft({ name: '', alias: '', mobile: '', nationalId: '', username: '', vip: 'none', password: '' });
+    setConcurrentLoginLimit(1);
+    setActionNote('');
+    setAction('new');
+  }
+
   function openAction(nextAction: Exclude<CustomerAction, '' | 'new'>) {
     if (!selected) {
       setNotice('ابتدا یک مشتری را انتخاب کنید');
@@ -86,6 +94,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
     setRefundSourceId('');
     setEditName(selected.name);
     setEditPassword('');
+    setConcurrentLoginLimit(selected.concurrentLoginLimit ?? 1);
     setAction(nextAction);
   }
 
@@ -126,33 +135,24 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
         setNotice('نام کامل مشتری را وارد کنید');
         return;
       }
-      const code = String(Math.max(1049, ...customers.map(item => Number(item.code) || 0)) + 1);
-      const username = draft.username.trim() || `user${code}`;
-      const dailyHourCap = draft.vip === 'gold' ? 4 : draft.vip === 'silver' ? 5 : undefined;
-      const customer: CustomerRecord = {
-        id: `c${Date.now()}`,
-        code,
-        name,
-        alias: draft.alias.trim(),
-        mobile: draft.mobile.trim(),
-        nationalId: draft.nationalId.trim(),
-        vip: draft.vip,
-        wallet: 0,
-        debt: 0,
-        giftCredit: 0,
-        discountLevel: draft.vip === 'gold' ? 15 : draft.vip === 'silver' ? 10 : 0,
-        packageName: draft.vip === 'none' ? undefined : draft.vip === 'gold' ? 'Gold VIP' : 'Silver VIP',
-        username,
-        lastSeen: 'هرگز',
-        status: 'active',
-        hoursUsedToday: 0,
-        dailyHourCap,
-        transactionHistory: [],
-      };
-      setCustomers(current => [customer, ...current]);
-      setSelectedId(customer.id);
-      setAction('');
-      setNotice(`مشتری با کد ${code} ساخته شد`);
+      try {
+        const customer = await createServerCustomer({
+          fullName: name,
+          code: undefined,
+          username: draft.username.trim() || undefined,
+          alias: draft.alias.trim() || undefined,
+          nationalId: draft.nationalId.trim() || undefined,
+          phone: draft.mobile.trim() || undefined,
+          vipTier: draft.vip,
+          concurrentLoginLimit,
+        });
+        setCustomers(current => [customer, ...current]);
+        setSelectedId(customer.id);
+        setAction('');
+        setNotice('مشتری با کد ' + (customer.code ?? customer.username) + ' در سرور ساخته شد');
+      } catch (error) {
+        setNotice(userErrorMessage(error, 'ثبت مشتری در سرور انجام نشد'));
+      }
       return;
     }
 
@@ -162,9 +162,23 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
     if (action === 'edit') {
       const name = editName.trim();
       if (!name) { setNotice('نام مشتری نمی‌تواند خالی باشد'); return; }
-      updateCustomer(selected.id, { name }, 'اطلاعات مشتری ویرایش شد');
-      setAction('');
-      setNotice('اطلاعات مشتری ویرایش شد');
+      try {
+        const updated = await updateServerCustomer(selected.id, {
+          fullName: name,
+          code: selected.code,
+          username: selected.username,
+          alias: selected.alias,
+          nationalId: selected.nationalId,
+          phone: selected.mobile,
+          vipTier: selected.vip,
+          concurrentLoginLimit,
+        });
+        setCustomers(current => current.map(item => item.id === updated.id ? { ...item, ...updated } : item));
+        setAction('');
+        setNotice('اطلاعات مشتری در سرور ذخیره شد');
+      } catch (error) {
+        setNotice(userErrorMessage(error, 'ویرایش مشتری در سرور انجام نشد'));
+      }
       return;
     }
 
@@ -261,7 +275,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <div className="search-box"><input aria-label="جستجوی مشتری" value={query} onChange={event => setQuery(event.target.value)} placeholder="کد، نام، لقب، موبایل یا کد ملی…" /></div>
           <div className="view-switch">{([['all', 'همه'], ['vip', 'VIP'], ['debt', 'بدهکار']] as [Filter, string][]).map(([key, label]) =>
             <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{label}</button>)}</div>
-          <button className="btn primary sm" onClick={() => setNotice('ثبت مشتری جدید در مرحله «مشتری و VIP» انجام می‌شود و فعلاً فقط مشتریان سروری نمایش داده می‌شوند.')}>+ مشتری جدید</button>
+          <button className="btn primary sm" onClick={openNewCustomer}>+ مشتری جدید</button>
         </div>
         <div className="rows">{visible.map(customer =>
           <button key={customer.id} type="button" className={`customer-row ${customer.id === selected?.id ? 'active' : ''}`} onClick={() => setSelectedId(customer.id)}>
@@ -340,7 +354,8 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <label>نام کامل<input autoFocus value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} /></label>
           <label>لقب<input value={draft.alias} onChange={event => setDraft(current => ({ ...current, alias: event.target.value }))} /></label>
           <div className="modal-grid-2"><label>موبایل<input dir="ltr" value={draft.mobile} onChange={event => setDraft(current => ({ ...current, mobile: event.target.value }))} /></label><label>کد ملی<input dir="ltr" value={draft.nationalId} onChange={event => setDraft(current => ({ ...current, nationalId: event.target.value }))} /></label></div>
-          <div className="modal-grid-2"><label>نام کاربری<input dir="ltr" value={draft.username} onChange={event => setDraft(current => ({ ...current, username: event.target.value }))} placeholder="در صورت نیاز دستی وارد کنید" /></label><label>VIP اولیه<select value={draft.vip} onChange={event => setDraft(current => ({ ...current, vip: event.target.value as CustomerRecord['vip'] }))}><option value="none">بدون VIP</option><option value="silver">Silver</option><option value="gold">Gold</option></select></label></div>
+          <div className="modal-grid-2"><label>نام کاربری<input dir="ltr" value={draft.username} onChange={event => setDraft(current => ({ ...current, username: event.target.value }))} placeholder="در صورت نیاز دستی وارد کنید" /></label><label>سطح VIP<select value={draft.vip} onChange={event => setDraft(current => ({ ...current, vip: event.target.value as CustomerRecord['vip'] }))}><option value="none">بدون VIP</option><option value="bronze">Bronze</option><option value="silver">Silver</option><option value="gold">Gold</option><option value="custom">سفارشی</option></select></label></div>
+          <label>حد ورود هم‌زمان<input inputMode="numeric" min="1" type="number" value={concurrentLoginLimit} onChange={event => setConcurrentLoginLimit(Math.max(1, Number(event.target.value) || 1))} /></label>
           <label>رمز ورود<input dir="ltr" type="password" value={draft.password} onChange={event => setDraft(current => ({ ...current, password: event.target.value }))} placeholder="اختیاری" /></label>
           <div className="modal-actions"><button className="btn primary" onClick={submitAction}>ساخت مشتری</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
         </>}
@@ -348,6 +363,10 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
         {action === 'edit' && <>
           <h2>ویرایش مشتری · {selected?.name}</h2>
           <label>نام کامل<input autoFocus value={editName} onChange={event => setEditName(event.target.value)} /></label>
+          <div className="modal-grid-2"><label>کد مشتری<input dir="ltr" value={selected?.code ?? ''} onChange={event => setCustomers(current => current.map(item => item.id === selected?.id ? { ...item, code: event.target.value } : item))} /></label><label>نام کاربری<input dir="ltr" value={selected?.username ?? ''} onChange={event => setCustomers(current => current.map(item => item.id === selected?.id ? { ...item, username: event.target.value } : item))} /></label></div>
+          <div className="modal-grid-2"><label>لقب<input value={selected?.alias ?? ''} onChange={event => setCustomers(current => current.map(item => item.id === selected?.id ? { ...item, alias: event.target.value } : item))} /></label><label>کد ملی<input dir="ltr" value={selected?.nationalId ?? ''} onChange={event => setCustomers(current => current.map(item => item.id === selected?.id ? { ...item, nationalId: event.target.value } : item))} /></label></div>
+          <div className="modal-grid-2"><label>موبایل<input dir="ltr" value={selected?.mobile ?? ''} onChange={event => setCustomers(current => current.map(item => item.id === selected?.id ? { ...item, mobile: event.target.value } : item))} /></label><label>سطح VIP<select value={selected?.vip ?? 'none'} onChange={event => setCustomers(current => current.map(item => item.id === selected?.id ? { ...item, vip: event.target.value as CustomerRecord['vip'] } : item))}><option value="none">بدون VIP</option><option value="bronze">Bronze</option><option value="silver">Silver</option><option value="gold">Gold</option><option value="custom">سفارشی</option></select></label></div>
+          <label>حد ورود هم‌زمان<input inputMode="numeric" min="1" type="number" value={concurrentLoginLimit} onChange={event => setConcurrentLoginLimit(Math.max(1, Number(event.target.value) || 1))} /></label>
           <div className="modal-actions"><button className="btn primary" onClick={submitAction}>ذخیره تغییرات</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
         </>}
 
