@@ -63,6 +63,138 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
 })
 .WithName("GetDashboardSnapshot");
 
+
+app.MapGet("/api/customers/{customerId:guid}/wallet-ledger", async (
+    Guid customerId,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var customer = await database.Customers
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+
+    if (customer is null)
+    {
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+    }
+
+    var transactions = await database.WalletTransactions
+        .AsNoTracking()
+        .Where(item => item.CustomerId == customerId)
+        .OrderByDescending(item => item.CreatedAt)
+        .ThenByDescending(item => item.Id)
+        .ToListAsync(cancellationToken);
+
+    var running = customer.Balance;
+    var result = new List<WalletLedgerEntryDto>(transactions.Count);
+
+    foreach (var transaction in transactions)
+    {
+        result.Add(new WalletLedgerEntryDto(
+            transaction.Id,
+            transaction.CustomerId,
+            transaction.Amount,
+            transaction.Type.ToString(),
+            transaction.Description,
+            transaction.CreatedAt,
+            running));
+
+        running = transaction.Type == WalletTransactionType.Credit
+            ? running - transaction.Amount
+            : running + transaction.Amount;
+    }
+
+    result.Reverse();
+    return Results.Ok(result);
+})
+.WithName("GetWalletLedger");
+
+app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (
+    Guid customerId,
+    WalletTransactionRequestDto request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (request.Amount <= 0)
+    {
+        return Results.BadRequest(new { code = "invalid_amount", message = "مبلغ باید بیشتر از صفر باشد." });
+    }
+
+    if (!Enum.TryParse<WalletTransactionType>(request.Type, true, out var type))
+    {
+        return Results.BadRequest(new { code = "invalid_transaction_type", message = "نوع تراکنش معتبر نیست." });
+    }
+
+    var description = request.Description?.Trim();
+    if (string.IsNullOrWhiteSpace(description))
+    {
+        return Results.BadRequest(new { code = "missing_description", message = "توضیح تراکنش را وارد کنید." });
+    }
+
+    var customer = await database.Customers
+        .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+
+    if (customer is null)
+    {
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+    }
+
+    var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+    try
+    {
+        if (type == WalletTransactionType.Credit)
+        {
+            customer.Balance += request.Amount;
+        }
+        else
+        {
+            if (customer.Balance < request.Amount)
+            {
+                return Results.BadRequest(new { code = "insufficient_balance", message = "موجودی کیف پول کافی نیست." });
+            }
+
+            customer.Balance -= request.Amount;
+        }
+
+        var ledger = new WalletTransaction
+        {
+            CustomerId = customer.Id,
+            Amount = request.Amount,
+            Type = type,
+            Description = description
+        };
+
+        database.WalletTransactions.Add(ledger);
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = type == WalletTransactionType.Credit ? "WalletCredit" : "WalletDebit",
+            EntityName = "CustomerWallet",
+            EntityId = customer.Id.ToString(),
+            Details = request.Amount.ToString("0.##") + " تومان · " + description,
+            AppUserId = request.AppUserId
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return Results.Ok(new WalletLedgerEntryDto(
+            ledger.Id,
+            ledger.CustomerId,
+            ledger.Amount,
+            ledger.Type.ToString(),
+            ledger.Description,
+            ledger.CreatedAt,
+            customer.Balance));
+    }
+    catch
+    {
+        await transaction.RollbackAsync(cancellationToken);
+        throw;
+    }
+})
+.WithName("PostWalletTransaction");
+
 app.MapHub<DashboardHub>("/hubs/dashboard");
 
 if (!app.Environment.IsDevelopment())
