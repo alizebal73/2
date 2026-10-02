@@ -261,6 +261,8 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
               agentLastSeenAt: agent.lastSeenAt ?? null,
               agentVersion: agent.agentVersion ?? null,
               agentLocked: agent.isLocked,
+              agentKioskEnabled: agent.kioskEnabled,
+              agentLockOnDisconnect: agent.lockOnDisconnect,
             }
           : station;
       }),
