@@ -1274,7 +1274,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           <div className="search-box"><input aria-label="جست‌وجوی ایستگاه" value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی ایستگاه…" /></div>
           <div className="view-switch" aria-label="حالت نمایش">{(['v-card', 'v-compact', 'v-list'] as ViewMode[]).map((item, index) => <button key={item} type="button" className={view === item ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(item)}>{['▦', '▤', '☰'][index]}</button>)}</div>
           <label className="zoom-control">اندازه <input type="range" min="70" max="130" step="5" value={zoom} onChange={event => setZoom(Number(event.target.value))} />{money(zoom)}٪</label>
-          {canStartSession && <button type="button" className="btn primary" onClick={() => open('start', stations.find(item => item.state === 'free') ?? null)}>+ شروع جلسه</button>
+          {canStartSession && <button type="button" className="btn primary" onClick={() => open('start', stations.find(item => item.state === 'free') ?? null)}>+ شروع جلسه</button>}
           {selectedStationIds.length > 0 && <div className="station-selection-tools"><span>{selectedStationIds.length.toLocaleString('fa-IR')} ایستگاه انتخاب شده</span><button type="button" className="btn sm" onClick={() => { setSelectedStationIds([]); setSelectionAnchorId(null); }}>لغو انتخاب</button></div>}
         </div>
         {apiState === 'loading' && <p className="empty-state">در حال دریافت اطلاعات از سرور…</p>}
