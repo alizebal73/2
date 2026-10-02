@@ -86,6 +86,54 @@ jobs:
             }
             Write-Host 'Server startup, EF migrations and /api/health passed.'
 
+            $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            $adminLogin = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              userName = 'admin'
+              password = 'Admin123!'
+            } | ConvertTo-Json)
+            if (-not $adminLogin.id -or $adminLogin.role -ne 'Admin') { throw 'Server operator authentication smoke failed.' }
+
+            $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
+            if ($me.userName -ne 'admin') { throw 'Current operator endpoint returned the wrong user.' }
+
+            $permissionCatalog = Invoke-RestMethod -Uri "$baseUrl/api/permissions" -Method Get -WebSession $adminSession
+            if (-not @($permissionCatalog | Where-Object { $_.name -eq 'session.start' })) { throw 'Permission catalog smoke failed.' }
+
+            $userSmokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            $managedUser = Invoke-RestMethod -Uri "$baseUrl/api/users" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              fullName = "Stage 7 Operator $userSmokeId"
+              userName = "operator_$userSmokeId"
+              email = "operator_$userSmokeId@gamenet.local"
+              password = 'Operator123!'
+              role = 'Operator'
+              isActive = $true
+            } | ConvertTo-Json)
+            if (-not $managedUser.id -or $managedUser.role -ne 'Operator') { throw 'AppUser create smoke failed.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('session.start','buffet.sell')
+            } | ConvertTo-Json) | Out-Null
+
+            $managedUsers = Invoke-RestMethod -Uri "$baseUrl/api/users" -Method Get -WebSession $adminSession
+            $managedRow = @($managedUsers | Where-Object { $_.id -eq $managedUser.id })[0]
+            if (-not @($managedRow.permissions | Where-Object { $_ -eq 'session.start' }) -or -not @($managedRow.permissions | Where-Object { $_ -eq 'buffet.sell' })) {
+              throw 'AppUser permission assignment smoke failed.'
+            }
+
+            $approval = Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              action = 'discount'
+              entityName = 'Session'
+              entityId = $startedSession.sessionId
+              reason = 'Stage 7 approval smoke'
+            } | ConvertTo-Json)
+            $approvalDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($approval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 smoke approved'
+            } | ConvertTo-Json)
+            if ($approvalDecision.status -ne 'Approved') { throw 'Approval decision smoke failed.' }
+
+            $adminLogout = Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $adminSession
+            if (-not $adminLogout.success) { throw 'Server operator logout smoke failed.' }
+
             $customers = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Get
             if (@($customers).Count -lt 1) { throw 'Customer API returned no seeded customers.' }
 
