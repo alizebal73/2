@@ -111,7 +111,7 @@ try
         connection.Reconnected += async connectionId =>
         {
             Console.WriteLine($"Agent دوباره متصل شد ({connectionId}).");
-            await SendHeartbeatAsync(connection, agentVersion, osVersion, shutdown.Token);
+            await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, shutdown.Token);
         };
 
         connection.Closed += error =>
@@ -134,6 +134,7 @@ try
                     connection,
                     agentVersion,
                     osVersion,
+                    lockScreen,
                     shutdown.Token);
 
                 var delaySeconds = Math.Clamp(heartbeatSeconds ?? 10, 3, 60);
@@ -234,6 +235,7 @@ static async Task<int?> SendHeartbeatAsync(
     HubConnection connection,
     string agentVersion,
     string osVersion,
+    AgentLockScreenController lockScreen,
     CancellationToken cancellationToken)
 {
     if (connection.State != HubConnectionState.Connected)
@@ -248,7 +250,8 @@ static async Task<int?> SendHeartbeatAsync(
                 osVersion,
                 null,
                 GC.GetGCMemoryInfo().TotalAvailableMemoryBytes,
-                Environment.TickCount64 / 1000));
+                Environment.TickCount64 / 1000,
+                lockScreen.IsLocked));
 
         Console.WriteLine($"Heartbeat موفق؛ زمان سرور: {response.ServerUtcNow:HH:mm:ss}.");
         return response.HeartbeatIntervalSeconds;
