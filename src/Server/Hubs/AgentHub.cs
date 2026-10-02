@@ -234,12 +234,21 @@ public sealed class AgentHub(
                 item => item.Id == acknowledgement.CommandId
                     && item.AgentDeviceId == device.Id
                     && (
-                        (acknowledgement.Final
-                            && item.Status is "Accepted" or "AwaitingHealth")
-                        || (!acknowledgement.Final
+                        (!acknowledgement.Final
                             && item.Status == "Sent"
                             && item.AgentConnectionId == Context.ConnectionId
-                            && item.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback)
+                            && (item.CommandType == AgentCommandTypes.Update
+                                || item.CommandType == AgentCommandTypes.Rollback))
+                        || (acknowledgement.Final
+                            && (
+                                ((item.CommandType == AgentCommandTypes.Update
+                                    || item.CommandType == AgentCommandTypes.Rollback)
+                                    && (item.Status == "Accepted" || item.Status == "AwaitingHealth"))
+                                || (item.CommandType != AgentCommandTypes.Update
+                                    && item.CommandType != AgentCommandTypes.Rollback
+                                    && item.Status == "Sent"
+                                    && item.AgentConnectionId == Context.ConnectionId)
+                            ))
                     ),
                 Context.ConnectionAborted);
 
