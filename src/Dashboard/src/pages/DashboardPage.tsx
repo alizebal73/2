@@ -67,6 +67,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   const [customReduceMinutes, setCustomReduceMinutes] = useState('15');
   const [discountPercent, setDiscountPercent] = useState(0);
   const [roundingEnabled, setRoundingEnabled] = useState(true);
+  const [settlementWhyOpen, setSettlementWhyOpen] = useState(false);
+  const [receivedAmount, setReceivedAmount] = useState('');
   const [hotkeys, setHotkeys] = useState<Record<string,string>>(() => { try { return JSON.parse(localStorage.getItem('gamenet-hotkeys-v1') || '{}'); } catch { return {}; } });
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
@@ -345,6 +347,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setCustomerCode(station?.customerCode ?? '');
     setDiscountPercent(0);
     setRoundingEnabled(true);
+    setSettlementWhyOpen(false);
+    setReceivedAmount('');
     setExtendMinutes(30);
     setCustomExtendMinutes('30');
     setReduceMinutes(15);
@@ -531,10 +535,13 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     const timeCost = billing.timeAmount;
     const prepaidUsed = Math.min(billing.finalAmount, activeStation.sessionCredit ?? 0);
     const finalTotal = Math.max(0, billing.finalAmount - prepaidUsed);
+    const received = method === 'cash' ? (number(receivedAmount) || finalTotal) : finalTotal;
+    const change = method === 'cash' ? received - finalTotal : 0;
+    if (method === 'cash' && received < finalTotal) { setMessage('مبلغ دریافتی نقدی کمتر از مبلغ قابل دریافت است.'); return; }
     if (method === 'wallet' && (!customer || customer.wallet < finalTotal)) { setMessage('موجودی کیف پول کافی نیست'); return; }
     const closedAt = new Date().toISOString();
     setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt }, ...items]);
-    addSessionTimeline(activeStation.id, 'settle', 'تسویه جلسه', 'مبلغ نهایی ' + money(finalTotal) + ' تومان · روش پرداخت ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : method === 'wallet' ? 'کیف پول' : 'بدهی'), finalTotal);
+    addSessionTimeline(activeStation.id, 'settle', 'تسویه جلسه', 'مبلغ نهایی ' + money(finalTotal) + ' تومان · روش پرداخت ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : method === 'wallet' ? 'کیف پول' : 'بدهی') + (change > 0 ? ' · برگشتی ' + money(change) + ' تومان' : ''), finalTotal);
     setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: method === 'debt' ? 'unpaid' : 'paid' } : item));
     void mockService.addReportRow({
       id: crypto.randomUUID(),
@@ -977,11 +984,60 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       {modal === 'flow' && <><h2>⚡ فلوی سرعت · F1</h2>{flowStep === 1 ? <><label>شناسه مشتری<input autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && setFlowStep(2)} placeholder="کد، نام، لقب یا موبایل" /></label><button className="btn primary" onClick={() => setFlowStep(2)}>نمایش پروفایل</button></> : <><p>{customers.find(item => [item.username, item.mobile, item.id, item.name].some(value => value.includes(customerCode)))?.name ?? 'مشتری مهمان'} · {activeStation?.name ?? 'بدون دستگاه'}</p><label>مبلغ (تومان)<input id="flow-amount" inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label><div className="modal-actions">{[['F5', 'شارژ مستقیم'], ['F6', 'ثبت بدهی'], ['F7', 'کسر از کیف پول'], ['F8', 'کسر کیف پول + بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyFlow(key)}>{key} {label}</button>)}</div></>}</>}
       {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول'], ['debt', 'ثبت در بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
       {modal === 'settle' && activeStation && (() => {
-      const baseTotal = Math.max(0, Math.round((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60 + (activeStation.buffetTotal ?? 0)));
-      const discount = Math.min(baseTotal, Math.round(baseTotal * Math.max(0, Math.min(100, discountPercent)) / 100));
-      const discounted = Math.max(0, baseTotal - discount);
-      const finalTotal = roundingEnabled ? Math.round(discounted / 1000) * 1000 : discounted;
-      return <><h2>تسویه جلسه · {activeStation.name}</h2><div className="info-row"><span>مدت جلسه</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="info-row"><span>مبلغ زمان</span><strong>{money(Math.round((activeStation.sessionRate ?? activeStation.ratePerHour) * duration(activeStation) / 60))} تومان</strong></div><div className="info-row"><span>مبلغ بوفه</span><strong>{money(activeStation.buffetTotal ?? 0)} تومان</strong></div><div className="modal-grid-2"><label>تخفیف (%)<input type="number" min="0" max="100" value={discountPercent} onChange={event => setDiscountPercent(Number(event.target.value))} /></label><label className="setting-item"><span>رند به ۱۰۰۰ تومان</span><input type="checkbox" checked={roundingEnabled} onChange={event => setRoundingEnabled(event.target.checked)} /></label></div><div className="info-row"><span>تخفیف</span><strong>{money(discount)} تومان</strong></div><div className="info-row"><span>مبلغ نهایی</span><strong>{money(finalTotal)} تومان</strong></div><div className="modal-actions"><button className="btn" onClick={() => finishSession('cash')}>پرداخت نقدی</button><button className="btn" onClick={() => finishSession('card')}>کارتخوان</button><button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button><button className="btn danger" onClick={() => finishSession('debt')}>پرداخت بعداً / ثبت بدهی</button><button className="btn" onClick={() => window.print()}>چاپ فاکتور</button></div></>;
+      const settlementCustomer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
+      const settlementTariff = tariffs.find(item => item.stationType === activeStation.type);
+      const preview = calculateBilling({
+        elapsedMinutes: duration(activeStation),
+        ratePerHour: activeStation.sessionRate ?? activeStation.ratePerHour,
+        buffetAmount: activeStation.buffetTotal ?? 0,
+        freeMinutes: settlementCustomer?.freeTimeMinutes ?? 0,
+        discountPercent,
+        minimumCharge: settlementTariff?.minimumCharge ?? 0,
+        roundingStep: roundingEnabled ? (settlementTariff?.roundingStep ?? 1000) : 0,
+      });
+      const prepaidUsed = Math.min(preview.finalAmount, activeStation.sessionCredit ?? 0);
+      const finalTotal = Math.max(0, preview.finalAmount - prepaidUsed);
+      const received = number(receivedAmount) || finalTotal;
+      const change = Math.max(0, received - finalTotal);
+      return <>
+        <h2>تسویه جلسه · {activeStation.name}</h2>
+        <div className="settlement-hero"><span>مبلغ قابل دریافت</span><strong>{money(finalTotal)} تومان</strong></div>
+        <div className="settlement-grid">
+          <div className="info-row"><span>مدت بازی</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div>
+          <div className="info-row"><span>زمان قابل صورتحساب</span><strong>{money(preview.billableMinutes)} دقیقه</strong></div>
+          <div className="info-row"><span>نرخ جلسه</span><strong>{money(activeStation.sessionRate ?? activeStation.ratePerHour)} تومان/ساعت</strong></div>
+          <div className="info-row"><span>هزینه زمان</span><strong>{money(preview.timeAmount)} تومان</strong></div>
+          <div className="info-row"><span>بوفه</span><strong>{money(preview.buffetAmount)} تومان</strong></div>
+          <div className="info-row"><span>اعتبار پیش‌پرداخت</span><strong>{prepaidUsed ? '− ' + money(prepaidUsed) : '۰'} تومان</strong></div>
+          <div className="info-row"><span>تخفیف</span><strong>− {money(preview.discountAmount)} تومان</strong></div>
+          <div className="info-row"><span>رند</span><strong>{money(preview.roundedAmount)} تومان</strong></div>
+        </div>
+        <div className="settlement-why">
+          <button type="button" className="settlement-why-toggle" onClick={() => setSettlementWhyOpen(value => !value)}>
+            {settlementWhyOpen ? '⌃ بستن جزئیات محاسبه' : '⌄ چرا این مبلغ؟'}
+          </button>
+          {settlementWhyOpen && <div className="settlement-why-body">
+            <div>۱. زمان بازی با نرخ همین جلسه محاسبه شد.</div>
+            <div>۲. {preview.billableMinutes.toLocaleString('fa-IR')} دقیقه قابل صورتحساب × نرخ جلسه اعمال شد.</div>
+            {settlementCustomer?.freeTimeMinutes ? <div>۳. {money(settlementCustomer.freeTimeMinutes)} دقیقه اعتبار زمانی رایگان از صورتحساب کم شد.</div> : null}
+            {prepaidUsed > 0 ? <div>۴. {money(prepaidUsed)} تومان از شارژ ثبت‌شده قبلی پوشش داده شد.</div> : null}
+            {preview.buffetAmount > 0 ? <div>۵. {money(preview.buffetAmount)} تومان بوفه به مبلغ اضافه شد.</div> : null}
+            {preview.discountAmount > 0 ? <div>۶. {money(preview.discountAmount)} تومان تخفیف اعمال شد.</div> : null}
+            {roundingEnabled ? <div>مبلغ نهایی طبق رند تعرفه تا {money(settlementTariff?.roundingStep ?? 1000)} تومان گرد شد.</div> : <div>رند غیرفعال است.</div>}
+          </div>}
+        </div>
+        <div className="modal-grid-2 settlement-payment-inputs">
+          <label>مبلغ دریافتی نقدی (در صورت پرداخت نقدی)<input inputMode="numeric" value={receivedAmount} onChange={event => setReceivedAmount(event.target.value)} placeholder={money(finalTotal)} /></label>
+          <div className="settlement-change"><span>مبلغ برگشتی</span><strong>{money(change)} تومان</strong></div>
+        </div>
+        <div className="modal-actions">
+          <button className="btn" onClick={() => finishSession('cash')}>پرداخت نقدی</button>
+          <button className="btn" onClick={() => finishSession('card')}>کارتخوان</button>
+          <button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button>
+          <button className="btn danger" onClick={() => finishSession('debt')}>پرداخت بعداً / ثبت بدهی</button>
+          <button className="btn" onClick={() => window.print()}>چاپ فاکتور</button>
+        </div>
+      </>;
     })()}
     </section></div>}
       {modal === 'reduce' && activeStation && <><h2>↘ کاهش زمان جلسه · {activeStation.name}</h2><div className="info-row"><span>زمان قابل صورتحساب فعلی</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="person-choice">{[[5,'۵ دقیقه'],[10,'۱۰ دقیقه'],[15,'۱۵ دقیقه'],[30,'۳۰ دقیقه'],[-1,'مدت دلخواه']].map(([value,label]) => <button key={String(value)} className={reduceMinutes === value ? 'active' : ''} onClick={() => setReduceMinutes(Number(value))}>{label}</button>)}</div>{reduceMinutes === -1 && <label>مدت دلخواه (دقیقه)<input autoFocus type="number" min="1" value={customReduceMinutes} onChange={event => setCustomReduceMinutes(event.target.value)} /></label>}<div className="modal-actions"><button className="btn primary" onClick={completeReduce}>ثبت کاهش</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
