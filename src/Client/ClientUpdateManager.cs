@@ -85,6 +85,15 @@ public sealed class ClientUpdateManager
             if (string.IsNullOrWhiteSpace(clientAssembly))
                 throw new InvalidDataException("بستهٔ به‌روزرسانی فاقد GameNetManager.Client.dll است.");
 
+            var versionMarker = Path.Combine(Path.GetDirectoryName(clientAssembly)!, "client-version.txt");
+            if (!File.Exists(versionMarker))
+                throw new InvalidDataException("بستهٔ به‌روزرسانی فاقد client-version.txt است.");
+
+            var markedVersion = (await File.ReadAllTextAsync(versionMarker, cancellationToken)).Trim();
+            ValidateVersion(markedVersion);
+            if (!string.Equals(markedVersion, package.Version, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("نسخهٔ ثبت‌شده داخل بسته با نسخهٔ Manifest یکسان نیست.");
+
             var finalVersionRoot = Path.Combine(_versionsDirectory, package.Version);
             if (Directory.Exists(finalVersionRoot))
                 Directory.Delete(finalVersionRoot, recursive: true);
@@ -105,6 +114,58 @@ public sealed class ClientUpdateManager
             catch
             {
                 // Cleanup is best-effort; the verified staged version is never deleted here.
+            }
+        }
+    }
+
+    public async Task EnsureCurrentVersionSnapshotAsync(
+        string currentVersion,
+        string currentInstallRoot,
+        CancellationToken cancellationToken)
+    {
+        ValidateVersion(currentVersion);
+
+        var target = Path.Combine(_versionsDirectory, currentVersion);
+        if (Directory.Exists(target))
+            return;
+
+        var temporaryRoot = target + "." + Guid.NewGuid().ToString("N") + ".snapshot";
+        Directory.CreateDirectory(temporaryRoot);
+
+        try
+        {
+            foreach (var sourceFile in Directory.EnumerateFiles(currentInstallRoot, "*", SearchOption.AllDirectories))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var relative = Path.GetRelativePath(currentInstallRoot, sourceFile);
+                if (relative.StartsWith("versions" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+                    || relative.StartsWith("updates" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var destination = Path.Combine(temporaryRoot, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                await using var source = File.OpenRead(sourceFile);
+                await using var targetStream = File.Create(destination);
+                await source.CopyToAsync(targetStream, cancellationToken);
+            }
+
+            var versionMarker = Path.Combine(temporaryRoot, "client-version.txt");
+            await File.WriteAllTextAsync(versionMarker, currentVersion, cancellationToken);
+            Directory.Move(temporaryRoot, target);
+        }
+        finally
+        {
+            if (Directory.Exists(temporaryRoot))
+            {
+                try
+                {
+                    Directory.Delete(temporaryRoot, recursive: true);
+                }
+                catch
+                {
+                    // Best-effort cleanup after cancellation/failure.
+                }
             }
         }
     }
