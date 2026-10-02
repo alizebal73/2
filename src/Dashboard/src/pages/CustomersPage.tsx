@@ -31,13 +31,6 @@ export function CustomersPage() {
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([]);
 
   useEffect(() => { void mockService.getCustomers().then(setCustomers); }, []);
-  useEffect(() => {
-    if (!selected?.id) { setWalletLedger([]); return; }
-    let active = true;
-    void getWalletLedger(selected.id).then(rows => { if (active) setWalletLedger(rows); }).catch(() => { if (active) setWalletLedger([]); });
-    return () => { active = false; };
-  }, [selected?.id]);
-
   const visible = useMemo(() => customers.filter(customer => {
     const matchesFilter = filter === 'all' || (filter === 'vip' ? customer.vip !== 'none' : customer.debt > 0);
     const search = query.trim().toLowerCase();
@@ -48,6 +41,15 @@ export function CustomersPage() {
 
   const selected = customers.find(customer => customer.id === selectedId) ?? visible[0];
   const walletTotal = customers.reduce((sum, customer) => sum + customer.wallet, 0);
+
+  useEffect(() => {
+    if (!selected?.id) { setWalletLedger([]); return; }
+    let active = true;
+    void getWalletLedger(selected.id).then(rows => { if (active) setWalletLedger(rows); }).catch(() => { if (active) setWalletLedger([]); });
+    return () => { active = false; };
+  }, [selected?.id]);
+
+
   const vipCount = customers.filter(customer => customer.vip !== 'none').length;
   const debtCount = customers.filter(customer => customer.debt > 0).length;
   const packageCount = customers.filter(customer => customer.packageName).length;
