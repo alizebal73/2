@@ -41,7 +41,7 @@ type SessionFollowUp = { id: string; stationId: string; stationName: string; cus
 type PendingPayment = { id: string; stationId: string; stationName: string; customerId?: string; customerName: string; customerCode: string; amount: number; createdAt: string; };
 type AttentionItem = { id: string; kind: AttentionKind; station: StationDto; title: string; detail: string; actionLabel: string; followUpId?: string; };
 
-export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role = 'operator', user }: Props) {
+export function DashboardPage({ snapshot, apiState, onNavigate: _onNavigate, role = 'operator', user }: Props) {
   const canStartSession = hasPermission(user, 'session.start');
   const canManageSession = hasPermission(user, 'session.manage');
   const canSettleSession = hasPermission(user, 'session.settle');
