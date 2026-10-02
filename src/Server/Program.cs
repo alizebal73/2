@@ -347,8 +347,7 @@ app.MapGet("/api/release/client-package", async (
     return Results.File(
         packagePath,
         "application/zip",
-        enableRangeProcessing: true,
-        lastModified: File.GetLastWriteTimeUtc(packagePath));
+        enableRangeProcessing: true);
 })
 .WithName("GetClientReleasePackage");
 
