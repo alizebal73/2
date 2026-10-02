@@ -3216,3 +3216,58 @@ button:focus-visible {
   border-color: rgba(167, 139, 250, 0.6);
   background: rgba(167, 139, 250, 0.14);
 }
+
+
+.station-card {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.station-card * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.station-card.selected {
+  border-color: rgba(58, 169, 255, 0.75);
+  box-shadow: inset 0 0 0 1px rgba(58, 169, 255, 0.55), 0 0 0 2px rgba(58, 169, 255, 0.08);
+}
+
+.station-card.selected::after {
+  content: '✓';
+  position: absolute;
+  inset-inline-start: 8px;
+  top: 8px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: var(--blue);
+  color: #04101a;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.station-selection-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-inline-start: auto;
+  padding: 4px 7px 4px 9px;
+  border: 1px solid rgba(58, 169, 255, 0.28);
+  border-radius: 9px;
+  background: rgba(58, 169, 255, 0.07);
+  color: #b9dfff;
+  font-size: 9.5px;
+}
+
+.station-selection-rect {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  border: 1px solid rgba(58, 169, 255, 0.8);
+  background: rgba(58, 169, 255, 0.1);
+  box-shadow: 0 0 0 1px rgba(58, 169, 255, 0.08);
+}
