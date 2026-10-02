@@ -40,7 +40,7 @@ export function SectionLockDialog({ page, onClose, onUnlock }: Props) {
       <section className="operation-modal section-lock-dialog" role="dialog" aria-modal="true" aria-label="قفل بخش">
         <div className="approval-icon">🔐</div>
         <span className="approval-kicker">دسترسی محافظت‌شده</span>
-        <h2>ورود به {protectedPageLabels[page] ?? page}</h2>
+        <h2>ورود به {protectedPageLabels[protectedPage] ?? protectedPage}</h2>
         <p>برای مشاهده یا تغییر این بخش، رمز اختصاصی آن را وارد کنید.</p>
         <label>رمز بخش<input autoFocus type="password" inputMode="numeric" value={pin} onChange={event => setPin(event.target.value)} onKeyDown={event => event.key === 'Enter' && void submit()} /></label>
         {notice && <div className="user-inline-error">{notice}</div>}
