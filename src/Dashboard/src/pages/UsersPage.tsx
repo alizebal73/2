@@ -9,7 +9,11 @@ import type { UserRecord } from '../types';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(value); }
 
-export function UsersPage() {
+type UsersPageProps = { permissions: string[]; userId: string };
+
+export function UsersPage({ permissions, userId }: UsersPageProps) {
+  const canManageUsers = permissions.includes('user.manage');
+  const canManageShift = permissions.includes('shift.manage');
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [serverUsers, setServerUsers] = useState<AppUserRecord[]>([]);
   const [permissionCatalog, setPermissionCatalog] = useState<Array<{ id: string; name: string; description?: string }>>([]);
@@ -32,11 +36,12 @@ export function UsersPage() {
   const [shiftOpeningCash, setShiftOpeningCash] = useState('0');
 
   async function refresh() {
-    try {
-      const [serverRows, catalog] = await Promise.all([getUsers(), getPermissions()]);
-      setServerUsers(serverRows);
-      setPermissionCatalog(catalog);
-      const userRows: UserRecord[] = serverRows.map(user => ({
+    if (canManageUsers) {
+      try {
+        const [serverRows, catalog] = await Promise.all([getUsers(), getPermissions()]);
+        setServerUsers(serverRows);
+        setPermissionCatalog(catalog);
+        const userRows: UserRecord[] = serverRows.map(user => ({
         id: user.id,
         name: user.fullName,
         role: user.role.toLowerCase() === 'owner' ? 'owner' : user.role.toLowerCase() === 'admin' || user.role.toLowerCase() === 'manager' ? 'admin' : 'operator',
@@ -54,31 +59,44 @@ export function UsersPage() {
         damageTotal: 0,
         advanceTotal: 0,
       }));
-      setUsers(userRows);
-      const nextUserId = selectedUserId && serverRows.some(user => user.id === selectedUserId) ? selectedUserId : (serverRows[0]?.id ?? '');
-      setSelectedUserId(nextUserId);
-      const selected = serverRows.find(user => user.id === nextUserId);
-      setSelectedPermissions(selected?.permissions ?? []);
-      if (!shiftOperator && userRows.length) setShiftOperator(userRows.find(user => user.role !== 'owner')?.name ?? userRows[0].name);
-    } catch (error) {
+        setUsers(userRows);
+        const nextUserId = selectedUserId && serverRows.some(user => user.id === selectedUserId) ? selectedUserId : (serverRows[0]?.id ?? '');
+        setSelectedUserId(nextUserId);
+        const selected = serverRows.find(user => user.id === nextUserId);
+        setSelectedPermissions(selected?.permissions ?? []);
+        if (!shiftOperator && userRows.length) setShiftOperator(userRows.find(user => user.role !== 'owner')?.name ?? userRows[0].name);
+      } catch (error) {
+        setServerUsers([]);
+        setPermissionCatalog([]);
+        setUsers([]);
+        setNotice(userErrorMessage(error, 'کاربران و دسترسی‌ها از سرور دریافت نشدند'));
+      }
+    } else {
       setServerUsers([]);
       setPermissionCatalog([]);
       setUsers([]);
-      setNotice(userErrorMessage(error, 'کاربران و دسترسی‌ها از سرور دریافت نشدند'));
+      setSelectedUserId('');
+      setSelectedPermissions([]);
+      setShiftOperator('');
     }
 
-    try {
-      const [serverShift, serverHistory] = await Promise.all([getCurrentShift(), getShiftHistory()]);
-      setCurrentShift(serverShift);
-      setShifts(serverHistory.map(row => ({ ...row, sales: row.cashSales })));
-    } catch (error) {
+    if (canManageShift) {
+      try {
+        const [serverShift, serverHistory] = await Promise.all([getCurrentShift(), getShiftHistory()]);
+        setCurrentShift(serverShift);
+        setShifts(serverHistory.map(row => ({ ...row, sales: row.cashSales })));
+      } catch (error) {
+        setCurrentShift(null);
+        setShifts([]);
+        setNotice(userErrorMessage(error, 'اطلاعات شیفت از سرور دریافت نشد'));
+      }
+    } else {
       setCurrentShift(null);
       setShifts([]);
-      setNotice(userErrorMessage(error, 'اطلاعات شیفت از سرور دریافت نشد'));
     }
 
   }
-  useEffect(() => { void refresh(); }, []);
+  useEffect(() => { void refresh(); }, [canManageUsers, canManageShift]);
 
   async function saveUser() {
     if (!draft?.name.trim()) { setNotice('نام کاربر را وارد کنید'); return; }
@@ -89,6 +107,7 @@ export function UsersPage() {
   }
 
   async function openShift() {
+    if (!canManageShift) { setNotice('دسترسی مدیریت شیفت ندارید'); return; }
     try {
       if (!shiftOperator) { setNotice('اپراتور شیفت را انتخاب کنید'); return; }
       const opening = Number(shiftOpeningCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,s]/g, '')) || 0;
@@ -101,6 +120,7 @@ export function UsersPage() {
   }
 
   function openCloseShift() {
+    if (!canManageShift) { setNotice('دسترسی مدیریت شیفت ندارید'); return; }
     if (!currentShift) { setNotice('شیفت بازی برای بستن وجود ندارد'); return; }
     setCountedCash('');
     setHandoverNote('');
@@ -108,7 +128,7 @@ export function UsersPage() {
   }
 
   async function closeShift() {
-    if (!currentShift) return;
+    if (!canManageShift || !currentShift) return;
     const counted = Number(countedCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
     const adjusted = Number(manualCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
     try {
@@ -145,6 +165,7 @@ export function UsersPage() {
   }
 
   async function savePermissions() {
+    if (!canManageUsers) { setNotice('دسترسی مدیریت کاربران ندارید'); return; }
     if (!selectedUserId) { setNotice('کاربری برای تغییر دسترسی انتخاب نشده است'); return; }
     try {
       await setUserPermissions(selectedUserId, selectedPermissions);
@@ -156,6 +177,7 @@ export function UsersPage() {
   }
 
   function selectPermissionUser(id: string) {
+    if (!canManageUsers) return;
     setSelectedUserId(id);
     setSelectedPermissions(serverUsers.find(user => user.id === id)?.permissions ?? []);
   }
@@ -171,9 +193,9 @@ export function UsersPage() {
     <div className="toolbar">
       {!currentShift && <label className="shift-operator-select">اپراتور شیفت<select value={shiftOperator} onChange={event => setShiftOperator(event.target.value)}>{users.filter(user => user.role !== 'owner').map(user => <option key={user.id} value={user.name}>{user.name} · {user.shift}</option>)}</select></label>}
       {!currentShift && <label className="shift-operator-select">صندوق اولیه<input inputMode="numeric" value={shiftOpeningCash} onChange={event => setShiftOpeningCash(event.target.value)} placeholder="۰" /></label>}
-      <button className="btn" onClick={() => void (currentShift ? openCloseShift() : openShift())}>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>
-      <button className="btn danger" onClick={() => openCloseShift()} disabled={!currentShift}>بستن شیفت</button>
-      <span className="status-pill free">کاربران و Permission اکنون از Server خوانده می‌شوند</span>
+      {canManageShift && <button className="btn" onClick={() => void (currentShift ? openCloseShift() : openShift())}>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>}
+      {canManageShift && <button className="btn danger" onClick={() => openCloseShift()} disabled={!currentShift}>بستن شیفت</button>}
+      <span className="status-pill free">{canManageUsers ? 'کاربران و Permission از Server' : 'دسترسی این حساب فقط به عملیات مجاز محدود شده است'}</span>
     </div>
     <div className="summary-grid">
       {currentShift && <div className="card-panel shift-adjust-panel" style={{gridColumn:'1 / -1',padding:12}}><strong>تطبیق نقدی خارج از سیستم</strong><small>اگر بخشی از وجه نقد گرفته شده اما در نرم‌افزار ثبت نشده، آن را جدا ثبت کن؛ این مبلغ خودکار از حقوق اپراتور کم نمی‌شود.</small><div className="modal-grid-2"><label>مبلغ نقدی ثبت‌نشده<input inputMode="numeric" value={manualCash} onChange={event => setManualCash(event.target.value)} placeholder="۰" /></label><label>توضیح/شماره رسید<input value={shiftNote} onChange={event => setShiftNote(event.target.value)} placeholder="مثلاً رسید دستی صندوق" /></label></div></div>}
@@ -184,11 +206,11 @@ export function UsersPage() {
       <div className="summary-card"><div className="label">طلب مالک</div><div className="value purple">{money(users.reduce((s,u) => s + (u.ownerReceivable ?? 0), 0))} ت</div></div>
     </div>
     <div className="customer-layout">
-      <section className="card-panel" style={{ padding: 14 }}>
+      {canManageUsers && <section className="card-panel" style={{ padding: 14 }}>
         <h3>کاربران سیستم</h3>
         <div className="bullet-grid">{users.map(user => <div className="user-card" key={user.id}><b>{user.name}</b><div className="meta">نقش: {user.role === 'owner' ? 'صاحب' : user.role === 'admin' ? 'مدیر' : 'اپراتور'}</div><div className="meta">شیفت: {user.shift}</div><div className="meta">فروش: {money(user.sales)} تومان</div><div className="user-pay-summary"><span>{user.payType === 'monthly' ? 'حقوق ماهانه' : 'ساعتی'} · {money(user.payType === 'monthly' ? (user.monthlySalary ?? 0) : (user.hourlyRate ?? 0))} تومان</span><span>پرداخت‌شده {money(user.paidSalaryTotal ?? 0)} · مانده حقوق {money(user.employeePayable ?? 0)}</span><span>طلب مالک {money(user.ownerReceivable ?? 0)} · خسارت {money(user.damageTotal ?? 0)}</span></div><div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{user.permissions.map(permission => <span className="status-pill free" key={permission}>{permission}</span>)}</div><button type="button" className="btn sm" onClick={() => selectPermissionUser(user.id)}>دسترسی‌ها</button><button type="button" className="btn sm" onClick={() => { setPayUserId(user.id); setPayAmount(''); setPayReason(''); setPayMode('salary'); }}>حقوق/حساب</button></div>)}</div>
-      </section>
-      <section className="card-panel" style={{ padding: 14, overflow: 'auto' }}>
+      </section>}
+      {canManageUsers && <section className="card-panel" style={{ padding: 14, overflow: 'auto' }}>
         <h3>🔐 دسترسی سروری کاربر</h3>
         <label>کاربر<select value={selectedUserId} onChange={event => selectPermissionUser(event.target.value)}>
           <option value="">انتخاب کاربر</option>
@@ -201,7 +223,7 @@ export function UsersPage() {
           </label>)}
         </div>
         <button className="btn primary" disabled={!selectedUserId} onClick={() => void savePermissions()}>💾 ذخیره دسترسی‌های کاربر</button>
-      </section>
+      </section>}
     </div>
     <section className="card-panel" style={{ margin:'0 22px 20px', padding:14 }}>
       <h3>🕘 شیفت‌های اخیر</h3>
