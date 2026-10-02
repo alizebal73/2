@@ -141,7 +141,7 @@ jobs:
               stationId = $availableStation.id
               persons = 1
             } | ConvertTo-Json)
-            if (-not $startedSession.id) { throw 'VIP usage session smoke did not return a session id.' }
+            if (-not $startedSession.sessionId) { throw 'VIP usage session smoke did not return a session id.' }
 
             Start-Sleep -Milliseconds 1200
 
@@ -154,7 +154,7 @@ jobs:
             }
 
             $history = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/history") -Method Get
-            if (-not @($history | Where-Object { $_.type -eq 'session' -and $_.referenceId -eq $startedSession.id })) {
+            if (-not @($history | Where-Object { $_.type -eq 'session' -and $_.referenceId -eq $startedSession.sessionId })) {
               throw 'Customer history did not include the newly started session.'
             }
 
