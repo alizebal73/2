@@ -5,7 +5,7 @@ import type { CustomerRecord, WalletLedgerEntry } from '../types';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 type Filter = 'all' | 'vip' | 'debt';
-type CustomerAction = '' | 'new' | 'edit' | 'wallet' | 'debt' | 'gift' | 'package' | 'password';
+type CustomerAction = '' | 'new' | 'edit' | 'wallet' | 'debt' | 'gift' | 'refund' | 'package' | 'password';
 
 type CustomerDraft = {
   name: string;
@@ -23,6 +23,7 @@ export function CustomersPage() {
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
   const [action, setAction] = useState<CustomerAction>('');
+  const [actionNote, setActionNote] = useState('');
   const [amount, setAmount] = useState('');
   const [notice, setNotice] = useState('');
   const [draft, setDraft] = useState<CustomerDraft>({ name: '', alias: '', mobile: '', nationalId: '', username: '', vip: 'none', password: '' });
@@ -56,6 +57,7 @@ export function CustomersPage() {
 
   function openNewCustomer() {
     setDraft({ name: '', alias: '', mobile: '', nationalId: '', username: '', vip: 'none', password: '' });
+    setActionNote('');
     setAction('new');
   }
 
@@ -131,6 +133,16 @@ export function CustomersPage() {
       return;
     }
 
+    if (action === 'refund') {
+      if (value > selected.wallet) { setNotice('مبلغ بازگشت بیشتر از موجودی کیف پول مشتری است'); return; }
+      if (!actionNote.trim()) { setNotice('دلیل بازگشت وجه را وارد کنید'); return; }
+      try {
+        const entry = await recordWalletTransaction(selected.id, { amount: value, type: 'debit', description: 'بازگشت وجه · ' + actionNote.trim() });
+        updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'بازگشت وجه · ' + money(value) + ' تومان');
+        setAction(''); setActionNote(''); setNotice('مبلغ از کیف پول کسر و بازگشت وجه ثبت شد');
+      } catch (error) { setNotice(error instanceof Error ? error.message : 'ثبت بازگشت وجه انجام نشد'); }
+      return;
+    }
     if (action === 'password') {
       if (!editPassword.trim()) { setNotice('رمز جدید را وارد کنید'); return; }
       setAction('');
@@ -282,7 +294,7 @@ export function CustomersPage() {
         </>}
 
         {['wallet', 'debt', 'gift'].includes(action) && <>
-          <h2>{({ wallet: 'شارژ کیف پول', debt: 'ثبت بدهی', gift: 'اعتبار رایگان' } as Record<string, string>)[action]} · {selected?.name}</h2>
+          <h2>{({ wallet: 'شارژ کیف پول', debt: 'ثبت بدهی', gift: 'اعتبار رایگان', refund: 'کسر اعتبار / بازگشت وجه' } as Record<string, string>)[action]} · {selected?.name}</h2>
           <label>مبلغ (تومان)<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label>
           
           <div className="modal-actions"><button className="btn primary" onClick={submitAction}>ثبت عملیات</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
