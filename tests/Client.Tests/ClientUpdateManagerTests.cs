@@ -24,6 +24,11 @@ public sealed class ClientUpdateManagerTests
             var statePath = Path.Combine(root, "agent-state.json");
             var manager = new ClientUpdateManager(httpClient, root, statePath);
 
+            var currentInstall = Path.Combine(root, "current-install");
+            Directory.CreateDirectory(currentInstall);
+            await File.WriteAllTextAsync(Path.Combine(currentInstall, "GameNetManager.Client.dll"), "current-client");
+            await manager.EnsureCurrentVersionSnapshotAsync("1.0.0", currentInstall, CancellationToken.None);
+
             var staged = await manager.StageAsync(
                 new ClientUpdatePackage("2.0.0", "https://test.local/client.zip", hash, packageBytes.Length),
                 CancellationToken.None);
