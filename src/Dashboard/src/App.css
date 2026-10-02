@@ -3218,10 +3218,18 @@ button:focus-visible {
 }
 
 
+.station-grid {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
+}
+
 .station-card {
   user-select: none;
   -webkit-user-select: none;
   -webkit-user-drag: none;
+  cursor: default;
 }
 
 .station-card * {
