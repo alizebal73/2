@@ -91,6 +91,15 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         };
 
         database.Invoices.Add(invoice);
+        foreach (var part in normalizedParts)
+        {
+            database.InvoicePayments.Add(new InvoicePayment
+            {
+                InvoiceId = invoice.Id,
+                Method = part.Method,
+                Amount = part.Amount,
+            });
+        }
 
         session.TotalAmount = request.TotalAmount;
         session.EndAt = DateTimeOffset.UtcNow;
