@@ -480,6 +480,26 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.ToTable("Expenses");
                 });
 
+            modelBuilder.Entity("GameNetManager.Server.Data.EmployeeProfile", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("TEXT");
+                    b.Property<Guid>("AppUserId").HasColumnType("TEXT");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("TEXT");
+                    b.Property<DateTimeOffset?>("EmploymentStartDate").HasColumnType("TEXT");
+                    b.Property<decimal>("HourlyRate").HasColumnType("decimal(18,2)");
+                    b.Property<bool>("IsActive").HasColumnType("INTEGER");
+                    b.Property<decimal>("MonthlySalary").HasColumnType("decimal(18,2)");
+                    b.Property<string>("Notes").HasMaxLength(500).HasColumnType("TEXT");
+                    b.Property<decimal>("OvertimeRate").HasColumnType("decimal(18,2)");
+                    b.Property<string>("PayType").IsRequired().HasMaxLength(20).HasColumnType("TEXT");
+                    b.Property<string>("Phone").IsRequired().HasMaxLength(20).HasColumnType("TEXT");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("TEXT").IsConcurrencyToken();
+                    b.Property<string>("WorkSchedule").HasMaxLength(120).HasColumnType("TEXT");
+                    b.HasKey("Id");
+                    b.HasIndex("AppUserId").IsUnique();
+                    b.ToTable("EmployeeProfiles");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.Game", b =>
                 {
                     b.Property<Guid>("Id")
@@ -773,6 +793,30 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.ToTable("InvoiceReversals");
                 });
 
+            modelBuilder.Entity("GameNetManager.Server.Data.PayrollLedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("TEXT");
+                    b.Property<DateTimeOffset?>("ApprovedAt").HasColumnType("TEXT");
+                    b.Property<Guid?>("ApprovedByUserId").HasColumnType("TEXT");
+                    b.Property<decimal>("Amount").HasColumnType("decimal(18,2)");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("TEXT");
+                    b.Property<Guid>("CreatedByUserId").HasColumnType("TEXT");
+                    b.Property<decimal>("EmployeePayableDelta").HasColumnType("decimal(18,2)");
+                    b.Property<Guid>("EmployeeProfileId").HasColumnType("TEXT");
+                    b.Property<string>("Kind").IsRequired().HasMaxLength(40).HasColumnType("TEXT");
+                    b.Property<decimal>("OwnerReceivableDelta").HasColumnType("decimal(18,2)");
+                    b.Property<string>("PaymentMethod").HasMaxLength(40).HasColumnType("TEXT");
+                    b.Property<string>("Reason").IsRequired().HasMaxLength(500).HasColumnType("TEXT");
+                    b.Property<string>("ReceiptNumber").HasMaxLength(120).HasColumnType("TEXT");
+                    b.Property<string>("Status").IsRequired().HasMaxLength(20).HasColumnType("TEXT");
+                    b.Property<DateTimeOffset?>("UpdatedAt").HasColumnType("TEXT").IsConcurrencyToken();
+                    b.HasKey("Id");
+                    b.HasIndex("ApprovedByUserId");
+                    b.HasIndex("CreatedByUserId");
+                    b.HasIndex("EmployeeProfileId", "Status", "CreatedAt");
+                    b.ToTable("PayrollLedgerEntries");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.Permission", b =>
                 {
                     b.Property<Guid>("Id")
@@ -801,6 +845,16 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .IsUnique();
 
                     b.ToTable("Permissions");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.PayrollLedgerEntry", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.EmployeeProfile", "EmployeeProfile")
+                        .WithMany("PayrollEntries")
+                        .HasForeignKey("EmployeeProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                    b.Navigation("EmployeeProfile");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Product", b =>
@@ -1587,6 +1641,11 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
             modelBuilder.Entity("GameNetManager.Server.Data.Invoice", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.EmployeeProfile", b =>
+                {
+                    b.Navigation("PayrollEntries");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Permission", b =>
