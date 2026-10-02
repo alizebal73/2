@@ -294,13 +294,36 @@ jobs:
               if (-not $agentProcess.HasExited) {
                 Stop-Process -Id $agentProcess.Id -Force -ErrorAction SilentlyContinue
               }
+
+              $agentDataPattern = [regex]::Escape($agentData)
+              Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+                Where-Object {
+                  $_.ProcessId -ne $PID
+                    -and $_.CommandLine
+                    -and $_.CommandLine -match $agentDataPattern
+                } |
+                ForEach-Object {
+                  Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue
+                }
+
+              Start-Sleep -Seconds 2
+            }
+
+            $offlineRow = $null
+            $offlineReady = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              try {
+                $offlineRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                $offlineRow = @($offlineRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+                if ($offlineRow -and -not $offlineRow.isOnline) {
+                  $offlineReady = $true
+                  break
+                }
+              } catch {}
               Start-Sleep -Seconds 1
             }
 
-            Start-Sleep -Seconds 8
-            $offlineRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
-            $offlineRow = @($offlineRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
-            if (-not $offlineRow -or $offlineRow.isOnline) {
+            if (-not $offlineReady) {
               Write-Host '--- Agent stdout ---'
               if (Test-Path $agentStdout) { Get-Content $agentStdout }
               Write-Host '--- Agent stderr ---'
