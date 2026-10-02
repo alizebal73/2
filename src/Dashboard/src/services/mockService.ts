@@ -1,8 +1,6 @@
 import type {
-  AccountRecord,
   ClientRecord,
   CustomerRecord,
-  GameRecord,
   ProductRecord,
   SessionInvoice,
   StartSessionInput,
@@ -65,24 +63,6 @@ const tariffs: TariffRecord[] = [
   { id: 't4', title: 'PS4 - عادی', stationType: 'PS4', tier: 'normal', pricePerHour: 110000, daily: 650000, vipDiscount: 0, nightRate: 130000, nightHours: '۲۲:۰۰ تا ۰۶:۰۰', active: true },
   { id: 't5', title: 'فوتبال‌دستی - عادی', stationType: 'فوتبال‌دستی', tier: 'normal', pricePerHour: 60000, daily: 0, vipDiscount: 0, nightRate: 75000, nightHours: '۲۲:۰۰ تا ۰۶:۰۰', active: true },
 ];
-
-const games: GameRecord[] = [
-  { id: 'g1', name: 'Counter-Strike 2', version: '2.0', category: 'FPS', status: 'online', activeUsers: 34, path: 'D:\\Games\\Steam\\steamapps\\common\\Counter-Strike Global Offensive', executable: 'cs2.exe', cover: '🎯', trailer: '', launchArgs: '-novid', connectionType: 'آنلاین', active: true, targetSystem: 'all', target: 'all', targetZone: 'pc', targetStations: '' },
-  { id: 'g2', name: 'Valorant', version: '11.0', category: 'FPS', status: 'online', activeUsers: 21, path: 'D:\\Riot Games\\VALORANT', executable: 'VALORANT-Win64-Shipping.exe', cover: '⚡', trailer: '', launchArgs: '', connectionType: 'آنلاین', active: true, targetSystem: 'standard', target: 'all', targetZone: 'pc', targetStations: '' },
-  { id: 'g3', name: 'FIFA 25', version: '2025', category: 'Sports', status: 'offline', activeUsers: 14, path: 'D:\\Games\\EA SPORTS FC 25', executable: 'FC25.exe', cover: '⚽', trailer: '', launchArgs: '', connectionType: 'آفلاین', active: true, targetSystem: 'all', target: 'zone', targetZone: 'console', targetStations: '' },
-  { id: 'g4', name: 'Fortnite', version: '25.10', category: 'Battle Royale', status: 'online', activeUsers: 28, path: 'D:\\Epic Games\\Fortnite', executable: 'FortniteClient-Win64-Shipping.exe', cover: '🪂', trailer: '', launchArgs: '', connectionType: 'آنلاین', active: true, targetSystem: 'vip', target: 'all', targetZone: 'pc', targetStations: '' },
-  { id: 'g5', name: 'Discord', version: '1.0', category: 'برنامه', status: 'program', activeUsers: 40, path: 'C:\\Users\\Public\\Desktop', executable: 'Discord.exe', cover: '💬', trailer: '', launchArgs: '', connectionType: 'آنلاین', active: true, targetSystem: 'all', target: 'all', targetZone: 'pc', targetStations: '' },
-];
-
-const accounts: AccountRecord[] = [
-  { id: 'a1', title: 'Steam-01', platform: 'Steam', status: 'in-use', owner: 'مجموعه', expiresAt: '۳ روز دیگر', allowedGames: ['Counter-Strike 2', 'Dota 2'], assignedClient: 'PC ۱۲', guardStatus: '2FA' },
-  { id: 'a2', title: 'Battle-02', platform: 'Battle.net', status: 'free', owner: 'مجموعه', expiresAt: '۱۲ ساعت دیگر', allowedGames: ['Overwatch 2', 'Diablo IV'], assignedClient: '', guardStatus: 'محافظت‌شده' },
-  { id: 'a3', title: 'Riot-03', platform: 'Riot', status: 'locked', owner: 'مجموعه', expiresAt: 'قفل شده', allowedGames: ['Valorant'], assignedClient: '', guardStatus: 'نیازمند بررسی' },
-  { id: 'a4', title: 'Epic-04', platform: 'Epic', status: 'free', owner: 'مجموعه', expiresAt: '۱ هفته دیگر', allowedGames: ['Fortnite', 'Rocket League'], assignedClient: '', guardStatus: '2FA' },
-  { id: 'a5', title: 'Steam-05', platform: 'Steam', status: 'free', owner: 'مجموعه', expiresAt: '۲ هفته دیگر', allowedGames: ['EA SPORTS FC 25'], assignedClient: '', guardStatus: 'محافظت‌شده' },
-];
-
-const accountLogs: string[] = ['Steam-01 به PC ۱۲ تخصیص یافت', 'Riot-03 پس از خطای ورود قفل شد', 'Epic-04 آزاد شد'];
 
 const clientSystems: ClientRecord[] = Array.from({ length: 40 }, (_, index) => {
   const number = index + 1;
@@ -284,46 +264,6 @@ export const mockService = {
   deleteTariff: async (id: string) => {
     const index = tariffs.findIndex(item => item.id === id);
     if (index >= 0) tariffs.splice(index, 1);
-  },
-  getGames: async () => games,
-  saveGame: async (game: GameRecord) => {
-    const index = games.findIndex(item => item.id === game.id);
-    if (index < 0) games.push(game);
-    else games[index] = game;
-    return game;
-  },
-  deleteGame: async (id: string) => {
-    const index = games.findIndex(item => item.id === id);
-    if (index >= 0) games.splice(index, 1);
-  },
-  applyGamesToClients: async (gameIds: string[]) => ({ gameIds, queuedAt: new Date().toISOString() }),
-  getAccounts: async () => accounts,
-  saveAccount: async (account: AccountRecord) => {
-    const index = accounts.findIndex(item => item.id === account.id);
-    if (index < 0) accounts.push(account);
-    else accounts[index] = account;
-    accountLogs.unshift(`${account.title} ذخیره شد`);
-    return account;
-  },
-  unlockAccount: async (id: string) => {
-    const account = accounts.find(item => item.id === id);
-    if (account) { account.status = 'free'; account.assignedClient = ''; accountLogs.unshift(`${account.title} رفع قفل شد`); }
-  },
-  getAccountLogs: async () => [...accountLogs],
-  allocatePoolAccount: async (gameName: string, clientName: string) => {
-    const account = accounts.find(item => item.status === 'free' && item.allowedGames.includes(gameName));
-    if (!account) return null;
-    account.status = 'in-use'; account.assignedClient = clientName;
-    accountLogs.unshift(`${account.title} برای ${clientName} در بازی ${gameName} تخصیص یافت`);
-    return account;
-  },
-  releasePoolAccount: async (clientName: string) => {
-    for (const account of accounts) {
-      if (account.status === 'in-use' && account.assignedClient === clientName) {
-        account.status = 'free'; account.assignedClient = '';
-        accountLogs.unshift(`${account.title} از ${clientName} آزاد شد`);
-      }
-    }
   },
   getClients: async () => clientSystems,
   getClientSystems: async () => clientSystems,
