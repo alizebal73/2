@@ -3,6 +3,7 @@ import { createServerCustomer, getServerCustomers, updateServerCustomer } from '
 import { userErrorMessage } from '../utils/userError';
 import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
 import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
+import { assignVipPackage, getVipPackages } from '../services/vipPackageService';
 import type { CustomerRecord, WalletLedgerEntry } from '../types';
 import { ApprovalDialog } from '../components/ApprovalDialog';
 
@@ -37,11 +38,17 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const [serverFreeBenefits, setServerFreeBenefits] = useState<{ freeMoney: number; freeTimeMinutes: number } | null>(null);
   const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string; sourceTransactionId?: string } | null>(null);
   const [refundSourceId, setRefundSourceId] = useState('');
+  const [vipPackages, setVipPackages] = useState<import('../types').VipPackageRecord[]>([]);
+  const [selectedVipPackageId, setSelectedVipPackageId] = useState('');
 
   useEffect(() => {
-    void getServerCustomers()
-      .then(setCustomers)
-      .catch(error => setNotice(userErrorMessage(error, 'دریافت فهرست مشتریان انجام نشد')));
+    void Promise.all([
+      getServerCustomers(),
+      getVipPackages().catch(() => []),
+    ]).then(([rows, packages]) => {
+      setCustomers(rows);
+      setVipPackages(packages);
+    }).catch(error => setNotice(userErrorMessage(error, 'دریافت اطلاعات مشتریان انجام نشد')));
   }, []);
   const visible = useMemo(() => customers.filter(customer => {
     const matchesFilter = filter === 'all' || (filter === 'vip' ? customer.vip !== 'none' : customer.debt > 0);
@@ -92,6 +99,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
     }
     setAmount('');
     setRefundSourceId('');
+    setSelectedVipPackageId(selected.vipPackageId ?? '');
     setEditName(selected.name);
     setEditPassword('');
     setConcurrentLoginLimit(selected.concurrentLoginLimit ?? 1);
@@ -248,12 +256,32 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       }
     }
     else if (action === 'package') {
-      const vip = selected.vip === 'none' ? 'silver' : selected.vip;
-      updateCustomer(selected.id, {
-        vip,
-        packageName: vip === 'gold' ? 'Gold VIP' : 'Silver VIP',
-        dailyHourCap: vip === 'gold' ? 4 : 5,
-      }, 'پکیج VIP فعال شد');
+      if (!selectedVipPackageId) {
+        setNotice('یک پکیج VIP را انتخاب کنید');
+        return;
+      }
+      try {
+        const result = await assignVipPackage(selected.id, selectedVipPackageId);
+        const tier = result.vipTier === 'gold' || result.vipTier === 'silver' || result.vipTier === 'bronze' || result.vipTier === 'custom' ? result.vipTier : 'none';
+        setCustomers(current => current.map(item => item.id === selected.id ? {
+          ...item,
+          vip: tier,
+          vipPackageId: result.packageId,
+          packageName: result.packageName,
+          vipActivatedAt: result.activatedAt,
+          vipExpiresAt: result.expiresAt,
+          vipDailyMinutes: result.dailyMinutes,
+          vipTotalMinutes: result.totalMinutes,
+          vipDiscountPercent: result.discountPercent,
+          dailyHourCap: Math.floor(result.dailyMinutes / 60),
+        } : item));
+        setAction('');
+        setNotice('پکیج VIP سروری برای مشتری فعال شد');
+        return;
+      } catch (error) {
+        setNotice(userErrorMessage(error, 'تخصیص پکیج VIP انجام نشد'));
+        return;
+      }
     }
 
     setAction('');
@@ -410,17 +438,21 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
         {action === 'package' && <>
           <h2>پکیج VIP · {selected?.name}</h2>
           <div className="info-row"><span>پکیج فعلی</span><strong>{selected?.packageName ?? 'بدون پکیج'}</strong></div>
-          <div className="info-row"><span>مصرف امروز</span><strong>{selected?.hoursUsedToday ?? 0} ساعت</strong></div>
-          <label>سطح جدید<select value={selected?.vip === 'gold' ? 'gold' : selected?.vip === 'silver' ? 'silver' : 'none'} onChange={event => {
-            const vip = event.target.value as CustomerRecord['vip'];
-            setCustomers(current => current.map(item => item.id === selected?.id ? {
-              ...item,
-              vip,
-              packageName: vip === 'gold' ? 'Gold VIP' : vip === 'silver' ? 'Silver VIP' : undefined,
-              dailyHourCap: vip === 'gold' ? 4 : vip === 'silver' ? 5 : undefined,
-            } : item));
-          }}><option value="none">بدون VIP</option><option value="silver">Silver VIP · ۵ ساعت/روز</option><option value="gold">Gold VIP · ۴ ساعت/روز</option></select></label>
-          <div className="modal-actions"><button className="btn primary" onClick={() => { setAction(''); setNotice('پکیج VIP به‌روزرسانی شد'); }}>ذخیره پکیج</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
+          <div className="info-row"><span>انقضا</span><strong>{selected?.vipExpiresAt ? new Date(selected.vipExpiresAt).toLocaleDateString('fa-IR') : 'بدون پکیج فعال'}</strong></div>
+          <label>پکیج جدید<select value={selectedVipPackageId} onChange={event => setSelectedVipPackageId(event.target.value)}>
+            <option value="">انتخاب کنید</option>
+            {vipPackages.map(item => <option key={item.id} value={item.id}>{item.name} · {item.dailyMinutes} دقیقه/روز · {money(item.price)} تومان</option>)}
+          </select></label>
+          {selectedVipPackageId && (() => {
+            const pkg = vipPackages.find(item => item.id === selectedVipPackageId);
+            if (!pkg) return null;
+            return <div className="package-box">
+              <div className="info-row"><span>سقف روزانه</span><strong>{money(pkg.dailyMinutes)} دقیقه</strong></div>
+              <div className="info-row"><span>کل زمان</span><strong>{money(pkg.totalMinutes)} دقیقه</strong></div>
+              <div className="info-row"><span>تخفیف</span><strong>{money(pkg.discount)}٪</strong></div>
+            </div>;
+          })()}
+          <div className="modal-actions"><button className="btn primary" onClick={() => void submitAction()}>فعال‌سازی پکیج</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
         </>}
       </section>
     </div>}
