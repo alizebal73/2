@@ -538,17 +538,6 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
       </section>
     </div>}
 
-    {refundApproval && (
-      <ApprovalDialog
-        open
-        title="تأیید بازگشت وجه"
-        detail={'بازگشت ' + money(refundApproval.amount) + ' تومان برای «' + (selected?.name ?? 'مشتری') + '» به تأیید مدیر نیاز دارد. دلیل: ' + refundApproval.reason}
-        requestLabel="تأیید و ثبت بازگشت وجه"
-        onReject={() => setRefundApproval(null)}
-        onApprove={() => executeRefund(refundApproval.amount, refundApproval.reason, refundApproval.sourceTransactionId)}
-      />
-    )}
-
     {notice && <div className="operation-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
   </>;
 }
