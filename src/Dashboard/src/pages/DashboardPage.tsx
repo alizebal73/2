@@ -78,6 +78,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
   const [selectionRect, setSelectionRect] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+  const selectionRectRef = useRef<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const selectionDragRef = useRef<{ stationId: string; startX: number; startY: number; dragging: boolean; ctrlKey: boolean; shiftKey: boolean } | null>(null);
   const suppressNextStationClickRef = useRef(false);
 
@@ -224,16 +225,19 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       if (!drag.dragging && moved < 6) return;
       drag.dragging = true;
       suppressNextStationClickRef.current = true;
-      setSelectionRect({ startX: drag.startX, startY: drag.startY, endX: event.clientX, endY: event.clientY });
+      const nextRect = { startX: drag.startX, startY: drag.startY, endX: event.clientX, endY: event.clientY };
+      selectionRectRef.current = nextRect;
+      setSelectionRect(nextRect);
     };
     const onUp = () => {
       const drag = selectionDragRef.current;
       if (!drag) return;
-      if (drag.dragging && selectionRect) {
-        const left = Math.min(selectionRect.startX, selectionRect.endX);
-        const right = Math.max(selectionRect.startX, selectionRect.endX);
-        const top = Math.min(selectionRect.startY, selectionRect.endY);
-        const bottom = Math.max(selectionRect.startY, selectionRect.endY);
+      const finalRect = selectionRectRef.current;
+      if (drag.dragging && finalRect) {
+        const left = Math.min(finalRect.startX, finalRect.endX);
+        const right = Math.max(finalRect.startX, finalRect.endX);
+        const top = Math.min(finalRect.startY, finalRect.endY);
+        const bottom = Math.max(finalRect.startY, finalRect.endY);
         const selected = Array.from(document.querySelectorAll<HTMLElement>('[data-station-id]'))
           .filter(element => {
             const rect = element.getBoundingClientRect();
@@ -249,6 +253,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         setSelectionAnchorId(selected[selected.length - 1] ?? null);
       }
       setSelectionRect(null);
+      selectionRectRef.current = null;
       selectionDragRef.current = null;
       window.setTimeout(() => {
         suppressNextStationClickRef.current = false;
@@ -260,7 +265,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [selectionRect, selectionAnchorId]);
+  }, [selectionAnchorId]);
 
 
   const counts = useMemo(() => ({
