@@ -109,10 +109,16 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setStationOverrides(items => (items ?? snapshot?.stations ?? emptyStations).map(item => item.id === id ? { ...item, ...update } : item));
   }, [snapshot?.stations]);
   const duration = useCallback((station: StationDto) => {
-    if (!station.startedAt) return station.sessionMinutes ?? 0;
-    const referenceNow = station.state === 'paused' && station.pausedAt ? new Date(station.pausedAt).getTime() : now;
-    const pausedMinutes = station.pausedMinutes ?? 0;
-    return Math.max(0, (referenceNow - new Date(station.startedAt).getTime()) / 60000 - pausedMinutes);
+    const startedAt = station.startedAt ?? station.sessionStartedAt ?? undefined;
+    if (!startedAt) return station.sessionMinutes ?? 0;
+    const pausedAt = station.pausedAt ?? station.sessionPausedAt ?? undefined;
+    const pausedMinutes = station.pausedMinutes ?? station.sessionPausedMinutes ?? 0;
+    const timeAdjustment = station.sessionTimeAdjustmentMinutes ?? 0;
+    const referenceNow = station.state === 'paused' && pausedAt ? new Date(pausedAt).getTime() : now;
+    const activePauseMinutes = station.state === 'paused' && pausedAt
+      ? Math.max(0, (referenceNow - new Date(pausedAt).getTime()) / 60000)
+      : 0;
+    return Math.max(0, (referenceNow - new Date(startedAt).getTime()) / 60000 - pausedMinutes - activePauseMinutes + timeAdjustment);
   }, [now]);
   function addSessionTimeline(stationId: string, kind: SessionTimelineEvent['kind'], title: string, detail: string, amount?: number, serverReferenceId?: string) {
     setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId, createdAt: new Date().toISOString(), kind, title, detail, amount, serverReferenceId }, ...current].slice(0, 300));
@@ -828,24 +834,41 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setMessage('تسویه ' + money(finalTotal) + ' تومان ثبت شد؛ فاکتور در تاریخچه باقی ماند');
   }
 
-  function pauseSession(stationOverride?: StationDto) {
+  async function pauseSession(stationOverride?: StationDto) {
     if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     const station = stationOverride ?? activeStation;
     if (!station || station.state !== 'busy') { setMessage('فقط جلسه در حال بازی قابل توقف است'); return; }
-    updateStation(station.id, { state: 'paused', pausedAt: new Date().toISOString() });
-    addSessionTimeline(station.id, 'pause', 'توقف جلسه', 'جلسه موقتاً متوقف شد');
-    setModal(null);
-    setMessage('جلسه متوقف موقت شد؛ زمان صورتحساب جلو نمی‌رود');
+    try {
+      if (station.serverSessionId) await pauseServerSession(station.serverSessionId);
+      const pausedAt = new Date().toISOString();
+      updateStation(station.id, { state: 'paused', pausedAt, sessionPausedAt: pausedAt });
+      addSessionTimeline(station.id, 'pause', 'توقف جلسه', 'جلسه موقتاً متوقف شد');
+      setModal(null);
+      setMessage(station.serverSessionId ? 'جلسه روی سرور متوقف شد.' : 'جلسه متوقف موقت شد؛ زمان صورتحساب جلو نمی‌رود');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'توقف جلسه روی سرور ثبت نشد'));
+    }
   }
 
-  function resumeSession(stationOverride?: StationDto) {
+  async function resumeSession(stationOverride?: StationDto) {
     if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     const station = stationOverride ?? activeStation;
-    if (!station || station.state !== 'paused' || !station.pausedAt) { setMessage('جلسه متوقفی برای ادامه وجود ندارد'); return; }
-    const currentPaused = (Date.now() - new Date(station.pausedAt).getTime()) / 60000;
-    updateStation(station.id, { state: 'busy', pausedAt: undefined, pausedMinutes: (station.pausedMinutes ?? 0) + Math.max(0, currentPaused) });
-    addSessionTimeline(station.id, 'resume', 'ادامه جلسه', 'توقف ' + money(currentPaused) + ' دقیقه محاسبه شد');
-    setMessage('جلسه ادامه پیدا کرد');
+    const pausedAt = station?.pausedAt ?? station?.sessionPausedAt;
+    if (!station || station.state !== 'paused' || !pausedAt) { setMessage('جلسه متوقفی برای ادامه وجود ندارد'); return; }
+    const currentPaused = (Date.now() - new Date(pausedAt).getTime()) / 60000;
+    try {
+      if (station.serverSessionId) await resumeServerSession(station.serverSessionId);
+      updateStation(station.id, {
+        state: 'busy',
+        pausedAt: undefined,
+        sessionPausedAt: undefined,
+        pausedMinutes: (station.pausedMinutes ?? station.sessionPausedMinutes ?? 0) + Math.max(0, currentPaused),
+      });
+      addSessionTimeline(station.id, 'resume', 'ادامه جلسه', 'توقف ' + money(currentPaused) + ' دقیقه محاسبه شد');
+      setMessage(station.serverSessionId ? 'جلسه روی سرور ادامه پیدا کرد.' : 'جلسه ادامه پیدا کرد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'ادامه جلسه روی سرور ثبت نشد'));
+    }
   }
 
   function completeReduce() {
