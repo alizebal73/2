@@ -173,13 +173,13 @@
 14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
 
 **جایگاه فعلی:** مرحلهٔ اصلی **۷ — Users & Permissions**.  
-مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ در حال تکمیل است؛ برش احراز هویت/Permission/Approval و سخت‌گیری سروری روی endpointهای حساس تا CI #507 با موفقیت پیاده‌سازی و تست شده، و موارد چندصندوقی/تعارض عملیات/حقوق پرسنل همچنان باز هستند.
+مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ در حال تکمیل است؛ برش احراز هویت/Permission/Approval و سخت‌گیری سروری روی endpointهای حساس تا CI #514 با موفقیت پیاده‌سازی و تست شده، و موارد چندصندوقی/تعارض عملیات/حقوق پرسنل همچنان باز هستند.
 
 این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
 
 ## وضعیت اجرایی مرحلهٔ ۷ — Users & Permissions
 
-### برش تأییدشده تا CI #507
+### برش تأییدشده تا CI #514
 - ✅ احراز هویت واقعی اپراتور با Session سروری، Cookie امن و PBKDF2؛ `/api/auth/login`، `/api/auth/me` و `/api/auth/logout`.
 - ✅ مدل AppUser / Permission / AppUserSession / ApprovalRequest و Migration/Seeder واقعی سرور.
 - ✅ کاتالوگ Permissionهای رسمی پروژه و تخصیص دسترسی به کاربر.
@@ -191,7 +191,7 @@
 - ✅ Run #507: Build/Test .NET، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke همگی سبز.
 
 ### بازمانده‌های مرحلهٔ ۷
-- ⬜ Multi-cashier concurrency و conflict handling.
+- ✅ Multi-cashier concurrency و conflict handling: `UpdatedAt` به‌عنوان Concurrency Token سروری، به‌روزرسانی خودکار زمان تغییر، تبدیل تعارض EF به HTTP 409 فارسی و تست دو اپراتور روی یک رکورد؛ CI #514 سبز.
 - ⬜ Approval اجرایی متصل به عملیات حساس واقعی، نه فقط ثبت/تصمیم درخواست مستقل.
 - ⬜ Ledger/Payroll واقعی پرسنل و پرداخت حقوق.
 - ⬜ Hardening بیشتر Permissionهای Read/Write در UI و تفکیک دقیق مشاهده/ویرایش در هر دامنه.
