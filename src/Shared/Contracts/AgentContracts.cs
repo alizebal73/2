@@ -66,7 +66,7 @@ public static class AgentCommandTypes
     public const string LogoutLock = "logout-lock";
 
     public static bool IsSupported(string? commandType)
-        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock;
+        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock;
 }
 
 public sealed record AgentCommandRequest(
