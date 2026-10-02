@@ -9,6 +9,8 @@ public sealed record InvoiceReverseResult(
     string InvoiceStatus,
     decimal WalletRestored,
     decimal FreeMoneyRestored,
+    int FreeTimeRestored,
+    int InventoryRestored,
     bool ExternalRefundRequired,
     Guid ReversalId);
 
@@ -27,6 +29,8 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
 
         var invoice = await database.Invoices
             .Include(item => item.Customer)
+            .Include(item => item.Items)
+                .ThenInclude(item => item.Product)
             .FirstOrDefaultAsync(item => item.Id == invoiceId, cancellationToken);
 
         if (invoice is null)
@@ -86,6 +90,42 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
             });
         }
 
+        var freeTimeRestored = await database.BenefitTransactions
+            .AsNoTracking()
+            .Where(item => item.ReferenceInvoiceId == invoice.Id && item.Type == BenefitTransactionType.FreeTimeDebit)
+            .Select(item => (int?)item.Minutes)
+            .SumAsync(cancellationToken) ?? 0;
+
+        if (freeTimeRestored > 0)
+        {
+            invoice.Customer.FreeTimeMinutes += freeTimeRestored;
+            database.BenefitTransactions.Add(new BenefitTransaction
+            {
+                CustomerId = invoice.CustomerId,
+                Type = BenefitTransactionType.FreeTimeCredit,
+                MoneyAmount = 0m,
+                Minutes = freeTimeRestored,
+                ReferenceInvoiceId = invoice.Id,
+                Description = "برگشت اعتبار زمانی مصرف‌شده · " + reason
+            });
+        }
+
+        var inventoryRestored = 0;
+        foreach (var item in invoice.Items.Where(item => item.ProductId.HasValue && item.Quantity > 0 && item.Product is not null))
+        {
+            item.Product!.StockQuantity += item.Quantity;
+            inventoryRestored += item.Quantity;
+            database.InventoryTransactions.Add(new InventoryTransaction
+            {
+                ProductId = item.ProductId!.Value,
+                Quantity = item.Quantity,
+                Direction = TransactionDirection.In,
+                Kind = "Return",
+                AppUserId = request.AppUserId,
+                Notes = "برگشت خودکار فروش فاکتور · " + reason
+            });
+        }
+
         invoice.Status = InvoiceStatus.Cancelled;
 
         var reversal = new InvoiceReversal
@@ -103,6 +143,8 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
             EntityName = "Invoice",
             EntityId = invoice.Id.ToString(),
             Details = "برگشت فاکتور · " + reason
+                + " · زمان " + freeTimeRestored.ToString()
+                + " دقیقه · موجودی " + inventoryRestored.ToString()
                 + (externalRefundRequired ? " · بازپرداخت نقد/کارت خارج از سیستم لازم است" : ""),
             AppUserId = request.AppUserId
         });
@@ -115,6 +157,8 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
             invoice.Status.ToString(),
             walletRestored,
             freeMoneyRestored,
+            freeTimeRestored,
+            inventoryRestored,
             externalRefundRequired,
             reversal.Id);
     }
