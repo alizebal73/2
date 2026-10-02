@@ -406,7 +406,7 @@
 - Reverse کامل و چندمرحله‌ای
 این موارد در B10/B11 و مرحله ۷/مالی تکمیل می‌شوند.
 
-## وضعیت مرحله اصلی ۴ — Finance & Session Core
+## وضعیت تاریخی مرحله اصلی ۴ — Finance & Session Core
 
 **هستهٔ مرحله ۴ تکمیل شد.** B9 تا B17 مسیرهای اصلی مالی/جلسه را روی Server/SQLite/Audit و CI/Smoke سبز تثبیت کرده‌اند. موارد مشترک Permission/Approval نهایی عمداً به مرحلهٔ ۷ منتقل شده‌اند و موارد Customer Domain که به مدل مشتری مربوط‌اند، در مرحلهٔ ۵ ادامه پیدا می‌کنند.
 
@@ -415,7 +415,14 @@
 
 - **Customer CRUD سروری**: Create/Update + Alias/NationalId/VipTier + Unique validation + Audit + SQLite migration + Dashboard adapter/UI + Persistence Test + CI سبز.
 - **صفحه مشتریان** دیگر برای «مشتری جدید» پیام نمایشی نمی‌دهد؛ ایجاد و ویرایش اصلی به Server متصل است.
-- **مرحله ۵ هنوز باز است**؛ Customer CRUD سبز شده و هستهٔ API پکیج VIP/تخصیص پکیج اضافه شده است، اما اتصال UI، نمایش انقضا/مصرف روزانه و Credential UX باید تکمیل و تست شوند.
+- **VIP Package**: Catalog + ساخت پکیج + تخصیص پکیج + Activation/Expiry + Daily/Total Minutes + Discount در Server/API و UI متصل شده و با Server startup/API smoke محافظت می‌شود.
+- **Stage 5 هنوز باز است** و این موارد نباید تا قبل از پیاده‌سازی + تست تیک بخورند:
+  - Debt به منبع حقیقت سرور و Ledger/Audit واقعی متصل شود؛ وضعیت فعلی بدهی در صفحه مشتری هنوز محلی است.
+  - مصرف روزانه VIP از Session/Client واقعی محاسبه و ذخیره شود؛ hoursUsedToday فعلاً منبع سروری واقعی ندارد.
+  - Password/Credential UX واقعاً به Authentication/credential storage سروری متصل شود؛ Flow فعلی هنوز عملیات واقعی رمز را انجام نمی‌دهد.
+  - Concurrent Login Limit در مسیر Client Login واقعی مصرف و در Integration/E2E تست شود؛ مدل/Guard پایه از قبل وجود دارد.
+  - History/Customer timeline برای عملیات مشتری به داده‌های واقعی سرور متصل و از state محلی جدا شود.
+  - Client Login preparation تا Agent و Server واقعی تکمیل شود.
 
 
 ### محدوده
@@ -431,7 +438,7 @@
 
 ## وضعیت مرحله اصلی ۳ — Operational Completion
 
-**تکمیل شد.** A1 تا A8 همگی پیاده‌سازی شدند و CI + Dashboard Interaction Smoke روی HEAD نهایی سبز است. مرحله اصلی بعدی: **۴ — Finance & Session Core**.
+**یادداشت تاریخی:** در زمان ثبت این بخش، A1 تا A8 تکمیل شده بودند و مرحله بعدی ۴ بود. این متن صرفاً سابقه است و جایگاه فعلی پروژه را تعیین نمی‌کند.
 
 ### B) Finance / Session
 9. ✅ Wallet Ledger واقعی — API/SQLite/Audit/adapter و مسیرهای مالی Dashboard سروری شدند؛ ادامهٔ مدل مشتری و Permissionهای نهایی به مراحل ۵ و ۷ منتقل شد
@@ -537,4 +544,4 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - در نسخه نهایی Server باید تراکنش Split را به‌صورت atomic ثبت کند و Audit/Permission نیز داشته باشد.
 
 ## وضعیت
-مرحله اصلی ۳ — Operational Completion — بسته است و A1 تا A8 همگی از نظر Build/Test/Smoke تثبیت شده‌اند. مرحله اصلی ۴ — Finance & Session Core — در حال تکمیل است؛ B9 تا B17 vertical slice دارند، اما هر مورد فقط بعد از اتصال نهایی Server/Permission/Transaction/Audit به Done می‌رسد. HEAD فعلی روی CI و Dashboard Interaction Smoke سبز است.
+مرحله اصلی ۳ و هستهٔ اصلی مرحلهٔ ۴ بسته شده‌اند. جایگاه فعلی پروژه **مرحلهٔ ۵ — Customer & VIP Domain** است؛ موارد Permission/Approval نهایی عمداً به مرحلهٔ ۷ منتقل شده‌اند و موارد باز Stage 5 در بخش بالاتر همین سند ثبت شده‌اند. CI فعلی شامل Build/Test، مهاجرت/Startup سرور، smoke واقعی Customer/VIP API و smoke تعاملی Dashboard است.
