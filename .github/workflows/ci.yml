@@ -503,6 +503,23 @@ jobs:
 
             Start-Sleep -Milliseconds 1200
 
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/pause") -Method Post -WebSession $adminSession | Out-Null
+            $pausedDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $pausedStation = @($pausedDashboard.stations | Where-Object { $_.serverSessionId -eq $startedSession.sessionId })[0]
+            if (-not $pausedStation -or $pausedStation.state -ne 'Paused' -or -not $pausedStation.sessionPausedAt) {
+              throw 'Server session pause did not surface as authoritative dashboard state.'
+            }
+
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/resume") -Method Post -WebSession $adminSession | Out-Null
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/time-adjustment") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ minutes = 2 } | ConvertTo-Json) | Out-Null
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/time-adjustment") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ minutes = -1 } | ConvertTo-Json) | Out-Null
+
+            $timedDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $timedStation = @($timedDashboard.stations | Where-Object { $_.serverSessionId -eq $startedSession.sessionId })[0]
+            if (-not $timedStation -or [int]$timedStation.sessionTimeAdjustmentMinutes -ne 1) {
+              throw 'Server session time adjustment did not persist correctly.'
+            }
+
             $usageAfterSession = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get -WebSession $adminSession
             if ([int]$usageAfterSession.usedTotalMinutes -lt 1 -or [int]$usageAfterSession.usedTodayMinutes -lt 1) {
               throw 'VIP usage did not account for the active session.'
