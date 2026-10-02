@@ -250,7 +250,7 @@ jobs:
 
             $inventoryAfterRejectedSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
             $unchangedProduct = @($inventoryAfterRejectedSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
-            if ([int]$unchangedProduct.stock -ne 2) { throw 'Rejected buffet sale changed server stock.' }
+            if ([int]$unchangedProduct.stock -ne 1 -or -not $unchangedProduct.lowStock) { throw 'Rejected buffet sale changed server stock.' }
 
             $inventoryHistory = Invoke-RestMethod -Uri "$baseUrl/api/buffet/inventory-transactions" -Method Get
             if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Waste' })) { throw 'Inventory history did not contain waste movement.' }
