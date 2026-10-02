@@ -12,6 +12,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
+builder.Services.AddScoped<WalletRefundService>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
 var databasePath = Path.IsPathRooted(databaseFile)
@@ -723,6 +724,7 @@ app.MapPost("/api/approvals/{approvalId:guid}/approve", async (
     Guid approvalId,
     ApprovalDecisionRequest request,
     InvoiceReverseService reverseService,
+    WalletRefundService walletRefundService,
     HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
@@ -779,6 +781,60 @@ app.MapPost("/api/approvals/{approvalId:guid}/approve", async (
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return Results.Ok(new { id = approval.Id, status = approval.Status.ToString(), entryId = entry.Id });
+    }
+
+    if (approval.Action.Equals("wallet.refund", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!TryDecodeWalletRefundApprovalTarget(approval.EntityId, out var refundTarget))
+            return Results.BadRequest(new { code = "invalid_approval_target", message = "اطلاعات بازگشت وجه معتبر نیست." });
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var refundResult = await walletRefundService.RefundWithinTransactionAsync(
+                new WalletRefundRequest(refundTarget.CustomerId, refundTarget.Amount, refundTarget.SourceTransactionId, approval.Reason),
+                auth.User.Id,
+                cancellationToken);
+
+            approval.Status = ApprovalStatus.Approved;
+            approval.DecidedByUserId = auth.User.Id;
+            approval.DecidedAt = DateTimeOffset.UtcNow;
+            approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? "تأیید و اجرا شد" : request.Note.Trim();
+
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "WalletRefundApproved",
+                EntityName = "CustomerWallet",
+                EntityId = refundTarget.CustomerId.ToString(),
+                AppUserId = auth.User.Id,
+                Details = refundResult.Amount.ToString("0.##") + " تومان · درخواست " + approval.Id
+            });
+
+            await database.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return Results.Ok(new
+            {
+                id = approval.Id,
+                status = approval.Status.ToString(),
+                operation = refundResult
+            });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.NotFound(new { code = "refund_not_found", message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.Conflict(new { code = "refund_conflict", message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.BadRequest(new { code = "invalid_refund", message = exception.Message });
+        }
     }
 
     if (approval.Action.Equals("invoice.reverse", StringComparison.OrdinalIgnoreCase))
@@ -2444,7 +2500,8 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (HttpC
 .WithName("PostWalletTransaction");
 
 
-app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (HttpContext context,
+app.MapPost("/api/customers/{customerId:guid}/wallet-refunds/request", async (
+    HttpContext context,
     Guid customerId,
     WalletRefundRequestDto request,
     GameNetDbContext database,
@@ -2453,97 +2510,72 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (HttpContex
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.wallet", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    if (request.Amount <= 0)
-    {
-        return Results.BadRequest(new { code = "invalid_amount", message = "مبلغ بازگشت باید بیشتر از صفر باشد." });
-    }
-
     var reason = request.Reason?.Trim();
-    if (string.IsNullOrWhiteSpace(reason))
-    {
-        return Results.BadRequest(new { code = "missing_reason", message = "دلیل بازگشت وجه را وارد کنید." });
-    }
+    if (request.Amount <= 0 || string.IsNullOrWhiteSpace(reason))
+        return Results.BadRequest(new { code = "invalid_refund_request", message = "مبلغ و دلیل بازگشت وجه الزامی است." });
 
-    var customer = await database.Customers
-        .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
-
-    if (customer is null)
-    {
+    var customerExists = await database.Customers.AsNoTracking().AnyAsync(item => item.Id == customerId, cancellationToken);
+    if (!customerExists)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
-    }
-
-    if (customer.Balance < request.Amount)
-    {
-        return Results.BadRequest(new { code = "insufficient_balance", message = "موجودی کیف پول برای بازگشت این مبلغ کافی نیست." });
-    }
 
     WalletTransaction? source = null;
     if (request.SourceTransactionId is Guid sourceId)
     {
         source = await database.WalletTransactions
+            .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == sourceId && item.CustomerId == customerId, cancellationToken);
-
         if (source is null)
             return Results.NotFound(new { code = "refund_source_not_found", message = "تراکنش مبدأ بازگشت وجه پیدا نشد." });
-
         if (source.Type != WalletTransactionType.Credit)
             return Results.BadRequest(new { code = "invalid_refund_source", message = "تراکنش انتخاب‌شده قابل بازگشت نیست." });
-
-        var alreadyRefunded = await database.WalletTransactions
-            .Where(item => item.ReferenceTransactionId == source.Id && item.Type == WalletTransactionType.Debit)
-            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-
-        if (alreadyRefunded + request.Amount > source.Amount)
-            return Results.BadRequest(new { code = "refund_exceeds_source", message = "مبلغ بازگشت از مانده قابل بازگشت تراکنش مبدأ بیشتر است." });
     }
 
-    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    var target = EncodeWalletRefundApprovalTarget(customerId, request.Amount, request.SourceTransactionId);
+    var pending = await database.ApprovalRequests.AnyAsync(item =>
+        item.Action == "wallet.refund"
+        && item.EntityName == "CustomerWallet"
+        && item.EntityId == target
+        && item.Status == ApprovalStatus.Pending, cancellationToken);
+    if (pending)
+        return Results.Conflict(new { code = "wallet_refund_approval_pending", message = "برای این بازگشت وجه یک درخواست در انتظار تصمیم وجود دارد." });
 
-    try
+    var approval = new ApprovalRequest
     {
-        customer.Balance -= request.Amount;
-
-        var ledger = new WalletTransaction
-        {
-            CustomerId = customer.Id,
-            Amount = request.Amount,
-            Type = WalletTransactionType.Debit,
-            ReferenceTransactionId = source?.Id,
-            Description = "بازگشت وجه · " + reason
-        };
-
-        database.WalletTransactions.Add(ledger);
-        database.AuditLogs.Add(new AuditLog
-        {
-            Action = "WalletRefund",
-            EntityName = "CustomerWallet",
-            EntityId = customer.Id.ToString(),
-            Details = request.Amount.ToString("0.##") + " تومان · " + reason
-                + (source is null ? "" : " · مرجع " + source.Id),
-            AppUserId = auth.User!.Id
-        });
-
-        await database.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return Results.Ok(new WalletLedgerEntryDto(
-            ledger.Id,
-            ledger.CustomerId,
-            ledger.Amount,
-            "Refund",
-            ledger.Description,
-            ledger.CreatedAt,
-            customer.Balance,
-            ledger.ReferenceTransactionId));
-    }
-    catch
+        Action = "wallet.refund",
+        EntityName = "CustomerWallet",
+        EntityId = target,
+        Reason = reason,
+        RequestedByUserId = auth.User!.Id,
+        Status = ApprovalStatus.Pending
+    };
+    database.ApprovalRequests.Add(approval);
+    database.AuditLogs.Add(new AuditLog
     {
-        await transaction.RollbackAsync(cancellationToken);
-        throw;
-    }
+        Action = "WalletRefundApprovalRequest",
+        EntityName = "CustomerWallet",
+        EntityId = customerId.ToString(),
+        AppUserId = auth.User.Id,
+        Details = request.Amount.ToString("0.##") + " تومان · " + reason
+            + (source is null ? "" : " · مرجع " + source.Id)
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = approval.Id, status = approval.Status.ToString(), action = approval.Action, entityId = customerId });
+})
+.WithName("RequestWalletRefundApproval");
+
+app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", (
+    Guid customerId) =>
+{
+    return Results.Conflict(new
+    {
+        code = "approval_required",
+        message = "بازگشت وجه کیف پول باید ابتدا برای تأیید ثبت شود.",
+        customerId,
+        requiredEndpoint = $"/api/customers/{customerId}/wallet-refunds/request"
+    });
 })
 .WithName("PostWalletRefund");
-
 
 
 app.MapGet("/api/shifts/{shiftId:guid}/expenses", async (HttpContext context,
@@ -3199,6 +3231,36 @@ app.Run();
 
 
 
+static string EncodeWalletRefundApprovalTarget(Guid customerId, decimal amount, Guid? sourceTransactionId)
+    => string.Join("|",
+        customerId.ToString("D"),
+        amount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        sourceTransactionId?.ToString("D") ?? "");
+
+static bool TryDecodeWalletRefundApprovalTarget(string? value, out WalletRefundApprovalTarget target)
+{
+    target = default!;
+    var parts = value?.Split('|');
+    if (parts is null || parts.Length < 2 || parts.Length > 3)
+        return false;
+
+    if (!Guid.TryParse(parts[0], out var customerId)
+        || !decimal.TryParse(parts[1], System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var amount)
+        || amount <= 0)
+        return false;
+
+    Guid? sourceTransactionId = null;
+    if (parts.Length == 3 && !string.IsNullOrWhiteSpace(parts[2]))
+    {
+        if (!Guid.TryParse(parts[2], out var sourceId))
+            return false;
+        sourceTransactionId = sourceId;
+    }
+
+    target = new WalletRefundApprovalTarget(customerId, amount, sourceTransactionId);
+    return true;
+}
+
 static string HashPassword(string password)
 {
     var salt = RandomNumberGenerator.GetBytes(16);
@@ -3356,6 +3418,8 @@ public sealed record PayrollEntryRequest(
     decimal? OwnerReceivableDelta = null);
 
 public sealed record ApprovalDecisionRequest(string? Note);
+public sealed record WalletRefundRequestDto(decimal Amount, string? Reason, Guid? SourceTransactionId);
+public sealed record WalletRefundApprovalTarget(Guid CustomerId, decimal Amount, Guid? SourceTransactionId);
 
 public sealed record StartShiftRequest(
     string? OperatorName,
