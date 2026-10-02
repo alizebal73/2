@@ -86,3 +86,19 @@ npm run build --prefix src/Dashboard
 ```
 
 صفحه‌های prototype برای مقایسه‌ی طراحی همچنان در `prototype/index.html` و `prototype/client.html` موجودند.
+
+## پیش‌نمایش سریع
+
+برای دیدن آخرین نسخهٔ قابل اجرای برنامه روی ویندوز، فایل **GameNet-Preview.bat** را از ریشهٔ ریپو اجرا کنید. این فایل آخرین `main` را دریافت می‌کند، سرور و داشبورد را بالا می‌آورد و مرورگر را روی:
+
+`http://localhost:5173/`
+
+باز می‌کند. وضعیت سلامت سرور:
+
+`http://localhost:5080/api/health`
+
+نسخهٔ تجربهٔ مشتری:
+
+`http://localhost:5173/client`
+
+برای Preview همیشه از `main` استفاده کنید؛ Preview به معنی اتصال به دیتابیس واقعی فروشگاه نیست.
