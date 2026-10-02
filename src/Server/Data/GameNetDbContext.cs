@@ -49,6 +49,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureInvoice(modelBuilder);
         ConfigureInvoiceItem(modelBuilder);
         ConfigureWalletTransaction(modelBuilder);
+        ConfigureBenefitTransaction(modelBuilder);
         ConfigureInventoryTransaction(modelBuilder);
         ConfigureShift(modelBuilder);
         ConfigureExpense(modelBuilder);
