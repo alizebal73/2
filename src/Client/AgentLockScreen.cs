@@ -11,6 +11,8 @@ public sealed class AgentLockScreenController : IDisposable
     private bool disposed;
     private bool Headless => !Environment.UserInteractive || string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_HEADLESS"), "1", StringComparison.Ordinal);
 
+    public bool IsLocked { get; private set; }
+
     public async Task LockAsync(CancellationToken cancellationToken)
     {
         Task waitForShown;
@@ -19,7 +21,10 @@ public sealed class AgentLockScreenController : IDisposable
         {
             ThrowIfDisposed();
             if (Headless)
+            {
+                IsLocked = true;
                 return;
+            }
 
             if (form is not null && !form.IsDisposed)
                 return;
@@ -38,6 +43,7 @@ public sealed class AgentLockScreenController : IDisposable
         }
 
         await waitForShown.WaitAsync(cancellationToken);
+        IsLocked = true;
     }
 
     public Task UnlockAsync()
@@ -50,6 +56,7 @@ public sealed class AgentLockScreenController : IDisposable
                 return Task.CompletedTask;
 
             current = form;
+            IsLocked = false;
             if (current is null || current.IsDisposed)
                 return Task.CompletedTask;
 
