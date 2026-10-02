@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { mockService } from '../services/mockService';
 import { userErrorMessage } from '../utils/userError';
-import { getWalletLedger, recordWalletTransaction } from '../services/walletLedgerService';
+import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
 import type { CustomerRecord, WalletLedgerEntry } from '../types';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
@@ -138,7 +138,7 @@ export function CustomersPage() {
       if (value > selected.wallet) { setNotice('مبلغ بازگشت بیشتر از موجودی کیف پول مشتری است'); return; }
       if (!actionNote.trim()) { setNotice('دلیل بازگشت وجه را وارد کنید'); return; }
       try {
-        const entry = await recordWalletTransaction(selected.id, { amount: value, type: 'debit', description: 'بازگشت وجه · ' + actionNote.trim() });
+        const entry = await refundWalletTransaction(selected.id, { amount: value, reason: actionNote.trim() });
         updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'بازگشت وجه · ' + money(value) + ' تومان');
         setAction(''); setActionNote(''); setNotice('مبلغ از کیف پول کسر و بازگشت وجه ثبت شد');
       } catch (error) { setNotice(userErrorMessage(error, 'ثبت بازگشت وجه انجام نشد')); }
