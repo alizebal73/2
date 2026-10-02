@@ -1340,7 +1340,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       {canManageSession && context.station.state === 'busy' && <button onClick={() => contextAction('pause')}>⏸ توقف موقت جلسه</button>}
       {canManageSession && context.station.state === 'paused' && <button onClick={() => contextAction('resume')}>▶ ادامه جلسه</button>}
       {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('extend')}>⏱ تمدید وقت</button>}
-      {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('reduce')}>↘ کاهش زمان</button>
+      {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('reduce')}>↘ کاهش زمان</button>}
       {canControlClient && <button onClick={() => contextAction('switch-net')}>🌐 تغییر اینترنت ۱ ↔ ۲</button>}
       {canManageSession && <button onClick={() => contextAction('move-user')}>🔀 جابه‌جایی یوزر</button>}
       {canControlClient && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
