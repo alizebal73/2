@@ -102,9 +102,13 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     {
         var customer = modelBuilder.Entity<Customer>();
         customer.HasKey(item => item.Id);
+        customer.HasIndex(item => item.Code).IsUnique();
+        customer.HasIndex(item => item.Username).IsUnique();
         customer.HasIndex(item => item.Phone).IsUnique();
         customer.HasIndex(item => item.Email).IsUnique();
         customer.Property(item => item.FullName).HasMaxLength(120).IsRequired();
+        customer.Property(item => item.Code).HasMaxLength(20);
+        customer.Property(item => item.Username).HasMaxLength(60);
         customer.Property(item => item.Phone).HasMaxLength(20);
         customer.Property(item => item.Email).HasMaxLength(120);
         customer.Property(item => item.Notes).HasMaxLength(500);
