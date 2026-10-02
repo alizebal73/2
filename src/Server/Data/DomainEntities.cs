@@ -194,6 +194,8 @@ public sealed class Session : BaseEntity
     public DateTimeOffset StartAt { get; set; }
     public DateTimeOffset? EndAt { get; set; }
     public decimal TotalAmount { get; set; }
+    public decimal? HourlyRateOverride { get; set; }
+    public int Persons { get; set; } = 1;
     public SessionState State { get; set; } = SessionState.Active;
     public string? Notes { get; set; }
 }
