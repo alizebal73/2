@@ -257,9 +257,22 @@ public sealed class VipPackage : BaseEntity
 public sealed class Game : BaseEntity
 {
     public required string Name { get; set; }
+    public string Version { get; set; } = string.Empty;
     public string? Genre { get; set; }
+    public string Status { get; set; } = "offline";
+    public string Path { get; set; } = string.Empty;
+    public string Executable { get; set; } = string.Empty;
+    public string Cover { get; set; } = string.Empty;
+    public string Trailer { get; set; } = string.Empty;
+    public string LaunchArgs { get; set; } = string.Empty;
+    public string ConnectionType { get; set; } = "آنلاین";
+    public string TargetSystem { get; set; } = "all";
+    public string Target { get; set; } = "all";
+    public string TargetZone { get; set; } = "pc";
+    public string TargetStations { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;
     public ICollection<GameAccount> GameAccounts { get; set; } = new List<GameAccount>();
+    public ICollection<AccountLease> AccountLeases { get; set; } = new List<AccountLease>();
 }
 
 public sealed class GameAccount : BaseEntity
