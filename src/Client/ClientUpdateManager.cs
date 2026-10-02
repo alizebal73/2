@@ -265,7 +265,7 @@ public sealed class ClientUpdateManager
             state,
             new JsonSerializerOptions { WriteIndented = true });
 
-        var temporaryPath = _activeStatePath + ".tmp";
+        var temporaryPath = _activeStatePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         await File.WriteAllTextAsync(temporaryPath, json, cancellationToken);
 
         try
