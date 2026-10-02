@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
-import { mockService } from '../services/mockService';
+import { useEffect, useMemo, useState } from 'react';
 import type { ProductRecord } from '../types';
+import { adjustServerStock, createServerProduct, getServerProducts, recordServerBuffetSale } from '../services/buffetService';
+import { userErrorMessage } from '../utils/userError';
 
 function money(value: number) {
-  return new Intl.NumberFormat('fa-IR').format(value);
+  return new Intl.NumberFormat('fa-IR').format(Math.round(value));
 }
 
 export function BuffetPage() {
@@ -12,73 +13,147 @@ export function BuffetPage() {
   const [cart, setCart] = useState<Record<string, number>>({});
   const [target, setTarget] = useState<'session' | 'standalone'>('session');
   const [notice, setNotice] = useState('');
+  const [productFormOpen, setProductFormOpen] = useState(false);
+  const [draft, setDraft] = useState({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0' });
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    void mockService.getProducts().then(setProducts);
-  }, []);
+  async function refresh() {
+    try {
+      setProducts(await getServerProducts());
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'دریافت موجودی بوفه انجام نشد'));
+    }
+  }
+
+  useEffect(() => { void refresh(); }, []);
 
   const categoryValue = category === 'خوراکی' ? 'غذا' : category;
-  const visibleProducts = category === 'همه' ? products : products.filter((item) => item.category === categoryValue);
+  const visibleProducts = category === 'همه' ? products : products.filter(item => item.category === categoryValue);
   const cartTotal = products.reduce((total, product) => total + product.price * (cart[product.id] ?? 0), 0);
   const cartItems = products.filter(product => (cart[product.id] ?? 0) > 0);
+  const lowStockCount = useMemo(() => products.filter(item => item.stock <= Math.max(3, Math.floor(item.maxStock * 0.3))).length, [products]);
+
+  const numberValue = (value: string) => Number(value.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
 
   function changeQuantity(id: string, delta: number) {
-    setCart(current => {
-      const next = Math.max(0, (current[id] ?? 0) + delta);
-      return { ...current, [id]: next };
-    });
+    const product = products.find(item => item.id === id);
+    if (!product) return;
+    setCart(current => ({ ...current, [id]: Math.max(0, Math.min(product.stock, (current[id] ?? 0) + delta)) }));
   }
 
-  function checkout(destination: 'session' | 'standalone') {
-    if (cartTotal <= 0) { setNotice('سبد فروش خالی است'); return; }
-    if (destination === 'session') {
-      window.dispatchEvent(new CustomEvent('gamenet-buffet-sale', { detail: { total: cartTotal, items: cartItems.map(item => ({ name: item.name, quantity: cart[item.id] })) } }));
+  async function adjustStock(product: ProductRecord, direction: 'in' | 'out') {
+    setBusy(true);
+    try {
+      const result = await adjustServerStock(product.id, 1, direction, direction === 'in' ? 'ورود بوفه' : 'خروج دستی بوفه');
+      setProducts(current => current.map(item => item.id === product.id ? { ...item, stock: result.stock, maxStock: Math.max(item.maxStock, result.stock) } : item));
+      setNotice(direction === 'in' ? 'یک عدد به موجودی اضافه شد' : 'یک عدد از موجودی کم شد');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'اصلاح موجودی انجام نشد'));
+    } finally {
+      setBusy(false);
     }
-    void mockService.addReportRow({ id: crypto.randomUUID(), station: destination === 'session' ? 'جلسه فعال' : 'فروش مستقل', timeAmount: 0, buffet: cartTotal, packageAmount: 0, amount: cartTotal, method: 'cash', operator: 'علی محمدی', type: 'buffet', closedAt: new Date().toISOString() });
-    setProducts(current => current.map(product => ({ ...product, stock: Math.max(0, product.stock - (cart[product.id] ?? 0)) })));
-    setCart({});
-    setTarget(destination);
-    setNotice(destination === 'session' ? 'اقلام به فاکتور جلسه اضافه شدند' : 'فروش مستقل ثبت شد');
   }
 
-  return (
-    <>
-      <div className="page-header">
-        <div>
-          <p>بوفه و فروش</p>
-          <h1>بوفه</h1>
-        </div>
-      </div>
-      <div className="toolbar"><button type="button" className="btn primary" onClick={() => setNotice('فرم محصول جدید در حالت دمو آماده است')}>+ محصول جدید</button></div>
+  async function createProduct() {
+    const price = numberValue(draft.price);
+    const buyPrice = numberValue(draft.buyPrice);
+    const stock = numberValue(draft.stock);
+    if (!draft.name.trim()) {
+      setNotice('نام محصول را وارد کنید');
+      return;
+    }
+    setBusy(true);
+    try {
+      const created = await createServerProduct({ name: draft.name.trim(), category: draft.category, price, buyPrice, initialStock: stock });
+      setProducts(current => [created, ...current]);
+      setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0' });
+      setProductFormOpen(false);
+      setNotice('محصول جدید ثبت شد');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ثبت محصول انجام نشد'));
+    } finally {
+      setBusy(false);
+    }
+  }
 
-      <div className="summary-grid">
-        <div className="summary-card"><div className="label">فروش امروز</div><div className="value orange">{money(860000)} تومان</div></div>
-        <div className="summary-card"><div className="label">سود امروز</div><div className="value green">{money(310000)} تومان</div></div>
-        <div className="summary-card"><div className="label">کالای رو به اتمام</div><div className="value red">{products.filter(item => item.stock / item.maxStock <= 0.3).length}</div></div>
-        <div className="summary-card"><div className="label">پرفروش امروز</div><div className="value blue">نوشابه · ۱۸ عدد</div></div>
+  async function checkout(destination: 'session' | 'standalone') {
+    if (cartTotal <= 0) { setNotice('سبد فروش خالی است'); return; }
+    setBusy(true);
+    try {
+      const sale = await recordServerBuffetSale(cartItems.map(item => ({ productId: item.id, quantity: cart[item.id] ?? 0 })), destination);
+      if (destination === 'session') {
+        window.dispatchEvent(new CustomEvent('gamenet-buffet-sale', {
+          detail: { total: sale.total, items: cartItems.map(item => ({ name: item.name, quantity: cart[item.id] ?? 0 })) },
+        }));
+      }
+      setCart({});
+      await refresh();
+      setNotice(destination === 'session' ? 'فروش بوفه ثبت و موجودی سرور به‌روزرسانی شد' : 'فروش مستقل ثبت و موجودی سرور به‌روزرسانی شد');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ثبت فروش بوفه انجام نشد'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <>
+    <div className="page-header">
+      <div><p>فروش و انبار</p><h1>بوفه</h1></div>
+      <div className="page-meta"><span>{products.length} کالا</span><span>{lowStockCount} مورد نیازمند بررسی</span></div>
+    </div>
+
+    <div className="toolbar">
+      <button type="button" className="btn primary" onClick={() => setProductFormOpen(current => !current)}>+ محصول جدید</button>
+      <span className="status-pill free">موجودی از Server</span>
+    </div>
+
+    {productFormOpen && <section className="card-panel buffet-product-form">
+      <h3>ثبت محصول</h3>
+      <div className="modal-grid-2">
+        <label>نام محصول<input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} /></label>
+        <label>دسته<select value={draft.category} onChange={event => setDraft(current => ({ ...current, category: event.target.value }))}>{['نوشیدنی','غذا','تنقلات','لوازم جانبی','سایر'].map(item => <option key={item}>{item}</option>)}</select></label>
+        <label>قیمت فروش<input inputMode="numeric" value={draft.price} onChange={event => setDraft(current => ({ ...current, price: event.target.value }))} /></label>
+        <label>قیمت خرید<input inputMode="numeric" value={draft.buyPrice} onChange={event => setDraft(current => ({ ...current, buyPrice: event.target.value }))} /></label>
+        <label>موجودی اولیه<input inputMode="numeric" value={draft.stock} onChange={event => setDraft(current => ({ ...current, stock: event.target.value }))} /></label>
       </div>
-      <div className="buffet-layout">
-        <section className="panel-box buffet-products">
-          <div className="category-tabs">{['همه', 'نوشیدنی', 'غذا', 'تنقلات', 'لوازم جانبی'].map(item => <button key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>
-          <div className="product-grid">
-            {visibleProducts.map(product => <article key={product.id} className="product-card">
+      <div className="modal-actions"><button className="btn primary" disabled={busy} onClick={() => void createProduct()}>ثبت محصول</button><button className="btn" onClick={() => setProductFormOpen(false)}>انصراف</button></div>
+    </section>}
+
+    <div className="summary-grid">
+      <div className="summary-card"><div className="label">تعداد کالا</div><div className="value blue">{products.length}</div></div>
+      <div className="summary-card"><div className="label">کالای کم‌موجود</div><div className="value red">{lowStockCount}</div></div>
+      <div className="summary-card"><div className="label">ارزش فروش سبد</div><div className="value orange">{money(cartTotal)} تومان</div></div>
+      <div className="summary-card"><div className="label">سبد فعال</div><div className="value green">{cartItems.length} کالا</div></div>
+    </div>
+
+    <div className="buffet-layout">
+      <section className="panel-box buffet-products">
+        <div className="category-tabs">{['همه','نوشیدنی','غذا','تنقلات','لوازم جانبی','سایر'].map(item => <button key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>
+        <div className="product-grid">
+          {visibleProducts.map(product => {
+            const low = product.stock <= Math.max(3, Math.floor(product.maxStock * 0.3));
+            const width = product.maxStock ? Math.min(100, product.stock / product.maxStock * 100) + '%' : '0%';
+            return <article key={product.id} className="product-card">
               <div className="icon">🧃</div><b>{product.name}</b><div className="price">{money(product.price)} تومان</div>
-              <div className="stock">موجودی: {product.stock} / {product.maxStock}</div>
-              <div className="progress-bar"><span style={{ width: `${product.stock / product.maxStock * 100}%` }} /></div>
-              {product.stock / product.maxStock <= 0.3 && <small className="low-stock">هشدار موجودی کم</small>}
-              <button className="btn sm" disabled={product.stock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
-            </article>)}
-          </div>
-        </section>
-        <section className="panel-box cart-panel">
-          <h3>🛒 سبد فروش سریع</h3>
-          <div className="target-switch"><button className={target === 'session' ? 'active' : ''} onClick={() => setTarget('session')}>افزودن به فاکتور جلسه</button><button className={target === 'standalone' ? 'active' : ''} onClick={() => setTarget('standalone')}>فروش مستقل</button></div>
-          <div className="cart-items">{cartItems.length ? cartItems.map(item => <div className="cart-item" key={item.id}><span>{item.name} · {money(item.price)}</span><div><button onClick={() => changeQuantity(item.id, -1)} aria-label="کاهش تعداد">−</button><b>{cart[item.id]}</b><button onClick={() => changeQuantity(item.id, 1)} aria-label="افزایش تعداد">+</button></div></div>) : <p className="empty-state">از فهرست کالا انتخاب کنید</p>}</div>
-          <div className="cart-total"><span>جمع سبد</span><b>{money(cartTotal)} تومان</b></div>
-          <div className="modal-actions"><button className="btn primary" onClick={() => checkout('session')}>افزودن به فاکتور</button><button className="btn" onClick={() => checkout('standalone')}>ثبت فروش مستقل</button></div>
-        </section>
-      </div>
-      {notice && <div className="operation-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
-    </>
-  );
+              <div className="stock">موجودی: {product.stock}</div>
+              <div className="progress-bar"><span style={{ width }} /></div>
+              {low && <small className="low-stock">هشدار موجودی کم</small>}
+              <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
+              <div className="product-stock-actions"><button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button><button className="btn sm danger" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out')}>− موجودی</button></div>
+            </article>;
+          })}
+        </div>
+      </section>
+
+      <section className="panel-box cart-panel">
+        <h3>🛒 سبد فروش سریع</h3>
+        <div className="target-switch"><button className={target === 'session' ? 'active' : ''} onClick={() => setTarget('session')}>افزودن به فاکتور جلسه</button><button className={target === 'standalone' ? 'active' : ''} onClick={() => setTarget('standalone')}>فروش مستقل</button></div>
+        <div className="cart-items">{cartItems.length ? cartItems.map(item => <div className="cart-item" key={item.id}><span>{item.name} · {money(item.price)}</span><div><button onClick={() => changeQuantity(item.id, -1)} aria-label="کاهش تعداد">−</button><b>{cart[item.id]}</b><button onClick={() => changeQuantity(item.id, 1)} aria-label="افزایش تعداد">+</button></div></div>) : <p className="empty-state">از فهرست کالا انتخاب کنید</p>}</div>
+        <div className="cart-total"><span>جمع سبد</span><b>{money(cartTotal)} تومان</b></div>
+        <div className="modal-actions"><button className="btn primary" disabled={busy} onClick={() => void checkout('session')}>افزودن به فاکتور</button><button className="btn" disabled={busy} onClick={() => void checkout('standalone')}>ثبت فروش مستقل</button></div>
+      </section>
+    </div>
+
+    {notice && <div className="operation-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
+  </>;
 }
