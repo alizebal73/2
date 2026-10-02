@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { changeServerCustomerPassword, createServerCustomer, createServerCustomerDebt, getCustomerDebts, getCustomerHistory, getCustomerVipUsage, getServerCustomers, settleCustomerDebt, updateServerCustomer } from '../services/customerService';
 import { userErrorMessage } from '../utils/userError';
-import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
+import { getWalletLedger, recordWalletTransaction, requestWalletRefundApproval } from '../services/walletLedgerService';
 import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
 import { assignVipPackage, getVipPackages } from '../services/vipPackageService';
 import type { AppUserRecord, CustomerRecord, WalletLedgerEntry } from '../types';
@@ -150,21 +150,18 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
       .replace(/[٬,s]/g, '')) || 0;
   }
 
-  async function executeRefund(refundAmount: number, reason: string, sourceTransactionId?: string) {
+  async function requestRefundApproval(refundAmount: number, reason: string, sourceTransactionId?: string) {
     if (!canManageWallet) { setNotice('دسترسی مدیریت کیف پول ندارید'); return; }
     if (!selected) return;
     try {
-      const entry = await refundWalletTransaction(selected.id, { amount: refundAmount, reason, sourceTransactionId });
-      updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'بازگشت وجه · ' + money(refundAmount) + ' تومان');
-      setWalletLedger(current => [entry, ...current]);
+      await requestWalletRefundApproval(selected.id, { amount: refundAmount, reason, sourceTransactionId });
       setAction('');
       setActionNote('');
       setRefundSourceId('');
       setAmount('');
-      setNotice('بازگشت وجه ثبت شد و در دفتر کیف پول باقی ماند');
+      setNotice('درخواست بازگشت وجه ثبت شد و برای تأیید کاربر مجاز ارسال شد.');
     } catch (error) {
-      setRefundApproval(null);
-      setNotice(userErrorMessage(error, 'ثبت بازگشت وجه انجام نشد'));
+      setNotice(userErrorMessage(error, 'درخواست بازگشت وجه ثبت نشد'));
     }
   }
 
@@ -228,7 +225,7 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
       if (value > selected.wallet) { setNotice('مبلغ بازگشت بیشتر از موجودی کیف پول مشتری است'); return; }
       if (!actionNote.trim()) { setNotice('دلیل بازگشت وجه را وارد کنید'); return; }
       if (!refundSourceId) { setNotice('تراکنش مبدأ بازگشت وجه را انتخاب کنید'); return; }
-      await executeRefund(value, actionNote.trim(), refundSourceId);
+      await requestRefundApproval(value, actionNote.trim(), refundSourceId);
       return;
     }
     if (action === 'password') {
