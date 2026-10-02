@@ -550,18 +550,7 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
 
             case AgentCommandTypes.Update:
             {
-                var payload = JsonSerializer.Deserialize<ClientUpdateCommandPayload>(
-                    command.PayloadJson ?? string.Empty,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                if (payload is null
-                    || string.IsNullOrWhiteSpace(payload.Version)
-                    || string.IsNullOrWhiteSpace(payload.PackageUrl)
-                    || string.IsNullOrWhiteSpace(payload.Sha256)
-                    || payload.SizeBytes <= 0)
-                {
-                    throw new InvalidOperationException("دادهٔ Update ناقص یا نامعتبر است.");
-                }
+                var payload = ClientUpdateCommandParser.Parse(command.PayloadJson);
 
                 Console.WriteLine($"CLIENT_UPDATE_SNAPSHOT_START:{agentVersion}");
                 await updateManager.EnsureCurrentVersionSnapshotAsync(
