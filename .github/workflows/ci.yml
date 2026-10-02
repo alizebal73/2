@@ -203,28 +203,39 @@ jobs:
               unitPrice = 25000
               costPrice = 12000
               initialStock = 5
+              minimumStock = 2
+              unit = 'عدد'
             } | ConvertTo-Json)
 
-            if (-not $inventoryProduct.id -or [int]$inventoryProduct.stock -ne 5) {
+            if (-not $inventoryProduct.id -or [int]$inventoryProduct.stock -ne 5 -or [int]$inventoryProduct.minimumStock -ne 2 -or $inventoryProduct.unit -ne 'عدد') {
               throw 'Buffet product creation smoke failed.'
             }
 
             $stockOut = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
               quantity = 1
               direction = 'Out'
-              notes = 'Stage 6 manual test'
+              kind = 'Waste'
+              notes = 'Stage 6 waste test'
             } | ConvertTo-Json)
-            if ([int]$stockOut.stock -ne 4) { throw 'Inventory stock adjustment smoke failed.' }
+            if ([int]$stockOut.stock -ne 4 -or $stockOut.kind -ne 'Waste') { throw 'Inventory waste smoke failed.' }
+
+            $returned = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
+              quantity = 1
+              direction = 'In'
+              kind = 'Return'
+              notes = 'Stage 6 return test'
+            } | ConvertTo-Json)
+            if ([int]$returned.stock -ne 5 -or $returned.kind -ne 'Return') { throw 'Inventory return smoke failed.' }
 
             $sale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
-              items = @(@{ productId = $inventoryProduct.id; quantity = 2 })
+              items = @(@{ productId = $inventoryProduct.id; quantity = 4 })
               target = 'standalone'
             } | ConvertTo-Json)
-            if ([int]$sale.total -ne 50000) { throw 'Buffet sale total smoke failed.' }
+            if ([int]$sale.total -ne 100000) { throw 'Buffet sale total smoke failed.' }
 
             $inventoryAfterSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
             $soldProduct = @($inventoryAfterSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
-            if ([int]$soldProduct.stock -ne 2) { throw 'Buffet sale did not reduce server stock atomically.' }
+            if ([int]$soldProduct.stock -ne 1 -or -not $soldProduct.lowStock) { throw 'Buffet sale did not reduce server stock or low-stock state correctly.' }
 
             try {
               Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
@@ -242,18 +253,20 @@ jobs:
             if ([int]$unchangedProduct.stock -ne 2) { throw 'Rejected buffet sale changed server stock.' }
 
             $inventoryHistory = Invoke-RestMethod -Uri "$baseUrl/api/buffet/inventory-transactions" -Method Get
-            if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id })) {
-              throw 'Inventory transaction history did not contain the new product movements.'
-            }
+            if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Waste' })) { throw 'Inventory history did not contain waste movement.' }
+            if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Return' })) { throw 'Inventory history did not contain return movement.' }
+            if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Sale' })) { throw 'Inventory history did not contain sale movement.' }
 
             $updatedProduct = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)") -Method Put -ContentType 'application/json' -Body (@{
               name = "Stage 6 Smoke Updated $inventoryId"
               category = 'تنقلات'
               unitPrice = 30000
               costPrice = 14000
+              minimumStock = 1
+              unit = 'بسته'
               isActive = $true
             } | ConvertTo-Json)
-            if ($updatedProduct.name -ne "Stage 6 Smoke Updated $inventoryId" -or [int]$updatedProduct.price -ne 30000) {
+            if ($updatedProduct.name -ne "Stage 6 Smoke Updated $inventoryId" -or [int]$updatedProduct.price -ne 30000 -or [int]$updatedProduct.minimumStock -ne 1 -or $updatedProduct.unit -ne 'بسته') {
               throw 'Buffet product update smoke failed.'
             }
 
