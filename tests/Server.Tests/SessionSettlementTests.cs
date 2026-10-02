@@ -215,26 +215,17 @@ public sealed class SessionSettlementTests : IDisposable
 
         await using var settlementDb = new GameNetDbContext(options);
         var service = new SessionSettlementService(settlementDb);
-        SettlementResult result;
-        try
-        {
-            result = await service.SettleAsync(
-                session.Id,
-                new SessionSettlementRequest(
-                    150000m,
-                    new[] { new SettlementPart("cash", 150000m) },
-                    null,
-                    0,
-                    100000m,
-                    0m,
-                    0m),
-                CancellationToken.None);
-        }
-        catch (DbUpdateConcurrencyException ex)
-        {
-            var details = string.Join(" | ", ex.Entries.Select(entry => entry.Entity.GetType().Name + ":" + entry.State + ":" + string.Join(",", entry.Properties.Where(p => p.Metadata.IsPrimaryKey()).Select(p => p.CurrentValue))));
-            throw new Xunit.Sdk.XunitException("Concurrency entries: " + details);
-        }
+        var result = await service.SettleAsync(
+            session.Id,
+            new SessionSettlementRequest(
+                150000m,
+                new[] { new SettlementPart("cash", 150000m) },
+                null,
+                0,
+                100000m,
+                0m,
+                0m),
+            CancellationToken.None);
 
         var invoice = await settlementDb.Invoices
             .Include(item => item.Items)
