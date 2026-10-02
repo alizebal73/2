@@ -121,6 +121,10 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         customer.Property(item => item.Balance).HasColumnType("decimal(18,2)");
         customer.Property(item => item.FreeMoney).HasColumnType("decimal(18,2)");
         customer.Property(item => item.ConcurrentLoginLimit).IsRequired();
+        customer.HasOne(item => item.VipPackage)
+            .WithMany(item => item.Customers)
+            .HasForeignKey(item => item.VipPackageId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
     private static void ConfigureCustomerLogin(ModelBuilder modelBuilder)
