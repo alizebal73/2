@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createServerCustomer, getCustomerHistory, getCustomerVipUsage, getServerCustomers, updateServerCustomer } from '../services/customerService';
+import { changeServerCustomerPassword, createServerCustomer, createServerCustomerDebt, getCustomerDebts, getCustomerHistory, getCustomerVipUsage, getServerCustomers, settleCustomerDebt, updateServerCustomer } from '../services/customerService';
 import { userErrorMessage } from '../utils/userError';
 import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
 import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
@@ -9,7 +9,7 @@ import { ApprovalDialog } from '../components/ApprovalDialog';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 type Filter = 'all' | 'vip' | 'debt';
-type CustomerAction = '' | 'new' | 'edit' | 'wallet' | 'debt' | 'gift' | 'freeTime' | 'refund' | 'package' | 'password';
+type CustomerAction = '' | 'new' | 'edit' | 'wallet' | 'debt' | 'debtSettle' | 'gift' | 'freeTime' | 'refund' | 'package' | 'password';
 
 type CustomerDraft = {
   name: string;
@@ -38,6 +38,9 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const [serverFreeBenefits, setServerFreeBenefits] = useState<{ freeMoney: number; freeTimeMinutes: number } | null>(null);
   const [vipUsage, setVipUsage] = useState<import('../types').CustomerVipUsage | null>(null);
   const [serverHistory, setServerHistory] = useState<import('../types').CustomerHistoryItem[]>([]);
+  const [customerDebts, setCustomerDebts] = useState<Array<{ id: string; amount: number; issuedAt: string; description: string }>>([]);
+  const [selectedDebtId, setSelectedDebtId] = useState('');
+  const [debtPaymentMethod, setDebtPaymentMethod] = useState<'cash' | 'card' | 'wallet'>('cash');
   const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string; sourceTransactionId?: string } | null>(null);
   const [refundSourceId, setRefundSourceId] = useState('');
   const [vipPackages, setVipPackages] = useState<import('../types').VipPackageRecord[]>([]);
@@ -73,11 +76,14 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       getFreeBenefits(selected.id).catch(() => null),
       getCustomerVipUsage(selected.id).catch(() => null),
       getCustomerHistory(selected.id).catch(() => []),
-    ]).then(([rows, benefits, usage, history]) => {
+      getCustomerDebts(selected.id).catch(() => []),
+    ]).then(([rows, benefits, usage, history, debts]) => {
       if (!active) return;
       setWalletLedger(rows);
       setVipUsage(usage);
       setServerHistory(history);
+      setCustomerDebts(debts);
+      setSelectedDebtId(debts[0]?.id ?? '');
       if (benefits) {
         setServerFreeBenefits({ freeMoney: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes });
         setCustomers(current => current.map(item => item.id === selected.id
@@ -161,6 +167,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           phone: draft.mobile.trim() || undefined,
           vipTier: draft.vip,
           concurrentLoginLimit,
+          password: draft.password.trim() || undefined,
         });
         setCustomers(current => [customer, ...current]);
         setSelectedId(customer.id);
@@ -212,8 +219,30 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
     }
     if (action === 'password') {
       if (!editPassword.trim()) { setNotice('رمز جدید را وارد کنید'); return; }
-      setAction('');
-      setNotice('رمز ورود مشتری به‌روزرسانی شد');
+      try {
+        await changeServerCustomerPassword(selected.id, editPassword.trim());
+        setAction('');
+        setEditPassword('');
+        setNotice('رمز ورود مشتری روی سرور به‌روزرسانی شد');
+      } catch (error) {
+        setNotice(userErrorMessage(error, 'تغییر رمز ورود مشتری انجام نشد'));
+      }
+      return;
+    }
+
+    if (action === 'debtSettle') {
+      if (!selectedDebtId) { setNotice('یک بدهی برای تسویه انتخاب کنید'); return; }
+      try {
+        const result = await settleCustomerDebt(selected.id, selectedDebtId, debtPaymentMethod);
+        setCustomers(current => current.map(item => item.id === selected.id ? { ...item, debt: result.debtRemaining, wallet: result.walletBalanceAfter } : item));
+        const debts = await getCustomerDebts(selected.id);
+        setCustomerDebts(debts);
+        setSelectedDebtId(debts[0]?.id ?? '');
+        setAction('');
+        setNotice('بدهی با موفقیت تسویه شد');
+      } catch (error) {
+        setNotice(userErrorMessage(error, 'تسویه بدهی انجام نشد'));
+      }
       return;
     }
 
@@ -232,7 +261,19 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
         return;
       }
     }
-    else if (action === 'debt') updateCustomer(selected.id, { debt: selected.debt + value }, `ثبت بدهی · ${money(value)} تومان`);
+    else if (action === 'debt') {
+      try {
+        await createServerCustomerDebt(selected.id, value, 'ثبت بدهی توسط اپراتور');
+        const debts = await getCustomerDebts(selected.id);
+        setCustomerDebts(debts);
+        setCustomers(current => current.map(item => item.id === selected.id ? { ...item, debt: debts.reduce((sum, debt) => sum + debt.amount, 0) } : item));
+        setAction('');
+        setNotice('بدهی مشتری روی سرور ثبت شد');
+      } catch (error) {
+        setNotice(userErrorMessage(error, 'ثبت بدهی مشتری انجام نشد'));
+      }
+      return;
+    }
     else if (action === 'gift') {
       try {
         const benefits = await changeFreeBenefits(selected.id, { moneyAmount: value, mode: 'credit', description: 'اعطای اعتبار مالی رایگان توسط اپراتور' });
@@ -340,7 +381,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
             <div className="description">سقف روزانه {Math.floor((selected.vipDailyMinutes ?? ((selected.dailyHourCap ?? 0) * 60)) / 60)} ساعت · کل زمان {money(selected.vipTotalMinutes ?? 0)} دقیقه · تخفیف {money(selected.vipDiscountPercent ?? 0)}٪ · انقضا {selected.vipExpiresAt ? new Date(selected.vipExpiresAt).toLocaleDateString('fa-IR') : 'نامشخص'}</div>
             <div className="info-row"><span>مصرف امروز / باقی‌مانده</span><strong>{money(vipUsage?.usedTodayMinutes ?? 0)} / {money(vipUsage?.remainingTodayMinutes ?? (selected.vipDailyMinutes ?? 0))} دقیقه</strong></div>
             <div className="info-row"><span>مصرف کل / باقی‌مانده</span><strong>{money(vipUsage?.usedTotalMinutes ?? 0)} / {money(vipUsage?.remainingTotalMinutes ?? (selected.vipTotalMinutes ?? 0))} دقیقه</strong></div>
-            {(vipUsage?.remainingTodayMinutes ?? 1) <= 0 && <strong className="limit-warning">سقف روزانه مصرف شده است</strong>
+            {(vipUsage?.remainingTodayMinutes ?? 1) <= 0 && <strong className="limit-warning">سقف روزانه مصرف شده است</strong>}
           </div>
         </div>
 
@@ -379,7 +420,9 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <button className="btn sm" onClick={() => openAction('gift')}>اعتبار رایگان</button>
           <button className="btn sm" onClick={() => openAction('freeTime')}>زمان رایگان</button>
           <button className="btn sm" onClick={() => openAction('refund')}>بازگشت وجه</button>
-          <button className="btn sm" onClick={() => setNotice('ویرایش مشخصات، بدهی، VIP و رمز ورود در مرحله «مشتری و VIP» سروری تکمیل می‌شوند.')}>سایر عملیات مشتری</button>
+          {selected.debt > 0 && <button className="btn sm" onClick={() => openAction('debtSettle')}>تسویه بدهی</button>}
+          <button className="btn sm" onClick={() => openAction('edit')}>ویرایش مشتری</button>
+          <button className="btn sm" onClick={() => openAction('password')}>تغییر رمز</button>
         </div>     </section>}
     </div>
 
@@ -408,6 +451,16 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <div className="modal-actions"><button className="btn primary" onClick={submitAction}>ذخیره تغییرات</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
         </>}
 
+        {action === 'debtSettle' && <>
+          <h2>تسویه بدهی · {selected?.name}</h2>
+          <label>بدهی<select value={selectedDebtId} onChange={event => setSelectedDebtId(event.target.value)}>
+            {customerDebts.map(debt => <option key={debt.id} value={debt.id}>{money(debt.amount)} تومان · {debt.description} · {new Date(debt.issuedAt).toLocaleDateString('fa-IR')}</option>)}
+          </select></label>
+          <label>روش تسویه<select value={debtPaymentMethod} onChange={event => setDebtPaymentMethod(event.target.value as typeof debtPaymentMethod)}>
+            <option value="cash">نقدی</option><option value="card">کارتخوان</option><option value="wallet">کیف پول</option>
+          </select></label>
+          <div className="modal-actions"><button className="btn primary" onClick={submitAction}>تسویه بدهی</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
+        </>}
         {action === 'password' && <>
           <h2>تغییر رمز ورود · {selected?.name}</h2>
           <label>رمز جدید<input autoFocus dir="ltr" type="password" value={editPassword} onChange={event => setEditPassword(event.target.value)} /></label>
