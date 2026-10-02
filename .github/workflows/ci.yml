@@ -138,6 +138,16 @@ jobs:
                 } catch {
                   Write-Host ("Agent status API failed: {0}" -f $_.Exception.Message)
                 }
+                Write-Host '--- Server stdout ---'
+                if (Test-Path $stdout) { Get-Content $stdout }
+                Write-Host '--- Server stderr ---'
+                if (Test-Path $stderr) { Get-Content $stderr }
+                try {
+                  $health = Invoke-WebRequest -Uri "$baseUrl/api/health" -UseBasicParsing -TimeoutSec 2
+                  Write-Host ("Server health after Agent failure: {0}" -f $health.StatusCode)
+                } catch {
+                  Write-Host ("Server health failed after Agent failure: {0}" -f $_.Exception.Message)
+                }
                 throw 'Stage 8 Agent did not register/connect and publish an online heartbeat.'
               }
 
