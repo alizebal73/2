@@ -908,21 +908,27 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
         TryTerminateProcess(rollbackChild);
 
         var failedRollbackState = await manager.GetStateAsync(cancellation.Token);
-        if (!string.Equals(
+        var canRecoverManualRollback = string.Equals(
                 failedRollbackState?.PendingRollbackVersion,
                 rollbackVersion,
                 StringComparison.OrdinalIgnoreCase)
-            || string.Equals(
+            && string.Equals(
+                failedRollbackState?.PendingCommandType,
+                AgentCommandTypes.Rollback,
+                StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(
                 failedRollbackState?.HealthyVersion,
                 rollbackVersion,
                 StringComparison.OrdinalIgnoreCase)
-            || string.IsNullOrWhiteSpace(failedRollbackState?.PreviousVersion))
+            && !string.IsNullOrWhiteSpace(failedRollbackState?.PreviousVersion);
+
+        if (!canRecoverManualRollback)
         {
             await MarkPendingLifecycleCommandOutcomeAsync(
                 dataDirectory,
                 rollbackVersion,
                 "Failed",
-                $"نسخه {rollbackVersion} نیز سالم نشد و نسخه امن جایگزین قابل اتکا وجود ندارد.",
+                $"نسخه {rollbackVersion} سالم نشد و نسخه امن دیگری برای بازیابی خودکار وجود ندارد.",
                 cancellation.Token);
             return 2;
         }
