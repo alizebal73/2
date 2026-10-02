@@ -172,8 +172,8 @@
 13. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
 14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
 
-**جایگاه فعلی:** مرحلهٔ اصلی **۵ — Customer & VIP Domain**.  
-مرحلهٔ ۳ (Operational Completion) و هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core) بسته شده‌اند. موارد Permission/Approval سراسری که عمداً به مرحلهٔ ۷ واگذار شده‌اند، carry-over هستند و مانع ادامهٔ دامنه‌های بعدی نیستند.
+**جایگاه فعلی:** مرحلهٔ اصلی **۶ — Buffet & Inventory Domain**.  
+مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core) و مرحلهٔ ۵ (Customer & VIP Domain) بسته شده‌اند. موارد Permission/Approval سراسری که عمداً به مرحلهٔ ۷ واگذار شده‌اند، carry-over هستند و مانع ادامهٔ دامنه‌های بعدی نیستند.
 
 این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
 
@@ -434,7 +434,7 @@
 
 ## فهرست اصلی
 
-> مرحله اصلی فعلی: **۵ — Customer & VIP Domain**؛ هستهٔ B9 → B17 در مرحلهٔ ۴ تکمیل و تست شده است؛ hardening مجوزها در مرحلهٔ ۷ دنبال می‌شود.
+> مرحله اصلی فعلی: **۶ — Buffet & Inventory Domain**؛ هستهٔ B9 → B17 در مرحلهٔ ۴ و دامنهٔ Customer/VIP در مرحلهٔ ۵ تکمیل و تست شده‌اند؛ hardening مجوزها در مرحلهٔ ۷ دنبال می‌شود.
 
 ### A) Operational Intelligence / UX
 1. ✅ مرکز «نیازمند توجه» در داشبورد — پیاده‌سازی و CI سبز شد
@@ -513,9 +513,10 @@
 - **Atomic Sale**: فروش بوفه موجودی را داخل Transaction کم می‌کند و فروش بیشتر از موجودی را بدون تغییر موجودی رد می‌کند ✅
 - **Inventory History**: گردش موجودی از Server قابل دریافت و در Dashboard نمایش داده می‌شود ✅
 - **CI Smoke**: ایجاد کالا → اصلاح موجودی → فروش → رد فروش نامعتبر → بررسی ثابت‌ماندن موجودی → History → ویرایش کالا، در Run #467 سبز شد ✅
-- **هنوز باز است**: حداقل موجودی قابل‌تنظیم برای هر کالا، نوع عملیات Waste/Return، مرجوعی فروش با برگشت موجودی، اتصال قطعی فروش «به فاکتور Session»، گزارش سود کالا و جریان کامل انبار/خرید.
-- **در برش بعدی Stage 6 پیاده‌سازی شد و در Gate CI در حال تأیید است**: `MinimumStock`، `Unit`، `InventoryTransaction.Kind`، و مسیرهای واقعی Waste/Return در Server + Dashboard + Migration.
-- **قانون**: تا زمانی که موارد باز بالا پیاده‌سازی + تست نشوند، Stage 6 کامل اعلام نمی‌شود.
+- **تأییدشده در Run #482**: حداقل موجودی قابل‌تنظیم (`MinimumStock`)، واحد شمارش (`Unit`)، نوع تراکنش (`InventoryTransaction.Kind`) و مسیرهای واقعی Waste/Return در Server + Dashboard + Migration ✅
+- **تأییدشده در Run #482**: فروش بوفه به Draft Invoice همان Session، انتخاب Session مقصد، نهایی‌سازی همان Invoice در Settlement، و Reverse/Cancel با برگشت موجودی و اعتبار زمانی ✅
+- **هنوز باز است**: جریان کامل Purchase/ورود موجودی با ثبت بهای خرید و گزارش سود کالا؛ این دو برای اعلام تکمیل کامل Stage 6 باقی مانده‌اند.
+- **قانون**: تا تکمیل و تست جریان Purchase + Profit، Stage 6 کامل اعلام نمی‌شود.
 
 ## وضعیت مرحله اصلی ۳ — Operational Completion
 
