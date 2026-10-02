@@ -407,9 +407,9 @@ jobs:
             if ($walletRefundDecision.status -ne 'Approved' -or [int]$walletRefundDecision.operation.amount -ne 50000) { throw 'Wallet refund approval execution smoke failed.' }
 
             $walletAfterRefund = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/wallet-ledger") -Method Get -WebSession $adminSession
-            $refundRow = @($walletAfterRefund | Where-Object { $_.id -eq $walletRefundDecision.operation.transactionId -and $_.type -eq 'Refund' })[0]
+            $refundRow = @($walletAfterRefund | Where-Object { $_.id -eq $walletRefundDecision.operation.transactionId -and $_.type -eq 'Debit' })[0]
             if (-not $refundRow -or [int]$refundRow.balanceAfter -ne 70000 -or $refundRow.referenceTransactionId -ne $walletCredit.id) {
-              throw 'Approved wallet refund did not persist the correct ledger result.'
+              throw 'Approved wallet refund did not persist the correct server ledger result.'
             }
 
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
