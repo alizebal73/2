@@ -97,9 +97,22 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         return serverStation
           ? {
               ...station,
+              state: serverStation.state,
+              customerUsername: serverStation.customerUsername,
+              customerFullName: serverStation.customerFullName,
+              customerDebt: serverStation.customerDebt,
+              customerNote: serverStation.customerNote,
+              remainingMinutes: serverStation.remainingMinutes,
+              serverSessionId: serverStation.serverSessionId,
+              buffetTotal: serverStation.buffetTotal,
               agentOnline: serverStation.agentOnline,
               agentLastSeenAt: serverStation.agentLastSeenAt,
               agentVersion: serverStation.agentVersion,
+              sessionStartedAt: serverStation.sessionStartedAt,
+              sessionPausedAt: serverStation.sessionPausedAt,
+              sessionPausedMinutes: serverStation.sessionPausedMinutes,
+              sessionTimeAdjustmentMinutes: serverStation.sessionTimeAdjustmentMinutes,
+              sessionPrepaidAmount: serverStation.sessionPrepaidAmount,
             }
           : station;
       })
