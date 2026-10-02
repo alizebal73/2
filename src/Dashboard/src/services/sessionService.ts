@@ -124,3 +124,36 @@ export async function transferServerSession(
   }
   return await response.json() as { sessionId: string; stationId: string };
 }
+
+
+export async function reverseServerInvoice(
+  invoiceId: string,
+  reason: string,
+): Promise<{
+  invoiceId: string;
+  invoiceStatus: string;
+  walletRestored: number;
+  freeMoneyRestored: number;
+  externalRefundRequired: boolean;
+  reversalId: string;
+}> {
+  const response = await fetch('/api/invoices/' + invoiceId + '/reverse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ appUserId: null, reason }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'برگشت فاکتور روی سرور انجام نشد');
+  }
+
+  return await response.json() as {
+    invoiceId: string;
+    invoiceStatus: string;
+    walletRestored: number;
+    freeMoneyRestored: number;
+    externalRefundRequired: boolean;
+    reversalId: string;
+  };
+}
