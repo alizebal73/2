@@ -1,4 +1,5 @@
 name: Stage 8 Snapshot Generator
+# one-shot snapshot generation for the current branch
 
 on:
   push:
