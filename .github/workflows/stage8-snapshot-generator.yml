@@ -1,5 +1,4 @@
 name: Stage 8 Snapshot Generator
-# one-shot snapshot generation for the current branch
 
 on:
   push:
@@ -7,7 +6,7 @@ on:
       - stage8-pc-agent-foundation
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   generate:
@@ -30,22 +29,27 @@ jobs:
         shell: pwsh
         run: |
           dotnet restore GameNetManager.sln
-          dotnet tool install --global dotnet-ef --version 10.0.12
+          dotnet tool update --global dotnet-ef --version 10.0.12
+          if ($LASTEXITCODE -ne 0) {
+            dotnet tool install --global dotnet-ef --version 10.0.12
+          }
           "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Generate authoritative EF snapshot
         shell: pwsh
         run: |
-          $output = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-generated'
-          Remove-Item $output -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $output -Force | Out-Null
           dotnet build GameNetManager.sln --configuration Release --no-restore
           dotnet ef migrations add Stage8SnapshotProbe --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --configuration Release --output-dir Data/Migrations/Stage8SnapshotProbe --no-build
-          Copy-Item src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs $output\
-          Copy-Item src/Server/Data/Migrations/Stage8SnapshotProbe/* $output\ -Force
 
-      - name: Upload generated EF files
-        uses: actions/upload-artifact@v4
-        with:
-          name: stage8-generated-ef
-          path: \${{ runner.temp }}/gamenet-stage8-generated
+      - name: Commit authoritative EF snapshot
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+          if (git diff --cached --quiet) {
+            Write-Host 'EF snapshot is already synchronized.'
+            exit 0
+          }
+          git commit -m "chore: sync EF model snapshot"
+          git push origin HEAD:stage8-pc-agent-foundation
