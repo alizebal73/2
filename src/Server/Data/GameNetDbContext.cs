@@ -12,6 +12,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<AppUser> AppUsers => Set<AppUser>();
     public DbSet<Permission> Permissions => Set<Permission>();
     public DbSet<AppUserPermission> AppUserPermissions => Set<AppUserPermission>();
+    public DbSet<AppUserSession> AppUserSessions => Set<AppUserSession>();
+    public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
     public DbSet<VipPackage> VipPackages => Set<VipPackage>();
     public DbSet<Game> Games => Set<Game>();
     public DbSet<GameAccount> GameAccounts => Set<GameAccount>();
