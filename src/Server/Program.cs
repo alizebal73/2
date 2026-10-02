@@ -142,6 +142,52 @@ app.MapPost("/api/agent/register", async (
 })
 .WithName("RegisterAgent");
 
+app.MapPut("/api/agent/devices/{deviceId:guid}/policy", async (
+    Guid deviceId,
+    AgentPolicyRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    IHubContext<AgentHub> agentHub,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var device = await database.AgentDevices
+        .FirstOrDefaultAsync(item => item.Id == deviceId && item.IsActive, cancellationToken);
+    if (device is null)
+        return Results.NotFound(new { code = "agent_not_found", message = "Agent پیدا نشد." });
+
+    device.KioskEnabled = request.KioskEnabled;
+    device.LockOnDisconnect = request.LockOnDisconnect;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AgentPolicyUpdated",
+        EntityName = "AgentDevice",
+        EntityId = device.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = $"Kiosk={device.KioskEnabled}; LockOnDisconnect={device.LockOnDisconnect}"
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+
+    if (!string.IsNullOrWhiteSpace(device.ConnectionId))
+    {
+        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+            "AgentPolicyChanged",
+            new AgentPolicyDto(device.Id, device.KioskEnabled, device.LockOnDisconnect),
+            cancellationToken);
+    }
+
+    return Results.Ok(new AgentPolicyDto(device.Id, device.KioskEnabled, device.LockOnDisconnect));
+})
+.WithName("UpdateAgentPolicy");
+
 app.MapGet("/api/agent/devices", async (
     HttpContext context,
     GameNetDbContext database,
@@ -181,6 +227,8 @@ app.MapGet("/api/agent/devices", async (
             && device.LastSeenAt.HasValue
             && now - device.LastSeenAt.Value <= TimeSpan.FromSeconds(offlineAfter),
         device.IsLocked,
+        device.KioskEnabled,
+        device.LockOnDisconnect,
         device.LastSeenAt,
         device.ConnectedAt,
         device.AgentVersion,
