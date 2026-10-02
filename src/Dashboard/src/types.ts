@@ -33,6 +33,7 @@ export type StationDto = {
   pausedMinutes?: number;
   sessionCredit?: number;
   prepaidEndsAt?: string;
+  serverSessionId?: string;
   network?: 1 | 2;
   outOfServiceReason?: string;
 };
