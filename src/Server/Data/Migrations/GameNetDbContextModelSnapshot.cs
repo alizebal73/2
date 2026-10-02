@@ -723,6 +723,32 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasMaxLength(80)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CoverPath").HasMaxLength(500).HasColumnType("TEXT");
+
+                    b.Property<string>("ConnectionType").HasMaxLength(30).HasColumnType("TEXT");
+
+                    b.Property<string>("ExecutablePath").HasMaxLength(260).HasColumnType("TEXT");
+
+                    b.Property<string>("InstallPath").HasMaxLength(500).HasColumnType("TEXT");
+
+                    b.Property<string>("LaunchArguments").HasMaxLength(1000).HasColumnType("TEXT");
+
+                    b.Property<string>("Launcher").HasMaxLength(40).HasColumnType("TEXT");
+
+                    b.Property<string>("ProcessNames").HasMaxLength(500).HasColumnType("TEXT");
+
+                    b.Property<string>("TargetScope").HasMaxLength(20).HasColumnType("TEXT");
+
+                    b.Property<string>("TargetStations").HasMaxLength(1000).HasColumnType("TEXT");
+
+                    b.Property<string>("TargetSystem").HasMaxLength(30).HasColumnType("TEXT");
+
+                    b.Property<string>("TargetZone").HasMaxLength(30).HasColumnType("TEXT");
+
+                    b.Property<string>("TrailerPath").HasMaxLength(500).HasColumnType("TEXT");
+
+                    b.Property<string>("Version").HasMaxLength(60).HasColumnType("TEXT");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
@@ -788,6 +814,60 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.HasIndex("GameId");
 
                     b.ToTable("GameAccounts");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.GameAccountPoolEntry", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("TEXT");
+                    b.Property<string>("AccountName").IsRequired().HasMaxLength(120).HasColumnType("TEXT");
+                    b.Property<string>("Platform").IsRequired().HasMaxLength(40).HasColumnType("TEXT");
+                    b.Property<string>("Launcher").HasMaxLength(60).HasColumnType("TEXT");
+                    b.Property<string>("Login").HasMaxLength(120).HasColumnType("TEXT");
+                    b.Property<string>("PasswordHash").HasMaxLength(250).HasColumnType("TEXT");
+                    b.Property<string>("Status").IsRequired().HasMaxLength(20).HasColumnType("TEXT");
+                    b.Property<string>("Owner").IsRequired().HasMaxLength(120).HasColumnType("TEXT");
+                    b.Property<DateTimeOffset?>("ExpiresAt").HasColumnType("TEXT");
+                    b.Property<string>("GuardStatus").IsRequired().HasMaxLength(40).HasColumnType("TEXT");
+                    b.Property<bool>("IsActive").HasColumnType("INTEGER");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("TEXT");
+                    b.Property<DateTimeOffset?>("UpdatedAt").IsConcurrencyToken().HasColumnType("TEXT");
+                    b.HasKey("Id");
+                    b.HasIndex("AccountName").IsUnique();
+                    b.HasIndex("ExpiresAt");
+                    b.HasIndex("Status", "IsActive");
+                    b.ToTable("GameAccountPoolEntries");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.GameAccountAllowedGame", b =>
+                {
+                    b.Property<Guid>("GameAccountPoolEntryId").HasColumnType("TEXT");
+                    b.Property<Guid>("GameId").HasColumnType("TEXT");
+                    b.HasKey("GameAccountPoolEntryId", "GameId");
+                    b.HasIndex("GameId");
+                    b.ToTable("GameAccountAllowedGames");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.GameAccountLease", b =>
+                {
+                    b.Property<Guid>("Id").ValueGeneratedOnAdd().HasColumnType("TEXT");
+                    b.Property<Guid>("GameAccountPoolEntryId").HasColumnType("TEXT");
+                    b.Property<Guid>("GameId").HasColumnType("TEXT");
+                    b.Property<Guid?>("AgentDeviceId").HasColumnType("TEXT");
+                    b.Property<Guid?>("CustomerId").HasColumnType("TEXT");
+                    b.Property<string>("Status").IsRequired().HasMaxLength(20).HasColumnType("TEXT");
+                    b.Property<DateTimeOffset>("LeasedAt").HasColumnType("TEXT");
+                    b.Property<DateTimeOffset?>("ReleasedAt").HasColumnType("TEXT");
+                    b.Property<string>("ReleaseReason").HasMaxLength(250).HasColumnType("TEXT");
+                    b.Property<DateTimeOffset>("CreatedAt").HasColumnType("TEXT");
+                    b.Property<DateTimeOffset?>("UpdatedAt").IsConcurrencyToken().HasColumnType("TEXT");
+                    b.HasKey("Id");
+                    b.HasIndex("AgentDeviceId");
+                    b.HasIndex("CustomerId");
+                    b.HasIndex("GameAccountPoolEntryId");
+                    b.HasIndex("GameId");
+                    b.HasIndex("Status");
+                    b.HasIndex("GameAccountPoolEntryId").IsUnique().HasFilter("ReleasedAt IS NULL");
+                    b.ToTable("GameAccountLeases");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.InventoryTransaction", b =>
@@ -1699,6 +1779,28 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Navigation("Game");
                 });
 
+            modelBuilder.Entity("GameNetManager.Server.Data.GameAccountAllowedGame", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.GameAccountPoolEntry", "GameAccountPoolEntry")
+                        .WithMany("AllowedGames").HasForeignKey("GameAccountPoolEntryId").OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.HasOne("GameNetManager.Server.Data.Game", "Game")
+                        .WithMany("AllowedAccountGames").HasForeignKey("GameId").OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.Navigation("GameAccountPoolEntry");
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.GameAccountLease", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AgentDevice", "AgentDevice").WithMany().HasForeignKey("AgentDeviceId").OnDelete(DeleteBehavior.SetNull);
+                    b.HasOne("GameNetManager.Server.Data.Customer", "Customer").WithMany().HasForeignKey("CustomerId").OnDelete(DeleteBehavior.SetNull);
+                    b.HasOne("GameNetManager.Server.Data.GameAccountPoolEntry", "GameAccountPoolEntry").WithMany("Leases").HasForeignKey("GameAccountPoolEntryId").OnDelete(DeleteBehavior.Cascade).IsRequired();
+                    b.HasOne("GameNetManager.Server.Data.Game", "Game").WithMany().HasForeignKey("GameId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                    b.Navigation("AgentDevice");
+                    b.Navigation("Customer");
+                    b.Navigation("GameAccountPoolEntry");
+                    b.Navigation("Game");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.InventoryTransaction", b =>
                 {
                     b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
@@ -1939,7 +2041,14 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
             modelBuilder.Entity("GameNetManager.Server.Data.Game", b =>
                 {
+                    b.Navigation("AllowedAccountGames");
                     b.Navigation("GameAccounts");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.GameAccountPoolEntry", b =>
+                {
+                    b.Navigation("AllowedGames");
+                    b.Navigation("Leases");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Invoice", b =>

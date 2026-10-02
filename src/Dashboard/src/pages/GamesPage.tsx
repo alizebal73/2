@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { mockService } from '../services/mockService';
+import { createServerGame, deleteServerGame, getServerGames, updateServerGame } from '../services/gameLibraryService';
 import type { GameRecord } from '../types';
 
 type GameFilter = 'all' | 'online' | 'offline' | 'program';
@@ -22,6 +22,8 @@ const emptyGame = (): GameRecord => ({
   target: 'all',
   targetZone: 'pc',
   targetStations: '',
+  launcher: '',
+  processNames: '',
 });
 
 const filterNames: Record<GameFilter, string> = { all: 'همه', online: 'آنلاین', offline: 'آفلاین', program: 'برنامه' };
@@ -35,7 +37,7 @@ export function GamesPage() {
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
 
   useEffect(() => {
-    void mockService.getGames().then(setGames);
+    void getServerGames().then(setGames).catch(error => setNotice(error instanceof Error ? error.message : 'دریافت بازی‌ها انجام نشد'));
   }, []);
 
   const visibleGames = useMemo(() => games.filter(game => {
@@ -55,22 +57,18 @@ export function GamesPage() {
       setNotice('نام بازی و فایل اجرایی الزامی است');
       return;
     }
-    await mockService.saveGame(draft);
-    setGames(await mockService.getGames());
+    const exists = games.some(game => game.id === draft.id);
+    const saved = exists ? await updateServerGame(draft) : await createServerGame(draft);
+    setGames(current => exists ? current.map(game => game.id === saved.id ? saved : game) : [...current, saved].sort((a, b) => a.name.localeCompare(b.name)));
     setDraft(null);
     setNotice('بازی ذخیره شد');
   }
 
   async function deleteGame(game: GameRecord) {
     if (!window.confirm(`بازی «${game.name}» حذف شود؟`)) return;
-    await mockService.deleteGame(game.id);
-    setGames(await mockService.getGames());
+    await deleteServerGame(game.id);
+    setGames(await getServerGames());
     setNotice('بازی حذف شد');
-  }
-
-  async function applyGames(gameIds: string[]) {
-    await mockService.applyGamesToClients(gameIds);
-    setNotice(`اعمال ${gameIds.length} بازی به کلاینت‌ها در صف قرار گرفت`);
   }
 
   return (
@@ -91,7 +89,7 @@ export function GamesPage() {
       <div className="toolbar game-management-toolbar">
         <div className="search-box"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی بازی…" aria-label="جست‌وجوی بازی" /></div>
         <div className="view-switch">{(Object.keys(filterNames) as GameFilter[]).map(key => <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{filterNames[key]}</button>)}</div>
-        <button type="button" className="btn" onClick={() => void applyGames(games.map(game => game.id))}>📤 اعمال بازی‌ها به همه کلاینت‌ها</button>
+        
         <button type="button" className="btn primary" onClick={() => setDraft(emptyGame())}>+ بازی جدید</button>
       </div>
 
@@ -119,7 +117,7 @@ export function GamesPage() {
               <div className="info-row"><span>اعمال به</span><strong>{selectedGame.target === 'all' ? 'همه رایانه‌ها' : selectedGame.target === 'zone' ? selectedGame.targetZone : selectedGame.targetStations || 'ایستگاه‌های منتخب'}</strong></div>
               <div className="info-row"><span>کاربران فعال</span><strong>{selectedGame.activeUsers.toLocaleString('fa-IR')}</strong></div>
             </div>
-            <div className="game-detail-actions"><button className="btn primary" onClick={() => setDraft({ ...selectedGame })}>ویرایش تنظیمات</button><button className="btn" onClick={() => void applyGames([selectedGame.id])}>اعمال به کلاینت‌ها</button><button className="btn danger" onClick={() => void deleteGame(selectedGame)}>حذف بازی</button></div>
+            <div className="game-detail-actions"><button className="btn primary" onClick={() => setDraft({ ...selectedGame })}>ویرایش تنظیمات</button><button className="btn danger" onClick={() => void deleteGame(selectedGame)}>حذف بازی</button></div>
           </> : <div className="games-empty">بازی‌ای برای نمایش انتخاب نشده است.</div>}
         </section>
       </div>
@@ -127,12 +125,14 @@ export function GamesPage() {
       {draft && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setDraft(null)}><section className="operation-modal wide" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setDraft(null)}>×</button><h2>{games.some(game => game.id === draft.id) ? 'ویرایش بازی' : 'بازی جدید'}</h2>
         <div className="game-form-grid">
           <label>نام بازی<input value={draft.name} onChange={event => patchDraft({ name: event.target.value })} /></label>
+          <label>Launcher<input value={draft.launcher} onChange={event => patchDraft({ launcher: event.target.value })} /></label>
           <label>دسته<input value={draft.category} onChange={event => patchDraft({ category: event.target.value })} /></label>
           <label>مسیر نصب<input className="ltr" value={draft.path} onChange={event => patchDraft({ path: event.target.value })} /></label>
           <label>فایل اجرایی (.exe)<input className="ltr" value={draft.executable} onChange={event => patchDraft({ executable: event.target.value })} /></label>
+          <label>نام Processها (با ویرگول جدا شود)<input value={draft.processNames} onChange={event => patchDraft({ processNames: event.target.value })} /></label>
           <label>پارامتر اجرا<input className="ltr" value={draft.launchArgs} onChange={event => patchDraft({ launchArgs: event.target.value })} /></label>
           <label>نوع اتصال<select value={draft.connectionType} onChange={event => patchDraft({ connectionType: event.target.value })}><option>آنلاین</option><option>آفلاین</option><option>برنامه</option></select></label>
-          <label>وضعیت<select value={draft.status} onChange={event => patchDraft({ status: event.target.value as GameRecord['status'] })}><option value="online">آنلاین</option><option value="offline">آفلاین</option><option value="program">برنامه</option></select></label>
+          <div className="info-row"><span>وضعیت</span><strong>{draft.active ? 'فعال' : 'غیرفعال'} · از سمت سرور محاسبه می‌شود</strong></div>
           <label>نوع سیستم<select value={draft.targetSystem} onChange={event => patchDraft({ targetSystem: event.target.value as GameRecord['targetSystem'] })}><option value="all">همه</option><option value="vip">فقط VIP</option><option value="standard">فقط عادی</option></select></label>
           <label>اعمال به<select value={draft.target} onChange={event => patchDraft({ target: event.target.value as GameRecord['target'] })}><option value="all">همه رایانه‌ها</option><option value="zone">زون خاص</option><option value="stations">ایستگاه‌های منتخب</option></select></label>
           {draft.target === 'zone' && <label>زون<select value={draft.targetZone} onChange={event => patchDraft({ targetZone: event.target.value })}><option value="pc">رایانه‌ها</option><option value="console">کنسول‌ها</option><option value="table">میزها</option></select></label>}

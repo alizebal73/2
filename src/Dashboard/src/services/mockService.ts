@@ -67,19 +67,19 @@ const tariffs: TariffRecord[] = [
 ];
 
 const games: GameRecord[] = [
-  { id: 'g1', name: 'Counter-Strike 2', version: '2.0', category: 'FPS', status: 'online', activeUsers: 34, path: 'D:\\Games\\Steam\\steamapps\\common\\Counter-Strike Global Offensive', executable: 'cs2.exe', cover: '🎯', trailer: '', launchArgs: '-novid', connectionType: 'آنلاین', active: true, targetSystem: 'all', target: 'all', targetZone: 'pc', targetStations: '' },
-  { id: 'g2', name: 'Valorant', version: '11.0', category: 'FPS', status: 'online', activeUsers: 21, path: 'D:\\Riot Games\\VALORANT', executable: 'VALORANT-Win64-Shipping.exe', cover: '⚡', trailer: '', launchArgs: '', connectionType: 'آنلاین', active: true, targetSystem: 'standard', target: 'all', targetZone: 'pc', targetStations: '' },
-  { id: 'g3', name: 'FIFA 25', version: '2025', category: 'Sports', status: 'offline', activeUsers: 14, path: 'D:\\Games\\EA SPORTS FC 25', executable: 'FC25.exe', cover: '⚽', trailer: '', launchArgs: '', connectionType: 'آفلاین', active: true, targetSystem: 'all', target: 'zone', targetZone: 'console', targetStations: '' },
-  { id: 'g4', name: 'Fortnite', version: '25.10', category: 'Battle Royale', status: 'online', activeUsers: 28, path: 'D:\\Epic Games\\Fortnite', executable: 'FortniteClient-Win64-Shipping.exe', cover: '🪂', trailer: '', launchArgs: '', connectionType: 'آنلاین', active: true, targetSystem: 'vip', target: 'all', targetZone: 'pc', targetStations: '' },
-  { id: 'g5', name: 'Discord', version: '1.0', category: 'برنامه', status: 'program', activeUsers: 40, path: 'C:\\Users\\Public\\Desktop', executable: 'Discord.exe', cover: '💬', trailer: '', launchArgs: '', connectionType: 'آنلاین', active: true, targetSystem: 'all', target: 'all', targetZone: 'pc', targetStations: '' },
+  { id: 'g1', name: 'Counter-Strike 2', version: '2.0', category: 'FPS', status: 'online', activeUsers: 34, path: 'D:\\Games\\Steam\\steamapps\\common\\Counter-Strike Global Offensive', executable: 'cs2.exe', cover: '🎯', trailer: '', launchArgs: '-novid', connectionType: 'آنلاین', active: true, targetSystem: 'all', target: 'all', targetZone: 'pc', targetStations: '', launcher: '', processNames: '' },
+  { id: 'g2', name: 'Valorant', version: '11.0', category: 'FPS', status: 'online', activeUsers: 21, path: 'D:\\Riot Games\\VALORANT', executable: 'VALORANT-Win64-Shipping.exe', cover: '⚡', trailer: '', launchArgs: '', connectionType: 'آنلاین', active: true, targetSystem: 'standard', target: 'all', targetZone: 'pc', targetStations: '', launcher: '', processNames: '' },
+  { id: 'g3', name: 'FIFA 25', version: '2025', category: 'Sports', status: 'offline', activeUsers: 14, path: 'D:\\Games\\EA SPORTS FC 25', executable: 'FC25.exe', cover: '⚽', trailer: '', launchArgs: '', connectionType: 'آفلاین', active: true, targetSystem: 'all', target: 'zone', targetZone: 'console', targetStations: '', launcher: '', processNames: '' },
+  { id: 'g4', name: 'Fortnite', version: '25.10', category: 'Battle Royale', status: 'online', activeUsers: 28, path: 'D:\\Epic Games\\Fortnite', executable: 'FortniteClient-Win64-Shipping.exe', cover: '🪂', trailer: '', launchArgs: '', connectionType: 'آنلاین', active: true, targetSystem: 'vip', target: 'all', targetZone: 'pc', targetStations: '', launcher: '', processNames: '' },
+  { id: 'g5', name: 'Discord', version: '1.0', category: 'برنامه', status: 'program', activeUsers: 40, path: 'C:\\Users\\Public\\Desktop', executable: 'Discord.exe', cover: '💬', trailer: '', launchArgs: '', connectionType: 'آنلاین', active: true, targetSystem: 'all', target: 'all', targetZone: 'pc', targetStations: '', launcher: '', processNames: '' },
 ];
 
 const accounts: AccountRecord[] = [
-  { id: 'a1', title: 'Steam-01', platform: 'Steam', status: 'in-use', owner: 'مجموعه', expiresAt: '۳ روز دیگر', allowedGames: ['Counter-Strike 2', 'Dota 2'], assignedClient: 'PC ۱۲', guardStatus: '2FA' },
-  { id: 'a2', title: 'Battle-02', platform: 'Battle.net', status: 'free', owner: 'مجموعه', expiresAt: '۱۲ ساعت دیگر', allowedGames: ['Overwatch 2', 'Diablo IV'], assignedClient: '', guardStatus: 'محافظت‌شده' },
-  { id: 'a3', title: 'Riot-03', platform: 'Riot', status: 'locked', owner: 'مجموعه', expiresAt: 'قفل شده', allowedGames: ['Valorant'], assignedClient: '', guardStatus: 'نیازمند بررسی' },
-  { id: 'a4', title: 'Epic-04', platform: 'Epic', status: 'free', owner: 'مجموعه', expiresAt: '۱ هفته دیگر', allowedGames: ['Fortnite', 'Rocket League'], assignedClient: '', guardStatus: '2FA' },
-  { id: 'a5', title: 'Steam-05', platform: 'Steam', status: 'free', owner: 'مجموعه', expiresAt: '۲ هفته دیگر', allowedGames: ['EA SPORTS FC 25'], assignedClient: '', guardStatus: 'محافظت‌شده' },
+  { id: 'a1', title: 'Steam-01', platform: 'Steam', status: 'in-use', owner: 'مجموعه', expiresAt: '۳ روز دیگر', allowedGames: ['Counter-Strike 2', 'Dota 2'], assignedClient: 'PC ۱۲', guardStatus: '2FA', allowedGameIds: ['g1', 'g2'] },
+  { id: 'a2', title: 'Battle-02', platform: 'Battle.net', status: 'free', owner: 'مجموعه', expiresAt: '۱۲ ساعت دیگر', allowedGames: ['Overwatch 2', 'Diablo IV'], assignedClient: '', guardStatus: 'محافظت‌شده', allowedGameIds: [] },
+  { id: 'a3', title: 'Riot-03', platform: 'Riot', status: 'locked', owner: 'مجموعه', expiresAt: 'قفل شده', allowedGames: ['Valorant'], assignedClient: '', guardStatus: 'نیازمند بررسی', allowedGameIds: ['g2'] },
+  { id: 'a4', title: 'Epic-04', platform: 'Epic', status: 'free', owner: 'مجموعه', expiresAt: '۱ هفته دیگر', allowedGames: ['Fortnite', 'Rocket League'], assignedClient: '', guardStatus: '2FA', allowedGameIds: [] },
+  { id: 'a5', title: 'Steam-05', platform: 'Steam', status: 'free', owner: 'مجموعه', expiresAt: '۲ هفته دیگر', allowedGames: ['EA SPORTS FC 25'], assignedClient: '', guardStatus: 'محافظت‌شده', allowedGameIds: [] },
 ];
 
 const accountLogs: string[] = ['Steam-01 به PC ۱۲ تخصیص یافت', 'Riot-03 پس از خطای ورود قفل شد', 'Epic-04 آزاد شد'];

@@ -271,6 +271,8 @@ export type GameRecord = {
   target: 'all' | 'zone' | 'stations';
   targetZone: string;
   targetStations: string;
+  launcher: string;
+  processNames: string;
 };
 
 export type AccountRecord = {
@@ -283,6 +285,13 @@ export type AccountRecord = {
   allowedGames: string[];
   assignedClient: string;
   guardStatus: '2FA' | 'محافظت‌شده' | 'نیازمند بررسی';
+  allowedGameIds: string[];
+  assignedClientId?: string;
+  assignedGameId?: string;
+  assignedGame?: string;
+  launcher?: string;
+  login?: string;
+  password?: string;
 };
 
 export type ClientRecord = {

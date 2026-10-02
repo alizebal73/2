@@ -259,7 +259,21 @@ public sealed class Game : BaseEntity
     public required string Name { get; set; }
     public string? Genre { get; set; }
     public bool IsActive { get; set; } = true;
+    public string? Version { get; set; }
+    public string? Launcher { get; set; }
+    public string? InstallPath { get; set; }
+    public string? ExecutablePath { get; set; }
+    public string? LaunchArguments { get; set; }
+    public string? ConnectionType { get; set; }
+    public string? TargetSystem { get; set; }
+    public string? TargetZone { get; set; }
+    public string? TargetScope { get; set; }
+    public string? TargetStations { get; set; }
+    public string? ProcessNames { get; set; }
+    public string? CoverPath { get; set; }
+    public string? TrailerPath { get; set; }
     public ICollection<GameAccount> GameAccounts { get; set; } = new List<GameAccount>();
+    public ICollection<GameAccountAllowedGame> AllowedAccountGames { get; set; } = new List<GameAccountAllowedGame>();
 }
 
 public sealed class GameAccount : BaseEntity
@@ -272,6 +286,49 @@ public sealed class GameAccount : BaseEntity
     public Game Game { get; set; } = default!;
     public Guid CustomerId { get; set; }
     public Customer Customer { get; set; } = default!;
+}
+
+public enum GameAccountPoolStatus { Free, InUse, Locked }
+public enum GameAccountLeaseStatus { Active, Released }
+
+public sealed class GameAccountPoolEntry : BaseEntity
+{
+    public required string AccountName { get; set; }
+    public required string Platform { get; set; }
+    public string? Launcher { get; set; }
+    public string? Login { get; set; }
+    public string? PasswordHash { get; set; }
+    public GameAccountPoolStatus Status { get; set; } = GameAccountPoolStatus.Free;
+    public string Owner { get; set; } = "مجموعه";
+    public DateTimeOffset? ExpiresAt { get; set; }
+    public string GuardStatus { get; set; } = "محافظت‌شده";
+    public bool IsActive { get; set; } = true;
+    public ICollection<GameAccountAllowedGame> AllowedGames { get; set; } = new List<GameAccountAllowedGame>();
+    public ICollection<GameAccountLease> Leases { get; set; } = new List<GameAccountLease>();
+}
+
+public sealed class GameAccountAllowedGame
+{
+    public Guid GameAccountPoolEntryId { get; set; }
+    public GameAccountPoolEntry GameAccountPoolEntry { get; set; } = default!;
+    public Guid GameId { get; set; }
+    public Game Game { get; set; } = default!;
+}
+
+public sealed class GameAccountLease : BaseEntity
+{
+    public Guid GameAccountPoolEntryId { get; set; }
+    public GameAccountPoolEntry GameAccountPoolEntry { get; set; } = default!;
+    public Guid GameId { get; set; }
+    public Game Game { get; set; } = default!;
+    public Guid? AgentDeviceId { get; set; }
+    public AgentDevice? AgentDevice { get; set; }
+    public Guid? CustomerId { get; set; }
+    public Customer? Customer { get; set; }
+    public GameAccountLeaseStatus Status { get; set; } = GameAccountLeaseStatus.Active;
+    public DateTimeOffset LeasedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? ReleasedAt { get; set; }
+    public string? ReleaseReason { get; set; }
 }
 
 public sealed class Client : BaseEntity

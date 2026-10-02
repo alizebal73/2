@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { mockService } from '../services/mockService';
-import type { AccountRecord } from '../types';
+import { createServerAccount, getServerAccountClients, getServerAccountLogs, getServerAccounts, leaseServerAccount, lockServerAccount, releaseServerAccount, unlockServerAccount, updateServerAccount } from '../services/accountPoolService';
+import type { AccountRecord, GameRecord } from '../types';
+import { getServerGames } from '../services/gameLibraryService';
 
 type Platform = 'all' | AccountRecord['platform'];
 
@@ -11,30 +12,43 @@ export function AccountsPage() {
   const [logs, setLogs] = useState<string[] | null>(null);
   const [notice, setNotice] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [games, setGames] = useState<GameRecord[]>([]);
+  const [clients, setClients] = useState<Array<{ id: string; name: string; isOnline: boolean; lifecycleState: string }>>([]);
+  const [leaseGameId, setLeaseGameId] = useState('');
+  const [leaseClientId, setLeaseClientId] = useState('');
 
   useEffect(() => {
-    void mockService.getAccounts().then(setAccounts);
+    void Promise.all([getServerAccounts(), getServerGames()]).then(([accountRows, gameRows]) => {
+      setAccounts(accountRows);
+      setGames(gameRows);
+      void getServerAccountClients().then(setClients).catch(() => setClients([]));
+    }).catch(error => setNotice(error instanceof Error ? error.message : 'دریافت Account Pool انجام نشد'));
   }, []);
 
   const visible = useMemo(() => accounts.filter(account => filter === 'all' || account.platform === filter), [accounts, filter]);
 
   function createAccount() {
-    setDraft({ id: crypto.randomUUID(), title: '', platform: 'Steam', status: 'free', owner: 'مجموعه', expiresAt: '', allowedGames: [], assignedClient: '', guardStatus: 'محافظت‌شده' });
+    setDraft({ id: crypto.randomUUID(), title: '', platform: 'Steam', status: 'free', owner: 'مجموعه', expiresAt: '', allowedGames: [], allowedGameIds: [], assignedClient: '', guardStatus: 'محافظت‌شده', launcher: '', login: '', password: '' });
   }
 
   async function saveAccount() {
     if (!draft?.title.trim()) { setNotice('نام یا شناسه اکانت را وارد کنید'); return; }
-    await mockService.saveAccount(draft);
-    setAccounts(await mockService.getAccounts()); setDraft(null); setNotice('اکانت ذخیره شد');
+    try {
+      const exists = accounts.some(account => account.id === draft.id);
+      const saved = exists ? await updateServerAccount(draft) : await createServerAccount(draft);
+      setAccounts(current => exists ? current.map(account => account.id === saved.id ? saved : account) : [...current, saved]);
+      setDraft(null); setNotice('اکانت ذخیره شد');
+    } catch (error) { setNotice(error instanceof Error ? error.message : 'ذخیره اکانت انجام نشد'); }
   }
 
   async function unlock(account: AccountRecord) {
-    await mockService.unlockAccount(account.id);
-    setAccounts(await mockService.getAccounts()); setNotice(`${account.title} آزاد شد`);
+    try { const saved = await unlockServerAccount(account.id); setAccounts(current => current.map(item => item.id === saved.id ? saved : item)); setNotice(account.title + ' آزاد شد'); }
+    catch (error) { setNotice(error instanceof Error ? error.message : 'رفع قفل اکانت انجام نشد'); }
   }
 
   async function showLogs() {
-    setLogs(await mockService.getAccountLogs());
+    try { setLogs((await getServerAccountLogs()).map(row => [row.operator, row.details || row.action].filter(Boolean).join(' · '))); }
+    catch (error) { setNotice(error instanceof Error ? error.message : 'دریافت لاگ انجام نشد'); }
   }
 
   return (
@@ -89,7 +103,26 @@ export function AccountsPage() {
                 <div className="info-row"><span>کلاینت</span><strong>{selected.assignedClient || '—'}</strong></div>
                 <div className="info-row"><span>Guard / 2FA</span><strong>{selected.guardStatus}</strong></div>
               </div>
-              <div className="account-card-actions"><button className="btn primary" onClick={() => setDraft({ ...selected })}>ویرایش</button>{selected.status === 'locked' && <button className="btn" onClick={() => void unlock(selected)}>رفع قفل</button>}<button className="btn" onClick={() => void showLogs()}>لاگ استخر</button></div>
+              {selected.status === 'free' && <div className="account-lease-controls">
+                <select value={leaseGameId} onChange={event => setLeaseGameId(event.target.value)} aria-label="بازی برای تخصیص">
+                  <option value="">بازی را انتخاب کنید</option>{games.filter(game => selected.allowedGameIds.includes(game.id) && game.active).map(game => <option key={game.id} value={game.id}>{game.name}</option>)}
+                </select>
+                <select value={leaseClientId} onChange={event => setLeaseClientId(event.target.value)} aria-label="کلاینت برای تخصیص">
+                  <option value="">کلاینت آنلاین را انتخاب کنید</option>{clients.filter(client => client.isOnline).map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+                </select>
+                <button className="btn primary" disabled={!leaseGameId || !leaseClientId} onClick={() => void (async () => {
+                  try { const saved = await leaseServerAccount(selected.id, leaseGameId, leaseClientId); setAccounts(current => current.map(item => item.id === saved.id ? saved : item)); setLeaseGameId(''); setLeaseClientId(''); setNotice('اکانت به کلاینت تخصیص یافت'); }
+                  catch (error) { setNotice(error instanceof Error ? error.message : 'تخصیص اکانت انجام نشد'); }
+                })()}>تخصیص به کلاینت</button>
+              </div>}
+              {selected.status === 'in-use' && <div className="account-lease-controls">
+                <div className="info-row"><span>بازی فعال</span><strong>{selected.assignedGame || 'نامشخص'} · {selected.assignedClient || 'کلاینت نامشخص'}</strong></div>
+                <button className="btn" onClick={() => void (async () => {
+                  try { const saved = await releaseServerAccount(selected.id); setAccounts(current => current.map(item => item.id === saved.id ? saved : item)); setNotice('اکانت آزاد شد'); }
+                  catch (error) { setNotice(error instanceof Error ? error.message : 'آزادسازی اکانت انجام نشد'); }
+                })()}>آزادسازی حساب</button>
+              </div>}
+              <div className="account-card-actions"><button className="btn primary" onClick={() => setDraft({ ...selected })}>ویرایش</button>{selected.status === 'locked' && <button className="btn" onClick={() => void unlock(selected)}>رفع قفل</button>}{selected.status === 'free' && <button className="btn" onClick={() => void (async () => { try { const saved = await lockServerAccount(selected.id); setAccounts(current => current.map(item => item.id === saved.id ? saved : item)); setNotice('اکانت قفل شد'); } catch (error) { setNotice(error instanceof Error ? error.message : 'قفل اکانت انجام نشد'); } })()}>قفل اکانت</button>}<button className="btn" onClick={() => void showLogs()}>لاگ استخر</button></div>
             </>;
           })()}
         </section>
@@ -97,9 +130,12 @@ export function AccountsPage() {
       {draft && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setDraft(null)}><section className="operation-modal" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setDraft(null)}>×</button><h2>{accounts.some(item => item.id === draft.id) ? 'ویرایش اکانت' : 'اکانت جدید'}</h2>
         <label>نام / شناسه<input value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></label>
         <label>Platform<select value={draft.platform} onChange={event => setDraft({ ...draft, platform: event.target.value as AccountRecord['platform'] })}><option>Steam</option><option>Battle.net</option><option>Riot</option><option>Epic</option></select></label>
-        <label>بازی‌های مجاز (با ویرگول جدا شود)<input value={draft.allowedGames.join(', ')} onChange={event => setDraft({ ...draft, allowedGames: event.target.value.split(',').map(item => item.trim()).filter(Boolean) })} /></label>
-        <label>وضعیت<select value={draft.status} onChange={event => setDraft({ ...draft, status: event.target.value as AccountRecord['status'] })}><option value="free">آزاد</option><option value="in-use">در استفاده</option><option value="locked">قفل‌شده</option></select></label>
-        <label>کلاینت تخصیص‌یافته<input value={draft.assignedClient} onChange={event => setDraft({ ...draft, assignedClient: event.target.value })} /></label>
+        <label>Launcher<input value={draft.launcher || ''} onChange={event => setDraft({ ...draft, launcher: event.target.value })} /></label>
+        <label>Login<input className="ltr" value={draft.login || ''} onChange={event => setDraft({ ...draft, login: event.target.value })} /></label>
+        <label>رمز اکانت<input className="ltr" type="password" value={draft.password || ''} onChange={event => setDraft({ ...draft, password: event.target.value })} placeholder={accounts.some(item => item.id === draft.id) ? 'در صورت تغییر وارد شود' : ''} /></label>
+        <div><strong>بازی‌های مجاز</strong>{games.length === 0 ? <p>بازی فعالی ثبت نشده است.</p> : <div className="account-game-checks">{games.filter(game => game.active).map(game => <label key={game.id}><input type="checkbox" checked={draft.allowedGameIds.includes(game.id)} onChange={event => { const ids = event.target.checked ? [...draft.allowedGameIds, game.id] : draft.allowedGameIds.filter(id => id !== game.id); setDraft({ ...draft, allowedGameIds: ids, allowedGames: games.filter(item => ids.includes(item.id)).map(item => item.name) }); }} />{game.name}</label>)}</div>}</div>
+        <div className="info-row"><span>وضعیت</span><strong>{draft.status === 'free' ? 'آزاد' : draft.status === 'in-use' ? 'در استفاده' : 'قفل‌شده'} · فقط با عملیات Pool تغییر می‌کند</strong></div>
+        <div className="info-row"><span>کلاینت تخصیص‌یافته</span><strong>{draft.assignedClient || '—'}</strong></div>
         <label>وضعیت Guard / 2FA<select value={draft.guardStatus} onChange={event => setDraft({ ...draft, guardStatus: event.target.value as AccountRecord['guardStatus'] })}><option>2FA</option><option>محافظت‌شده</option><option>نیازمند بررسی</option></select></label>
         <label>مالک<input value={draft.owner} onChange={event => setDraft({ ...draft, owner: event.target.value })} /></label>
         <label>تاریخ انقضا<input value={draft.expiresAt} onChange={event => setDraft({ ...draft, expiresAt: event.target.value })} /></label>
