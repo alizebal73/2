@@ -294,6 +294,23 @@ export type SessionTimelineEvent = {
 };
 
 
+export type CustomerVipUsage = {
+  active: boolean;
+  usedTodayMinutes: number;
+  remainingTodayMinutes: number;
+  usedTotalMinutes: number;
+  remainingTotalMinutes: number;
+};
+
+export type CustomerHistoryItem = {
+  id: string;
+  type: string;
+  description: string;
+  amount: number;
+  createdAt: string;
+  referenceId?: string;
+};
+
 export type WalletLedgerEntry = {
   id: string;
   customerId: string;
