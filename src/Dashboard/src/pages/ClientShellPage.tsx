@@ -11,6 +11,7 @@ export function ClientShellPage() {
   const [lastIndex, setLastIndex] = useState<number | null>(null);
   const [selectionRect, setSelectionRect] = useState<{ startX:number; startY:number; endX:number; endY:number } | null>(null);
   const dragRef = useRef<{ startX:number; startY:number; dragging:boolean; ctrl:boolean } | null>(null);
+  const suppressClickRef = useRef(false);
   const [context, setContext] = useState<ContextMenu>(null);
   const [settingsTarget, setSettingsTarget] = useState<string[]>([]);
   const [settings, setSettings] = useState<ClientSettings | null>(null);
@@ -54,6 +55,7 @@ export function ClientShellPage() {
       const drag = dragRef.current;
       if (!drag) return;
       if (drag.dragging && selectionRect) {
+        suppressClickRef.current = true;
         const left = Math.min(selectionRect.startX, selectionRect.endX);
         const right = Math.max(selectionRect.startX, selectionRect.endX);
         const top = Math.min(selectionRect.startY, selectionRect.endY);
@@ -77,6 +79,7 @@ export function ClientShellPage() {
   }, [selectionRect]);
 
   function selectClient(event: React.MouseEvent, client: ClientRecord, index: number) {
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
     if (event.shiftKey && lastIndex !== null) {
       const start = Math.min(lastIndex, index);
       const end = Math.max(lastIndex, index);
