@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { mockService } from '../services/mockService';
-import { getFinanceExpenses, getFinanceSummary } from '../services/financeService';
+import { getFinanceExpenses, getFinanceSummary, createShiftExpense } from '../services/financeService';
+import { closeServerShift, getCurrentShift } from '../services/shiftService';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
 function parsePersianDate(value: string): Date | null {
@@ -135,20 +136,34 @@ export function ReportsPage() {
   async function registerExpense() {
     const title = window.prompt('شرح هزینه'); if (!title) return;
     const value = amount(window.prompt('مبلغ هزینه به تومان', '100000') ?? ''); if (!value) { setNotice('مبلغ معتبر نیست'); return; }
-    await mockService.addExpense({ title, amount: value, category: 'سایر', operator: 'علی محمدی' }); setExpenses(await mockService.getExpenses()); setNotice('هزینه ثبت شد');
+    try {
+      const current = await getCurrentShift();
+      if (!current) { setNotice('برای ثبت هزینه ابتدا یک شیفت باز کنید'); return; }
+      await createShiftExpense(current.id, { amount: value, category: 'سایر', description: title });
+      const costs = await getFinanceExpenses();
+      setExpenses(costs);
+      setNotice('هزینه روی شیفت سرور ثبت شد');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'ثبت هزینه انجام نشد');
+    }
   }
 
   async function closeShift() {
-    const current = await mockService.getCurrentShift();
-    if (!current) { setNotice('شیفت بازی برای بستن وجود ندارد'); return; }
-    const counted = amount(window.prompt('وجه نقد شمارش‌شده (تومان)', String(totals.cash)) ?? '');
-    const result = await mockService.closeShift(counted);
-    setNotice('شیفت بسته شد؛ اختلاف صندوق ' + money(result.difference ?? 0) + ' تومان');
+    try {
+      const current = await getCurrentShift();
+      if (!current) { setNotice('شیفت بازی برای بستن وجود ندارد'); return; }
+      const counted = amount(window.prompt('وجه نقد شمارش‌شده (تومان)', String(totals.cash)) ?? '');
+      const result = await closeServerShift(current.id, { cashClosing: counted, externalCash: 0 });
+      setNotice('شیفت بسته شد؛ اختلاف صندوق ' + money(result.difference) + ' تومان');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'بستن شیفت انجام نشد');
+    }
   }
 
   return <>
     {role === 'operator' && <div className="operation-toast" style={{ position:'relative', inset:'auto', margin:'8px 22px' }}>🔒 اپراتور فقط گزارش شیفت خودش را می‌بیند.</div>}
-    <div className="page-header"><div><p>گزارش مالی و کارکرد</p><h1>گزارش‌ها</h1></div><div className="page-meta"><span>{visibleRows.length} تراکنش</span><span>{role === 'operator' ? 'شیفت شخصی' : 'گزارش کامل'}</span><span>{financeSummary?.source === 'server' ? 'مالی از سرور' : 'حالت نمایشی'}</span></div></div>
+    {financeError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت اطلاعات مالی کامل نشد</strong><span>{financeError} · بخش مالی فعلاً باید از سرور در دسترس باشد.</span></div><button type="button" className="btn sm" onClick={() => window.location.reload()}>تلاش مجدد</button></div>}
+    <div className="page-header"><div><p>گزارش مالی و کارکرد</p><h1>گزارش‌ها</h1></div><div className="page-meta"><span>{visibleRows.length} تراکنش</span><span>{role === 'operator' ? 'شیفت شخصی' : 'گزارش کامل'}</span><span>{financeSummary?.source === 'server' ? 'مالی از سرور' : 'در انتظار سرور'}</span></div></div>
     <div className="toolbar">
       <div className="view-switch">{(['week','month','year','custom'] as Period[]).map(key => <button key={key} className={period===key?'active':''} onClick={() => { setPeriod(key); if (key !== 'custom') setRange(null); }}>{key==='week'?'۷ روز اخیر':key==='month'?'ماهانه (۶ ماه)':key==='year'?'سالانه':'📅 بازه دلخواه'}</button>)}</div>
       <button className="btn" onClick={exportCsv}>📤 خروجی اکسل</button><button className="btn" onClick={() => window.print()}>🖨 چاپ گزارش</button><button className="btn primary" onClick={() => void closeShift()}>🔒 بستن شیفت امروز</button><button className="btn" onClick={() => void registerExpense()}>➖ ثبت هزینه</button>
