@@ -3397,3 +3397,96 @@ button:focus-visible {
 .section-lock-grid{display:grid;gap:6px;margin-top:9px}.section-lock-row{padding:8px;border:1px solid #19243c;border-radius:9px;background:#0d1526}.section-lock-row .setting-item{margin:0}.section-lock-row small{display:block;color:var(--dim);font-size:8.5px;margin-top:2px}.section-lock-pin{margin-top:7px}
 .security-footnote{display:block;color:#71809f;font-size:8.5px;line-height:1.7;margin-top:8px}.section-lock-dialog{max-width:430px}.user-inline-error{margin:8px 0;color:var(--red);font-size:10px}
 .shift-adjust-panel{display:grid;gap:5px;background:linear-gradient(165deg,#101a2e,#0d1526)}.shift-adjust-panel small{color:var(--dim);font-size:9px;line-height:1.7}.user-pay-summary{display:grid;gap:2px;margin-top:8px;color:var(--dim);font-size:9px}
+
+
+.settlement-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 12px 13px;
+  border: 1px solid rgba(255, 180, 84, 0.3);
+  border-radius: 11px;
+  background: rgba(255, 180, 84, 0.07);
+}
+
+.settlement-hero span {
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.settlement-hero strong {
+  color: var(--orange);
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.settlement-grid {
+  display: grid;
+  gap: 1px 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.settlement-why {
+  margin-top: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.settlement-why-toggle {
+  width: 100%;
+  border: 0;
+  background: #0d1526;
+  color: var(--txt);
+  padding: 8px 10px;
+  text-align: right;
+  cursor: pointer;
+  font-size: 10.5px;
+}
+
+.settlement-why-toggle:hover {
+  background: #111b30;
+}
+
+.settlement-why-body {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  color: var(--dim);
+  background: #0a1323;
+  font-size: 9px;
+  line-height: 1.7;
+}
+
+.settlement-payment-inputs {
+  margin-top: 9px;
+}
+
+.settlement-change {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #0d1526;
+}
+
+.settlement-change span {
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.settlement-change strong {
+  margin-top: 3px;
+  color: var(--green);
+  font-size: 14px;
+}
+
+@media (max-width: 650px) {
+  .settlement-grid {
+    grid-template-columns: 1fr;
+  }
+}
