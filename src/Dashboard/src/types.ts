@@ -36,6 +36,7 @@ export type StationDto = {
   serverSessionId?: string;
   network?: 1 | 2;
   outOfServiceReason?: string;
+  remainingMinutes?: number;
 };
 
 export type StartSessionInput = {
