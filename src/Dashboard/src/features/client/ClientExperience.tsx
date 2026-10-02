@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './ClientExperience.css';
 import { mockService } from '../../services/mockService';
 import { authenticateCustomer, readCustomerState, releaseCustomerLogin } from '../../services/customerAuthService';
@@ -83,25 +83,9 @@ export function ClientExperience() {
   const [paletteQuery, setPaletteQuery] = useState('');
   const [notice, setNotice] = useState('');
   const [adVisible, setAdVisible] = useState(true);
-  const [adminDialog, setAdminDialog] = useState<'operator' | 'release' | null>(null);
-  const [pin, setPin] = useState('');
   const [locked, setLocked] = useState(false);
   const [internet, setInternet] = useState(true);
   const [myGamesOnly, setMyGamesOnly] = useState(false);
-
-  const submitAdminAction = useCallback(() => {
-    if (!pin.trim()) { notify('PIN یا رمز مدیر را وارد کنید'); return; }
-    if (adminDialog === 'operator') {
-      if (pin !== '2468') { notify('PIN اپراتور دمو نادرست است'); return; }
-      setCustomerName('اپراتور'); setLoggedIn(true); setRemainingSeconds(24 * 3600); setLocked(false);
-      notify('ورود اپراتور با زمان نامحدود انجام شد');
-    } else {
-      if (pin !== '2020') { notify('رمز مدیر دمو نادرست است'); return; }
-      setLoggedIn(false); setActiveGame(null); setLocked(false);
-      notify('آزادسازی سیستم تأیید شد؛ Restart/Shutdown برای Agent واقعی باقی است');
-    }
-    setAdminDialog(null); setPin('');
-  }, [adminDialog, pin]);
 
   const visibleCommands = useMemo(() => commands.filter(item => item.title.includes(paletteQuery.trim())), [paletteQuery]);
 
@@ -154,11 +138,8 @@ export function ClientExperience() {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault(); setPaletteOpen(value => !value); setPaletteQuery('');
       } else if (event.key === 'Escape') {
-        setPaletteOpen(false); setContext(null); setPanel(null); setDockHoverPanel(null); setAdminDialog(null); setAccountGame(null);
-      } else if (event.altKey && event.key === 'F6') {
-        event.preventDefault(); setAdminDialog('operator');
-      } else if (event.altKey && event.key === 'F7') {
-        event.preventDefault(); setAdminDialog('release');
+        setPaletteOpen(false); setContext(null); setPanel(null); setDockHoverPanel(null); setAccountGame(null);
+
       } else if (event.ctrlKey && event.key.toLowerCase() === 'i') {
         event.preventDefault(); setInternet(value => !value); notify('وضعیت اینترنت تغییر کرد');
       } else if (event.ctrlKey && event.key.toLowerCase() === 'm') {
@@ -171,13 +152,12 @@ export function ClientExperience() {
         event.preventDefault(); notify('درخواست شارژ برای اپراتور ارسال شد');
       } else if (event.ctrlKey && event.key.toLowerCase() === 'p') {
         event.preventDefault(); askMessage();
-      } else if (event.key === 'Enter' && adminDialog) {
-        event.preventDefault(); submitAdminAction();
+
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [adminDialog, loggedIn, submitAdminAction]);
+  }, [loggedIn]);
 
   useEffect(() => {
     if (!notice) return;
@@ -308,7 +288,7 @@ export function ClientExperience() {
       {!loggedIn && <span className="client-offline-pill">● {internet ? 'آنلاین' : 'آفلاین / LAN'}</span>}
     </header>
 
-    {!loggedIn ? <main className="client-login-stage"><section className="client-login-panel"><div className="client-login-logo">گ</div><h1>گیم‌نت منیجر</h1><p>برای شروع بازی وارد حساب خود شوید</p><form onSubmit={event => { event.preventDefault(); signIn(); }}><input id="client-login-id" autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} placeholder="کد کاربری — مثلاً ۱۰۵۰" /><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="رمز عبور (برای مهمان خالی بگذار)" /><div className="client-login-error">{loginError}</div><button className="client-login-submit">ورود به سیستم</button></form><button className="client-guest" onClick={() => signIn(true)}>ورود مهمان</button><div className="client-login-separator" /><button className="client-operator" onClick={() => setAdminDialog('operator')}>🧑‍💼 ورود اپراتور با زمان نامحدود <kbd>Alt+F6</kbd></button><button className="client-release" onClick={() => setAdminDialog('release')}>🔓 آزادسازی سیستم / ورود به Windows <kbd>Alt+F7</kbd></button></section><span className="client-login-foot">شناسه نمونه: ۱۰۵۰ · دسترسی مهمان بدون حساب</span></main> : <>
+    {!loggedIn ? <main className="client-login-stage"><section className="client-login-panel"><div className="client-login-logo">گ</div><h1>گیم‌نت منیجر</h1><p>برای شروع بازی وارد حساب خود شوید</p><form onSubmit={event => { event.preventDefault(); signIn(); }}><input id="client-login-id" autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} placeholder="کد کاربری — مثلاً ۱۰۵۰" /><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="رمز عبور (برای مهمان خالی بگذار)" /><div className="client-login-error">{loginError}</div><button className="client-login-submit">ورود به سیستم</button></form><button className="client-guest" onClick={() => signIn(true)}>ورود مهمان</button><div className="client-login-separator" /><p className="client-login-footnote">کنترل‌های مدیریتی و آزادسازی سیستم فقط از طریق Agent و Dashboard انجام می‌شوند.</p></section><span className="client-login-foot">شناسه نمونه: ۱۰۵۰ · دسترسی مهمان بدون حساب</span></main> : <>
       {sessionLocked ? <main className="client-lock-screen"><div className="client-lock-icon">🔒</div><h1>سیستم قفل است</h1><p>برای ادامه، به اپراتور مراجعه کنید.</p><button className="client-button primary" onClick={() => notify('درخواست بازکردن قفل برای اپراتور ارسال شد')}>درخواست بازگشایی</button></main> : <main className="client-desktop">
         <div className="client-toolbar"><span>{myGamesOnly ? 'بازی‌های من' : 'بازی‌های در دسترس'}</span><div className="client-spacer" /><span className={`client-network ${internet ? '' : 'offline'}`}>● {internet ? 'Online' : 'Offline / LAN'}</span></div>
         <div className={`client-game-grid ${view}`} style={{ '--game-size': `${gameSize}px`, '--game-zoom': zoom / 100 } as React.CSSProperties}>
@@ -368,7 +348,7 @@ export function ClientExperience() {
         <button onClick={() => notify('مسابقات دمو: جام CS2 · ثبت‌نام از صندوق')}>🏆 مسابقات</button>
         <button onClick={() => { setMyGamesOnly(true); setPanel(null); setDockHoverPanel(null); }}>🎮 بازی‌های من</button>
         <button onClick={() => { setDockHoverPanel(null); setPanel(panel === 'account' ? null : 'account'); }}>👤 حساب من</button>
-        <button className="dock-spacer" onClick={() => { setPanel('operator'); setDockHoverPanel(null); setContext({ x: 14, y: window.innerHeight - 350 }); }}>🛠 ابزار اپراتور <kbd>Alt+F6</kbd></button>
+        <button className="dock-spacer" onClick={() => notify('کنترل‌های اپراتور فقط از Dashboard مدیریت انجام می‌شوند.')}>🛡️ کنترل اپراتور</button>
         <button onClick={() => setAdVisible(value => !value)}>📢 تبلیغات</button>
       </nav>
     </>}
@@ -380,8 +360,6 @@ export function ClientExperience() {
     {paletteOpen && <div className="client-overlay" onMouseDown={event => event.target === event.currentTarget && setPaletteOpen(false)}><section className="client-palette" role="dialog" aria-modal="true"><input autoFocus value={paletteQuery} onChange={event => setPaletteQuery(event.target.value)} onKeyDown={event => event.key === 'Enter' && visibleCommands[0] && runCommand(visibleCommands[0].key)} placeholder="جست‌وجوی فرمان یا صفحه…" /><div>{visibleCommands.map(item => <button key={item.key} onClick={() => runCommand(item.key)}><span>{item.icon} {item.title}</span><kbd>Enter</kbd></button>)}</div><small>Ctrl+K باز کردن · Esc بستن</small></section></div>}
 
     {accountGame && <div className="client-overlay" onMouseDown={event => event.target === event.currentTarget && setAccountGame(null)}><section className="client-account-picker" role="dialog" aria-modal="true"><header><div><b>{accountGame.icon} {accountGame.name}</b><small>روش ورود به بازی را انتخاب کنید</small></div><button onClick={() => setAccountGame(null)}>×</button></header><button className="account-option" onClick={() => launchGame(accountGame, 'own')}><span>👤</span><div><b>اکانت خودم</b><small>با حساب شخصی خود وارد شوید</small></div></button><button className="account-option pool" onClick={() => launchGame(accountGame, 'pool')}><span>🎮</span><div><b>اکانت GameNet</b><small>از Account Pool سرور تخصیص داده شود</small></div></button><p>اطلاعات ورود اکانت‌های مجموعه به مشتری نمایش داده نمی‌شود.</p></section></div>}
-
-    {adminDialog && <div className="client-overlay"><section className="client-admin-dialog" role="dialog" aria-modal="true"><header><b>{adminDialog === 'operator' ? 'ورود اپراتور با زمان نامحدود' : 'آزادسازی سیستم'}</b><button onClick={() => { setAdminDialog(null); setPin(''); }}>×</button></header><p>{adminDialog === 'operator' ? 'PIN اپراتور را وارد کنید.' : 'رمز مدیر برای آزادسازی Windows، Restart یا Shutdown لازم است.'}</p><input autoFocus type="password" value={pin} onChange={event => setPin(event.target.value)} placeholder={adminDialog === 'operator' ? 'PIN اپراتور' : 'رمز مدیر'} /><div className="client-admin-actions"><button onClick={() => { setAdminDialog(null); setPin(''); }}>لغو</button>{adminDialog === 'operator' ? <button className="primary" onClick={submitAdminAction}>ورود اپراتور</button> : <><button className="primary" onClick={submitAdminAction}>آزادسازی Windows</button><button onClick={() => { submitAdminAction(); notify('Restart ثبت شد'); }}>Restart</button><button className="danger" onClick={() => { submitAdminAction(); notify('Shutdown ثبت شد'); }}>Shutdown</button></>}</div><small>این عملیات دمو است و اجرای واقعی به Agent کلاینت نیاز دارد.</small></section></div>}
 
     {notice && <div className="client-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
     <span className="client-clock" aria-hidden="true">{new Date(now).toLocaleTimeString('fa-IR')}</span>
