@@ -514,6 +514,12 @@ app.MapPost("/api/payroll/users/{userId:guid}/entries", async (
     if (kind is not ("SalaryAccrual" or "Overtime" or "SalaryPayment" or "Bonus" or "Deduction" or "Advance" or "Damage" or "ReceivablePayment" or "Adjustment"))
         return Results.BadRequest(new { code = "invalid_payroll_kind", message = "نوع عملیات حقوقی معتبر نیست." });
 
+    var paymentMethod = request.PaymentMethod?.Trim().ToLowerInvariant();
+    if (kind == "SalaryPayment" && string.IsNullOrWhiteSpace(paymentMethod))
+        return Results.BadRequest(new { code = "missing_payment_method", message = "روش پرداخت حقوق را مشخص کنید." });
+    if (kind == "SalaryPayment" && paymentMethod is not ("cash" or "card" or "bank"))
+        return Results.BadRequest(new { code = "invalid_payment_method", message = "روش پرداخت حقوق معتبر نیست." });
+
     var profile = await database.EmployeeProfiles.FirstOrDefaultAsync(item => item.AppUserId == userId, cancellationToken);
     if (profile is null)
     {
@@ -548,8 +554,8 @@ app.MapPost("/api/payroll/users/{userId:guid}/entries", async (
         Reason = request.Reason.Trim(),
         Status = sensitive ? ApprovalStatus.Pending : ApprovalStatus.Approved,
         CreatedByUserId = auth.User!.Id,
-        PaymentMethod = request.PaymentMethod?.Trim(),
-        ReceiptNumber = request.ReceiptNumber?.Trim()
+        PaymentMethod = paymentMethod,
+        ReceiptNumber = string.IsNullOrWhiteSpace(request.ReceiptNumber) ? null : request.ReceiptNumber.Trim()
     };
     database.PayrollLedgerEntries.Add(entry);
 
@@ -2861,7 +2867,7 @@ app.MapPost("/api/shifts/{shiftId:guid}/close", async (
         EntityName = "Shift",
         EntityId = shift.Id.ToString(),
         Details = "بستن شیفت · فروش نقدی " + cashSales.ToString("0.##") + " · هزینه " + expenseTotal.ToString("0.##") + " · اختلاف " + difference.ToString("0.##"),
-        AppUserId = shift.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
@@ -3158,33 +3164,20 @@ app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
 
 app.MapPost("/api/invoices/{invoiceId:guid}/reverse", async (
     Guid invoiceId,
-    InvoiceReverseRequest request,
-    InvoiceReverseService reverseService,
     HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
     if (auth.Error is not null) return auth.Error;
-    request = request with { AppUserId = auth.User!.Id };
 
-    try
+    return Results.Conflict(new
     {
-        var result = await reverseService.ReverseAsync(invoiceId, request, cancellationToken);
-        return Results.Ok(result);
-    }
-    catch (KeyNotFoundException exception)
-    {
-        return Results.NotFound(new { code = "invoice_not_found", message = exception.Message });
-    }
-    catch (InvalidOperationException exception)
-    {
-        return Results.Conflict(new { code = "reverse_conflict", message = exception.Message });
-    }
-    catch (ArgumentException exception)
-    {
-        return Results.BadRequest(new { code = "invalid_reverse", message = exception.Message });
-    }
+        code = "approval_required",
+        message = "برگشت فاکتور باید ابتدا از مسیر درخواست تأیید ثبت شود و سپس توسط کاربر مجاز اجرا شود.",
+        invoiceId,
+        requiredEndpoint = $"/api/invoices/{invoiceId}/reverse/request"
+    });
 })
 .WithName("ReverseInvoice");
 
