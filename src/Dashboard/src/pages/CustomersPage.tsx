@@ -4,8 +4,9 @@ import { userErrorMessage } from '../utils/userError';
 import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
 import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
 import { assignVipPackage, getVipPackages } from '../services/vipPackageService';
-import type { CustomerRecord, WalletLedgerEntry } from '../types';
+import type { AppUserRecord, CustomerRecord, WalletLedgerEntry } from '../types';
 import { ApprovalDialog } from '../components/ApprovalDialog';
+import { hasPermission } from '../services/authService';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 type Filter = 'all' | 'vip' | 'debt';
@@ -21,7 +22,12 @@ type CustomerDraft = {
   password: string;
 };
 
-export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'manager' | 'owner' }) {
+export function CustomersPage({ user }: { user: AppUserRecord }) {
+  const canManageCustomer = hasPermission(user, 'customer.manage');
+  const canManageWallet = hasPermission(user, 'customer.wallet');
+  const canManageDebt = hasPermission(user, 'customer.debt');
+  const canRequestApproval = hasPermission(user, 'finance.manage');
+  const canDecideApproval = hasPermission(user, 'approval.decide');
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selectedId, setSelectedId] = useState('c1');
   const [filter, setFilter] = useState<Filter>('all');
@@ -47,6 +53,11 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const [selectedVipPackageId, setSelectedVipPackageId] = useState('');
 
   useEffect(() => {
+    if (!canManageCustomer) {
+      setCustomers([]);
+      setVipPackages([]);
+      return;
+    }
     void Promise.all([
       getServerCustomers(),
       getVipPackages().catch(() => []),
@@ -54,7 +65,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       setCustomers(rows);
       setVipPackages(packages);
     }).catch(error => setNotice(userErrorMessage(error, 'دریافت اطلاعات مشتریان انجام نشد')));
-  }, []);
+  }, [canManageCustomer]);
   const visible = useMemo(() => customers.filter(customer => {
     const matchesFilter = filter === 'all' || (filter === 'vip' ? customer.vip !== 'none' : customer.debt > 0);
     const search = query.trim().toLowerCase();
@@ -72,11 +83,11 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
     setVipUsage(null);
     setServerHistory([]);
     void Promise.all([
-      getWalletLedger(selected.id),
-      getFreeBenefits(selected.id).catch(() => null),
-      getCustomerVipUsage(selected.id).catch(() => null),
-      getCustomerHistory(selected.id).catch(() => []),
-      getCustomerDebts(selected.id).catch(() => []),
+      canManageWallet ? getWalletLedger(selected.id) : Promise.resolve([]),
+      canManageWallet ? getFreeBenefits(selected.id).catch(() => null) : Promise.resolve(null),
+      canManageCustomer ? getCustomerVipUsage(selected.id).catch(() => null) : Promise.resolve(null),
+      canManageCustomer ? getCustomerHistory(selected.id).catch(() => []) : Promise.resolve([]),
+      canManageDebt ? getCustomerDebts(selected.id).catch(() => []) : Promise.resolve([]),
     ]).then(([rows, benefits, usage, history, debts]) => {
       if (!active) return;
       setWalletLedger(rows);
@@ -92,7 +103,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       } else setServerFreeBenefits(null);
     }).catch(() => { if (active) { setWalletLedger([]); setServerFreeBenefits(null); } });
     return () => { active = false; };
-  }, [selected?.id]);
+  }, [selected?.id, canManageCustomer, canManageWallet, canManageDebt]);
 
 
   const vipCount = customers.filter(customer => customer.vip !== 'none').length;
@@ -100,6 +111,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const packageCount = customers.filter(customer => customer.packageName).length;
 
   function openNewCustomer() {
+    if (!canManageCustomer) { setNotice('دسترسی مدیریت مشتریان ندارید'); return; }
     setDraft({ name: '', alias: '', mobile: '', nationalId: '', username: '', vip: 'none', password: '' });
     setConcurrentLoginLimit(1);
     setActionNote('');
@@ -109,6 +121,15 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   function openAction(nextAction: Exclude<CustomerAction, '' | 'new'>) {
     if (!selected) {
       setNotice('ابتدا یک مشتری را انتخاب کنید');
+      return;
+    }
+    const required = nextAction === 'wallet' || nextAction === 'gift' || nextAction === 'freeTime' || nextAction === 'refund'
+      ? canManageWallet
+      : nextAction === 'debt' || nextAction === 'debtSettle'
+        ? canManageDebt
+        : canManageCustomer;
+    if (!required) {
+      setNotice('دسترسی لازم برای این عملیات را ندارید');
       return;
     }
     setAmount('');
