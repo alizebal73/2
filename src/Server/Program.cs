@@ -91,7 +91,14 @@ app.MapGet("/api/customers", async (
             discountLevel = 0,
             lastSeen = "نامشخص",
             status = "active",
-            concurrentLoginLimit = item.ConcurrentLoginLimit
+            concurrentLoginLimit = item.ConcurrentLoginLimit,
+            vipPackageId = item.VipPackageId,
+            vipPackageName = item.VipPackage != null ? item.VipPackage.Name : null,
+            vipActivatedAt = item.VipActivatedAt,
+            vipExpiresAt = item.VipExpiresAt,
+            vipDailyMinutes = item.VipPackage != null ? item.VipPackage.DailyMinutes : 0,
+            vipTotalMinutes = item.VipPackage != null ? item.VipPackage.TotalMinutes : 0,
+            vipDiscountPercent = item.VipPackage != null ? item.VipPackage.DiscountPercent : 0
         })
         .ToListAsync(cancellationToken);
 
