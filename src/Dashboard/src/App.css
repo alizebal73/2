@@ -3350,3 +3350,8 @@ button:focus-visible {
   font-size: 9.5px;
   text-align: center;
 }
+
+
+.client-card { user-select:none; -webkit-user-select:none; -webkit-user-drag:none; cursor:pointer; }
+.client-card.selected { border-color:rgba(58,169,255,.8); box-shadow:0 0 0 2px rgba(58,169,255,.14); }
+.selection-rect { position:fixed; z-index:999; pointer-events:none; border:1px dashed var(--blue); background:rgba(58,169,255,.10); }
