@@ -194,15 +194,11 @@
 - ✅ Multi-cashier concurrency و conflict handling: `UpdatedAt` به‌عنوان Concurrency Token سروری، به‌روزرسانی خودکار زمان تغییر، تبدیل تعارض EF به HTTP 409 فارسی و تست دو اپراتور روی یک رکورد؛ CI #514 سبز.
 - ✅ Approval اجرایی متصل به Reverse واقعی فاکتور: مسیر درخواست با `finance.manage`، تصمیم با `approval.decide`، اجرای Reverse داخل Transaction تصمیم، Audit، و جلوگیری از تأیید توسط ثبت‌کننده؛ CI #520 سبز.
 - ✅ Hardening اولیهٔ Permission در UI: ناوبری بر اساس Permission واقعی فیلتر می‌شود، Navigation/Command/Hotkey بدون مجوز به صفحه وارد نمی‌شود، و Users & Shift کنترل‌های user.manage و shift.manage را جداگانه رعایت می‌کند؛ نقش‌های Admin/Owner هم مانند Server دسترسی سراسری دارند؛ CI #527 سبز.
-- ⬜ Ledger/Payroll واقعی پرسنل و پرداخت حقوق.
-  - پیاده‌سازی فعلی روی Server شامل EmployeeProfile، PayrollLedgerEntry، پرداخت حقوق با روش پرداخت/رسید، و Approval اجرایی برای عملیات حساس است.
-  - UI پروفایل حقوق، Ledger و ثبت عملیات به دادهٔ واقعی Server متصل شده است.
-  - تیک فقط پس از سبز شدن Migration/Server Smoke + Dashboard Lint/Build + E2E روی head جاری مجاز است.
-- ⬜ Hardening کامل Permissionهای Read/Write در همهٔ صفحات دامنه‌ای و تفکیک دقیق مشاهده/ویرایش در هر دامنه.
-  - Customer، Dashboard/Session، Users/Shift و سایر صفحات دامنه‌ای در حال هم‌ترازی Read/Write با Permissionهای Server هستند.
-- ⬜ Approvalهای حساس باقی‌مانده.
-  - Invoice Reverse قبلاً به‌صورت واقعی تأیید و اجرا شده است.
-  - Wallet Refund اکنون مسیر درخواست/تأیید/اجرای Server-side دارد و تست واقعی آن هنوز باید روی head جاری سبز شود.
+- ✅ Ledger/Payroll واقعی پرسنل و پرداخت حقوق — Server، Ledger، پروفایل حقوق، روش پرداخت/رسید و Approval اجرایی روی head جاری پیاده و با CI #591 در Build/Test، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke تأیید شد.
+- ✅ Hardening Read/Write برای دامنه‌های فعال Server-backed: Customer، Dashboard/Session، Buffet/Inventory، Users/Shift/Payroll و Reports؛ کنترل‌های UI با Permissionهای واقعی هم‌تراز و endpointهای حساس Server-side محافظت شدند.
+- ⬜ صفحات Mock/آینده مثل Accounts، Games، Tariffs و ClientShell تا زمان ساخته‌شدن dependency واقعی همان Stageها بازطراحی امنیتی کامل نمی‌شوند؛ این‌ها عمداً خارج از Stage 7 فعال‌سازی نشده‌اند.
+- ✅ Approvalهای حساس فعال: Invoice Reverse و Wallet Refund دارای مسیر درخواست/تصمیم/اجرای واقعی Server-side، Transaction و Audit هستند؛ Wallet Refund با CI #591 تا اجرای واقعی و Ledger/Reference آن تست شد.
+- ✅ Generic Approval API هم به Actionهای شناخته‌شده و Permission متناظر محدود شد و Action ناشناخته در Smoke با 400 رد می‌شود.
 
 
 ## تکمیل‌های سراسری مرحله ۳ — نیازهای جدید اپراتور
