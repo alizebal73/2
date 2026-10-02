@@ -6,6 +6,7 @@ import { calculateBilling, resolvePricingRate } from '../services/billingEngine'
 import { SessionCenter } from '../features/session/SessionCenter';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
 import { ApprovalDialog } from '../components/ApprovalDialog';
+import { ReverseDialog } from '../components/ReverseDialog';
 
 const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه‌ها (۴۰)', console: 'کنسول‌ها (۱۶)', table: 'میزها (۵)' };
 const stateLabels: Record<StationState, string> = { free: 'آزاد', busy: 'در حال بازی', paused: 'متوقف', reserved: 'رزرو', off: 'خارج از سرویس' };
@@ -54,6 +55,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   const [sessionTimeline, setSessionTimeline] = useState<SessionTimelineEvent[]>([]);
   const [message, setMessage] = useState('');
   const [approval, setApproval] = useState<{ title: string; detail: string; action: 'settle'; method: string } | null>(null);
+  const [reverseRequest, setReverseRequest] = useState<SessionTimelineEvent | null>(null);
+  const [reversedEventIds, setReversedEventIds] = useState<string[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
   const [extendMinutes, setExtendMinutes] = useState(30);
@@ -496,7 +499,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     if (!minutes || minutes >= current) { setMessage('زمان کاهش باید کمتر از زمان استفاده‌شده باشد'); return; }
     const nextStartedAt = new Date(new Date(activeStation.startedAt ?? Date.now()).getTime() + minutes * 60000).toISOString();
     updateStation(activeStation.id, { startedAt: nextStartedAt, sessionMinutes: Math.max(0, current - minutes) });
-    addSessionTimeline(activeStation.id, 'reduce', 'کاهش زمان', money(minutes) + ' دقیقه از زمان صورتحساب کم شد');
+    addSessionTimeline(activeStation.id, 'reduce', 'کاهش زمان', money(minutes) + ' دقیقه از زمان صورتحساب کم شد', minutes);
     setModal(null);
     setMessage(money(minutes) + ' دقیقه از زمان قابل صورتحساب کم شد');
   }
@@ -516,7 +519,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     }
     const nextStartedAt = new Date(new Date(activeStation.startedAt ?? Date.now()).getTime() - minutes * 60000).toISOString();
     updateStation(activeStation.id, { sessionMinutes: duration(activeStation) + minutes, startedAt: nextStartedAt });
-    addSessionTimeline(activeStation.id, 'extend', 'تمدید جلسه', money(minutes) + ' دقیقه به جلسه اضافه شد');
+    addSessionTimeline(activeStation.id, 'extend', 'تمدید جلسه', money(minutes) + ' دقیقه به جلسه اضافه شد', minutes);
     setModal(null);
     setMessage(`${money(minutes)} دقیقه به جلسه ${activeStation.name} اضافه شد`);
   }
@@ -552,6 +555,59 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
     setModal(null);
   }
+  const isReversibleTimelineEvent = useCallback((event: SessionTimelineEvent) => {
+    return ['charge', 'extend', 'reduce', 'buffet'].includes(event.kind) && !reversedEventIds.includes(event.id);
+  }, [reversedEventIds]);
+
+  function reverseTimelineEvent(event: SessionTimelineEvent) {
+    const station = stations.find(item => item.id === event.stationId);
+    if (!station || event.amount === undefined) {
+      setMessage('این عملیات در وضعیت فعلی قابل برگشت نیست');
+      return;
+    }
+
+    if (event.kind === 'buffet') {
+      updateStation(station.id, { buffetTotal: Math.max(0, (station.buffetTotal ?? 0) - event.amount) });
+    } else if (event.kind === 'charge') {
+      const rate = station.sessionRate ?? station.ratePerHour;
+      const minutes = rate > 0 ? event.amount / (rate / 60) : 0;
+      const currentDuration = duration(station);
+      const nextDuration = Math.max(0, currentDuration - minutes);
+      const currentEnd = station.prepaidEndsAt ? new Date(station.prepaidEndsAt).getTime() : 0;
+      updateStation(station.id, {
+        sessionCredit: Math.max(0, (station.sessionCredit ?? 0) - event.amount),
+        sessionMinutes: nextDuration,
+        startedAt: new Date(Date.now() - nextDuration * 60000).toISOString(),
+        prepaidEndsAt: currentEnd ? new Date(currentEnd - minutes * 60000).toISOString() : undefined,
+      });
+    } else if (event.kind === 'extend') {
+      const currentDuration = duration(station);
+      const minutes = event.amount;
+      updateStation(station.id, {
+        sessionMinutes: Math.max(0, currentDuration - minutes),
+        startedAt: new Date(Date.now() - Math.max(0, currentDuration - minutes) * 60000).toISOString(),
+      });
+    } else if (event.kind === 'reduce') {
+      const currentDuration = duration(station);
+      const minutes = event.amount;
+      updateStation(station.id, {
+        sessionMinutes: currentDuration + minutes,
+        startedAt: new Date(Date.now() - (currentDuration + minutes) * 60000).toISOString(),
+      });
+    }
+
+    setReversedEventIds(current => [...current, event.id]);
+    addSessionTimeline(
+      event.stationId,
+      'note',
+      'برگشت عملیات',
+      'عملیات «' + event.title + '» معکوس شد؛ رکورد اصلی حذف نشده است.',
+      event.amount,
+    );
+    setReverseRequest(null);
+    setMessage('برگشت عملیات ثبت شد');
+  }
+
   function openSessionCenter(station: StationDto) {
     if (!['busy', 'paused'].includes(station.state)) {
       setMessage('این ایستگاه جلسه فعالی ندارد');
@@ -697,6 +753,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       <button onClick={() => contextAction('offline')}>🛠 خارج از سرویس / فعال‌سازی</button>
       <button onClick={() => contextAction('settings')}>⚙ تنظیمات کامل کلاینت</button>
     </div>}
+    {reverseRequest && <ReverseDialog open={Boolean(reverseRequest)} title={reverseRequest.title} detail={reverseRequest.detail} onCancel={() => setReverseRequest(null)} onConfirm={() => reverseTimelineEvent(reverseRequest)} />}
     {approval && <ApprovalDialog
       open={Boolean(approval)}
       title={approval.title}
