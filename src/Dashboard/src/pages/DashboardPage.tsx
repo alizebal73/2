@@ -12,6 +12,7 @@ import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
 import { ApprovalDialog } from '../components/ApprovalDialog';
 import { ReverseDialog } from '../components/ReverseDialog';
+import { sendAgentCommand } from '../services/agentService';
 
 const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه‌ها (۴۰)', console: 'کنسول‌ها (۱۶)', table: 'میزها (۵)' };
 const stateLabels: Record<StationState, string> = { free: 'آماده استفاده', busy: 'در حال استفاده', paused: 'متوقف', reserved: 'رزرو', off: 'خاموش / خارج از سرویس' };
@@ -105,7 +106,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
               remainingMinutes: serverStation.remainingMinutes,
               serverSessionId: serverStation.serverSessionId,
               buffetTotal: serverStation.buffetTotal,
+              agentId: serverStation.agentId,
               agentOnline: serverStation.agentOnline,
+              agentLocked: serverStation.agentLocked,
               agentLastSeenAt: serverStation.agentLastSeenAt,
               agentVersion: serverStation.agentVersion,
               sessionStartedAt: serverStation.sessionStartedAt,
@@ -1162,6 +1165,32 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     event.preventDefault();
     openContextAt(event.clientX, event.clientY, station);
   }
+  async function setAgentLock(station: StationDto, locked: boolean) {
+    if (!canControlClient) {
+      setMessage('دسترسی کنترل کلاینت ندارید');
+      return;
+    }
+    if (!station.agentId || station.agentOnline === false) {
+      setMessage('Agent این دستگاه در دسترس نیست');
+      return;
+    }
+
+    try {
+      const result = await sendAgentCommand(station.agentId, locked ? 'lock' : 'unlock');
+      if (result.status !== 'Succeeded' || result.succeeded !== true) {
+        throw new Error(result.resultMessage || 'فرمان Agent اجرا نشد');
+      }
+
+      updateStation(station.id, {
+        agentId: station.agentId,
+        agentLocked: locked,
+      });
+      setMessage(locked ? 'دستگاه قفل شد' : 'قفل دستگاه آزاد شد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, locked ? 'قفل کردن دستگاه انجام نشد' : 'آزاد کردن قفل دستگاه انجام نشد'));
+    }
+  }
+
   function contextAction(action: string) {
     const station = context?.station;
     setContext(null);
@@ -1176,6 +1205,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       updateStation(station.id, { state: station.state === 'off' ? 'free' : 'off', outOfServiceReason: station.state === 'off' ? undefined : 'تعمیر و نگهداری' });
       setMessage(station.state === 'off' ? 'ایستگاه فعال شد' : 'ایستگاه خارج از سرویس شد'); return;
     }
+    if (action === 'lock') { void setAgentLock(station, true); return; }
+    if (action === 'unlock') { void setAgentLock(station, false); return; }
     if (action === 'settings') { window.dispatchEvent(new CustomEvent('gamenet-select-client', { detail: station.name })); onNavigate('client-shell'); return; }
     if (action === 'switch-net') { updateStation(station.id, { network: station.network === 1 ? 2 : 1 }); setMessage(`شبکه به اینترنت ${station.network === 1 ? '۲' : '۱'} تغییر کرد`); return; }
     setMessage(`${action} برای ${station.name} در صف دمو ثبت شد`);
@@ -1261,12 +1292,15 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       <span className="type">
         {station.type} · اینترنت {station.network ?? 1}
         {station.zone === 'pc' && station.agentOnline !== undefined && (
-          <span
-            className={`agent-state ${station.agentOnline ? 'online' : 'offline'}`}
-            title={station.agentLastSeenAt ? `آخرین ارتباط Agent: ${new Date(station.agentLastSeenAt).toLocaleTimeString('fa-IR')}` : 'Agent هنوز heartbeat معتبر ندارد'}
-          >
-            · Agent {station.agentOnline ? 'متصل' : 'آفلاین'}
-          </span>
+          <>
+            <span
+              className={`agent-state ${station.agentOnline ? 'online' : 'offline'}`}
+              title={station.agentLastSeenAt ? `آخرین ارتباط Agent: ${new Date(station.agentLastSeenAt).toLocaleTimeString('fa-IR')}` : 'Agent هنوز heartbeat معتبر ندارد'}
+            >
+              · Agent {station.agentOnline ? 'متصل' : 'آفلاین'}
+            </span>
+            {station.agentOnline && station.agentLocked && <span className="agent-state locked"> · قفل</span>}
+          </>
         )}
       </span>
       <div className="time">{station.state === 'busy' ? `${money(Math.floor(minutes / 60)).padStart(2, '۰')}:${money(Math.floor(minutes % 60)).padStart(2, '۰')}` : station.state === 'reserved' ? 'رزرو' : station.state === 'off' ? '⛔' : '--:--'}</div>
@@ -1411,6 +1445,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('reduce')}>↘ کاهش زمان</button>}
       {canControlClient && <button onClick={() => contextAction('switch-net')}>🌐 تغییر اینترنت ۱ ↔ ۲</button>}
       {canManageSession && <button onClick={() => contextAction('move-user')}>🔀 جابه‌جایی یوزر</button>}
+      {canControlClient && context.station.agentOnline && context.station.agentId && !context.station.agentLocked && <button onClick={() => contextAction('lock')}>🔒 قفل دستگاه</button>}
+      {canControlClient && context.station.agentOnline && context.station.agentId && context.station.agentLocked && <button onClick={() => contextAction('unlock')}>🔓 آزاد کردن قفل</button>}
       {canControlClient && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
       {canControlClient && <button onClick={() => contextAction('login-id')}>🔑 ورود با شناسه</button>}
       {canControlClient && <button onClick={() => contextAction('message')}>💬 پیام به مشتری</button>}
