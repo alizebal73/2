@@ -62,6 +62,412 @@ app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration c
 })
 .WithName("GetReleaseManifest");
 
+app.MapPost("/api/auth/login", async (
+    LoginRequest request,
+    GameNetDbContext database,
+    HttpContext context,
+    CancellationToken cancellationToken) =>
+{
+    var username = request.UserName?.Trim();
+    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(request.Password))
+        return Results.BadRequest(new { code = "missing_credentials", message = "نام کاربری و رمز عبور را وارد کنید." });
+
+    var user = await database.AppUsers
+        .Include(item => item.Permissions)
+        .ThenInclude(item => item.Permission)
+        .FirstOrDefaultAsync(item => item.UserName == username && item.IsActive, cancellationToken);
+
+    if (user is null || !PasswordSecurity.Verify(request.Password, user.PasswordHash))
+        return Results.Unauthorized();
+
+    var token = AuthorizationService.CreateToken();
+    var session = new AppUserSession
+    {
+        AppUserId = user.Id,
+        TokenHash = PasswordSecurity.HashToken(token),
+        ExpiresAt = DateTimeOffset.UtcNow.AddHours(AuthorizationService.SessionHours),
+        LastSeenAt = DateTimeOffset.UtcNow
+    };
+
+    user.LastLoginAt = DateTimeOffset.UtcNow;
+    database.AppUserSessions.Add(session);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AppUserLogin",
+        EntityName = "AppUser",
+        EntityId = user.Id.ToString(),
+        AppUserId = user.Id,
+        Details = "ورود اپراتور · " + user.UserName
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    context.Response.Cookies.Append(AuthorizationService.SessionCookieName, token, new CookieOptions
+    {
+        HttpOnly = true,
+        Secure = context.Request.IsHttps,
+        SameSite = SameSiteMode.Lax,
+        Expires = session.ExpiresAt
+    });
+
+    return Results.Ok(ToAppUserDto(user));
+})
+.WithName("AppUserLogin");
+
+app.MapPost("/api/auth/logout", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var user = await AuthorizationService.ResolveUserAsync(context, database, cancellationToken);
+    var token = context.Request.Cookies[AuthorizationService.SessionCookieName];
+    if (!string.IsNullOrWhiteSpace(token))
+    {
+        var hash = PasswordSecurity.HashToken(token);
+        var session = await database.AppUserSessions.FirstOrDefaultAsync(item => item.TokenHash == hash, cancellationToken);
+        if (session is not null)
+        {
+            session.RevokedAt = DateTimeOffset.UtcNow;
+            await database.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    context.Response.Cookies.Delete(AuthorizationService.SessionCookieName);
+    if (user is not null)
+    {
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "AppUserLogout",
+            EntityName = "AppUser",
+            EntityId = user.Id.ToString(),
+            AppUserId = user.Id,
+            Details = "خروج اپراتور · " + user.UserName
+        });
+        await database.SaveChangesAsync(cancellationToken);
+    }
+
+    return Results.Ok(new { success = true });
+})
+.WithName("AppUserLogout");
+
+app.MapGet("/api/auth/me", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var user = await AuthorizationService.ResolveUserAsync(context, database, cancellationToken);
+    return user is null ? Results.Unauthorized() : Results.Ok(ToAppUserDto(user));
+})
+.WithName("GetCurrentAppUser");
+
+app.MapGet("/api/users", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var users = await database.AppUsers
+        .AsNoTracking()
+        .Include(item => item.Permissions)
+        .ThenInclude(item => item.Permission)
+        .OrderBy(item => item.FullName)
+        .Select(item => ToAppUserDto(item))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(users);
+})
+.WithName("GetAppUsers");
+
+app.MapPost("/api/users", async (
+    AppUserWriteRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var username = request.UserName?.Trim();
+    var fullName = request.FullName?.Trim();
+    var email = request.Email?.Trim();
+    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email))
+        return Results.BadRequest(new { code = "missing_user_fields", message = "نام، نام کاربری و ایمیل را کامل کنید." });
+    if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 8)
+        return Results.BadRequest(new { code = "weak_password", message = "رمز عبور باید حداقل ۸ کاراکتر باشد." });
+    if (!AuthorizationService.PermissionCatalog.ContainsKey(request.Role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ? "user.manage" : "session.start"))
+        return Results.BadRequest(new { code = "invalid_role", message = "نقش کاربر معتبر نیست." });
+
+    if (await database.AppUsers.AnyAsync(item => item.UserName == username || item.Email == email, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_user", message = "نام کاربری یا ایمیل قبلاً استفاده شده است." });
+
+    var user = new AppUser
+    {
+        FullName = fullName,
+        UserName = username,
+        Email = email,
+        PasswordHash = PasswordSecurity.Hash(request.Password),
+        Role = request.Role.Trim(),
+        IsActive = true
+    };
+    database.AppUsers.Add(user);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AppUserCreate",
+        EntityName = "AppUser",
+        EntityId = user.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ایجاد کاربر · " + user.UserName
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(ToAppUserDto(user));
+})
+.WithName("CreateAppUser");
+
+app.MapPut("/api/users/{userId:guid}", async (
+    Guid userId,
+    AppUserWriteRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var user = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+    if (user is null) return Results.NotFound(new { code = "user_not_found", message = "کاربر پیدا نشد." });
+
+    var username = request.UserName?.Trim();
+    var fullName = request.FullName?.Trim();
+    var email = request.Email?.Trim();
+    if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email))
+        return Results.BadRequest(new { code = "missing_user_fields", message = "نام، نام کاربری و ایمیل را کامل کنید." });
+
+    if (await database.AppUsers.AnyAsync(item => item.Id != userId && (item.UserName == username || item.Email == email), cancellationToken))
+        return Results.Conflict(new { code = "duplicate_user", message = "نام کاربری یا ایمیل قبلاً استفاده شده است." });
+
+    user.FullName = fullName;
+    user.UserName = username;
+    user.Email = email;
+    user.Role = request.Role.Trim();
+    user.IsActive = request.IsActive;
+    if (!string.IsNullOrWhiteSpace(request.Password))
+    {
+        if (request.Password.Length < 8)
+            return Results.BadRequest(new { code = "weak_password", message = "رمز عبور باید حداقل ۸ کاراکتر باشد." });
+        user.PasswordHash = PasswordSecurity.Hash(request.Password);
+    }
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AppUserUpdate",
+        EntityName = "AppUser",
+        EntityId = user.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ویرایش کاربر · " + user.UserName
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(ToAppUserDto(user));
+})
+.WithName("UpdateAppUser");
+
+app.MapGet("/api/permissions", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var permissions = await database.Permissions
+        .AsNoTracking()
+        .OrderBy(item => item.Name)
+        .Select(item => new { id = item.Id, name = item.Name, description = item.Description })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(permissions);
+})
+.WithName("GetPermissions");
+
+app.MapPut("/api/users/{userId:guid}/permissions", async (
+    Guid userId,
+    PermissionAssignmentRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "user.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var user = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+    if (user is null) return Results.NotFound(new { code = "user_not_found", message = "کاربر پیدا نشد." });
+
+    var names = request.PermissionNames
+        .Where(name => !string.IsNullOrWhiteSpace(name))
+        .Select(name => name.Trim().ToLowerInvariant())
+        .Distinct()
+        .ToList();
+
+    var invalid = names.Where(name => !AuthorizationService.PermissionCatalog.ContainsKey(name)).ToList();
+    if (invalid.Count > 0)
+        return Results.BadRequest(new { code = "invalid_permission", message = "یکی از دسترسی‌ها معتبر نیست.", invalid });
+
+    var permissions = await database.Permissions.Where(item => names.Contains(item.Name)).ToListAsync(cancellationToken);
+    var current = await database.AppUserPermissions.Where(item => item.AppUserId == userId).ToListAsync(cancellationToken);
+    database.AppUserPermissions.RemoveRange(current);
+
+    foreach (var permission in permissions)
+        database.AppUserPermissions.Add(new AppUserPermission { AppUserId = userId, PermissionId = permission.Id });
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AppUserPermissionsUpdate",
+        EntityName = "AppUser",
+        EntityId = userId.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "تغییر دسترسی‌ها · " + user.UserName + " · " + string.Join(",", names)
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { userId, permissions = names });
+})
+.WithName("SetAppUserPermissions");
+
+app.MapGet("/api/approvals", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var approvals = await database.ApprovalRequests
+        .AsNoTracking()
+        .OrderByDescending(item => item.CreatedAt)
+        .Take(100)
+        .Select(item => new
+        {
+            id = item.Id,
+            action = item.Action,
+            entityName = item.EntityName,
+            entityId = item.EntityId,
+            reason = item.Reason,
+            status = item.Status.ToString(),
+            requestedByUserId = item.RequestedByUserId,
+            requestedBy = item.RequestedByUser.FullName,
+            decidedByUserId = item.DecidedByUserId,
+            decidedBy = item.DecidedByUser == null ? null : item.DecidedByUser.FullName,
+            decisionNote = item.DecisionNote,
+            createdAt = item.CreatedAt,
+            decidedAt = item.DecidedAt
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(approvals);
+})
+.WithName("GetApprovals");
+
+app.MapPost("/api/approvals", async (
+    ApprovalCreateRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var user = await AuthorizationService.ResolveUserAsync(context, database, cancellationToken);
+    if (user is null) return Results.Unauthorized();
+
+    if (string.IsNullOrWhiteSpace(request.Action) || string.IsNullOrWhiteSpace(request.EntityName) || string.IsNullOrWhiteSpace(request.Reason))
+        return Results.BadRequest(new { code = "invalid_approval_request", message = "عملیات، موجودیت و دلیل تأیید را وارد کنید." });
+
+    var approval = new ApprovalRequest
+    {
+        Action = request.Action.Trim(),
+        EntityName = request.EntityName.Trim(),
+        EntityId = request.EntityId,
+        Reason = request.Reason.Trim(),
+        RequestedByUserId = user.Id,
+        Status = ApprovalStatus.Pending
+    };
+    database.ApprovalRequests.Add(approval);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ApprovalRequestCreate",
+        EntityName = "ApprovalRequest",
+        EntityId = approval.Id.ToString(),
+        AppUserId = user.Id,
+        Details = "درخواست تأیید · " + approval.Action + " · " + approval.Reason
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = approval.Id, status = approval.Status.ToString() });
+})
+.WithName("CreateApprovalRequest");
+
+app.MapPost("/api/approvals/{approvalId:guid}/approve", async (
+    Guid approvalId,
+    ApprovalDecisionRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var approval = await database.ApprovalRequests.FirstOrDefaultAsync(item => item.Id == approvalId, cancellationToken);
+    if (approval is null) return Results.NotFound(new { code = "approval_not_found", message = "درخواست تأیید پیدا نشد." });
+    if (approval.Status != ApprovalStatus.Pending)
+        return Results.Conflict(new { code = "approval_not_pending", message = "این درخواست دیگر در وضعیت انتظار نیست." });
+
+    approval.Status = ApprovalStatus.Approved;
+    approval.DecidedByUserId = auth.User!.Id;
+    approval.DecidedAt = DateTimeOffset.UtcNow;
+    approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ApprovalApprove",
+        EntityName = "ApprovalRequest",
+        EntityId = approval.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = "تأیید عملیات · " + approval.Action
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = approval.Id, status = approval.Status.ToString() });
+})
+.WithName("ApproveApprovalRequest");
+
+app.MapPost("/api/approvals/{approvalId:guid}/reject", async (
+    Guid approvalId,
+    ApprovalDecisionRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var approval = await database.ApprovalRequests.FirstOrDefaultAsync(item => item.Id == approvalId, cancellationToken);
+    if (approval is null) return Results.NotFound(new { code = "approval_not_found", message = "درخواست تأیید پیدا نشد." });
+    if (approval.Status != ApprovalStatus.Pending)
+        return Results.Conflict(new { code = "approval_not_pending", message = "این درخواست دیگر در وضعیت انتظار نیست." });
+
+    approval.Status = ApprovalStatus.Rejected;
+    approval.DecidedByUserId = auth.User!.Id;
+    approval.DecidedAt = DateTimeOffset.UtcNow;
+    approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? "رد شد" : request.Note.Trim();
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ApprovalReject",
+        EntityName = "ApprovalRequest",
+        EntityId = approval.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = "رد عملیات · " + approval.Action
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = approval.Id, status = approval.Status.ToString() });
+})
+.WithName("RejectApprovalRequest");
+
 app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken cancellationToken) =>
 {
     var stations = await database.Stations
