@@ -151,7 +151,7 @@ export function SessionCenter({
           <button type="button" className="btn" onClick={onCharge}>＋ شارژ جلسه</button>
           <button type="button" className="btn" onClick={onExtend}>⏱ تمدید</button>
           <button type="button" className="btn" onClick={onReduce}>↘ کاهش زمان</button>
-          <button type="button" className="btn danger" onClick={onSettle}>🧾 تسویه</button>
+          <button type="button" className="btn danger" onClick={onSettle}>⏹ پایان بازی</button>
         </div>
       </section>
     </div>
