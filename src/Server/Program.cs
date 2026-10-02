@@ -155,9 +155,13 @@ app.MapGet("/api/agent/devices", async (
     if (auth.Error is not null) return auth.Error;
 
     var now = DateTimeOffset.UtcNow;
+    var heartbeatInterval = Math.Clamp(
+        configuration.GetValue("Agent:HeartbeatIntervalSeconds", 10),
+        3,
+        60);
     var offlineAfter = Math.Clamp(
         configuration.GetValue("Agent:OfflineAfterSeconds", 30),
-        10,
+        heartbeatInterval * 2,
         300);
 
     var devices = await database.AgentDevices
