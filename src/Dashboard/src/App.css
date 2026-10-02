@@ -3499,3 +3499,73 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+
+.split-payment-box {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(58, 169, 255, 0.28);
+  border-radius: 10px;
+  background: rgba(58, 169, 255, 0.05);
+}
+
+.split-payment-head {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.split-payment-head strong { font-size: 11px; }
+.split-payment-head span { color: var(--dim); font-size: 9px; }
+
+.split-payment-box label {
+  display: grid;
+  gap: 4px;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.split-payment-box input {
+  width: 100%;
+}
+
+.split-payment-total {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 10px;
+}
+
+.split-payment-total strong {
+  color: var(--orange);
+  font-size: 12px;
+}
+
+.split-payment-box + .modal-actions {
+  margin-top: 9px;
+}
+
+.btn.active {
+  border-color: rgba(58, 169, 255, 0.55);
+  background: rgba(58, 169, 255, 0.12);
+  color: #b9dcff;
+}
+
+@media (max-width: 700px) {
+  .split-payment-box {
+    grid-template-columns: 1fr;
+  }
+
+  .split-payment-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
