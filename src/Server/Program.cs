@@ -881,11 +881,16 @@ app.MapGet("/api/buffet/reports/profit", async (
 {
     var start = from ?? DateTimeOffset.UtcNow.Date.AddDays(-30);
     var end = to ?? DateTimeOffset.UtcNow;
-    var rows = await database.InventoryTransactions.AsNoTracking()
-        .Where(item => item.CreatedAt >= start && item.CreatedAt <= end &&
-            (item.Kind == "Sale" || item.Kind == "Purchase" || item.Kind == "Waste" || item.Kind == "Return"))
-        .Select(item => new { item.ProductId, productName = item.Product.Name, item.Quantity, item.UnitPrice, item.UnitCost, item.Direction, item.Kind, item.ReferenceInvoiceId })
+    var inventory = await database.InventoryTransactions
+        .Include(item => item.Product)
+        .AsNoTracking()
         .ToListAsync(cancellationToken);
+
+    var rows = inventory
+        .Where(item => item.CreatedAt >= start && item.CreatedAt <= end
+            && (item.Kind == "Sale" || item.Kind == "Purchase" || item.Kind == "Waste" || item.Kind == "Return"))
+        .Select(item => new { item.ProductId, productName = item.Product.Name, item.Quantity, item.UnitPrice, item.UnitCost, item.Direction, item.Kind, item.ReferenceInvoiceId })
+        .ToList();
     var products = rows.GroupBy(item => new { item.ProductId, item.productName }).Select(group =>
     {
         var sales = group.Where(item => item.Kind == "Sale");
