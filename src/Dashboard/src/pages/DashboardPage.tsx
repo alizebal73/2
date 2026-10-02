@@ -1258,13 +1258,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     if (action === 'unlock') { void setAgentLock(station, false); return; }
     if (action === 'logout-lock') { void setAgentLogoutLock(station); return; }
     if (action === 'kiosk-toggle') { void setAgentKioskPolicy(station, !Boolean(station.agentKioskEnabled)); return; }
-    if (action === 'offline') {
-      updateStation(station.id, { state: station.state === 'off' ? 'free' : 'off', outOfServiceReason: station.state === 'off' ? undefined : 'تعمیر و نگهداری' });
-      setMessage(station.state === 'off' ? 'ایستگاه فعال شد' : 'ایستگاه خارج از سرویس شد'); return;
-    }
-    if (action === 'settings') { window.dispatchEvent(new CustomEvent('gamenet-select-client', { detail: station.name })); onNavigate('client-shell'); return; }
-    if (action === 'switch-net') { updateStation(station.id, { network: station.network === 1 ? 2 : 1 }); setMessage(`شبکه به اینترنت ${station.network === 1 ? '۲' : '۱'} تغییر کرد`); return; }
-    setMessage(`${action} فعلاً در Stage 9 پیاده‌سازی نشده است.`);
+    setMessage('فرمان پشتیبانی‌نشده درخواست شد.');
   }
 
   function stationSupportsAgentLock(station: StationDto) {
