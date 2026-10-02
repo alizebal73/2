@@ -92,7 +92,7 @@ jobs:
             $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
             $adminLogin = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               userName = 'admin'
-              password = 'Admin123!'
+              password = '123456'
             } | ConvertTo-Json)
             if (-not $adminLogin.id -or $adminLogin.role -ne 'Admin') { throw 'Server operator authentication smoke failed before Agent smoke.' }
 
@@ -224,6 +224,40 @@ jobs:
               }
 
               Write-Host ("Stage 8 Agent persisted identity smoke passed: deviceId={0}" -f $secondRow.deviceId)
+
+              $commandRequestBody = @{
+                commandType = 'ping'
+                payloadJson = $null
+              } | ConvertTo-Json
+              $command = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.id)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body $commandRequestBody
+              if (-not $command.commandId -or $command.status -ne 'Sent') {
+                throw 'Stage 8 Agent command dispatch did not return a sent command.'
+              }
+
+              $commandCompleted = $false
+              $commandStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                try {
+                  $commandStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($command.commandId)" -Method Get -WebSession $adminSession
+                  if ($commandStatus.status -in @('Succeeded', 'Failed')) {
+                    $commandCompleted = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Milliseconds 500
+              }
+
+              if (-not $commandCompleted -or $commandStatus.status -ne 'Succeeded' -or $commandStatus.succeeded -ne $true) {
+                Write-Host '--- Second Agent stdout after command ---'
+                if (Test-Path $secondAgentStdout) { Get-Content $secondAgentStdout }
+                Write-Host '--- Second Agent stderr after command ---'
+                if (Test-Path $secondAgentStderr) { Get-Content $secondAgentStderr }
+                Write-Host '--- Command status ---'
+                if ($commandStatus) { $commandStatus | ConvertTo-Json -Depth 5 }
+                throw 'Stage 8 Agent ping command was not acknowledged successfully.'
+              }
+
+              Write-Host ("Stage 8 Agent command transport smoke passed: commandId={0}; result={1}" -f $commandStatus.commandId, $commandStatus.resultMessage)
             }
             finally {
               if (-not $secondAgentProcess.HasExited) {
