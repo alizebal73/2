@@ -64,6 +64,19 @@ jobs:
           $env:Agent__OfflineAfterSeconds = '6'
           $env:Agent__CommandTimeoutSeconds = '5'
 
+          $releaseRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage10-release'
+          $releaseClient = Join-Path $releaseRoot 'client'
+          $releasePackage = Join-Path $releaseRoot 'GameNetManager.Client-0.7.1.zip'
+          Remove-Item $releaseRoot -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $releaseClient -Force | Out-Null
+          dotnet publish src/Client/GameNetManager.Client.csproj --configuration Release --output $releaseClient --no-restore
+          '0.7.1' | Out-File -FilePath (Join-Path $releaseClient 'client-version.txt') -Encoding ascii
+          Compress-Archive -Path (Join-Path $releaseClient '*') -DestinationPath $releasePackage -Force
+          $releaseHash = (Get-FileHash -Algorithm SHA256 -Path $releasePackage).Hash.ToLowerInvariant()
+          $env:App__ClientPackageVersion = '0.7.1'
+          $env:App__ClientPackagePath = $releasePackage
+          $env:App__ClientPackageSha256 = $releaseHash
+
           $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
             'run','--no-build','--configuration','Release',
             '--project','src\Server\GameNetManager.Server.csproj',
@@ -174,6 +187,85 @@ jobs:
                 throw 'Agent release compatibility smoke failed for the current client.'
               }
               Write-Host ("Stage 10 lifecycle compatibility smoke passed: state={0}; compatible={1}; recommended={2}" -f $lifecycleStatus.lifecycleState, $lifecycleStatus.compatibility.compatible, $lifecycleStatus.compatibility.updateRecommended)
+
+              $baselineAgentVersion = $agentRow.agentVersion
+              $updatePayload = @{
+                commandType = 'update'
+                payloadJson = (@{
+                  version = '0.7.1'
+                  packageUrl = "$baseUrl/api/release/client-package?version=0.7.1"
+                  sha256 = $env:App__ClientPackageSha256
+                  sizeBytes = (Get-Item $env:App__ClientPackagePath).Length
+                  activate = $true
+                } | ConvertTo-Json -Compress)
+              } | ConvertTo-Json -Compress
+
+              $updateCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body $updatePayload
+              $updateCompleted = $false
+              $updateStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $updateStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($updateCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($updateStatus.status -in @('Succeeded','Failed')) { $updateCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $updateCompleted -or $updateStatus.status -ne 'Succeeded') {
+                throw 'Stage 10 update command did not complete successfully.'
+              }
+              Write-Host ("Stage 10 update command succeeded: commandId={0}" -f $updateCommand.commandId)
+
+              $updatedAgent = $null
+              $updatedReady = $false
+              for ($i = 0; $i -lt 45; $i++) {
+                try {
+                  $agentRowsAfterUpdate = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $updatedAgent = @($agentRowsAfterUpdate | Where-Object { $_.agentId -eq $agentRow.agentId })[0]
+                  if ($updatedAgent -and $updatedAgent.isOnline -and $updatedAgent.lifecycleState -eq 'Running' -and $updatedAgent.agentVersion -eq '0.7.1') {
+                    $updatedReady = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+              if (-not $updatedReady) {
+                throw "Stage 10 update did not restart into the new healthy version. Current=$($updatedAgent | ConvertTo-Json -Depth 5 -Compress)"
+              }
+
+              $updatedLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+              if (-not $updatedLifecycle.compatibility.compatible -or $updatedLifecycle.lifecycleState -ne 'Running') {
+                throw 'Stage 10 updated client failed release compatibility or healthy lifecycle checks.'
+              }
+
+              $rollbackCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/rollback" -Method Post -WebSession $adminSession | ConvertTo-Json -Compress
+              $rollbackCommand = $rollbackCommand | ConvertFrom-Json
+              $rollbackCompleted = $false
+              $rollbackStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $rollbackStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($rollbackCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($rollbackStatus.status -in @('Succeeded','Failed')) { $rollbackCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $rollbackCompleted -or $rollbackStatus.status -ne 'Succeeded') {
+                throw 'Stage 10 rollback command did not complete successfully.'
+              }
+
+              $rollbackReady = $false
+              $rolledBackAgent = $null
+              for ($i = 0; $i -lt 45; $i++) {
+                try {
+                  $rollbackRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $rolledBackAgent = @($rollbackRows | Where-Object { $_.agentId -eq $agentRow.agentId })[0]
+                  if ($rolledBackAgent -and $rolledBackAgent.isOnline -and $rolledBackAgent.lifecycleState -eq 'Running' -and $rolledBackAgent.agentVersion -eq $baselineAgentVersion) {
+                    $rollbackReady = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+              if (-not $rollbackReady) {
+                throw "Stage 10 rollback did not restore the previous healthy version. Current=$($rolledBackAgent | ConvertTo-Json -Depth 5 -Compress)"
+              }
+
+              Write-Host ("Stage 10 update and rollback smoke passed: baseline={0}; updated=0.7.1; restored={1}" -f $baselineAgentVersion, $rolledBackAgent.agentVersion)
             }
             finally {
               if (-not $agentProcess.HasExited) {
