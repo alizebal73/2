@@ -17,11 +17,13 @@ function parsePersianDate(value: string): Date | null {
 }
 function amount(value: string) { return Number(value.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0; }
 
-type Period = 'week' | 'month' | 'year' | 'custom';
+type Period = 'week' | 'month' | 'sixMonths' | 'year' | 'custom';
+type ReportCategory = 'finance' | 'sessions' | 'customers' | 'buffet' | 'users' | 'audit';
 type Role = 'operator' | 'manager' | 'owner';
 
 export function ReportsPage() {
   const [period, setPeriod] = useState<Period>('week');
+  const [reportCategory, setReportCategory] = useState<ReportCategory>('finance');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [fromTime, setFromTime] = useState('00:00');
@@ -66,7 +68,12 @@ export function ReportsPage() {
 
   const visibleRows = useMemo(() => {
     const now = Date.now();
-    const start = range ? range.start : period === 'month' ? now - 30 * 86400000 : period === 'year' ? now - 365 * 86400000 : now - 6 * 86400000;
+    const start = range
+      ? range.start
+      : period === 'month' ? now - 30 * 86400000
+      : period === 'sixMonths' ? now - 180 * 86400000
+      : period === 'year' ? now - 365 * 86400000
+      : now - 6 * 86400000;
     const end = range?.end ?? now;
     return rows.filter(row => {
       if (new Date(row.closedAt).getTime() < start || new Date(row.closedAt).getTime() > end) return false;
@@ -86,7 +93,12 @@ export function ReportsPage() {
   const visibleExpenses = useMemo(() => {
     if (type !== 'expense' && type !== 'all') return [];
     const now = Date.now();
-    const start = range ? range.start : period === 'month' ? now - 30 * 86400000 : period === 'year' ? now - 365 * 86400000 : now - 6 * 86400000;
+    const start = range
+      ? range.start
+      : period === 'month' ? now - 30 * 86400000
+      : period === 'sixMonths' ? now - 180 * 86400000
+      : period === 'year' ? now - 365 * 86400000
+      : now - 6 * 86400000;
     const end = range?.end ?? now;
     return expenses.filter(item => {
       if (new Date(item.createdAt).getTime() < start || new Date(item.createdAt).getTime() > end) return false;
@@ -172,17 +184,41 @@ export function ReportsPage() {
 
   return <>
     {role === 'operator' && <div className="operation-toast" style={{ position:'relative', inset:'auto', margin:'8px 22px' }}>🔒 اپراتور فقط گزارش شیفت خودش را می‌بیند.</div>}
-    {financeError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت اطلاعات مالی کامل نشد</strong><span>{financeError} · بخش مالی فعلاً باید از سرور در دسترس باشد.</span></div><button type="button" className="btn sm" onClick={() => window.location.reload()}>تلاش مجدد</button></div>}
-    <div className="page-header"><div><p>گزارش مالی و کارکرد</p><h1>گزارش‌ها</h1></div><div className="page-meta"><span>{visibleRows.length} تراکنش</span><span>{role === 'operator' ? 'شیفت شخصی' : 'گزارش کامل'}</span><span>{financeSummary?.source === 'server' ? 'مالی از سرور' : 'در انتظار سرور'}</span></div></div>
-    <div className="toolbar">
-      <div className="view-switch">{(['week','month','year','custom'] as Period[]).map(key => <button key={key} className={period===key?'active':''} onClick={() => { setPeriod(key); if (key !== 'custom') setRange(null); }}>{key==='week'?'۷ روز اخیر':key==='month'?'ماهانه (۶ ماه)':key==='year'?'سالانه':'📅 بازه دلخواه'}</button>)}</div>
-      <button className="btn" onClick={exportCsv}>📤 خروجی اکسل</button><button className="btn" onClick={() => window.print()}>🖨 چاپ گزارش</button><button className="btn primary" onClick={() => void closeShift()}>🔒 بستن شیفت امروز</button><button className="btn" onClick={() => void registerExpense()}>➖ ثبت هزینه</button>
-    </div>
-    {period==='custom' && <div className="card-panel" style={{margin:'0 22px 12px',padding:14}}><div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'end'}}><label>از تاریخ (شمسی)<input value={from} onChange={e=>setFrom(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۱"/></label><label>تا تاریخ<input value={to} onChange={e=>setTo(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۹"/></label><label>ساعت از<input type="time" value={fromTime} onChange={e=>setFromTime(e.target.value)}/></label><label>ساعت تا<input type="time" value={toTime} onChange={e=>setToTime(e.target.value)}/></label><button className="btn primary sm" onClick={applyRange}>🔍 اعمال بازه</button><button className="btn sm" onClick={()=>{setRange(null);setPeriod('week')}}>↩️ بازنشانی</button></div><div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}>{['امروز','دیروز','این هفته','ماه جاری','ماه قبل','۹۰ روز اخیر','امسال'].map(name=><button className="btn sm" key={name} onClick={()=>preset(name)}>{name}</button>)}</div></div>}
-    <div className="toolbar" style={{paddingTop:4}}><select value={station} onChange={e=>setStation(e.target.value)}><option value="all">همه ایستگاه‌ها</option><option value="pc">رایانه‌ها</option><option value="console">کنسول‌ها</option><option value="table">میزها</option></select><select value={operator} onChange={e=>setOperator(e.target.value)}><option value="all">همه اپراتورها</option><option>علی محمدی</option><option>سارا احمدی</option><option>رضا کاظمی</option></select><select value={method} onChange={e=>setMethod(e.target.value)}><option value="all">همه پرداخت‌ها</option><option value="cash">نقدی</option><option value="card">کارت</option><option value="wallet">کیف پول</option><option value="gift">اعتبار رایگان</option></select><select value={type} onChange={e=>setType(e.target.value)}><option value="all">همه تراکنش‌ها</option><option value="time">زمان</option><option value="buffet">بوفه</option><option value="package">پکیج</option><option value="expense">هزینه</option></select></div>
-    <div className="summary-grid">{[['درآمد ثبت‌شده',reportRevenue,'blue'],['درآمد زمان',totals.time,'blue'],['فروش بوفه',totals.buffet,'orange'],['پکیج',totals.packageAmount,'purple'],['هزینه ثبت‌شده',reportExpense,'red'],['سود عملیاتی',net,'green'],['نقد',totals.cash,'orange'],['کارت',totals.card,'blue'],['کیف پول',totals.wallet,'purple'],['اعتبار رایگان',totals.gift,'blue']].map(item=><div className="summary-card" key={String(item[0])}><div className="label">{item[0]}</div><div className={'value '+item[2]}>{money(Number(item[1]))} تومان</div></div>)}</div>
-    <div className="report-grid"><div className="chart-box"><h3>تفکیک نقد / کارت</h3><div className="bar-chart"><div className="bar" style={{height:'68%'}}/><div className="bar" style={{height:'52%'}}/><div className="bar" style={{height:'74%'}}/><div className="bar" style={{height:'44%'}}/></div></div><div className="chart-box"><h3>کارکرد ایستگاه‌ها</h3>{visibleRows.slice(0,8).map(row=><div key={row.id} className="info-row"><span>{row.station}</span><strong>{money(row.amount)} ت</strong></div>)}</div></div>
-    <div className="table-wrap"><table className="data-table"><thead><tr><th>تاریخ</th><th>ایستگاه</th><th>مبلغ</th><th>روش</th><th>اپراتور</th></tr></thead><tbody>{visibleRows.map(row=><tr key={row.id}><td>{new Date(row.closedAt).toLocaleString('fa-IR')}</td><td>{row.station}</td><td>{money(row.amount)} ت</td><td>{row.method}</td><td>{row.operator}</td></tr>)}{visibleExpenses.map(row=><tr key={row.id}><td>{new Date(row.createdAt).toLocaleString('fa-IR')}</td><td>هزینه: {row.title}</td><td>−{money(row.amount)} ت</td><td>هزینه</td><td>{row.operator}</td></tr>)}</tbody></table></div>
+    {financeError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت اطلاعات مالی کامل نشد</strong><span>{financeError}</span></div><button type="button" className="btn sm" onClick={() => window.location.reload()}>تلاش مجدد</button></div>}
+    <div className="page-header"><div><p>مرکز گزارش</p><h1>گزارش‌ها</h1></div><div className="page-meta"><span>{visibleRows.length} تراکنش</span><span>{role === 'operator' ? 'شیفت شخصی' : 'گزارش کامل'}</span></div></div>
+
+    <section className="report-center-head">
+      <div className="report-categories">
+        {([
+          ['finance','مالی'],
+          ['sessions','جلسات و ایستگاه‌ها'],
+          ['customers','مشتری و VIP'],
+          ['buffet','بوفه و موجودی'],
+          ['users','کاربران و شیفت'],
+          ['audit','Audit']
+        ] as Array<[ReportCategory,string]>).map(([key,label]) => <button key={key} className={reportCategory === key ? 'active' : ''} onClick={() => setReportCategory(key)}>{label}</button>)}
+      </div>
+      <div className="report-periods">
+        {([
+          ['week','۷ روز اخیر'],
+          ['month','۳۰ روز اخیر'],
+          ['sixMonths','۶ ماه اخیر'],
+          ['year','امسال'],
+          ['custom','بازه دلخواه']
+        ] as Array<[Period,string]>).map(([key,label]) => <button key={key} className={period === key ? 'active' : ''} onClick={() => { setPeriod(key); if (key !== 'custom') setRange(null); }}>{label}</button>)}
+      </div>
+      <div className="report-actions"><button className="btn" onClick={exportCsv}>📤 خروجی</button><button className="btn" onClick={() => window.print()}>🖨 چاپ</button><button className="btn" onClick={() => void registerExpense()}>➖ ثبت هزینه</button></div>
+    </section>
+
+    {period === 'custom' && <section className="card-panel report-range-panel"><div className="report-range-grid"><label>از تاریخ<input value={from} onChange={e=>setFrom(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۱"/></label><label>تا تاریخ<input value={to} onChange={e=>setTo(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۹"/></label><label>از ساعت<input type="time" value={fromTime} onChange={e=>setFromTime(e.target.value)}/></label><label>تا ساعت<input type="time" value={toTime} onChange={e=>setToTime(e.target.value)}/></label><button className="btn primary" onClick={applyRange}>اعمال بازه</button><button className="btn" onClick={()=>{setRange(null);setPeriod('week')}}>بازنشانی</button></div><div className="report-presets">{['امروز','دیروز','این هفته','ماه جاری','ماه قبل','۹۰ روز اخیر','امسال'].map(name=><button className="btn sm" key={name} onClick={()=>preset(name)}>{name}</button>)}</div></section>}
+
+    {reportCategory === 'finance' ? <>
+      <section className="report-filter-grid"><select value={operator} onChange={e=>setOperator(e.target.value)}><option value="all">همه اپراتورها</option><option>علی محمدی</option><option>سارا احمدی</option><option>رضا کاظمی</option></select><select value={method} onChange={e=>setMethod(e.target.value)}><option value="all">همه پرداخت‌ها</option><option value="cash">نقدی</option><option value="card">کارت</option><option value="wallet">کیف پول</option><option value="gift">اعتبار رایگان</option></select><select value={type} onChange={e=>setType(e.target.value)}><option value="all">همه تراکنش‌ها</option><option value="time">زمان</option><option value="buffet">بوفه</option><option value="package">پکیج</option><option value="expense">هزینه</option></select></section>
+      <div className="summary-grid">{[['درآمد ثبت‌شده',reportRevenue,'blue'],['درآمد زمان',totals.time,'blue'],['فروش بوفه',totals.buffet,'orange'],['پکیج',totals.packageAmount,'purple'],['هزینه ثبت‌شده',reportExpense,'red'],['سود عملیاتی',net,'green'],['نقد',totals.cash,'orange'],['کارت',totals.card,'blue'],['کیف پول',totals.wallet,'purple'],['اعتبار رایگان',totals.gift,'blue']].map(item=><div className="summary-card" key={String(item[0])}><div className="label">{item[0]}</div><div className={'value '+item[2]}>{money(Number(item[1]))} تومان</div></div>)}</div>
+      <div className="report-grid"><div className="chart-box"><h3>تفکیک پرداخت</h3><div className="report-kpi-list"><div><span>نقد</span><strong>{money(totals.cash)} تومان</strong></div><div><span>کارت</span><strong>{money(totals.card)} تومان</strong></div><div><span>کیف پول</span><strong>{money(totals.wallet)} تومان</strong></div><div><span>اعتبار رایگان</span><strong>{money(totals.gift)} تومان</strong></div></div></div><div className="chart-box"><h3>ایستگاه‌ها</h3>{visibleRows.slice(0,8).map(row=><div key={row.id} className="info-row"><span>{row.station}</span><strong>{money(row.amount)} ت</strong></div>)}</div></div>
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>تاریخ</th><th>شرح</th><th>مبلغ</th><th>روش</th><th>اپراتور</th></tr></thead><tbody>{visibleRows.map(row=><tr key={row.id}><td>{new Date(row.closedAt).toLocaleString('fa-IR')}</td><td>{row.station}</td><td>{money(row.amount)} ت</td><td>{row.method}</td><td>{row.operator}</td></tr>)}{visibleExpenses.map(row=><tr key={row.id}><td>{new Date(row.createdAt).toLocaleString('fa-IR')}</td><td>هزینه: {row.title}</td><td>−{money(row.amount)} ت</td><td>هزینه</td><td>{row.operator}</td></tr>)}</tbody></table></div>
+    </> : <section className="report-placeholder"><strong>{({sessions:'جلسات و ایستگاه‌ها',customers:'مشتری و VIP',buffet:'بوفه و موجودی',users:'کاربران و شیفت',audit:'Audit'} as Record<string,string>)[reportCategory]}</strong><span>ساختار این گزارش آماده شده است؛ اتصال منبع داده این دامنه باید قبل از نمایش عدد انجام شود تا هیچ داده ساختگی وارد گزارش نشود.</span></section>}
+
     {notice && <div className="operation-toast">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
   </>;
 }
