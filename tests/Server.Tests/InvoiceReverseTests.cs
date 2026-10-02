@@ -167,6 +167,9 @@ public sealed class InvoiceReverseTests : IDisposable
         {
             ProductId = product.Id,
             Quantity = 2,
+            UnitPrice = 30000m,
+            UnitCost = 12000m,
+            ReferenceInvoiceId = invoice.Id,
             Direction = TransactionDirection.Out,
             Kind = "Sale",
             Notes = "فروش آزمایشی"
@@ -185,6 +188,9 @@ public sealed class InvoiceReverseTests : IDisposable
         Assert.Equal(2, savedProduct.StockQuantity);
         Assert.Equal(30, savedCustomer.FreeTimeMinutes);
         Assert.Equal(TransactionDirection.In, returnMovement.Direction);
+        Assert.Equal(30000m, returnMovement.UnitPrice);
+        Assert.Equal(12000m, returnMovement.UnitCost);
+        Assert.Equal(invoice.Id, returnMovement.ReferenceInvoiceId);
     }
 
     public void Dispose() => _connection.Dispose();
