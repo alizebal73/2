@@ -2,7 +2,7 @@ name: GameNet Manager CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, repair/ef-snapshot-and-preview]
 
 concurrency:
   group: gamenet-ci-main
@@ -38,6 +38,47 @@ jobs:
       - name: Build .NET
         run: dotnet build GameNetManager.sln --no-restore --configuration Release
 
+      - name: Rebuild EF snapshot probe
+        shell: pwsh
+        run: |
+          $migrations = Join-Path $env:GITHUB_WORKSPACE 'src\Server\Data\Migrations'
+          $snapshot = Join-Path $migrations 'GameNetDbContextModelSnapshot.cs'
+          $backup = Join-Path $env:RUNNER_TEMP 'GameNetDbContextModelSnapshot.bak'
+          $probe = Join-Path $migrations '__SnapshotProbe'
+          $artifact = Join-Path $env:GITHUB_WORKSPACE 'ef-snapshot-probe'
+
+          if (-not (Test-Path $snapshot)) { throw 'Expected EF model snapshot was not found.' }
+          if (Test-Path $backup) { Remove-Item $backup -Force }
+          if (Test-Path $probe) { Remove-Item $probe -Recurse -Force }
+          if (Test-Path $artifact) { Remove-Item $artifact -Recurse -Force }
+
+          Move-Item $snapshot $backup
+          try {
+            New-Item -ItemType Directory -Force $probe | Out-Null
+            New-Item -ItemType Directory -Force $artifact | Out-Null
+            dotnet tool restore
+            dotnet build src\Server\GameNetManager.Server.csproj --no-restore --configuration Release
+            if ($LASTEXITCODE -ne 0) { throw 'Server build failed with the original snapshot temporarily removed.' }
+
+            dotnet tool run dotnet-ef migrations add SnapshotRebuildProbe --project src\Server --startup-project src\Server --output-dir Data\Migrations\__SnapshotProbe --no-build
+            if ($LASTEXITCODE -ne 0) { throw 'EF snapshot probe generation failed.' }
+
+            $generated = Get-ChildItem $probe -Filter '*ModelSnapshot.cs' | Select-Object -First 1
+            if (-not $generated) { throw 'EF did not generate a model snapshot probe.' }
+            Copy-Item $generated.FullName (Join-Path $artifact 'GameNetDbContextModelSnapshot.cs') -Force
+          }
+          finally {
+            if (Test-Path $snapshot) { Remove-Item $snapshot -Force }
+            if (Test-Path $backup) { Move-Item $backup $snapshot -Force }
+            if (Test-Path $probe) { Remove-Item $probe -Recurse -Force }
+          }
+
+      - name: Upload EF snapshot probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: ef-snapshot-probe
+          path: ef-snapshot-probe
+          if-no-files-found: error
       - name: Test .NET
         run: dotnet test GameNetManager.sln --no-build --configuration Release
 
