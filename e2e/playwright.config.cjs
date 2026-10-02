@@ -14,6 +14,7 @@ function findBrowser() {
 
 module.exports = defineConfig({
   testDir: __dirname,
+  testMatch: '**/*.cjs',
   workers: 1,
   reporter: 'list',
   use: {
