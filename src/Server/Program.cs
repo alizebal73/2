@@ -195,6 +195,81 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (
 })
 .WithName("PostWalletTransaction");
 
+
+app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (
+    Guid customerId,
+    WalletRefundRequestDto request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (request.Amount <= 0)
+    {
+        return Results.BadRequest(new { code = "invalid_amount", message = "مبلغ بازگشت باید بیشتر از صفر باشد." });
+    }
+
+    var reason = request.Reason?.Trim();
+    if (string.IsNullOrWhiteSpace(reason))
+    {
+        return Results.BadRequest(new { code = "missing_reason", message = "دلیل بازگشت وجه را وارد کنید." });
+    }
+
+    var customer = await database.Customers
+        .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+
+    if (customer is null)
+    {
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+    }
+
+    if (customer.Balance < request.Amount)
+    {
+        return Results.BadRequest(new { code = "insufficient_balance", message = "موجودی کیف پول برای بازگشت این مبلغ کافی نیست." });
+    }
+
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+    try
+    {
+        customer.Balance -= request.Amount;
+
+        var ledger = new WalletTransaction
+        {
+            CustomerId = customer.Id,
+            Amount = request.Amount,
+            Type = WalletTransactionType.Debit,
+            Description = "بازگشت وجه · " + reason
+        };
+
+        database.WalletTransactions.Add(ledger);
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "WalletRefund",
+            EntityName = "CustomerWallet",
+            EntityId = customer.Id.ToString(),
+            Details = request.Amount.ToString("0.##") + " تومان · " + reason,
+            AppUserId = request.AppUserId
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return Results.Ok(new WalletLedgerEntryDto(
+            ledger.Id,
+            ledger.CustomerId,
+            ledger.Amount,
+            "Refund",
+            ledger.Description,
+            ledger.CreatedAt,
+            customer.Balance));
+    }
+    catch
+    {
+        await transaction.RollbackAsync(cancellationToken);
+        throw;
+    }
+})
+.WithName("PostWalletRefund");
+
 app.MapHub<DashboardHub>("/hubs/dashboard");
 
 if (!app.Environment.IsDevelopment())
