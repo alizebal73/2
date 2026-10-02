@@ -419,9 +419,12 @@ public sealed class AgentHub(
         if (session.State == SessionState.Completed || session.State == SessionState.Cancelled)
             throw new HubException("این جلسه دیگر قابل پایان‌دادن نیست.");
 
+        if (session.State == SessionState.Active && !login.IsActive)
+            throw new HubException("ورود مشتری برای پایان این جلسه دیگر فعال نیست.");
+
         if (session.State == SessionState.Ended)
         {
-            if (login is not null && login.IsActive)
+            if (login.IsActive)
             {
                 login.IsActive = false;
                 login.LoggedOutAt = session.EndAt ?? now;
@@ -441,7 +444,7 @@ public sealed class AgentHub(
         session.State = SessionState.Ended;
         session.Station.State = StationState.Available;
 
-        if (login is not null && login.IsActive)
+        if (login.IsActive)
         {
             login.IsActive = false;
             login.LoggedOutAt = now;
