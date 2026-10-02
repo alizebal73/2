@@ -409,6 +409,51 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .OnDelete(DeleteBehavior.Cascade);
     }
 
+
+    private static void ConfigureGameAccountPool(ModelBuilder modelBuilder)
+    {
+        var account = modelBuilder.Entity<GameAccountPoolEntry>();
+        account.HasKey(item => item.Id);
+        account.HasIndex(item => item.AccountName).IsUnique();
+        account.HasIndex(item => new { item.Status, item.IsActive });
+        account.HasIndex(item => item.ExpiresAt);
+        account.Property(item => item.AccountName).HasMaxLength(120).IsRequired();
+        account.Property(item => item.Platform).HasMaxLength(40).IsRequired();
+        account.Property(item => item.Launcher).HasMaxLength(60);
+        account.Property(item => item.Login).HasMaxLength(120);
+        account.Property(item => item.PasswordHash).HasMaxLength(250);
+        account.Property(item => item.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        account.Property(item => item.Owner).HasMaxLength(120).IsRequired();
+        account.Property(item => item.GuardStatus).HasMaxLength(40).IsRequired();
+    }
+
+    private static void ConfigureGameAccountAllowedGame(ModelBuilder modelBuilder)
+    {
+        var link = modelBuilder.Entity<GameAccountAllowedGame>();
+        link.HasKey(item => new { item.GameAccountPoolEntryId, item.GameId });
+        link.HasIndex(item => item.GameId);
+        link.HasOne(item => item.GameAccountPoolEntry).WithMany(item => item.AllowedGames).HasForeignKey(item => item.GameAccountPoolEntryId).OnDelete(DeleteBehavior.Cascade);
+        link.HasOne(item => item.Game).WithMany(item => item.AllowedAccountGames).HasForeignKey(item => item.GameId).OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureGameAccountLease(ModelBuilder modelBuilder)
+    {
+        var lease = modelBuilder.Entity<GameAccountLease>();
+        lease.HasKey(item => item.Id);
+        lease.HasIndex(item => item.GameAccountPoolEntryId);
+        lease.HasIndex(item => item.GameId);
+        lease.HasIndex(item => item.AgentDeviceId);
+        lease.HasIndex(item => item.CustomerId);
+        lease.HasIndex(item => item.Status);
+        lease.HasIndex(item => item.GameAccountPoolEntryId).IsUnique().HasFilter("ReleasedAt IS NULL");
+        lease.Property(item => item.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        lease.Property(item => item.ReleaseReason).HasMaxLength(250);
+        lease.HasOne(item => item.GameAccountPoolEntry).WithMany(item => item.Leases).HasForeignKey(item => item.GameAccountPoolEntryId).OnDelete(DeleteBehavior.Cascade);
+        lease.HasOne(item => item.Game).WithMany().HasForeignKey(item => item.GameId).OnDelete(DeleteBehavior.Restrict);
+        lease.HasOne(item => item.AgentDevice).WithMany().HasForeignKey(item => item.AgentDeviceId).OnDelete(DeleteBehavior.SetNull);
+        lease.HasOne(item => item.Customer).WithMany().HasForeignKey(item => item.CustomerId).OnDelete(DeleteBehavior.SetNull);
+    }
+
     private static void ConfigureClient(ModelBuilder modelBuilder)
     {
         var client = modelBuilder.Entity<Client>();

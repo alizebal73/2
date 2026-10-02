@@ -61,7 +61,7 @@ public static class GameLibraryEndpointMapping
             if (await database.Games.AnyAsync(item => item.Name.ToLower() == name.ToLower(), cancellationToken))
                 return Results.Conflict(new { code = "game_name_exists", message = "این بازی قبلاً ثبت شده است." });
 
-            var game = new Game();
+            var game = new Game { Name = name };
             ApplyGameWrite(game, request);
             database.Games.Add(game);
             database.AuditLogs.Add(new AuditLog
