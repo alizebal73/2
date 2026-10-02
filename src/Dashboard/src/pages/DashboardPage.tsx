@@ -4,6 +4,7 @@ import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimeli
 import { mockService } from '../services/mockService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
+import { isServerGuid, settleServerSession, startServerSession } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
 import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
@@ -385,7 +386,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setModal(null);
   }
 
-  function startSession() {
+  async function startSession() {
     if (!activeStation || activeStation.state !== 'free') { setMessage('این ایستگاه دیگر آزاد نیست'); return; }
     const customer = findCustomer(customerCode);
     if (!customer) { setMessage('اول یوزر مشتری را وارد کنید و Enter بزنید.'); return; }
@@ -395,10 +396,42 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       ? Math.max(0, Math.round(tariff.pricePerHour * (1 - Math.min(100, Math.max(0, tariff.vipDiscount)) / 100)))
       : (tariff?.pricePerHour ?? activeStation.ratePerHour);
     const sessionRate = tariff ? resolvePricingRate(baseRate, tariff.schedule, new Date()) : activeStation.ratePerHour;
-    updateStation(activeStation.id, { state: 'busy', startedAt: new Date().toISOString(), sessionMinutes: 0, sessionRate, amountSoFar: 0, persons: activeStation.zone === 'pc' ? 1 : persons, customerCode: customer.username, buffetTotal: 0, sessionCredit: undefined, prepaidEndsAt: undefined, pausedAt: undefined, pausedMinutes: 0 });
-    addSessionTimeline(activeStation.id, 'start', 'شروع جلسه', customer.code + ' · ' + customer.name + ' · نرخ ' + money(sessionRate) + ' تومان/ساعت');
+    let serverSessionId: string | undefined;
+
+    if (isServerGuid(customer.id) && isServerGuid(activeStation.id)) {
+      try {
+        const result = await startServerSession({
+          customerId: customer.id,
+          stationId: activeStation.id,
+          tariffId: tariff?.id,
+        });
+        serverSessionId = result?.sessionId;
+      } catch (error) {
+        setMessage(userErrorMessage(error, 'شروع جلسه روی سرور انجام نشد'));
+        return;
+      }
+    }
+
+    updateStation(activeStation.id, {
+      state: 'busy',
+      startedAt: new Date().toISOString(),
+      sessionMinutes: 0,
+      sessionRate,
+      amountSoFar: 0,
+      persons: activeStation.zone === 'pc' ? 1 : persons,
+      customerCode: customer.username,
+      buffetTotal: 0,
+      sessionCredit: undefined,
+      prepaidEndsAt: undefined,
+      pausedAt: undefined,
+      pausedMinutes: 0,
+      serverSessionId,
+    });
+    addSessionTimeline(activeStation.id, 'start', serverSessionId ? 'شروع جلسه روی سرور' : 'شروع جلسه', customer.code + ' · ' + customer.name + ' · نرخ ' + money(sessionRate) + ' تومان/ساعت');
     setModal(null);
-    setMessage('یوزر ' + customer.code + ' وارد ' + activeStation.name + ' شد؛ زمان و مبلغ در طول بازی محاسبه می‌شود.');
+    setMessage(serverSessionId
+      ? 'جلسه روی سرور ثبت شد؛ زمان و مبلغ از وضعیت سرور پیروی می‌کنند.'
+      : 'یوزر ' + customer.code + ' وارد ' + activeStation.name + ' شد؛ زمان و مبلغ در طول بازی محاسبه می‌شود.');
   }
   function calculateSessionDue(station: StationDto) {
     const customer = customers.find(item => item.code === station.customerCode || item.username === station.customerCode || item.id === station.customerCode);
@@ -550,7 +583,36 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           : item));
       }
 
-      const paymentParts: string[] = [];
+      if (activeStation.serverSessionId && customer && isServerGuid(activeStation.serverSessionId) && isServerGuid(customer.id)) {
+      try {
+        const parts = [
+          ...(cash > 0 ? [{ method: 'cash' as const, amount: cash }] : []),
+          ...(card > 0 ? [{ method: 'card' as const, amount: card }] : []),
+          ...(wallet > 0 ? [{ method: 'wallet' as const, amount: wallet }] : []),
+        ];
+        const serverResult = await settleServerSession(activeStation.serverSessionId, finalTotal, parts);
+        if (wallet > 0) {
+          setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: serverResult.walletBalanceAfter } : item));
+        }
+        addSessionTimeline(activeStation.id, 'settle', 'تسویه ترکیبی سروری', parts.map(item => (item.method === 'cash' ? 'نقدی' : item.method === 'card' ? 'کارتخوان' : 'کیف پول') + ' ' + money(item.amount)).join(' · '), finalTotal);
+        updateStation(activeStation.id, {
+          state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined,
+          customerCode: undefined, persons: undefined, buffetTotal: undefined, sessionCredit: undefined,
+          prepaidEndsAt: undefined, pausedAt: undefined, pausedMinutes: undefined, serverSessionId: undefined,
+        });
+        setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: 'ترکیبی', closedAt: new Date().toISOString() }, ...items]);
+        setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: 'paid' } : item));
+        setModal(null);
+        setSessionCenterStation(null);
+        setMessage('تسویه ترکیبی سروری با موفقیت ثبت شد.');
+        return;
+      } catch (error) {
+        setMessage(userErrorMessage(error, 'تسویه ترکیبی سروری انجام نشد'));
+        return;
+      }
+    }
+
+    const paymentParts: string[] = [];
       if (cash > 0) {
         recordReportPayment({ id: crypto.randomUUID(), stationId: activeStation.id, stationName: activeStation.name, customerId: customer?.id, customerName: customer?.name ?? 'مهمان', customerCode: customer?.code ?? customer?.username ?? activeStation.customerCode ?? 'مهمان', amount: cash, createdAt: new Date().toISOString() }, cash, 'cash');
         paymentParts.push('نقدی ' + money(cash));
@@ -588,10 +650,39 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
 
   async function finishSession(method: string, bypassApproval = false) {
     if (!activeStation) return;
+
+    if (!activeStation) return;
     if (!bypassApproval && role === 'operator' && discountPercent > 10) {
       setApproval({ title: 'تخفیف بیشتر از حد مجاز اپراتور', detail: 'این تسویه شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.', action: 'settle', method });
       return;
     }
+    if (activeStation.serverSessionId && customer && isServerGuid(activeStation.serverSessionId) && ['cash', 'card', 'wallet'].includes(method)) {
+      try {
+        const serverResult = await settleServerSession(
+          activeStation.serverSessionId,
+          finalTotal,
+          [{ method: method as 'cash' | 'card' | 'wallet', amount: finalTotal }],
+        );
+        if (method === 'wallet') {
+          setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: serverResult.walletBalanceAfter } : item));
+        }
+        addSessionTimeline(activeStation.id, 'settle', 'تسویه سروری', money(finalTotal) + ' تومان · ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : 'کیف پول'), finalTotal);
+        setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt: new Date().toISOString() }, ...items]);
+        updateStation(activeStation.id, {
+          state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined,
+          customerCode: undefined, persons: undefined, buffetTotal: undefined, sessionCredit: undefined,
+          prepaidEndsAt: undefined, pausedAt: undefined, pausedMinutes: undefined, serverSessionId: undefined,
+        });
+        setModal(null);
+        setSessionCenterStation(null);
+        setMessage('تسویه سروری با موفقیت ثبت شد.');
+        return;
+      } catch (error) {
+        setMessage(userErrorMessage(error, 'تسویه سروری انجام نشد'));
+        return;
+      }
+    }
+
     const elapsed = duration(activeStation);
     const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
     const tariff = tariffs.find(item => item.stationType === activeStation.type);
