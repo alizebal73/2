@@ -299,6 +299,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("TEXT");
 
@@ -332,6 +335,42 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasIndex("GameId");
 
                     b.ToTable("GameAccounts");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.InvoiceReversal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AppUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ExternalRefundRequired")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppUserId");
+
+                    b.HasIndex("InvoiceId")
+                        .IsUnique();
+
+                    b.ToTable("InvoiceReversals");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.InventoryTransaction", b =>
@@ -410,6 +449,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasIndex("AppUserId");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("SessionId")
+                        .IsUnique();
 
                     b.ToTable("Invoices");
                 });
@@ -852,6 +894,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("ReferenceInvoiceId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Type")
