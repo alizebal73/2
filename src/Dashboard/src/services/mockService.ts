@@ -322,10 +322,14 @@ export const mockService = {
     expenses.unshift(row);
     return row;
   },
-  getCurrentShift: async () => currentShift ? { ...currentShift } : null,
+  getCurrentShift: async () => currentShift ? {
+    ...currentShift,
+    expectedCash: reportRows.filter(row => row.operator === currentShift!.operator && row.method === 'cash').reduce((sum, row) => sum + row.amount, 0),
+    sales: reportRows.filter(row => row.operator === currentShift!.operator).reduce((sum, row) => sum + row.amount, 0),
+  } : null,
   startShift: async (operator = 'علی محمدی') => {
     if (currentShift) throw new Error('شیفت فعلی هنوز باز است');
-    currentShift = { id: crypto.randomUUID(), operator, openedAt: new Date().toISOString() };
+    currentShift = { id: crypto.randomUUID(), operator, openedAt: new Date().toISOString(), expectedCash: 0, countedCash: 0, difference: 0, sales: 0 };
     return { ...currentShift };
   },
   closeShift: async (countedCash: number, manualCashAdjustment = 0, note = '') => {
