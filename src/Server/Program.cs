@@ -644,6 +644,7 @@ app.MapPost("/api/approvals", async (
         "invoice.reverse" => "finance.manage",
         "wallet.refund" => "customer.wallet",
         "payroll.entry" => "payroll.manage",
+        "discount" => "session.settle",
         _ => null
     };
 
