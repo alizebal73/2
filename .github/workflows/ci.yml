@@ -45,3 +45,36 @@ jobs:
 
       - name: Build Dashboard
         run: npm run build --prefix src/Dashboard
+
+      - name: Start Dashboard preview
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath 'npm.cmd' -ArgumentList @('run','preview','--prefix','src/Dashboard','--','--host','127.0.0.1','--port','4173') -PassThru
+          $process.Id | Out-File -FilePath (Join-Path $env:RUNNER_TEMP 'gamenet-dashboard.pid') -Encoding utf8
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri 'http://127.0.0.1:4173/' -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) { break }
+            } catch {}
+            Start-Sleep -Seconds 1
+          }
+          if (-not $response) { throw 'Dashboard preview did not start on port 4173.' }
+
+      - name: Install Playwright Chromium
+        shell: pwsh
+        run: npm exec --yes --package=@playwright/test@1.63.0 -- playwright install chromium
+
+      - name: Dashboard interaction smoke
+        shell: pwsh
+        run: npm exec --yes --package=@playwright/test@1.63.0 -- node e2e/dashboard-smoke.cjs
+
+      - name: Stop Dashboard preview
+        if: always()
+        shell: pwsh
+        run: |
+          $pidFile = Join-Path $env:RUNNER_TEMP 'gamenet-dashboard.pid'
+          if (Test-Path $pidFile) {
+            $pid = Get-Content $pidFile | Select-Object -First 1
+            if ($pid) { Stop-Process -Id ([int]$pid) -Force -ErrorAction SilentlyContinue }
+            Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+          }
