@@ -401,12 +401,21 @@ button:focus-visible {
 }
 
 .station-card {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+  cursor: pointer;
   background: linear-gradient(165deg, var(--panel), var(--panel2));
   border: 1px solid var(--line);
   border-radius: 15px;
   padding: 11px;
   transition: 0.2s ease;
   position: relative;
+}
+
+.station-card.selected {
+  border-color: rgba(34, 229, 138, 0.72);
+  box-shadow: 0 0 0 2px rgba(34, 229, 138, 0.12), inset 0 0 0 1px rgba(34, 229, 138, 0.18);
 }
 
 .station-card:hover {
