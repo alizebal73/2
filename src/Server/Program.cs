@@ -815,7 +815,6 @@ app.MapGet("/api/customers/{customerId:guid}/debts", async (
     var debts = await database.Invoices
         .AsNoTracking()
         .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
-        .OrderBy(item => item.IssuedAt)
         .Select(item => new
         {
             id = item.Id,
@@ -825,7 +824,7 @@ app.MapGet("/api/customers/{customerId:guid}/debts", async (
         })
         .ToListAsync(cancellationToken);
 
-    return Results.Ok(debts);
+    return Results.Ok(debts.OrderBy(item => item.issuedAt).ToList());
 })
 .WithName("GetCustomerDebts");
 
