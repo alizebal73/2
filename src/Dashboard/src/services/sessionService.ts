@@ -181,6 +181,8 @@ export async function reverseServerInvoice(
     invoiceStatus: string;
     walletRestored: number;
     freeMoneyRestored: number;
+    freeTimeRestored: number;
+    inventoryRestored: number;
     externalRefundRequired: boolean;
     reversalId: string;
   };
