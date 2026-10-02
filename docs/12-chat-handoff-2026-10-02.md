@@ -654,9 +654,10 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 # Stage 10 — Release Safety / Canary — verified checkpoint
 - Branch: `stage10-client-lifecycle`
 - PR #9: open, `mergeable=true`, `behind_by=0` against `main` at audit time.
-- Verified head: `b949a4c1f886bb1bbef66913162e246cab36275d`
-- Run #818: **success** on the exact verified head.
+- Verified head: `841b5c6f2b9f8b0e89d4d0b8360364dd87ac17cf`
+- Run #822: **success** on the exact verified head.
 - Release Safety gate now verifies: one online CI Agent as the canary target, server release manifest presence, package version match, package size match, and package SHA256 match.
 - The existing CI update path then performs the actual single-Agent canary flow: Update → fresh Running/compatible health → Rollback → restored baseline version/health.
 - No installer/package artifact is uploaded to GitHub; the package remains runner-local for this smoke.
+- Watchdog restart now waits for the previous Agent process to exit before starting the new version, and Client update-state writes use unique temp files plus serialized in-process writes.
 - Stage 10 Foundation + Client Lifecycle Update/Rollback + Release Safety/Canary are now verified on the same current head.
