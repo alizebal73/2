@@ -14,3 +14,8 @@ public sealed record WalletTransactionRequestDto(
     string Type,
     string Description,
     Guid? AppUserId);
+
+public sealed record WalletRefundRequestDto(
+    decimal Amount,
+    string Reason,
+    Guid? AppUserId);
