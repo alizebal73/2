@@ -36,14 +36,20 @@ if not defined DOTNET_EXE (
 )
 for %%D in ("%DOTNET_EXE%") do set "PATH=%%~dpD;%PATH%"
 
-rem Resolve npm from a normal Node installation first.
-if exist "%ProgramFiles%\nodejs\npm.cmd" set "NPM_EXE=%ProgramFiles%\nodejs\npm.cmd"
+rem Resolve npm/node from the current Windows environment first.
+for /f "delims=" %%N in ('where npm.cmd 2^>nul') do (
+  if not defined NPM_EXE set "NPM_EXE=%%N"
+)
+
+if not defined NPM_EXE if exist "%ProgramFiles%\nodejs\npm.cmd" set "NPM_EXE=%ProgramFiles%\nodejs\npm.cmd"
 if not defined NPM_EXE if exist "%APPDATA%\npm\npm.cmd" set "NPM_EXE=%APPDATA%\npm\npm.cmd"
 
-rem The self-hosted GitHub runner may have Node in its tool cache instead of the system PATH.
-if not defined NPM_EXE if exist "C:\actions-runner-2\_work\_tool\node" (
-  for /f "delims=" %%V in ('dir /b /ad /o-n "C:\actions-runner-2\_work\_tool\node" 2^>nul') do (
-    if not defined NPM_EXE if exist "C:\actions-runner-2\_work\_tool\node\%%V\x64\npm.cmd" set "NPM_EXE=C:\actions-runner-2\_work\_tool\node\%%V\x64\npm.cmd"
+rem Fallback for the self-hosted runner tool cache, without assuming a runner folder name.
+if not defined NPM_EXE for /d %%R in ("C:\actions-runner*" ) do (
+  if exist "%%~fR\_work\_tool\node" (
+    for /f "delims=" %%V in ('dir /b /ad /o-n "%%~fR\_work\_tool\node" 2^>nul') do (
+      if not defined NPM_EXE if exist "%%~fR\_work\_tool\node\%%V\x64\npm.cmd" set "NPM_EXE=%%~fR\_work\_tool\node\%%V\x64\npm.cmd"
+    )
   )
 )
 
@@ -52,7 +58,7 @@ if not defined NPM_EXE (
   echo Checked:
   echo   %ProgramFiles%\nodejs\npm.cmd
   echo   %APPDATA%\npm\npm.cmd
-  echo   C:\actions-runner-2\_work\_tool\node\*\x64\npm.cmd
+  echo   PATH / Program Files / AppData / actions-runner* tool cache
   pause
   exit /b 1
 )
@@ -120,19 +126,20 @@ if not exist "%PREVIEW%\src\Dashboard\node_modules" (
   echo [4/5] Dashboard dependencies already installed.
 )
 
-echo [5/5] Starting Server and Dashboard...
-start "GameNet Server" /D "%PREVIEW%\src\Server" "%DOTNET_EXE%" run --project "%PREVIEW%\src\Server\GameNetManager.Server.csproj"
-start "GameNet Dashboard" /D "%PREVIEW%\src\Dashboard" "%NPM_EXE%" run dev -- --host 0.0.0.0
+echo [5/5] Cleaning old Preview processes and starting Server and Dashboard...
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ports=@(5173,5080); foreach($port in $ports){ Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { if($_ -and $_ -ne $PID){ Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } } }"
+start "GameNet Server" /D "%PREVIEW%\src\Server" "%DOTNET_EXE%" run --urls "http://127.0.0.1:5080" --project "%PREVIEW%\src\Server\GameNetManager.Server.csproj"
+start "GameNet Dashboard" /D "%PREVIEW%\src\Dashboard" "%NPM_EXE%" run dev -- --host 0.0.0.0 --port 5173
 
 echo Waiting for Dashboard and Server...
-"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5173 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5173/' -TimeoutSec 2; if($r.StatusCode -eq 200){$ok=$true;break} } catch {}; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
 if errorlevel 1 (
   echo [ERROR] Dashboard did not become ready on port 5173.
   pause
   exit /b 1
 )
 
-"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5080 -InformationLevel Quiet) { $ok=$true; break }; if ($_ -eq 60) { exit 1 }; Start-Sleep -Milliseconds 500 }"
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { try { $r=Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:5080/api/health' -TimeoutSec 2; if($r.StatusCode -eq 200){$ok=$true;break} } catch {}; if ($_ -eq 60) { exit 1 }; Start-Sleep -Milliseconds 500 }"
 if errorlevel 1 (
   echo [WARN] Server is not ready on port 5080.
   echo [WARN] Dashboard will still open, but live API and SignalR data are unavailable.
