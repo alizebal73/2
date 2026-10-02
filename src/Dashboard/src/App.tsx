@@ -205,7 +205,7 @@ function DashboardApp() {
         <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={snapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={requestNavigation} role={role} /></div>
         <div hidden={activePage !== 'games'}><GamesPage /></div>
         <div hidden={activePage !== 'client-shell'}><ClientShellPage /></div>
-        <div hidden={activePage !== 'customers'}><CustomersPage /></div>
+        <div hidden={activePage !== 'customers'}><CustomersPage role={role} /></div>
         <div hidden={activePage !== 'tariffs'}><TariffsPage /></div>
         <div hidden={activePage !== 'accounts'}><AccountsPage /></div>
         <div hidden={activePage !== 'buffet'}><BuffetPage /></div>
