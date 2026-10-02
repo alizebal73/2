@@ -92,3 +92,9 @@ partial class BuffetTransactionPricing
 partial class InventoryTransactionInvoiceReference
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002190000_UserAuthorizationAndApprovals")]
+partial class UserAuthorizationAndApprovals
+{
+}
