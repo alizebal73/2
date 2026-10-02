@@ -79,9 +79,11 @@ app.MapGet("/api/customers", async (
             id = item.Id,
             code = item.Code,
             username = item.Username,
-            name = item.FullName,
+             name = item.FullName,
+            alias = item.Alias,
+            nationalId = item.NationalId,
             mobile = item.Phone,
-            vip = item.IsVip ? "gold" : "none",
+            vip = item.VipTier,
             wallet = item.Balance,
             debt = 0m,
             giftCredit = item.FreeMoney,
@@ -96,6 +98,147 @@ app.MapGet("/api/customers", async (
     return Results.Ok(customers);
 })
 .WithName("GetCustomers");
+
+app.MapPost("/api/customers", async (
+    CreateCustomerRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var fullName = request.FullName?.Trim();
+    if (string.IsNullOrWhiteSpace(fullName))
+        return Results.BadRequest(new { code = "missing_customer_name", message = "نام کامل مشتری را وارد کنید." });
+
+    var vipTier = NormalizeVipTier(request.VipTier);
+    var code = request.Code?.Trim();
+    var username = request.Username?.Trim();
+    var phone = request.Phone?.Trim();
+    var email = request.Email?.Trim();
+    var nationalId = request.NationalId?.Trim();
+
+    if (string.IsNullOrWhiteSpace(code))
+    {
+        var codes = await database.Customers.AsNoTracking()
+            .Where(item => item.Code != null)
+            .Select(item => item.Code!)
+            .ToListAsync(cancellationToken);
+        var next = codes.Select(value => int.TryParse(value, out var number) ? number : 1049)
+            .DefaultIfEmpty(1049)
+            .Max() + 1;
+        code = next.ToString();
+    }
+
+    username = string.IsNullOrWhiteSpace(username) ? "user" + code : username;
+
+    if (await database.Customers.AnyAsync(item => item.Code == code, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_customer_code", message = "این کد مشتری قبلاً استفاده شده است." });
+    if (await database.Customers.AnyAsync(item => item.Username == username, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_customer_username", message = "این نام کاربری قبلاً استفاده شده است." });
+    if (!string.IsNullOrWhiteSpace(phone) && await database.Customers.AnyAsync(item => item.Phone == phone, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_customer_phone", message = "این شماره موبایل قبلاً ثبت شده است." });
+    if (!string.IsNullOrWhiteSpace(nationalId) && await database.Customers.AnyAsync(item => item.NationalId == nationalId, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_customer_national_id", message = "این کد ملی قبلاً ثبت شده است." });
+
+    var customer = new Customer
+    {
+        FullName = fullName,
+        Code = code,
+        Username = username,
+        Alias = string.IsNullOrWhiteSpace(request.Alias) ? null : request.Alias.Trim(),
+        NationalId = string.IsNullOrWhiteSpace(nationalId) ? null : nationalId,
+        Phone = string.IsNullOrWhiteSpace(phone) ? null : phone,
+        Email = string.IsNullOrWhiteSpace(email) ? null : email,
+        VipTier = vipTier,
+        IsVip = vipTier != "none",
+        ConcurrentLoginLimit = Math.Max(1, request.ConcurrentLoginLimit),
+        Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim()
+    };
+
+    database.Customers.Add(customer);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "CustomerCreate",
+        EntityName = "Customer",
+        EntityId = customer.Id.ToString(),
+        Details = "ایجاد مشتری · " + customer.Code + " · " + customer.FullName
+    });
+
+    try
+    {
+        await database.SaveChangesAsync(cancellationToken);
+    }
+    catch (DbUpdateException)
+    {
+        return Results.Conflict(new { code = "customer_unique_conflict", message = "اطلاعات مشتری با رکورد دیگری تداخل دارد." });
+    }
+
+    return Results.Ok(ToCustomerDto(customer));
+})
+.WithName("CreateCustomer");
+
+app.MapPut("/api/customers/{customerId:guid}", async (
+    Guid customerId,
+    UpdateCustomerRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    var fullName = request.FullName?.Trim();
+    if (string.IsNullOrWhiteSpace(fullName))
+        return Results.BadRequest(new { code = "missing_customer_name", message = "نام کامل مشتری را وارد کنید." });
+
+    var code = request.Code?.Trim();
+    var username = request.Username?.Trim();
+    var phone = request.Phone?.Trim();
+    var nationalId = request.NationalId?.Trim();
+    var vipTier = NormalizeVipTier(request.VipTier);
+
+    if (string.IsNullOrWhiteSpace(code))
+        return Results.BadRequest(new { code = "missing_customer_code", message = "کد مشتری را وارد کنید." });
+
+    if (await database.Customers.AnyAsync(item => item.Id != customerId && item.Code == code, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_customer_code", message = "این کد مشتری قبلاً استفاده شده است." });
+    if (!string.IsNullOrWhiteSpace(username) && await database.Customers.AnyAsync(item => item.Id != customerId && item.Username == username, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_customer_username", message = "این نام کاربری قبلاً استفاده شده است." });
+    if (!string.IsNullOrWhiteSpace(phone) && await database.Customers.AnyAsync(item => item.Id != customerId && item.Phone == phone, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_customer_phone", message = "این شماره موبایل قبلاً ثبت شده است." });
+    if (!string.IsNullOrWhiteSpace(nationalId) && await database.Customers.AnyAsync(item => item.Id != customerId && item.NationalId == nationalId, cancellationToken))
+        return Results.Conflict(new { code = "duplicate_customer_national_id", message = "این کد ملی قبلاً ثبت شده است." });
+
+    customer.FullName = fullName;
+    customer.Code = code;
+    customer.Username = string.IsNullOrWhiteSpace(username) ? "user" + code : username;
+    customer.Alias = string.IsNullOrWhiteSpace(request.Alias) ? null : request.Alias.Trim();
+    customer.NationalId = string.IsNullOrWhiteSpace(nationalId) ? null : nationalId;
+    customer.Phone = string.IsNullOrWhiteSpace(phone) ? null : phone;
+    customer.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
+    customer.VipTier = vipTier;
+    customer.IsVip = vipTier != "none";
+    customer.ConcurrentLoginLimit = Math.Max(1, request.ConcurrentLoginLimit);
+    customer.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "CustomerUpdate",
+        EntityName = "Customer",
+        EntityId = customer.Id.ToString(),
+        Details = "ویرایش مشتری · " + customer.Code + " · " + customer.FullName
+    });
+
+    try
+    {
+        await database.SaveChangesAsync(cancellationToken);
+    }
+    catch (DbUpdateException)
+    {
+        return Results.Conflict(new { code = "customer_unique_conflict", message = "اطلاعات مشتری با رکورد دیگری تداخل دارد." });
+    }
+
+    return Results.Ok(ToCustomerDto(customer));
+})
+.WithName("UpdateCustomer");
 
 app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     Guid customerId,
@@ -1059,6 +1202,29 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.Run();
+
+
+static string NormalizeVipTier(string? tier)
+{
+    var value = tier?.Trim().ToLowerInvariant();
+    return value is "silver" or "gold" or "bronze" or "custom" ? value : "none";
+}
+
+static CustomerDto ToCustomerDto(Customer customer) => new(
+    customer.Id,
+    customer.Code,
+    customer.Username,
+    customer.FullName,
+    customer.Alias,
+    customer.NationalId,
+    customer.Phone,
+    customer.Email,
+    customer.VipTier,
+    customer.Balance,
+    customer.FreeMoney,
+    customer.FreeTimeMinutes,
+    customer.ConcurrentLoginLimit,
+    customer.Notes);
 
 static async Task InitializeDatabaseAsync(IServiceProvider services, string databasePath, ILogger logger)
 {
