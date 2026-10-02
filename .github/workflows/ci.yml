@@ -97,7 +97,8 @@ jobs:
               fullName = "Stage 5 Smoke $smokeId"
               username = "smoke_$smokeId"
               vipTier = 'none'
-              concurrentLoginLimit = 2
+              concurrentLoginLimit = 3
+              password = 'Smoke123!'
             } | ConvertTo-Json)
 
             $customerId = $newCustomer.id
@@ -142,7 +143,26 @@ jobs:
               Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json) | Out-Null
             }
 
-            Write-Host 'Stage 5 Customer CRUD + VIP package + concurrent login API smoke passed.'
+            $auth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
+              usernameOrCode = $newCustomer.username
+              password = 'Smoke123!'
+              clientKey = 'credential-smoke'
+            } | ConvertTo-Json)
+            if (-not $auth.authenticated) { throw 'Customer credential authentication failed.' }
+            Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'credential-smoke' } | ConvertTo-Json) | Out-Null
+
+            $debt = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debt") -Method Post -ContentType 'application/json' -Body (@{
+              amount = 55000
+              description = 'Stage 5 debt smoke'
+            } | ConvertTo-Json)
+            $debts = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debts") -Method Get
+            if (@($debts).Count -ne 1 -or [int]@($debts)[0].amount -ne 55000) { throw 'Customer debt listing smoke failed.' }
+            $settled = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debts/$($debt.invoiceId)/settle") -Method Post -ContentType 'application/json' -Body (@{
+              method = 'cash'
+            } | ConvertTo-Json)
+            if ([int]$settled.debtRemaining -ne 0) { throw 'Customer debt settlement smoke failed.' }
+
+            Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
 
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
