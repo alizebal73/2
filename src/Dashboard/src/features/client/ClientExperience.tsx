@@ -295,8 +295,10 @@ export function ClientExperience() {
   const hours = Math.floor(remainingSeconds / 3600);
   const minutes = Math.floor(remainingSeconds % 3600 / 60);
   const seconds = remainingSeconds % 60;
-  const timerClass = remainingSeconds < 300 ? 'critical' : remainingSeconds < 900 ? 'warning' : '';
-  const sessionLocked = locked || (loggedIn && remainingSeconds === 0);
+  const timerClass = sessionEndAt
+    ? remainingSeconds < 300 ? 'critical' : remainingSeconds < 900 ? 'warning' : ''
+    : '';
+  const sessionLocked = locked || Boolean(loggedIn && sessionEndAt && remainingSeconds === 0);
   const recentGames = myGamesOnly ? games.filter(game => ['cs2', 'fc25'].includes(game.id)) : games;
   const gameSize = Math.round(190 * zoom / 100);
 
