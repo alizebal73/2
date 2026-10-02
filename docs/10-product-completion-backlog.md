@@ -203,19 +203,33 @@
 
 ## وضعیت اجرایی مرحلهٔ ۸ — PC Agent Foundation
 
-### دروازهٔ اصلی Stage 8: Vertical Slice واقعی PC
-- ⬜ Agent Identity / Device Registration در Shared + Server
-- ⬜ Heartbeat و Last Seen سروری
-- ⬜ Health/Telemetry پایه
-- ⬜ SignalR reconnect و stale connection handling
-- ⬜ Online/Offline state واقعی در Dashboard
-- ⬜ Lock/Unlock واقعی
-- ⬜ Session Start/End از Agent واقعی
-- ⬜ Timer زنده بر مبنای Server truth
-- ⬜ Safe Offline / Recovery
-- ⬜ تست واقعی روی 2–3 PC قبل از گسترش به 40+
+### Gate نهایی Stage 8 — CI Run #676
+**Stage 8 Foundation تکمیل و با Run #676 سبز تأیید شد.**
 
-قاعدهٔ Stage 8: ابتدا یک برش عمودی کوچک اما واقعی از Agent تا Server و Dashboard کامل می‌شود؛ سپس فرمان‌ها و دامنه‌های بعدی گسترش می‌یابند.
+موارد تکمیل‌شده:
+- ✅ Agent Identity / Device Registration در Shared + Server
+- ✅ persistent Agent token و restart بدون bootstrap token
+- ✅ Heartbeat و Last Seen سروری
+- ✅ Health/Telemetry پایه
+- ✅ SignalR reconnect و stale connection handling
+- ✅ Online/Offline state واقعی در Dashboard
+- ✅ Agent Command persistence + SignalR dispatch + acknowledgement + result persistence
+- ✅ ping command smoke
+- ✅ تست هم‌زمان چند Agent و جلوگیری از DeviceId تکراری
+- ✅ Server-authoritative Session timing
+- ✅ Pause/Resume سروری
+- ✅ Extend/Reduce سروری با TimeAdjustment
+- ✅ Dashboard merge بر مبنای Server truth
+- ✅ CI Build/Test + Migration/Server Smoke + Dashboard Lint/Build + Browser Smoke سبز
+
+مواردی که عمداً به Stage 9 منتقل شدند:
+- ⏩ Lock/Unlock واقعی
+- ⏩ Agent-driven Session Start/End
+- ⏩ Kiosk/Shell policy و فرمان‌های واقعی Client
+- ⏩ Safe Offline/Recovery عملیاتی سطح Client
+- ⬜ تست فیزیکی 2–3 PC و سپس rollout گسترده 40+؛ این مورد Gate استقرار فیزیکی است، نه معیار سبزشدن Foundation در CI
+
+قاعده: Stage 8 مرجع هویت، ارتباط، command transport و Server truth را می‌بندد. Stage 9 همین transport را به فرمان‌های واقعی Client/Kiosk وصل می‌کند.
 
 ## تکمیل‌های سراسری مرحله ۳ — نیازهای جدید اپراتور
 
@@ -667,7 +681,7 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - در نسخه نهایی Server باید تراکنش Split را به‌صورت atomic ثبت کند و Audit/Permission نیز داشته باشد.
 
 ## وضعیت
-مرحله اصلی ۳ و هستهٔ اصلی مرحلهٔ ۴ بسته شده‌اند. جایگاه فعلی پروژه **مرحلهٔ ۷ — Users & Permissions** است؛ Stage 5 و Stage 6 بسته شده‌اند و فقط باقی‌مانده‌های صریح Stage 7 باید قبل از ورود به Stage 8 بسته و تست شوند. CI فعلی شامل Build/Test، مهاجرت/Startup سرور، smoke واقعی Customer/VIP API و smoke تعاملی Dashboard است.
+مرحله اصلی ۳ و هستهٔ اصلی مرحلهٔ ۴ بسته شده‌اند. Stage 5 و Stage 6 و Stage 7 بسته و Merge شده‌اند. **Stage 8 Foundation نیز با Run #676 سبز و تأیید شده است و اکنون مسیر اجرایی پروژه وارد Stage 9 — Real Client Commands & Kiosk می‌شود.** CI فعلی شامل Build/Test، مهاجرت/Startup سرور، smoke واقعی Customer/VIP API و smoke تعاملی Dashboard است.
 
 
 ## قرارداد سراسری Update / Release — از همین مرحله لازم‌الاجرا
