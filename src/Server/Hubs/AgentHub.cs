@@ -97,6 +97,7 @@ public sealed class AgentHub(
         var authorization = httpContext?.Request.Headers.Authorization.ToString();
 
         if (string.IsNullOrWhiteSpace(deviceId)
+            || string.IsNullOrWhiteSpace(authorization)
             || !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             return null;
 
