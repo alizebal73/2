@@ -415,7 +415,7 @@
 
 - **Customer CRUD سروری**: Create/Update + Alias/NationalId/VipTier + Unique validation + Audit + SQLite migration + Dashboard adapter/UI + Persistence Test + CI سبز.
 - **صفحه مشتریان** دیگر برای «مشتری جدید» پیام نمایشی نمی‌دهد؛ ایجاد و ویرایش اصلی به Server متصل است.
-- **مرحله ۵ هنوز باز است**؛ VIP Package/Consumption و Credential UX باید تکمیل و تست شوند.
+- **مرحله ۵ هنوز باز است**؛ Customer CRUD سبز شده و هستهٔ API پکیج VIP/تخصیص پکیج اضافه شده است، اما اتصال UI، نمایش انقضا/مصرف روزانه و Credential UX باید تکمیل و تست شوند.
 
 
 ### محدوده
