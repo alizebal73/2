@@ -472,6 +472,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("ReferenceInvoiceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<decimal>("UnitCost")
                         .HasColumnType("decimal(18,2)");
 
@@ -496,6 +499,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.HasIndex("AppUserId");
 
                     b.HasIndex("ProductId");
+
+                    b.HasIndex("ReferenceInvoiceId");
 
                     b.ToTable("InventoryTransactions");
                 });
