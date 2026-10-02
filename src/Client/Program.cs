@@ -63,6 +63,7 @@ using var httpClient = new HttpClient
 {
     BaseAddress = new Uri(serverUrl.TrimEnd('/') + "/")
 };
+httpClient.Timeout = TimeSpan.FromSeconds(110);
 var updateManager = new ClientUpdateManager(httpClient, dataDirectory, statePath);
 
 try
@@ -600,6 +601,13 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 message = "فرمان Agent ناشناخته است.";
                 break;
         }
+    }
+    catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+    {
+        success = false;
+        error = "زمان اجرای فرمان Agent تمام شد.";
+        message = error;
+        Console.WriteLine($"اجرای فرمان Agent به‌دلیل پایان زمان ناموفق بود: {message}");
     }
     catch (Exception exception) when (
         exception is HubException or HttpRequestException or InvalidOperationException or ObjectDisposedException or IOException)
