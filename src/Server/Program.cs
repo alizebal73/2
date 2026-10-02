@@ -84,7 +84,7 @@ app.MapPost("/api/auth/login", async (
     var token = AuthorizationService.CreateToken();
     var session = new AppUserSession
     {
-        AppUserId = user.Id,
+        AppUserId = auth.User.Id,
         TokenHash = PasswordSecurity.HashToken(token),
         ExpiresAt = DateTimeOffset.UtcNow.AddHours(AuthorizationService.SessionHours),
         LastSeenAt = DateTimeOffset.UtcNow
@@ -635,19 +635,31 @@ app.MapPost("/api/approvals", async (
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var user = await AuthorizationService.ResolveUserAsync(context, database, cancellationToken);
-    if (user is null) return Results.Unauthorized();
-
-    if (string.IsNullOrWhiteSpace(request.Action) || string.IsNullOrWhiteSpace(request.EntityName) || string.IsNullOrWhiteSpace(request.Reason))
+    var action = request.Action?.Trim().ToLowerInvariant();
+    if (string.IsNullOrWhiteSpace(action) || string.IsNullOrWhiteSpace(request.EntityName) || string.IsNullOrWhiteSpace(request.Reason))
         return Results.BadRequest(new { code = "invalid_approval_request", message = "عملیات، موجودیت و دلیل تأیید را وارد کنید." });
+
+    var requiredPermission = action switch
+    {
+        "invoice.reverse" => "finance.manage",
+        "wallet.refund" => "customer.wallet",
+        "payroll.entry" => "payroll.manage",
+        _ => null
+    };
+
+    if (requiredPermission is null)
+        return Results.BadRequest(new { code = "unsupported_approval_action", message = "این نوع درخواست تأیید از مسیر عمومی پشتیبانی نمی‌شود." });
+
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, requiredPermission, cancellationToken);
+    if (auth.Error is not null) return auth.Error;
 
     var approval = new ApprovalRequest
     {
-        Action = request.Action.Trim(),
+        Action = action!,
         EntityName = request.EntityName.Trim(),
         EntityId = request.EntityId,
         Reason = request.Reason.Trim(),
-        RequestedByUserId = user.Id,
+        RequestedByUserId = auth.User!.Id,
         Status = ApprovalStatus.Pending
     };
     database.ApprovalRequests.Add(approval);
