@@ -246,7 +246,12 @@ app.MapGet("/api/agent/devices", async (
         device.OsVersion,
         device.CpuUsagePercent,
         device.MemoryAvailableBytes,
-        device.UptimeSeconds)).ToList());
+        device.UptimeSeconds,
+        device.LifecycleState,
+        device.PendingUpdateVersion,
+        device.LastUpdateError,
+        device.LastHealthyAt,
+        device.LifecycleStateChangedAt)).ToList());
 })
 .WithName("GetAgentDevices");
 
