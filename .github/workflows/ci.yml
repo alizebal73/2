@@ -227,6 +227,13 @@ jobs:
 
               Write-Host ("Stage 8 Agent persisted identity smoke passed: deviceId={0}" -f $secondRow.deviceId)
 
+              $clientIdentity = Invoke-RestMethod -Uri "$baseUrl/api/client/identity" -Method Get
+              if ($clientIdentity.deviceId -ne $secondRow.deviceId -or -not $clientIdentity.isOnline) {
+                $clientIdentity | ConvertTo-Json -Depth 5
+                throw 'Client identity endpoint did not resolve the local Agent device.'
+              }
+              Write-Host ("Stage 9 Client identity discovery smoke passed: deviceId={0}; stationId={1}" -f $clientIdentity.deviceId, $clientIdentity.stationId)
+
               $commandRequestBody = @{
                 commandType = 'ping'
                 payloadJson = $null
@@ -465,8 +472,8 @@ jobs:
               password = 'Stage9Smoke123!'
               clientKey = 'ci-stage9-session-agent'
             } | ConvertTo-Json)
-            if (-not $customerAuth.authenticated -or -not $customerAuth.loginId) {
-              throw 'Customer authentication for Agent session smoke failed.'
+            if (-not $customerAuth.authenticated -or -not $customerAuth.loginId -or $customerAuth.balance -ne 0) {
+              throw 'Customer authentication for Agent session smoke failed or returned incomplete financial state.'
             }
 
             $env:GAMENET_SERVER_URL = $baseUrl
