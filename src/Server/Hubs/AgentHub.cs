@@ -59,9 +59,7 @@ public sealed class AgentHub(
         await base.OnDisconnectedAsync(exception);
     }
 
-    public async Task<AgentHeartbeatResponse> Heartbeat(
-        AgentHeartbeatRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task<AgentHeartbeatResponse> Heartbeat(AgentHeartbeatRequest request)
     {
         try
         {
@@ -70,7 +68,7 @@ public sealed class AgentHub(
                 Context.ConnectionId,
                 request.AgentVersion);
 
-            var device = await ResolveConnectedDeviceAsync(cancellationToken);
+            var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
 
             logger.LogInformation(
                 "Agent heartbeat identity resolved. ConnectionId={ConnectionId}, DeviceId={DeviceId}, StoredConnectionId={StoredConnectionId}",
@@ -100,7 +98,7 @@ public sealed class AgentHub(
                 : null;
             device.ConnectionId = Context.ConnectionId;
 
-            await database.SaveChangesAsync(cancellationToken);
+            await database.SaveChangesAsync(Context.ConnectionAborted);
             logger.LogInformation(
                 "Agent heartbeat persisted. DeviceId={DeviceId}, LastSeenAt={LastSeenAt}",
                 device.DeviceId,
@@ -108,7 +106,7 @@ public sealed class AgentHub(
 
             try
             {
-                await BroadcastStatusAsync(device, now, cancellationToken);
+                await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
                 logger.LogInformation(
                     "Agent heartbeat dashboard broadcast completed. DeviceId={DeviceId}",
                     device.DeviceId);
