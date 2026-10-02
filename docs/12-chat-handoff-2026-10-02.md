@@ -599,3 +599,18 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 - **Update**: این اصلاحات نباید با installer/Updater عجولانه مخلوط شوند؛ Release/Update در پایان برش پایدار و قبل از rollout واقعی انجام می‌شود.
 
 قاعده: هر نیاز مشابه جدید در ممیزی‌ها ثبت می‌شود و محل اجرای مناسبش تعیین می‌شود؛ patch پراکنده روی UI اصلی ممنوع.
+
+# Final Audit — Stages 1–9 — post-audit checkpoint
+
+- Repo: `alizebal73/2` only.
+- Stage 1–7: completed, tested, and merged.
+- Stage 8 Foundation: verified by Run #676.
+- Stage 9 Lock/Unlock: verified by Run #690.
+- Stage 9 Agent-driven Session Start/End: verified by Run #744 on head `cbbe511e4689721e4591a1a76e6a7dbe2a6965e0`.
+- Stage 1–9 audit found no missing Server-authority blocker in the verified slices.
+- PR #7 (operator account management UI gap found by the audit) is now merged to `main`.
+- A numeric-input parsing cleanup was applied in `UsersPage.tsx` so whitespace is stripped correctly.
+- Full Kiosk/Shell, broader Client command catalog, operational offline/recovery, physical 2–3 PC validation and controlled 40+ rollout remain intentionally deferred.
+- Tariff Server-domain replacement for remaining `mockService.getTariffs()` callers remains a tracked cross-stage debt and must not be treated as forgotten work.
+- Installer/Updater/Rollback remains local-only/deferred per release architecture.
+- This checkpoint is intended to force one more full CI verification of the exact post-audit state before any Stage 10 work is started.
