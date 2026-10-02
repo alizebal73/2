@@ -392,8 +392,21 @@ jobs:
 
               Write-Host ("Stage 8 Agent persisted identity smoke passed: deviceId={0}" -f $secondRow.deviceId)
 
-              $recoveredLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
-              if ($recoveredLifecycle.lifecycleState -ne 'Running' -or -not $recoveredLifecycle.lastHealthyAt) {
+              $recoveredLifecycle = $null
+              $recoveredReady = $false
+              for ($i = 0; $i -lt 20; $i++) {
+                try {
+                  $recoveredLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+                  if ($recoveredLifecycle.isOnline -and $recoveredLifecycle.lifecycleState -eq 'Running' -and $recoveredLifecycle.lastHealthyAt) {
+                    $recoveredReady = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $recoveredReady) {
+                $recoveredLifecycle | ConvertTo-Json -Depth 5
                 throw "Agent lifecycle did not recover to Running with a healthy timestamp: $($recoveredLifecycle.lifecycleState)"
               }
               Write-Host ("Stage 10 recovery lifecycle smoke passed: state={0}; lastHealthyAt={1}" -f $recoveredLifecycle.lifecycleState, $recoveredLifecycle.lastHealthyAt)
