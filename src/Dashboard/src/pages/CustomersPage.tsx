@@ -371,14 +371,19 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
           <button key={customer.id} type="button" className={`customer-row ${customer.id === selected?.id ? 'active' : ''}`} onClick={() => setSelectedId(customer.id)}>
             <span className={`avatar ${customer.vip}`}>{customer.name.slice(0, 1)}</span>
             <span className="main"><b>{customer.name}</b><span>کد {customer.code} · @{customer.username}</span><small>{customer.mobile || 'بدون موبایل'} · {customer.alias || 'بدون لقب'}</small></span>
-            <span className="fin"><span className={`vip-tag ${customer.vip}`}>{customer.vip === 'gold' ? 'طلایی' : customer.vip === 'silver' ? 'نقره‌ای' : 'عادی'}</span><strong className="customer-row-wallet">{money(customer.wallet)} تومان</strong>{customer.debt > 0 && <strong className="customer-row-debt">بدهی {money(customer.debt)} تومان</strong>}<small className={`customer-state ${customer.status}`}>{customer.status === 'active' ? 'فعال' : customer.status === 'warning' ? 'نیازمند توجه' : 'قفل'}</small></span>
+            <span className="fin"><span className={`vip-tag ${customer.vip}`}>{customer.vip === 'gold' ? 'طلایی' : customer.vip === 'silver' ? 'نقره‌ای' : 'عادی'}</span>{canManageWallet && <strong className="customer-row-wallet">{money(customer.wallet)} تومان</strong>}{canManageDebt && customer.debt > 0 && <strong className="customer-row-debt">بدهی {money(customer.debt)} تومان</strong>}<small className={`customer-state ${customer.status}`}>{customer.status === 'active' ? 'فعال' : customer.status === 'warning' ? 'نیازمند توجه' : 'قفل'}</small></span>
           </button>)}</div>
       </section>
 
       {selected && <section className="customer-profile">
         <div className="profile-head"><div className={`profile-avatar ${selected.vip}`}>{selected.name.slice(0, 1)}</div><div><h3>{selected.name}</h3><div className="sub">کد کاربری {selected.code} · @{selected.username} · {selected.alias || 'بدون لقب'}</div></div><span className={`vip-tag ${selected.vip}`}>{selected.vip === 'gold' ? 'طلایی' : selected.vip === 'silver' ? 'نقره‌ای' : 'عادی'}</span></div>
-        <div className="profile-stats">{[['کیف پول', selected.wallet, 'green'], ['بدهی', selected.debt, 'red'], ['اعتبار رایگان', selected.giftCredit, 'blue']].map(([label, value, color]) =>
-          <div className="profile-stat" key={label}><span className="label">{label}</span><span className={`value ${color}`}>{money(Number(value))} ت</span></div>)}</div>
+        <div className="profile-stats">
+          {canManageWallet && <>
+            <div className="profile-stat"><span className="label">کیف پول</span><span className="value green">{money(selected.wallet)} ت</span></div>
+            <div className="profile-stat"><span className="label">اعتبار رایگان</span><span className="value blue">{money(selected.giftCredit)} ت</span></div>
+          </>}
+          {canManageDebt && <div className="profile-stat"><span className="label">بدهی</span><span className="value red">{money(selected.debt)} ت</span></div>}
+        </div>
 
         <div className="profile-section"><h4>اطلاعات مشتری</h4>
           <div className="info-row"><span>کد کاربری</span><strong>{selected.code}</strong></div>
@@ -398,7 +403,7 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
           </div>
         </div>
 
-        <div className="profile-section">
+        {canManageWallet && <div className="profile-section">
           <div className="profile-section-head">
             <h4>دفتر کیف پول</h4>
             <span>{walletLedger.length.toLocaleString('fa-IR')} تراکنش</span>
@@ -422,7 +427,7 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
         <div className="profile-section"><div className="profile-section-head"><h4>تاریخچه مشتری</h4><span>{serverHistory.length} مورد</span></div><div className="customer-history-list">{serverHistory.length ? serverHistory.map((item, index) => (
           <div className="customer-history-item" key={item.id + '-' + index}><span className="customer-history-dot" /><div><strong>{item.description}</strong><small>{new Date(item.createdAt).toLocaleString('fa-IR')} · {money(item.amount)} تومان</small></div></div>
