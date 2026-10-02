@@ -25,6 +25,7 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
   const canManageCustomer = hasPermission(user, 'customer.manage');
   const canManageWallet = hasPermission(user, 'customer.wallet');
   const canManageDebt = hasPermission(user, 'customer.debt');
+  const canReadCustomerPage = canManageCustomer || canManageWallet || canManageDebt;
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selectedId, setSelectedId] = useState('c1');
   const [filter, setFilter] = useState<Filter>('all');
@@ -49,7 +50,7 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
   const [selectedVipPackageId, setSelectedVipPackageId] = useState('');
 
   useEffect(() => {
-    if (!canManageCustomer) {
+    if (!canReadCustomerPage) {
       setCustomers([]);
       setVipPackages([]);
       return;
@@ -61,7 +62,7 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
       setCustomers(rows);
       setVipPackages(packages);
     }).catch(error => setNotice(userErrorMessage(error, 'دریافت اطلاعات مشتریان انجام نشد')));
-  }, [canManageCustomer]);
+  }, [canReadCustomerPage]);
   const visible = useMemo(() => customers.filter(customer => {
     const matchesFilter = filter === 'all' || (filter === 'vip' ? customer.vip !== 'none' : customer.debt > 0);
     const search = query.trim().toLowerCase();
