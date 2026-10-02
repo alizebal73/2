@@ -129,6 +129,16 @@
 - نسخهٔ فعلی فقط UX/State را تثبیت می‌کند؛ تأیید نهایی باید بعداً توسط Server Permission + Approval Record + Audit کنترل شود و UI به هیچ وجه منبع حقیقت مجوز نیست.
 - فایل اصلی: src/Dashboard/src/components/ApprovalDialog.tsx
 
+## Vertical Slice آیتم B9 — Wallet Ledger
+
+- Server از WalletTransaction موجود به‌عنوان دفتر تراکنش استفاده می‌کند؛ جدول موازی ساخته نشد.
+- GET دفتر کیف پول: `/api/customers/{customerId}/wallet-ledger`
+- POST تراکنش کیف پول: `/api/customers/{customerId}/wallet-transactions`
+- Credit/Debit، کنترل موجودی، تراکنش SQLite و Audit در یک مسیر پایدار ثبت می‌شوند.
+- Dashboard adapter در `src/Dashboard/src/services/walletLedgerService.ts` برای API واقعی و Mock fallback دارد.
+- Customer Profile اکنون دفتر کیف پول را با مبلغ، جهت، توضیح، زمان و ماندهٔ بعد از تراکنش نشان می‌دهد.
+- گام بعدی B9: جایگزینی تمام تغییرات پراکندهٔ wallet در Dashboard با همین Ledger Command و سپس اتصال Permission/Server Command کامل.
+
 ## قرارداد اجرایی آیتم ۶ — Error UX استاندارد
 
 - هر خطای کاربر باید سه بخش داشته باشد: چه شد، معنی/علت قابل‌فهم، اقدام بعدی.
@@ -222,7 +232,7 @@
 8. [~] Undo UX برای عملیات برگشت‌پذیر (Reverse واقعی، بدون حذف رکورد) — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
 
 ### B) Finance / Session
-9. Wallet Ledger واقعی
+9. [~] Wallet Ledger واقعی — قرارداد مشترک، API پایدار Server/SQLite، Audit، adapter داشبورد و نمایش Ledger مشتری پیاده‌سازی شد؛ اتصال همه عملیات مالی و مهاجرت کامل از Mock باقی مانده
 10. Refund / Reverse واقعی
 11. Settlement کامل + Breakdown + Why this amount?
 12. Split Payment
