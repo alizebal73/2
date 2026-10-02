@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { HubConnectionBuilder } from '@microsoft/signalr';
 import './App.css';
 import { TopNavigation } from './components/TopNavigation';
