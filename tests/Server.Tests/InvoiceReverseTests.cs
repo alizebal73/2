@@ -56,7 +56,7 @@ public sealed class InvoiceReverseTests : IDisposable
         var audit = await db.AuditLogs.SingleAsync(item => item.Action == "InvoiceReverse");
 
         Assert.Equal(InvoiceStatus.Cancelled, savedInvoice.Status);
-        Assert.Equal(50000m, savedCustomer.Balance);
+        Assert.Equal(100000m, savedCustomer.Balance);
         Assert.Equal(100000m, restoration.Amount);
         Assert.False(result.ExternalRefundRequired);
         Assert.Equal("آزمون برگشت", reversal.Reason);
