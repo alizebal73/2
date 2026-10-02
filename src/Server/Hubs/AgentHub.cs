@@ -8,7 +8,8 @@ namespace GameNetManager.Server.Hubs;
 public sealed class AgentHub(
     GameNetDbContext database,
     IConfiguration configuration,
-    IHubContext<DashboardHub> dashboardHub) : Hub
+    IHubContext<DashboardHub> dashboardHub,
+    ILogger<AgentHub> logger) : Hub
 {
     public override async Task OnConnectedAsync()
     {
@@ -78,9 +79,32 @@ public sealed class AgentHub(
             ? request.UptimeSeconds
             : null;
         device.ConnectionId = Context.ConnectionId;
-        await database.SaveChangesAsync(cancellationToken);
 
-        await BroadcastStatusAsync(device, now, cancellationToken);
+        try
+        {
+            await database.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(
+                exception,
+                "Agent heartbeat persistence failed for {DeviceId}.",
+                device.DeviceId);
+            throw;
+        }
+
+        try
+        {
+            await BroadcastStatusAsync(device, now, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Agent heartbeat persisted but Dashboard status broadcast failed for {DeviceId}.",
+                device.DeviceId);
+        }
+
         return new AgentHeartbeatResponse(
             device.Id,
             now,
