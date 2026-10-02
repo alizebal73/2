@@ -56,7 +56,7 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         if (session is null)
             throw new KeyNotFoundException("جلسه پیدا نشد.");
 
-        if (session.State != SessionState.Active)
+        if (session.State is not SessionState.Active and not SessionState.Ended)
             throw new InvalidOperationException("این جلسه قبلاً بسته شده یا قابل تسویه نیست.");
 
         var walletPart = normalizedParts
@@ -220,7 +220,7 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         }
 
         session.TotalAmount = request.TotalAmount;
-        session.EndAt = DateTimeOffset.UtcNow;
+        session.EndAt ??= DateTimeOffset.UtcNow;
         session.State = SessionState.Completed;
 
         database.AuditLogs.Add(new AuditLog
