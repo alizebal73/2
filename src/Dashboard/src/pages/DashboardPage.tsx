@@ -650,40 +650,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
 
   async function finishSession(method: string, bypassApproval = false) {
     if (!activeStation) return;
-
-    if (!activeStation) return;
     if (!bypassApproval && role === 'operator' && discountPercent > 10) {
       setApproval({ title: 'تخفیف بیشتر از حد مجاز اپراتور', detail: 'این تسویه شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.', action: 'settle', method });
       return;
     }
-    if (activeStation.serverSessionId && customer && isServerGuid(activeStation.serverSessionId) && ['cash', 'card', 'wallet'].includes(method)) {
-      try {
-        const serverResult = await settleServerSession(
-          activeStation.serverSessionId,
-          finalTotal,
-          [{ method: method as 'cash' | 'card' | 'wallet', amount: finalTotal }],
-        );
-        if (method === 'wallet') {
-          setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: serverResult.walletBalanceAfter } : item));
-        }
-        addSessionTimeline(activeStation.id, 'settle', 'تسویه سروری', money(finalTotal) + ' تومان · ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : 'کیف پول'), finalTotal);
-        setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt: new Date().toISOString() }, ...items]);
-        updateStation(activeStation.id, {
-          state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined,
-          customerCode: undefined, persons: undefined, buffetTotal: undefined, sessionCredit: undefined,
-          prepaidEndsAt: undefined, pausedAt: undefined, pausedMinutes: undefined, serverSessionId: undefined,
-        });
-        setModal(null);
-        setSessionCenterStation(null);
-        setMessage('تسویه سروری با موفقیت ثبت شد.');
-        return;
-      } catch (error) {
-        setMessage(userErrorMessage(error, 'تسویه سروری انجام نشد'));
-        return;
-      }
-    }
-
-    const elapsed = duration(activeStation);
+    if (activeStation.serverSessiveStation);
     const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
     const tariff = tariffs.find(item => item.stationType === activeStation.type);
     const billing = calculateBilling({
