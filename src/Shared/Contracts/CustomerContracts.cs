@@ -26,7 +26,12 @@ public sealed record CreateCustomerRequest(
     string? Email,
     string VipTier,
     int ConcurrentLoginLimit,
-    string? Notes);
+    string? Notes,
+    string? Password = null);
+
+public sealed record ChangeCustomerPasswordRequest(string Password);
+public sealed record CustomerLoginAuthRequest(string UsernameOrCode, string Password, string ClientKey);
+public sealed record CustomerDebtSettlementRequest(string Method, Guid? AppUserId);
 
 public sealed record UpdateCustomerRequest(
     string FullName,
