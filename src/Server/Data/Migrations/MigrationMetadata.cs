@@ -98,3 +98,10 @@ partial class InventoryTransactionInvoiceReference
 partial class UserAuthorizationAndApprovals
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002193000_EmployeePayroll")]
+partial class EmployeePayroll
+{
+}
