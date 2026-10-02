@@ -903,7 +903,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       style={style}
       className={`station-card ${station.state} ${view} ${selected ? 'selected' : ''}`}
       draggable={false}
-      onPointerDown={event => {
+      onMouseDown={event => {
         if (event.button !== 0 || event.target instanceof Element && event.target.closest('button, input, select, textarea, a')) return;
         event.preventDefault();
         event.stopPropagation();
