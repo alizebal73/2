@@ -553,10 +553,12 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 if (payload is null)
                     throw new InvalidOperationException("دادهٔ Update معتبر نیست.");
 
+                Console.WriteLine($"CLIENT_UPDATE_SNAPSHOT_START:{agentVersion}");
                 await updateManager.EnsureCurrentVersionSnapshotAsync(
                     agentVersion,
                     AppContext.BaseDirectory,
                     cancellationToken);
+                Console.WriteLine($"CLIENT_UPDATE_SNAPSHOT_DONE:{agentVersion}");
 
                 var package = new ClientUpdatePackage(
                     payload.Version,
@@ -564,8 +566,10 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                     payload.Sha256,
                     payload.SizeBytes);
 
+                Console.WriteLine($"CLIENT_UPDATE_STAGE_START:{payload.Version}");
                 await updateManager.StageAsync(package, cancellationToken);
                 pendingUpdateVersion = payload.Version;
+                Console.WriteLine($"CLIENT_UPDATE_STAGE_DONE:{payload.Version}");
 
                 if (payload.Activate)
                 {
