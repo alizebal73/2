@@ -1,5 +1,6 @@
 using GameNetManager.Server.Data;
 using GameNetManager.Server.Hubs;
+using Microsoft.AspNetCore.SignalR;
 using GameNetManager.Shared.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
