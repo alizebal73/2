@@ -29,5 +29,19 @@ export async function sendAgentCommand(
     );
   }
 
-  return payload as import('../types').AgentCommandStatusDto;
+  const command = payload as import('../types').AgentCommandStatusDto;
+  for (let attempt = 0; attempt < 32; attempt += 1) {
+    if (command.status === 'Succeeded' || command.status === 'Failed') return command;
+
+    await new Promise<void>(resolve => window.setTimeout(resolve, 250));
+    const statusResponse = await fetch('/api/agent/commands/' + command.commandId);
+    if (!statusResponse.ok) {
+      const statusPayload = await statusResponse.json().catch(() => null) as { message?: string } | null;
+      throw new Error(statusPayload?.message || 'وضعیت فرمان Agent دریافت نشد');
+    }
+
+    Object.assign(command, await statusResponse.json());
+  }
+
+  throw new Error('فرمان Agent در زمان مجاز تکمیل نشد');
 }
