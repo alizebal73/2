@@ -1032,7 +1032,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       onExtend={() => { setSessionCenterStation(null); open('extend', liveSessionCenterStation); }}
       onReduce={() => { setSessionCenterStation(null); open('reduce', liveSessionCenterStation); }}
       onSettle={() => { setSessionCenterStation(null); open('settle', liveSessionCenterStation); }}
-      onRateChange={rate => { updateStation(liveSessionCenterStation.id, { sessionRate: rate }); addSessionTimeline(liveSessionCenterStation.id, 'note', 'تغییر نرخ جلسه', 'نرخ جدید ' + money(rate) + ' تومان/ساعت', rate); setMessage('نرخ همین جلسه به ' + money(rate) + ' تومان در ساعت تغییر کرد.'); }}
+      onRateChange={rate => changeSessionRate(liveSessionCenterStation, rate)}
+      onPersonsChange={persons => changeSessionPersons(liveSessionCenterStation, persons)}
+      availableStations={stations.filter(item => item.state === 'free' && item.id !== liveSessionCenterStation.id)}
+      onTransfer={targetId => transferSession(liveSessionCenterStation, targetId)}
       timeline={sessionTimeline.filter(item => item.stationId === liveSessionCenterStation.id)}
     />}
     {context && <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}>
