@@ -281,15 +281,21 @@
 
 ## فهرست اصلی
 
+> مرحله اصلی فعلی: **۴ — Finance & Session Core**؛ ترتیب B9 → B17 حفظ می‌شود.
+
 ### A) Operational Intelligence / UX
 1. ✅ مرکز «نیازمند توجه» در داشبورد — پیاده‌سازی و CI سبز شد
-2. [~] جست‌وجوی سراسری و مرکز جست‌وجو/فرمان — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
-3. [~] پنل جزئیات جلسه (Session Center) — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
-4. [~] Timeline کوتاه ایستگاه — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
-5. [~] عملیات اخیر اپراتور — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
+2. ✅ جست‌وجوی سراسری و مرکز جست‌وجو/فرمان — Build/Test/CI + Smoke Test تعاملی سبز
+3. ✅ پنل جزئیات جلسه (Session Center) — Build/Test/CI + Smoke Test تعاملی سبز
+4. ✅ Timeline کوتاه ایستگاه — Build/Test/CI + Smoke Test تعاملی سبز
+5. ✅ عملیات اخیر اپراتور — Build/Test/CI + Smoke Test تعاملی سبز
 6. [~] Error UX استاندارد: خطا → معنی → اقدام بعدی — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
-7. [~] Approval Flow برای عملیات حساس — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
-8. [~] Undo UX برای عملیات برگشت‌پذیر (Reverse واقعی، بدون حذف رکورد) — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
+7. ✅ Approval Flow برای عملیات حساس — Build/Test/CI + Smoke Test تعاملی سبز
+8. ✅ Undo UX برای عملیات برگشت‌پذیر (Reverse واقعی، بدون حذف رکورد) — Build/Test/CI + Smoke Test تعاملی سبز
+
+## وضعیت مرحله اصلی ۳ — Operational Completion
+
+**تکمیل شد.** A1 تا A8 همگی پیاده‌سازی شدند و CI + Dashboard Interaction Smoke روی HEAD نهایی سبز است. مرحله اصلی بعدی: **۴ — Finance & Session Core**.
 
 ### B) Finance / Session
 9. [~] Wallet Ledger واقعی — قرارداد مشترک، API پایدار Server/SQLite، Audit، adapter داشبورد و نمایش Ledger مشتری پیاده‌سازی شد؛ اتصال همه عملیات مالی و مهاجرت کامل از Mock باقی مانده
