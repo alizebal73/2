@@ -92,19 +92,32 @@ try
     while (!shutdown.IsCancellationRequested)
     {
         await using var connection = CreateConnection(hubUrl, state);
+        var kioskEnabled = false;
+        var lockOnDisconnect = true;
 
         connection.On<AgentCommandEnvelope>("AgentCommand", command =>
             HandleAgentCommandAsync(connection, command, lockScreen, shutdown.Token));
 
+        connection.On<AgentPolicyDto>("AgentPolicyChanged", policy =>
+        {
+            kioskEnabled = policy.KioskEnabled;
+            lockOnDisconnect = policy.LockOnDisconnect;
+            Console.WriteLine($"Policy Agent تغییر کرد؛ Kiosk={kioskEnabled}; LockOnDisconnect={lockOnDisconnect}.");
+            return Task.CompletedTask;
+        });
+
         connection.On<AgentReadyDto>("AgentReady", async ready =>
         {
+            kioskEnabled = ready.KioskEnabled;
+            lockOnDisconnect = ready.LockOnDisconnect;
+
             if (ready.IsLocked)
                 await lockScreen.LockAsync(shutdown.Token);
             else
                 await lockScreen.UnlockAsync();
 
             Console.WriteLine(
-                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}");
+                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}; Kiosk={kioskEnabled}; LockOnDisconnect={lockOnDisconnect}");
 
             if (!testSessionFlowCompleted
                 && testSessionFlow
@@ -133,12 +146,24 @@ try
             await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, shutdown.Token);
         };
 
-        connection.Closed += error =>
+        connection.Closed += async error =>
         {
+            if (kioskEnabled && lockOnDisconnect && !shutdown.IsCancellationRequested)
+            {
+                try
+                {
+                    await lockScreen.LockAsync(CancellationToken.None);
+                    Console.WriteLine("ارتباط Agent قطع شد؛ طبق Policy صفحه قفل شد.");
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine($"قفل امن هنگام قطع ارتباط انجام نشد: {exception.Message}");
+                }
+            }
+
             if (!shutdown.IsCancellationRequested)
                 Console.WriteLine(
                     $"اتصال Agent بسته شد؛ چرخهٔ اتصال دوباره شروع می‌شود. {error?.Message ?? "علت نامشخص"}".Trim());
-            return Task.CompletedTask;
         };
 
         try
@@ -398,6 +423,13 @@ static async Task HandleAgentCommandAsync(
                 await lockScreen.UnlockAsync();
                 Console.WriteLine($"فرمان بازگشایی دریافت شد؛ CommandId={command.CommandId}.");
                 message = "صفحه قفل GameNet باز شد.";
+                break;
+
+            case AgentCommandTypes.LogoutLock:
+                await connection.InvokeAsync("AgentLogoutAndLock", cancellationToken);
+                await lockScreen.LockAsync(cancellationToken);
+                Console.WriteLine($"فرمان خروج کاربر و قفل دریافت شد؛ CommandId={command.CommandId}.");
+                message = "کاربر خارج شد و دستگاه قفل شد.";
                 break;
 
             default:
