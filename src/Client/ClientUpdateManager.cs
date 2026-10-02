@@ -24,6 +24,7 @@ public sealed class ClientUpdateManager
     private readonly string _updatesDirectory;
     private readonly string _stateFilePath;
     private readonly string _activeStatePath;
+    private readonly SemaphoreSlim _stateWriteGate = new(1, 1);
 
     public ClientUpdateManager(HttpClient httpClient, string dataDirectory, string stateFilePath)
     {
@@ -261,29 +262,37 @@ public sealed class ClientUpdateManager
 
     private async Task SaveStateAsync(ClientUpdateState state, CancellationToken cancellationToken)
     {
-        var json = JsonSerializer.Serialize(
-            state,
-            new JsonSerializerOptions { WriteIndented = true });
-
-        var temporaryPath = _activeStatePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        await File.WriteAllTextAsync(temporaryPath, json, cancellationToken);
-
+        await _stateWriteGate.WaitAsync(cancellationToken);
         try
         {
-            File.Move(temporaryPath, _activeStatePath, overwrite: true);
-        }
-        catch
-        {
+            var json = JsonSerializer.Serialize(
+                state,
+                new JsonSerializerOptions { WriteIndented = true });
+
+            var temporaryPath = _activeStatePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            await File.WriteAllTextAsync(temporaryPath, json, cancellationToken);
+
             try
             {
-                File.Delete(temporaryPath);
+                File.Move(temporaryPath, _activeStatePath, overwrite: true);
             }
             catch
             {
-                // Preserve the last known active version pointer.
-            }
+                try
+                {
+                    File.Delete(temporaryPath);
+                }
+                catch
+                {
+                    // Preserve the last known active version pointer.
+                }
 
-            throw;
+                throw;
+            }
+        }
+        finally
+        {
+            _stateWriteGate.Release();
         }
     }
 
