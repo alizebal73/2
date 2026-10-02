@@ -150,6 +150,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         product.Property(item => item.Category).HasMaxLength(80).IsRequired();
         product.Property(item => item.UnitPrice).HasColumnType("decimal(18,2)");
         product.Property(item => item.CostPrice).HasColumnType("decimal(18,2)");
+        product.Property(item => item.MinimumStock).IsRequired();
+        product.Property(item => item.Unit).HasMaxLength(20).IsRequired();
     }
 
     private static void ConfigureAppUser(ModelBuilder modelBuilder)
@@ -385,6 +387,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         var transaction = modelBuilder.Entity<InventoryTransaction>();
         transaction.HasKey(item => item.Id);
         transaction.Property(item => item.Direction).HasConversion<string>().HasMaxLength(20);
+        transaction.Property(item => item.Kind).HasMaxLength(20).IsRequired();
         transaction.Property(item => item.Notes).HasMaxLength(250);
         transaction.HasOne(item => item.Product)
             .WithMany(item => item.InventoryTransactions)
