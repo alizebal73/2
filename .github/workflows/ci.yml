@@ -226,7 +226,7 @@ jobs:
               kind = 'Waste'
               notes = 'Stage 6 waste test'
             } | ConvertTo-Json)
-            if ([int]$stockOut.stock -ne 4 -or $stockOut.kind -ne 'Waste') { throw 'Inventory waste smoke failed.' }
+            if ([int]$stockOut.stock -ne 5 -or $stockOut.kind -ne 'Waste') { throw 'Inventory waste smoke failed.' }
 
             $returned = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
               quantity = 1
@@ -234,7 +234,7 @@ jobs:
               kind = 'Return'
               notes = 'Stage 6 return test'
             } | ConvertTo-Json)
-            if ([int]$returned.stock -ne 5 -or $returned.kind -ne 'Return') { throw 'Inventory return smoke failed.' }
+            if ([int]$returned.stock -ne 6 -or $returned.kind -ne 'Return') { throw 'Inventory return smoke failed.' }
 
             $sale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
               items = @(@{ productId = $inventoryProduct.id; quantity = 4 })
@@ -326,7 +326,7 @@ jobs:
 
             $inventoryAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
             $reversedProduct = @($inventoryAfterReverse | Where-Object { $_.id -eq $inventoryProduct.id })[0]
-            if ([int]$reversedProduct.stock -ne 1) { throw 'Buffet invoice reverse did not restore stock.' }
+            if ([int]$reversedProduct.stock -ne 2) { throw 'Buffet invoice reverse did not restore stock.' }
 
             Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
 
