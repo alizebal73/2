@@ -229,8 +229,9 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
         RequestedByAppUserId = auth.User!.Id,
         CommandType = commandType!,
         PayloadJson = request.PayloadJson,
-        Status = "Pending",
+        Status = "Sent",
         RequestedAt = now,
+        SentAt = now,
         AgentConnectionId = device.ConnectionId
     };
 
@@ -251,10 +252,6 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
-
-        command.Status = "Sent";
-        command.SentAt = DateTimeOffset.UtcNow;
-        await database.SaveChangesAsync(cancellationToken);
     }
     catch (Exception exception)
     {
