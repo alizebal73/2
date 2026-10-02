@@ -37,6 +37,7 @@ Console.WriteLine(
     $"پیکربندی Agent: Server={serverUrl}; DeviceId={state.DeviceId}; Name={state.Name}; StationId={stationId?.ToString() ?? "none"}");
 
 using var shutdown = new CancellationTokenSource();
+using var lockScreen = new AgentLockScreenController();
 Console.CancelKeyPress += (_, eventArgs) =>
 {
     eventArgs.Cancel = true;
@@ -87,11 +88,18 @@ try
         await using var connection = CreateConnection(hubUrl, state);
 
         connection.On<AgentCommandEnvelope>("AgentCommand", command =>
-            HandleAgentCommandAsync(connection, command, shutdown.Token));
+            HandleAgentCommandAsync(connection, command, lockScreen, shutdown.Token));
 
-        connection.On<AgentReadyDto>("AgentReady", ready =>
+        connection.On<AgentReadyDto>("AgentReady", async ready =>
+        {
+            if (ready.IsLocked)
+                await lockScreen.LockAsync(shutdown.Token);
+            else
+                await lockScreen.UnlockAsync();
+
             Console.WriteLine(
-                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}"));
+                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}");
+        });
 
         connection.Reconnecting += error =>
         {
@@ -301,6 +309,7 @@ static async Task SaveStateAsync(string path, AgentState state)
 static async Task HandleAgentCommandAsync(
     HubConnection connection,
     AgentCommandEnvelope command,
+    AgentLockScreenController lockScreen,
     CancellationToken cancellationToken)
 {
     var success = AgentCommandTypes.IsSupported(command.CommandType);
@@ -308,8 +317,40 @@ static async Task HandleAgentCommandAsync(
         ? "Agent فرمان را دریافت کرد."
         : "فرمان Agent ناشناخته است.";
 
-    if (success && string.Equals(command.CommandType, AgentCommandTypes.Ping, StringComparison.OrdinalIgnoreCase))
-        Console.WriteLine($"فرمان ping دریافت شد؛ CommandId={command.CommandId}.");
+    try
+    {
+        switch (command.CommandType.Trim().ToLowerInvariant())
+        {
+            case AgentCommandTypes.Ping:
+                Console.WriteLine($"فرمان ping دریافت شد؛ CommandId={command.CommandId}.");
+                message = "ارتباط Agent سالم است.";
+                break;
+
+            case AgentCommandTypes.Lock:
+                await lockScreen.LockAsync(cancellationToken);
+                Console.WriteLine($"فرمان قفل دریافت شد؛ CommandId={command.CommandId}.");
+                message = "صفحه قفل GameNet فعال شد.";
+                break;
+
+            case AgentCommandTypes.Unlock:
+                await lockScreen.UnlockAsync();
+                Console.WriteLine($"فرمان بازگشایی دریافت شد؛ CommandId={command.CommandId}.");
+                message = "صفحه قفل GameNet باز شد.";
+                break;
+
+            default:
+                success = false;
+                message = "فرمان Agent ناشناخته است.";
+                break;
+        }
+    }
+    catch (Exception exception) when (
+        exception is HubException or HttpRequestException or InvalidOperationException or ObjectDisposedException)
+    {
+        success = false;
+        message = exception.Message;
+        Console.WriteLine($"اجرای فرمان Agent ناموفق بود: {message}");
+    }
 
     try
     {
