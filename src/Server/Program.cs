@@ -2564,9 +2564,15 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-refunds/request", async (
 })
 .WithName("RequestWalletRefundApproval");
 
-app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", (
-    Guid customerId) =>
+app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (
+    Guid customerId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.wallet", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     return Results.Conflict(new
     {
         code = "approval_required",
