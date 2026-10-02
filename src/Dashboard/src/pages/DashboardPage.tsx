@@ -1121,7 +1121,14 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     <div className="summary-grid">
       {[["ایستگاه آزاد", counts.free, 'green'], ['در حال جلسه', counts.busy + stations.filter(item => item.state === 'paused').length, 'red'], ['رزرو امروز', counts.reserved, 'blue'], ['درآمد امروز', invoices.reduce((sum, item) => sum + item.total, 4820000), 'orange'], ['فروش بوفه', 860000, 'orange'], ['مشتری حاضر', stations.filter(item => item.state === 'busy').reduce((sum, item) => sum + (item.persons ?? 1), 0), 'blue']].map(([label, value, color]) => <div key={label} className="summary-card"><div className="label">{label}</div><div className={`value ${color}`}>{money(Number(value))}{String(label).includes('درآمد') || String(label).includes('فروش') ? ' تومان' : ''}</div></div>)}
     </div>
-        <div className="dashboard-workspace">
+        <div
+      className="dashboard-workspace"
+      onDragStart={event => event.preventDefault()}
+      onSelect={event => {
+        const target = event.target as HTMLElement;
+        if (!target.closest('input, textarea, select')) event.preventDefault();
+      }}
+    >
       <DashboardAttentionSidebar
         payments={sidebarPayments}
         attentions={sidebarAttentions}
@@ -1139,7 +1146,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           if (item) setReverseRequest(item);
         }}
       />
-      <main className="dashboard-main">
+      <main className="dashboard-main" onDragStart={event => event.preventDefault()}>
         <div className="toolbar dashboard-toolbar">
           <div className="zone-filter">{Object.entries(zoneLabels).map(([key, label]) => <button key={key} type="button" className={zone === key ? 'active' : ''} onClick={() => setZone(key as ZoneKey)}>{label}</button>)}</div>
           <div className="search-box"><input aria-label="جست‌وجوی ایستگاه" value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی ایستگاه…" /></div>
