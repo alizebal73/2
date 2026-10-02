@@ -374,6 +374,125 @@ jobs:
               Start-Sleep -Seconds 1
             }
 
+            # Stage 9: real Agent-driven session start/end using customer authentication and the existing settlement domain.
+            $sessionAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage9-session-agent'
+            $sessionAgentData = Join-Path $sessionAgentRoot 'data'
+            $sessionAgentStdout = Join-Path $sessionAgentRoot 'stdout.log'
+            $sessionAgentStderr = Join-Path $sessionAgentRoot 'stderr.log'
+            Remove-Item $sessionAgentRoot -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $sessionAgentData -Force | Out-Null
+
+            $sessionDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $sessionStation = @($sessionDashboard.stations | Where-Object { $_.zone -eq 'pc' -and $_.state -eq 'Available' }) | Select-Object -First 1
+            if (-not $sessionStation) { throw 'No available PC station was found for Agent session smoke.' }
+
+            $env:GAMENET_SERVER_URL = $baseUrl
+            $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
+            $env:GAMENET_AGENT_NAME = 'CI Agent Stage 9 Session'
+            $env:GAMENET_AGENT_DEVICE_ID = 'ci-stage9-session-agent'
+            $env:GAMENET_STATION_ID = $sessionStation.id
+            $env:GAMENET_AGENT_DATA_DIR = $sessionAgentData
+            $env:GAMENET_AGENT_HEADLESS = '1'
+            $env:GAMENET_AGENT_TEST_SESSION_FLOW = $null
+            $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $null
+            $env:GAMENET_AGENT_TEST_LOGIN_ID = $null
+
+            $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+              'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
+            ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $sessionAgentStdout -RedirectStandardError $sessionAgentStderr
+
+            try {
+              $sessionAgentOnline = $false
+              for ($i = 0; $i -lt 30; $i++) {
+                if ($sessionAgentProcess.HasExited) { break }
+                try {
+                  $rows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $row = @($rows | Where-Object { $_.name -eq 'CI Agent Stage 9 Session' })[0]
+                  if ($row -and $row.isOnline -and $row.deviceId -eq 'ci-stage9-session-agent') {
+                    $sessionAgentOnline = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+              if (-not $sessionAgentOnline) {
+                if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
+                if (Test-Path $sessionAgentStderr) { Get-Content $sessionAgentStderr }
+                throw 'Stage 9 session Agent did not register/connect.'
+              }
+
+              if (-not $sessionAgentProcess.HasExited) {
+                Stop-Process -Id $sessionAgentProcess.Id -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 1
+              }
+
+              $customerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
+                usernameOrCode = $newCustomer.username
+                password = 'Smoke123!'
+                clientKey = 'ci-stage9-session-agent'
+              } | ConvertTo-Json)
+              if (-not $customerAuth.authenticated -or -not $customerAuth.loginId) {
+                throw 'Customer authentication for Agent session smoke failed.'
+              }
+
+              $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+              $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
+              $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $customerId
+              $env:GAMENET_AGENT_TEST_LOGIN_ID = $customerAuth.loginId
+
+              $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+                'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
+              ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $sessionAgentStdout -RedirectStandardError $sessionAgentStderr
+
+              $sessionFlowCompleted = $false
+              $endedSessionId = $null
+              for ($i = 0; $i -lt 30; $i++) {
+                if ($sessionAgentProcess.HasExited) { break }
+                if (Test-Path $sessionAgentStdout) {
+                  $log = Get-Content $sessionAgentStdout -Raw
+                  if ($log -match 'Agent session end موفق؛ SessionId=([0-9a-fA-F-]+)') {
+                    $endedSessionId = $Matches[1]
+                    $sessionFlowCompleted = $true
+                    break
+                  }
+                }
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $sessionFlowCompleted) {
+                Write-Host '--- Stage 9 Session Agent stdout ---'
+                if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
+                Write-Host '--- Stage 9 Session Agent stderr ---'
+                if (Test-Path $sessionAgentStderr) { Get-Content $sessionAgentStderr }
+                throw 'Agent-driven Session Start/End smoke did not complete.'
+              }
+
+              $endedSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$endedSessionId/settle" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                totalAmount = 1000
+                parts = @(@{ method = 'cash'; amount = 1000 })
+                timeAmount = 1000
+                discountAmount = 0
+                prepaidAmount = 0
+              } | ConvertTo-Json)
+
+              if (-not $endedSession.invoiceId -or $endedSession.invoiceStatus -ne 'Paid') {
+                throw 'Ended Agent session could not be settled through the existing server settlement path.'
+              }
+
+              Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}" -f $endedSessionId, $sessionStation.id)
+            }
+            finally {
+              if (-not $sessionAgentProcess.HasExited) {
+                Stop-Process -Id $sessionAgentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+              $env:GAMENET_AGENT_DEVICE_ID = $null
+              $env:GAMENET_STATION_ID = $null
+              $env:GAMENET_AGENT_TEST_SESSION_FLOW = $null
+              $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $null
+              $env:GAMENET_AGENT_TEST_LOGIN_ID = $null
+              $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+            }
+
             $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($me.userName -ne 'admin') { throw 'Current operator endpoint returned the wrong user.' }
 
