@@ -73,3 +73,10 @@ partial class VipPackageDomain
 partial class CustomerCredentials
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002150000_BuffetInventorySettings")]
+partial class BuffetInventorySettings
+{
+}
