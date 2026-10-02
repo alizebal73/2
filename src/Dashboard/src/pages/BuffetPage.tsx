@@ -16,7 +16,7 @@ export function BuffetPage() {
   const [target, setTarget] = useState<'session' | 'standalone'>('session');
   const [notice, setNotice] = useState('');
   const [productFormOpen, setProductFormOpen] = useState(false);
-  const [draft, setDraft] = useState({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0' });
+  const [draft, setDraft] = useState({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0', minimumStock: '0', unit: 'عدد' });
   const [busy, setBusy] = useState(false);
 
   async function refresh() {
@@ -44,13 +44,13 @@ export function BuffetPage() {
     setCart(current => ({ ...current, [id]: Math.max(0, Math.min(product.stock, (current[id] ?? 0) + delta)) }));
   }
 
-  async function adjustStock(product: ProductRecord, direction: 'in' | 'out') {
+  async function adjustStock(product: ProductRecord, direction: 'in' | 'out', kind: 'Adjustment' | 'Waste' | 'Return' = 'Adjustment', notesOverride?: string) {
     setBusy(true);
     try {
-      const result = await adjustServerStock(product.id, 1, direction, direction === 'in' ? 'ورود بوفه' : 'خروج دستی بوفه');
+      const result = await adjustServerStock(product.id, 1, direction, notesOverride ?? (direction === 'in' ? 'ورود بوفه' : 'خروج دستی بوفه'), kind);
       setProducts(current => current.map(item => item.id === product.id ? { ...item, stock: result.stock, maxStock: Math.max(item.maxStock, result.stock) } : item));
       await refresh();
-      setNotice(direction === 'in' ? 'یک عدد به موجودی اضافه شد' : 'یک عدد از موجودی کم شد');
+      setNotice(kind === 'Waste' ? 'ضایعات ثبت شد' : kind === 'Return' ? 'مرجوعی ثبت شد' : direction === 'in' ? 'یک عدد به موجودی اضافه شد' : 'یک عدد از موجودی کم شد');
     } catch (error) {
       setNotice(userErrorMessage(error, 'اصلاح موجودی انجام نشد'));
     } finally {
@@ -62,6 +62,7 @@ export function BuffetPage() {
     const price = numberValue(draft.price);
     const buyPrice = numberValue(draft.buyPrice);
     const stock = numberValue(draft.stock);
+    const minimumStock = numberValue(draft.minimumStock);
     if (!draft.name.trim()) {
       setNotice('نام محصول را وارد کنید');
       return;
@@ -74,6 +75,8 @@ export function BuffetPage() {
           category: draft.category,
           price,
           buyPrice,
+          minimumStock,
+          unit: draft.unit.trim() || 'عدد',
           active: true,
         });
         setProducts(current => current.map(item => item.id === updated.id ? updated : item));
@@ -85,11 +88,13 @@ export function BuffetPage() {
           price,
           buyPrice,
           initialStock: stock,
+          minimumStock,
+          unit: draft.unit.trim() || 'عدد',
         });
         setProducts(current => [created, ...current]);
         setNotice('محصول جدید ثبت شد');
       }
-      setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0' });
+      setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0', minimumStock: '0', unit: 'عدد' });
       setEditingProductId(null);
       setProductFormOpen(false);
       await refresh();
@@ -108,6 +113,8 @@ export function BuffetPage() {
       price: String(product.price),
       buyPrice: String(product.buyPrice),
       stock: String(product.stock),
+      minimumStock: String(product.minimumStock),
+      unit: product.unit,
     });
     setProductFormOpen(true);
   }
@@ -139,7 +146,7 @@ export function BuffetPage() {
     </div>
 
     <div className="toolbar">
-      <button type="button" className="btn primary" onClick={() => { setEditingProductId(null); setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0' }); setProductFormOpen(current => !current); }}>+ محصول جدید</button>
+      <button type="button" className="btn primary" onClick={() => { setEditingProductId(null); setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0', minimumStock: '0', unit: 'عدد' }); setProductFormOpen(current => !current); }}>+ محصول جدید</button>
       <span className="status-pill free">موجودی از Server</span>
     </div>
 
@@ -151,6 +158,8 @@ export function BuffetPage() {
         <label>قیمت فروش<input inputMode="numeric" value={draft.price} onChange={event => setDraft(current => ({ ...current, price: event.target.value }))} /></label>
         <label>قیمت خرید<input inputMode="numeric" value={draft.buyPrice} onChange={event => setDraft(current => ({ ...current, buyPrice: event.target.value }))} /></label>
         <label>موجودی اولیه<input inputMode="numeric" value={draft.stock} onChange={event => setDraft(current => ({ ...current, stock: event.target.value }))} /></label>
+        <label>حداقل موجودی<input inputMode="numeric" value={draft.minimumStock} onChange={event => setDraft(current => ({ ...current, minimumStock: event.target.value }))} /></label>
+        <label>واحد شمارش<input value={draft.unit} onChange={event => setDraft(current => ({ ...current, unit: event.target.value }))} /></label>
       </div>
       <div className="modal-actions"><button className="btn primary" disabled={busy} onClick={() => void saveProduct()}>{editingProductId ? 'ذخیره تغییرات' : 'ثبت محصول'}</button><button className="btn" onClick={() => { setEditingProductId(null); setProductFormOpen(false); }}>انصراف</button></div>
     </section>}
@@ -167,16 +176,21 @@ export function BuffetPage() {
         <div className="category-tabs">{['همه','نوشیدنی','غذا','تنقلات','لوازم جانبی','سایر'].map(item => <button key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>
         <div className="product-grid">
           {visibleProducts.map(product => {
-            const low = product.stock <= Math.max(3, Math.floor(product.maxStock * 0.3));
+            const low = product.lowStock;
             const width = product.maxStock ? Math.min(100, product.stock / product.maxStock * 100) + '%' : '0%';
             return <article key={product.id} className="product-card">
               <div className="icon">🧃</div><b>{product.name}</b><div className="price">{money(product.price)} تومان</div>
-              <div className="stock">موجودی: {product.stock}</div>
+              <div className="stock">موجودی: {product.stock} {product.unit} · حداقل {product.minimumStock}</div>
               <div className="progress-bar"><span style={{ width }} /></div>
               {low && <small className="low-stock">هشدار موجودی کم</small>}
               <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
               <button className="btn sm" disabled={busy} onClick={() => startEdit(product)}>ویرایش</button>
-              <div className="product-stock-actions"><button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button><button className="btn sm danger" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out')}>− موجودی</button></div>
+              <div className="product-stock-actions">
+                <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button>
+                <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out')}>− موجودی</button>
+                <button className="btn sm danger" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out', 'Waste', 'ضایعات بوفه')}>− ضایعات</button>
+                <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in', 'Return', 'مرجوعی بوفه')}>+ مرجوعی</button>
+              </div>
             </article>;
           })}
         </div>
