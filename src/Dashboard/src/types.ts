@@ -339,8 +339,40 @@ export type InventoryTransactionRecord = {
   productId: string;
   productName: string;
   quantity: number;
+  unitPrice?: number;
+  unitCost?: number;
+  referenceInvoiceId?: string | null;
   direction: 'In' | 'Out';
   kind: 'Initial' | 'Adjustment' | 'Purchase' | 'Sale' | 'Waste' | 'Return' | string;
   notes?: string;
   createdAt: string;
+};
+
+export type BuffetProfitReport = {
+  from: string;
+  to: string;
+  totals: {
+    salesRevenue: number;
+    salesCost: number;
+    returnRevenue: number;
+    returnCost: number;
+    purchaseCost: number;
+    wasteCost: number;
+    grossProfit: number;
+  };
+  products: Array<{
+    productId: string;
+    productName: string;
+    salesQuantity: number;
+    salesRevenue: number;
+    salesCost: number;
+    returnQuantity: number;
+    returnRevenue: number;
+    returnCost: number;
+    purchaseQuantity: number;
+    purchaseCost: number;
+    wasteQuantity: number;
+    wasteCost: number;
+    grossProfit: number;
+  }>;
 };
