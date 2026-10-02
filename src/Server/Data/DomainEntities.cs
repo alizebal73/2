@@ -78,6 +78,7 @@ public sealed class Customer : BaseEntity
     public decimal Balance { get; set; }
     public decimal FreeMoney { get; set; }
     public int FreeTimeMinutes { get; set; }
+    public int ConcurrentLoginLimit { get; set; } = 1;
     public string? Notes { get; set; }
     public ICollection<Session> Sessions { get; set; } = new List<Session>();
     public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
@@ -102,6 +103,16 @@ public sealed class BenefitTransaction : BaseEntity
     public decimal MoneyAmount { get; set; }
     public int Minutes { get; set; }
     public string Description { get; set; } = string.Empty;
+}
+
+public sealed class CustomerLogin : BaseEntity
+{
+    public Guid CustomerId { get; set; }
+    public Customer Customer { get; set; } = default!;
+    public string ClientKey { get; set; } = string.Empty;
+    public DateTimeOffset LoggedInAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? LoggedOutAt { get; set; }
+    public bool IsActive { get; set; } = true;
 }
 
 public sealed class Product : BaseEntity
