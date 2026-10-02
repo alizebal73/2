@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Reflection;
 using System.Text.Json;
 using GameNetManager.Shared.Contracts;
+using GameNetManager.Client;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
 
@@ -35,6 +36,8 @@ var osVersion = Environment.OSVersion.VersionString;
 
 Console.WriteLine(
     $"پیکربندی Agent: Server={serverUrl}; DeviceId={state.DeviceId}; Name={state.Name}; StationId={stationId?.ToString() ?? "none"}");
+
+using var lockController = new AgentLockController();
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
@@ -87,11 +90,18 @@ try
         await using var connection = CreateConnection(hubUrl, state);
 
         connection.On<AgentCommandEnvelope>("AgentCommand", command =>
-            HandleAgentCommandAsync(connection, command, shutdown.Token));
+            HandleAgentCommandAsync(connection, command, lockController, shutdown.Token));
 
-        connection.On<AgentReadyDto>("AgentReady", ready =>
+        connection.On<AgentReadyDto>("AgentReady", async ready =>
+        {
             Console.WriteLine(
-                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}"));
+                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; Locked={ready.IsLocked}");
+
+            if (ready.IsLocked)
+                await lockController.LockAsync();
+            else
+                await lockController.UnlockAsync();
+        });
 
         connection.Reconnecting += error =>
         {
@@ -301,6 +311,7 @@ static async Task SaveStateAsync(string path, AgentState state)
 static async Task HandleAgentCommandAsync(
     HubConnection connection,
     AgentCommandEnvelope command,
+    AgentLockController lockController,
     CancellationToken cancellationToken)
 {
     var success = AgentCommandTypes.IsSupported(command.CommandType);
@@ -308,8 +319,32 @@ static async Task HandleAgentCommandAsync(
         ? "Agent فرمان را دریافت کرد."
         : "فرمان Agent ناشناخته است.";
 
-    if (success && string.Equals(command.CommandType, AgentCommandTypes.Ping, StringComparison.OrdinalIgnoreCase))
-        Console.WriteLine($"فرمان ping دریافت شد؛ CommandId={command.CommandId}.");
+    try
+    {
+        if (string.Equals(command.CommandType, AgentCommandTypes.Ping, StringComparison.OrdinalIgnoreCase))
+        {
+            Console.WriteLine($"فرمان ping دریافت شد؛ CommandId={command.CommandId}.");
+        }
+        else if (string.Equals(command.CommandType, AgentCommandTypes.Lock, StringComparison.OrdinalIgnoreCase))
+        {
+            await lockController.LockAsync();
+            Console.WriteLine($"فرمان lock اجرا شد؛ CommandId={command.CommandId}.");
+            message = "قفل GameNet فعال شد.";
+        }
+        else if (string.Equals(command.CommandType, AgentCommandTypes.Unlock, StringComparison.OrdinalIgnoreCase))
+        {
+            await lockController.UnlockAsync();
+            Console.WriteLine($"فرمان unlock اجرا شد؛ CommandId={command.CommandId}.");
+            message = "قفل GameNet آزاد شد.";
+        }
+    }
+    catch (Exception exception) when (
+        exception is HubException or HttpRequestException or InvalidOperationException or ObjectDisposedException)
+    {
+        success = false;
+        message = "اجرای فرمان روی Agent ناموفق بود.";
+        Console.WriteLine($"اجرای فرمان Agent ناموفق بود: {exception.Message}");
+    }
 
     try
     {
