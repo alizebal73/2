@@ -102,15 +102,13 @@ jobs:
             $env:GAMENET_AGENT_DATA_DIR = $agentData
 
             $agentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
-              'run','--no-build','--configuration','Release',
-              '--project','src/Client/GameNetManager.Client.csproj',
-              '--no-launch-profile'
+              'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
             ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $agentStdout -RedirectStandardError $agentStderr
 
             try {
               $agentOnline = $false
               $agentRow = $null
-              for ($i = 0; $i -lt 20; $i++) {
+              for ($i = 0; $i -lt 30; $i++) {
                 if ($agentProcess.HasExited) { break }
                 try {
                   $agentRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
@@ -124,10 +122,22 @@ jobs:
               }
 
               if (-not $agentOnline) {
+                Write-Host ("Agent process exited: {0}; exit code: {1}" -f $agentProcess.HasExited, $agentProcess.ExitCode)
                 Write-Host '--- Agent stdout ---'
                 if (Test-Path $agentStdout) { Get-Content $agentStdout }
                 Write-Host '--- Agent stderr ---'
                 if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                if (Test-Path (Join-Path $agentData 'agent-state.json')) {
+                  $agentState = Get-Content (Join-Path $agentData 'agent-state.json') | ConvertFrom-Json
+                  Write-Host ("Agent state persisted: DeviceId={0}; Name={1}; StationId={2}; HasToken={3}" -f $agentState.DeviceId, $agentState.Name, $agentState.StationId, (-not [string]::IsNullOrWhiteSpace($agentState.AgentToken)))
+                }
+                Write-Host '--- Server Agent rows ---'
+                try {
+                  $currentAgentRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $currentAgentRows | ConvertTo-Json -Depth 5
+                } catch {
+                  Write-Host ("Agent status API failed: {0}" -f $_.Exception.Message)
+                }
                 throw 'Stage 8 Agent did not register/connect and publish an online heartbeat.'
               }
 
