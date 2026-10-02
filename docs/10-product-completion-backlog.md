@@ -137,7 +137,7 @@
 - Credit/Debit، کنترل موجودی، تراکنش SQLite و Audit در یک مسیر پایدار ثبت می‌شوند.
 - Dashboard adapter در `src/Dashboard/src/services/walletLedgerService.ts` برای API واقعی و Mock fallback دارد.
 - Customer Profile اکنون دفتر کیف پول را با مبلغ، جهت، توضیح، زمان و ماندهٔ بعد از تراکنش نشان می‌دهد.
-- گام بعدی B9: جایگزینی تمام تغییرات پراکندهٔ wallet در Dashboard با همین Ledger Command و سپس اتصال Permission/Server Command کامل.
+- تغییرات کیف پول Dashboard شامل Flow مستقیم، کسر، تسویه از کیف پول، پرداخت‌های معوق و شارژ کیف پول به همین Ledger adapter منتقل شد. گام بعدی B9: اتصال Permission/Server Command کامل و همگام‌سازی همهٔ Invoice/Refundها با Ledger.
 
 ## قرارداد اجرایی آیتم ۶ — Error UX استاندارد
 
