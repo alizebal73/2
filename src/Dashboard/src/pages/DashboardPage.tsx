@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
 import { mockService } from '../services/mockService';
@@ -66,6 +66,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   const [discountPercent, setDiscountPercent] = useState(0);
   const [roundingEnabled, setRoundingEnabled] = useState(true);
   const [hotkeys, setHotkeys] = useState<Record<string,string>>(() => { try { return JSON.parse(localStorage.getItem('gamenet-hotkeys-v1') || '{}'); } catch { return {}; } });
+  const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
+  const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
+  const [selectionRect, setSelectionRect] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+  const selectionDragRef = useRef<{ stationId: string; startX: number; startY: number; dragging: boolean; ctrlKey: boolean } | null>(null);
+  const suppressNextStationClickRef = useRef(false);
 
   const stations = stationOverrides ?? snapshot?.stations ?? emptyStations;
   const liveSessionCenterStation = sessionCenterStation ? stations.find(item => item.id === sessionCenterStation.id) ?? null : null;
@@ -116,7 +121,12 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }, [message]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setModal(null); setContext(null); setSessionCenterStation(null); }
+      if (event.key === 'Escape') { setModal(null); setContext(null); setSessionCenterStation(null); setSelectedStationIds([]); setSelectionAnchorId(null); setSelectionRect(null); }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((event.target as HTMLElement)?.tagName)) {
+        event.preventDefault();
+        setSelectedStationIds(visibleStations.map(item => item.id));
+        setSelectionAnchorId(visibleStations[visibleStations.length - 1]?.id ?? null);
+      }
       const flowKey = (hotkeys.flow || 'F1').toUpperCase();
       const amountKey = (hotkeys.amount || 'F4').toUpperCase();
       const walletAddKey = (hotkeys.walletAdd || 'F5').toUpperCase();
@@ -168,6 +178,65 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
 
   const visibleStations = useMemo(() => stations.filter(station =>
     (zone === 'all' || station.zone === zone) && station.name.toLowerCase().includes(query.trim().toLowerCase())), [stations, zone, query]);
+  const selectStationWithModifiers = useCallback((stationId: string, ctrlKey: boolean, shiftKey: boolean) => {
+    if (shiftKey && selectionAnchorId) {
+      const anchorIndex = visibleStations.findIndex(item => item.id === selectionAnchorId);
+      const targetIndex = visibleStations.findIndex(item => item.id === stationId);
+      if (anchorIndex >= 0 && targetIndex >= 0) {
+        const [from, to] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
+        const rangeIds = visibleStations.slice(from, to + 1).map(item => item.id);
+        setSelectedStationIds(current => ctrlKey ? Array.from(new Set([...current, ...rangeIds])) : rangeIds);
+        return;
+      }
+    }
+    if (ctrlKey) {
+      setSelectedStationIds(current => current.includes(stationId) ? current.filter(id => id !== stationId) : [...current, stationId]);
+    } else {
+      setSelectedStationIds([stationId]);
+    }
+    setSelectionAnchorId(stationId);
+  }, [selectionAnchorId, visibleStations]);
+
+  useEffect(() => {
+    const onMove = (event: globalThis.MouseEvent) => {
+      const drag = selectionDragRef.current;
+      if (!drag) return;
+      const moved = Math.abs(event.clientX - drag.startX) + Math.abs(event.clientY - drag.startY);
+      if (!drag.dragging && moved < 6) return;
+      drag.dragging = true;
+      suppressNextStationClickRef.current = true;
+      setSelectionRect({ startX: drag.startX, startY: drag.startY, endX: event.clientX, endY: event.clientY });
+    };
+    const onUp = () => {
+      const drag = selectionDragRef.current;
+      if (!drag) return;
+      if (drag.dragging && selectionRect) {
+        const left = Math.min(selectionRect.startX, selectionRect.endX);
+        const right = Math.max(selectionRect.startX, selectionRect.endX);
+        const top = Math.min(selectionRect.startY, selectionRect.endY);
+        const bottom = Math.max(selectionRect.startY, selectionRect.endY);
+        const selected = Array.from(document.querySelectorAll<HTMLElement>('[data-station-id]'))
+          .filter(element => {
+            const rect = element.getBoundingClientRect();
+            return rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom;
+          })
+          .map(element => element.dataset.stationId)
+          .filter((id): id is string => Boolean(id));
+        setSelectedStationIds(current => drag.ctrlKey ? Array.from(new Set([...current, ...selected])) : selected);
+        setSelectionAnchorId(selected[selected.length - 1] ?? null);
+      }
+      setSelectionRect(null);
+      selectionDragRef.current = null;
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [selectionRect]);
+
+
   const counts = useMemo(() => ({
     free: stations.filter(item => item.state === 'free').length,
     busy: stations.filter(item => item.state === 'busy').length,
@@ -651,18 +720,49 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     const minutes = duration(station);
     const elapsedCost = station.state === 'busy' ? (station.sessionRate ?? station.ratePerHour) * minutes / 60 : 0;
     const style = { '--zoom': zoom / 100 } as CSSProperties;
-    return <article id={`station-${station.id}`} key={station.id} style={style} className={`station-card ${station.state} ${view}`} onClick={() => {
-      if (station.state === 'free') open('start', station);
-      else if (station.state === 'busy' || station.state === 'paused') openSessionCenter(station);
-      else setMessage(station.state === 'reserved' ? 'رزرو ساعت ۱۸:۰۰ — هنوز مشتری وارد نشده' : station.outOfServiceReason ?? 'این دستگاه خارج از سرویس است');
-    }} onDoubleClick={() => station.state === 'busy' && open('charge', station)} onContextMenu={event => showContext(event, station)}>
+    const selected = selectedStationIds.includes(station.id);
+    return <article
+      id={`station-${station.id}`}
+      data-station-id={station.id}
+      key={station.id}
+      style={style}
+      className={`station-card ${station.state} ${view} ${selected ? 'selected' : ''}`}
+      onMouseDown={event => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        selectionDragRef.current = {
+          stationId: station.id,
+          startX: event.clientX,
+          startY: event.clientY,
+          dragging: false,
+          ctrlKey: event.ctrlKey || event.metaKey,
+        };
+      }}
+      onClick={event => {
+        event.stopPropagation();
+        if (suppressNextStationClickRef.current) {
+          suppressNextStationClickRef.current = false;
+          return;
+        }
+        if (event.ctrlKey || event.metaKey || event.shiftKey) {
+          event.preventDefault();
+          selectStationWithModifiers(station.id, event.ctrlKey || event.metaKey, event.shiftKey);
+          return;
+        }
+        if (station.state === 'free') open('start', station);
+        else if (station.state === 'busy' || station.state === 'paused') openSessionCenter(station);
+        else setMessage(station.state === 'reserved' ? 'رزرو ساعت ۱۸:۰۰ — هنوز مشتری وارد نشده' : station.outOfServiceReason ?? 'این دستگاه خارج از سرویس است');
+      }}
+      onDoubleClick={() => station.state === 'busy' && open('charge', station)}
+      onContextMenu={event => showContext(event, station)}
+    >
       <div className="top"><div className="name">{station.name}</div><span className={`status-badge ${station.state}`}>{stateLabels[station.state as StationState] ?? station.state}</span></div>
       <span className="type">{station.type} · شبکه {station.network ?? 1}</span>
       <div className="time">{station.state === 'busy' ? `${money(Math.floor(minutes / 60)).padStart(2, '۰')}:${money(Math.floor(minutes % 60)).padStart(2, '۰')}` : station.state === 'reserved' ? 'رزرو ۱۸:۰۰' : station.state === 'off' ? '⛔' : '--:--'}</div>
       <div className="price">{station.state === 'busy' ? `هزینه ${money(elapsedCost)} تومان` : `از ${money(station.ratePerHour)} تومان / ساعت`}</div>
       {station.state === 'busy' && <><div className="person-dots">{'● '.repeat(station.persons ?? 1)}</div><div className="progress-bar"><span style={{ width: `${Math.min(100, minutes % 60 / 60 * 100)}%` }} /></div><span className="pulse" /></>}
       {station.state === 'off' && <small>{station.outOfServiceReason ?? 'در تعمیر'}</small>}
-      <div className="station-hover-actions" onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
+      <div className="station-hover-actions" onMouseDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
         {station.state === 'free' && <button type="button" className="quick primary" onClick={() => open('start', station)}>▶ شروع</button>}
         {station.state === 'busy' && <button type="button" className="quick" onClick={() => { setActiveStation(station); pauseSession(); }}>⏸ مکث</button>}
         {station.state === 'paused' && <button type="button" className="quick primary" onClick={() => { setActiveStation(station); resumeSession(); }}>▶ ادامه</button>}
@@ -712,6 +812,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           <div className="view-switch" aria-label="حالت نمایش">{(['v-card', 'v-compact', 'v-list'] as ViewMode[]).map((item, index) => <button key={item} type="button" className={view === item ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(item)}>{['▦', '▤', '☰'][index]}</button>)}</div>
           <label className="zoom-control">اندازه <input type="range" min="70" max="130" step="5" value={zoom} onChange={event => setZoom(Number(event.target.value))} />{money(zoom)}٪</label>
           <button type="button" className="btn primary" onClick={() => open('start', stations.find(item => item.state === 'free') ?? null)}>+ شروع جلسه</button>
+          {selectedStationIds.length > 0 && <div className="station-selection-tools"><span>{selectedStationIds.length.toLocaleString('fa-IR')} ایستگاه انتخاب شده</span><button type="button" className="btn sm" onClick={() => { setSelectedStationIds([]); setSelectionAnchorId(null); }}>لغو انتخاب</button></div>}
         </div>
         {apiState === 'loading' && <p className="empty-state">در حال دریافت اطلاعات از سرور…</p>}
         {apiState === 'online' && !visibleStations.length && <p className="empty-state">ایستگاهی با این جست‌وجو پیدا نشد.</p>}
@@ -721,6 +822,16 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           return <section key={key}><div className="section-title">{title} · {items.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{items.map(renderStation)}</div></section>;
         }) : <div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{visibleStations.map(renderStation)}</div>}
       </main>
+      {selectionRect && <div
+        className="station-selection-rect"
+        style={{
+          left: Math.min(selectionRect.startX, selectionRect.endX),
+          top: Math.min(selectionRect.startY, selectionRect.endY),
+          width: Math.abs(selectionRect.endX - selectionRect.startX),
+          height: Math.abs(selectionRect.endY - selectionRect.startY),
+        }}
+        aria-hidden="true"
+      />}
     </div>
 
     {liveSessionCenterStation && <SessionCenter
