@@ -770,29 +770,68 @@ static Process StartVersionProcess(
     var targetRoot = Path.Combine(manager.VersionsDirectory, targetVersion);
     var targetAssembly = Path.Combine(targetRoot, "GameNetManager.Client.dll");
     var targetExe = Path.Combine(targetRoot, "GameNetManager.Client.exe");
+    var processPath = Environment.ProcessPath ?? "dotnet";
+    var isDotnetHost = string.Equals(
+        Path.GetFileNameWithoutExtension(processPath),
+        "dotnet",
+        StringComparison.OrdinalIgnoreCase);
 
     Process? process;
-    if (File.Exists(targetExe))
+    if (isDotnetHost && File.Exists(targetAssembly))
+    {
+        var stdoutPath = Path.Combine(dataDirectory, $"watchdog-{targetVersion}-stdout.log");
+        var stderrPath = Path.Combine(dataDirectory, $"watchdog-{targetVersion}-stderr.log");
+
+        process = Process.Start(new ProcessStartInfo
+        {
+            FileName = processPath,
+            WorkingDirectory = targetRoot,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            ArgumentList = { targetAssembly },
+            Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory, ["GAMENET_UPDATE_TARGET_VERSION"] = targetVersion },
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8
+        });
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await using var stdout = new FileStream(stdoutPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+                await using var stderr = new FileStream(stderrPath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite);
+                await Task.WhenAll(
+                    process!.StandardOutput.BaseStream.CopyToAsync(stdout),
+                    process.StandardError.BaseStream.CopyToAsync(stderr));
+            }
+            catch
+            {
+            }
+        });
+    }
+    else if (File.Exists(targetExe))
     {
         process = Process.Start(new ProcessStartInfo
         {
             FileName = targetExe,
             WorkingDirectory = targetRoot,
             UseShellExecute = false,
-            CreateNoWindow = false,
-            Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory }
+            CreateNoWindow = true,
+            Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory, ["GAMENET_UPDATE_TARGET_VERSION"] = targetVersion }
         });
     }
     else if (File.Exists(targetAssembly))
     {
         process = Process.Start(new ProcessStartInfo
         {
-            FileName = Environment.ProcessPath ?? "dotnet",
+            FileName = processPath,
             WorkingDirectory = targetRoot,
             UseShellExecute = false,
             CreateNoWindow = true,
             ArgumentList = { targetAssembly },
-            Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory }
+            Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory, ["GAMENET_UPDATE_TARGET_VERSION"] = targetVersion }
         });
     }
     else
