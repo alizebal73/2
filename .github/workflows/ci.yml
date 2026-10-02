@@ -36,6 +36,21 @@ jobs:
       - name: Restore .NET
         run: dotnet restore GameNetManager.sln
 
+      - name: Diagnose Stage 7 pending EF model changes
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $tempDir = "src\Server\Data\Migrations\_diagnostic"
+          Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+          dotnet ef migrations add Stage7PendingModelProbe --project src\Server\GameNetManager.Server.csproj --startup-project src\Server\GameNetManager.Server.csproj --output-dir Data\Migrations\_diagnostic --no-build
+          $generated = Get-ChildItem $tempDir -Filter "*.cs" -File
+          if ($generated.Count -gt 0) {
+            Write-Host "=== Generated diagnostic migration ==="
+            Get-Content $generated[0].FullName
+          }
+          git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+          Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+
       - name: Build .NET
         run: dotnet build GameNetManager.sln --no-restore --configuration Release
 
