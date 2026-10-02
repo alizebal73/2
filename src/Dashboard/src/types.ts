@@ -110,6 +110,14 @@ export type UserRecord = {
   shift: string;
   sales: number;
   permissions: string[];
+  payType?: 'hourly' | 'monthly';
+  hourlyRate?: number;
+  monthlySalary?: number;
+  overtimeRate?: number;
+  workStart?: string;
+  workEnd?: string;
+  bonusTotal?: number;
+  deductionTotal?: number;
 };
 
 export type PricingScheduleRule = {
@@ -279,3 +287,6 @@ export type WalletLedgerEntry = {
   createdAt: string;
   balanceAfter: number;
 };
+
+export type PageLockRule = { enabled: boolean; pinHash: string; label: string };
+export type PageLockMap = Partial<Record<PageKey, PageLockRule>>;
