@@ -186,6 +186,8 @@ public sealed class AgentHub(
 
         await database.SaveChangesAsync(Context.ConnectionAborted);
 
+        await BroadcastStatusAsync(device, DateTimeOffset.UtcNow, Context.ConnectionAborted);
+
         await dashboardHub.Clients.All.SendAsync(
             "AgentCommandUpdated",
             new AgentCommandStatusDto(
