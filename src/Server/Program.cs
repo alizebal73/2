@@ -317,6 +317,202 @@ app.MapGet("/api/agent/devices/{deviceId:guid}/lifecycle", async (
 })
 .WithName("GetAgentLifecycleStatus");
 
+app.MapGet("/api/release/client-package", async (
+    HttpContext context,
+    IConfiguration configuration,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var device = await ResolveAgentHttpDeviceAsync(context, database, cancellationToken);
+    if (device is null || !device.IsActive)
+        return Results.Unauthorized();
+
+    var requestedVersion = context.Request.Query["version"].ToString().Trim();
+    var configuredVersion = configuration["App:ClientPackageVersion"]?.Trim();
+    var packagePath = configuration["App:ClientPackagePath"];
+
+    if (string.IsNullOrWhiteSpace(requestedVersion)
+        || string.IsNullOrWhiteSpace(configuredVersion)
+        || !string.Equals(requestedVersion, configuredVersion, StringComparison.OrdinalIgnoreCase)
+        || string.IsNullOrWhiteSpace(packagePath)
+        || !File.Exists(packagePath))
+        return Results.NotFound(new { code = "client_package_not_found", message = "بستهٔ Client برای این نسخه پیدا نشد." });
+
+    var expectedHash = configuration["App:ClientPackageSha256"]?.Trim();
+    if (string.IsNullOrWhiteSpace(expectedHash))
+        return Results.Problem(
+            statusCode: StatusCodes.Status503ServiceUnavailable,
+            title: "بستهٔ Client آماده انتشار نیست.");
+
+    return Results.File(
+        packagePath,
+        "application/zip",
+        enableRangeProcessing: true,
+        lastModified: File.GetLastWriteTimeUtc(packagePath));
+})
+.WithName("GetClientReleasePackage");
+
+app.MapPost("/api/agent/devices/{deviceId:guid}/update", async (
+    Guid deviceId,
+    HttpContext context,
+    GameNetDbContext database,
+    IConfiguration configuration,
+    IHubContext<AgentHub> agentHub,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var device = await database.AgentDevices.FirstOrDefaultAsync(item => item.Id == deviceId && item.IsActive, cancellationToken);
+    if (device is null) return Results.NotFound(new { code = "agent_not_found", message = "Agent پیدا نشد." });
+    if (!device.IsOnline || string.IsNullOrWhiteSpace(device.ConnectionId))
+        return Results.Conflict(new { code = "agent_offline", message = "Agent آفلاین است و Update ارسال نشد." });
+
+    var version = configuration["App:ClientPackageVersion"]?.Trim();
+    var packagePath = configuration["App:ClientPackagePath"];
+    var sha256 = configuration["App:ClientPackageSha256"]?.Trim();
+
+    if (string.IsNullOrWhiteSpace(version) || string.IsNullOrWhiteSpace(packagePath) || !File.Exists(packagePath) || string.IsNullOrWhiteSpace(sha256))
+        return Results.Conflict(new { code = "client_package_unavailable", message = "بستهٔ Update روی Server آماده نیست." });
+
+    var packageUrl = $"{context.Request.Scheme}://{context.Request.Host}/api/release/client-package?version={Uri.EscapeDataString(version)}";
+    var command = new AgentCommand
+    {
+        AgentDeviceId = device.Id,
+        RequestedByAppUserId = auth.User!.Id,
+        CommandType = AgentCommandTypes.Update,
+        PayloadJson = System.Text.Json.JsonSerializer.Serialize(new ClientUpdateCommandPayload(
+            version,
+            packageUrl,
+            sha256,
+            new FileInfo(packagePath).Length,
+            true)),
+        Status = "Sent",
+        RequestedAt = DateTimeOffset.UtcNow,
+        SentAt = DateTimeOffset.UtcNow,
+        AgentConnectionId = device.ConnectionId
+    };
+
+    database.AgentCommands.Add(command);
+    device.PendingUpdateVersion = version;
+    device.LifecycleState = ClientLifecycleStates.UpdatePending;
+    device.LifecycleStateChangedAt = DateTimeOffset.UtcNow;
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ClientUpdateRequested",
+        EntityName = "AgentDevice",
+        EntityId = device.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = $"درخواست Update به نسخه {version}"
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    try
+    {
+        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+            "AgentCommand",
+            new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
+            cancellationToken);
+    }
+    catch
+    {
+        command.Status = "Failed";
+        command.Succeeded = false;
+        command.CompletedAt = DateTimeOffset.UtcNow;
+        command.ResultMessage = "ارسال درخواست Update به Agent ناموفق بود.";
+        await database.SaveChangesAsync(CancellationToken.None);
+        return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: command.ResultMessage);
+    }
+
+    return Results.Ok(new AgentCommandStatusDto(
+        command.Id,
+        command.AgentDeviceId,
+        command.CommandType,
+        command.Status,
+        command.RequestedAt,
+        command.SentAt,
+        command.CompletedAt,
+        command.Succeeded,
+        command.ResultMessage));
+})
+.WithName("RequestClientUpdate");
+
+app.MapPost("/api/agent/devices/{deviceId:guid}/rollback", async (
+    Guid deviceId,
+    HttpContext context,
+    GameNetDbContext database,
+    IHubContext<AgentHub> agentHub,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var device = await database.AgentDevices.FirstOrDefaultAsync(item => item.Id == deviceId && item.IsActive, cancellationToken);
+    if (device is null) return Results.NotFound(new { code = "agent_not_found", message = "Agent پیدا نشد." });
+    if (!device.IsOnline || string.IsNullOrWhiteSpace(device.ConnectionId))
+        return Results.Conflict(new { code = "agent_offline", message = "Agent آفلاین است و Rollback ارسال نشد." });
+
+    var command = new AgentCommand
+    {
+        AgentDeviceId = device.Id,
+        RequestedByAppUserId = auth.User!.Id,
+        CommandType = AgentCommandTypes.Rollback,
+        PayloadJson = System.Text.Json.JsonSerializer.Serialize(new ClientRollbackCommandPayload("درخواست دستی Rollback توسط اپراتور")),
+        Status = "Sent",
+        RequestedAt = DateTimeOffset.UtcNow,
+        SentAt = DateTimeOffset.UtcNow,
+        AgentConnectionId = device.ConnectionId
+    };
+
+    database.AgentCommands.Add(command);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ClientRollbackRequested",
+        EntityName = "AgentDevice",
+        EntityId = device.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = "درخواست Rollback Client"
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    try
+    {
+        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+            "AgentCommand",
+            new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
+            cancellationToken);
+    }
+    catch
+    {
+        command.Status = "Failed";
+        command.Succeeded = false;
+        command.CompletedAt = DateTimeOffset.UtcNow;
+        command.ResultMessage = "ارسال درخواست Rollback به Agent ناموفق بود.";
+        await database.SaveChangesAsync(CancellationToken.None);
+        return Results.Problem(statusCode: StatusCodes.Status502BadGateway, title: command.ResultMessage);
+    }
+
+    return Results.Ok(new AgentCommandStatusDto(
+        command.Id,
+        command.AgentDeviceId,
+        command.CommandType,
+        command.Status,
+        command.RequestedAt,
+        command.SentAt,
+        command.CompletedAt,
+        command.Succeeded,
+        command.ResultMessage));
+})
+.WithName("RequestClientRollback");
+
 app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
     Guid deviceId,
     AgentCommandRequest request,
@@ -438,17 +634,39 @@ app.MapGet("/api/agent/commands/{commandId:guid}", async (
 })
 .WithName("GetAgentCommand");
 
-app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration configuration) =>
+app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration configuration, HttpRequest request) =>
 {
     var schemaVersion = database.Database.GetAppliedMigrations().LastOrDefault() ?? "unknown";
+    var productVersion = configuration["App:ProductVersion"] ?? "0.7.0";
+    var packageVersion = configuration["App:ClientPackageVersion"];
+    var packagePath = configuration["App:ClientPackagePath"];
+    var packageHash = configuration["App:ClientPackageSha256"];
+
+    long? packageSize = null;
+    if (!string.IsNullOrWhiteSpace(packagePath) && File.Exists(packagePath))
+        packageSize = new FileInfo(packagePath).Length;
+
+    var packageUrl = string.IsNullOrWhiteSpace(packageVersion)
+        ? null
+        : $"{request.Scheme}://{request.Host}/api/release/client-package?version={Uri.EscapeDataString(packageVersion)}";
+
     return Results.Ok(new
     {
-        productVersion = configuration["App:ProductVersion"] ?? "0.6.0",
+        productVersion,
         schemaVersion,
         apiContractVersion = configuration["App:ApiContractVersion"] ?? "1",
         minimumClientVersion = configuration["App:MinimumClientVersion"] ?? "0.1.0",
         recommendedClientVersion = configuration["App:RecommendedClientVersion"] ?? "0.1.0",
-        updateChannel = configuration["App:UpdateChannel"] ?? "stable"
+        updateChannel = configuration["App:UpdateChannel"] ?? "stable",
+        clientPackage = string.IsNullOrWhiteSpace(packageVersion) || string.IsNullOrWhiteSpace(packagePath)
+            ? null
+            : new
+            {
+                version = packageVersion,
+                packageUrl,
+                sha256 = packageHash ?? "",
+                sizeBytes = packageSize ?? 0
+            }
     });
 })
 .WithName("GetReleaseManifest");
@@ -3914,6 +4132,31 @@ if (!app.Environment.IsDevelopment())
 app.Run();
 
 
+
+static async Task<AgentDevice?> ResolveAgentHttpDeviceAsync(
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken)
+{
+    var deviceId = context.Request.Headers["X-GameNet-Device-Id"].ToString().Trim();
+    var authorization = context.Request.Headers.Authorization.ToString();
+
+    if (string.IsNullOrWhiteSpace(deviceId)
+        || string.IsNullOrWhiteSpace(authorization)
+        || !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        return null;
+
+    var token = authorization["Bearer ".Length..].Trim();
+    if (string.IsNullOrWhiteSpace(token))
+        return null;
+
+    var tokenHash = PasswordSecurity.HashToken(token);
+    return await database.AgentDevices.FirstOrDefaultAsync(
+        item => item.DeviceId == deviceId
+            && item.AgentTokenHash == tokenHash
+            && item.IsActive,
+        cancellationToken);
+}
 
 static string EncodeWalletRefundApprovalTarget(Guid customerId, decimal amount, Guid? sourceTransactionId)
     => string.Join("|",
