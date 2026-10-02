@@ -390,9 +390,21 @@ jobs:
               throw 'No available PC station was found for Agent session smoke.'
             }
 
+            $stage9SmokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            $stage9Customer = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              fullName = "Stage 9 Agent Smoke $stage9SmokeId"
+              username = "stage9_agent_$stage9SmokeId"
+              vipTier = 'none'
+              concurrentLoginLimit = 1
+              password = 'Stage9Smoke123!'
+            } | ConvertTo-Json)
+            if (-not $stage9Customer.id -or -not $stage9Customer.username) {
+              throw 'Stage 9 smoke customer creation failed.'
+            }
+
             $customerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
-              usernameOrCode = $newCustomer.username
-              password = 'Smoke123!'
+              usernameOrCode = $stage9Customer.username
+              password = 'Stage9Smoke123!'
               clientKey = 'ci-stage9-session-agent'
             } | ConvertTo-Json)
             if (-not $customerAuth.authenticated -or -not $customerAuth.loginId) {
@@ -407,7 +419,7 @@ jobs:
             $env:GAMENET_AGENT_DATA_DIR = $sessionAgentData
             $env:GAMENET_AGENT_HEADLESS = '1'
             $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
-            $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $customerId
+            $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $stage9Customer.id
             $env:GAMENET_AGENT_TEST_LOGIN_ID = $customerAuth.loginId
 
             $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
