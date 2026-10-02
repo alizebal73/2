@@ -102,7 +102,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.HasIndex("DeviceId")
                         .IsUnique();
 
-                    b.HasIndex("StationId");
+                    b.HasIndex("StationId")
+                        .IsUnique()
+                        .HasFilter("StationId IS NOT NULL");
 
                     b.ToTable("AgentDevices");
                 });
