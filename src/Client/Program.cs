@@ -733,7 +733,7 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
 
             var status = await manager.GetStateAsync(cancellation.Token);
             if (string.Equals(status?.ActiveVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(status.HealthyVersion, targetVersion, StringComparison.OrdinalIgnoreCase))
+                && string.Equals(status?.HealthyVersion, targetVersion, StringComparison.OrdinalIgnoreCase))
             {
                 await manager.CommitHealthyAsync(targetVersion, cancellation.Token);
                 return 0;
