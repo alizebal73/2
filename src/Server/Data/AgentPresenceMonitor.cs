@@ -29,8 +29,7 @@ public sealed class AgentPresenceMonitor(
                 var staleDevices = await database.AgentDevices
                     .Where(item => item.IsActive
                         && item.IsOnline
-                        && item.LastSeenAt.HasValue
-                        && item.LastSeenAt.Value < cutoff)
+                        && item.LastSeenAt < cutoff)
                     .ToListAsync(stoppingToken);
 
                 if (staleDevices.Count > 0)
