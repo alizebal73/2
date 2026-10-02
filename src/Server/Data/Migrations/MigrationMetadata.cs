@@ -80,3 +80,15 @@ partial class CustomerCredentials
 partial class BuffetInventorySettings
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002170000_BuffetTransactionPricing")]
+partial class BuffetTransactionPricing
+{
+}
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002183000_InventoryTransactionInvoiceReference")]
+partial class InventoryTransactionInvoiceReference
+{
+}

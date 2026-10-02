@@ -211,13 +211,22 @@ jobs:
               throw 'Buffet product creation smoke failed.'
             }
 
+            $purchase = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
+              quantity = 1
+              direction = 'In'
+              kind = 'Purchase'
+              unitCost = 10000
+              notes = 'Stage 6 purchase test'
+            } | ConvertTo-Json)
+            if ([int]$purchase.stock -ne 6 -or $purchase.kind -ne 'Purchase') { throw 'Inventory purchase smoke failed.' }
+
             $stockOut = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
               quantity = 1
               direction = 'Out'
               kind = 'Waste'
               notes = 'Stage 6 waste test'
             } | ConvertTo-Json)
-            if ([int]$stockOut.stock -ne 4 -or $stockOut.kind -ne 'Waste') { throw 'Inventory waste smoke failed.' }
+            if ([int]$stockOut.stock -ne 5 -or $stockOut.kind -ne 'Waste') { throw 'Inventory waste smoke failed.' }
 
             $returned = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
               quantity = 1
@@ -225,7 +234,7 @@ jobs:
               kind = 'Return'
               notes = 'Stage 6 return test'
             } | ConvertTo-Json)
-            if ([int]$returned.stock -ne 5 -or $returned.kind -ne 'Return') { throw 'Inventory return smoke failed.' }
+            if ([int]$returned.stock -ne 6 -or $returned.kind -ne 'Return') { throw 'Inventory return smoke failed.' }
 
             $sale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
               items = @(@{ productId = $inventoryProduct.id; quantity = 4 })
@@ -235,7 +244,7 @@ jobs:
 
             $inventoryAfterSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
             $soldProduct = @($inventoryAfterSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
-            if ([int]$soldProduct.stock -ne 1 -or -not $soldProduct.lowStock) { throw 'Buffet sale did not reduce server stock or low-stock state correctly.' }
+            if ([int]$soldProduct.stock -ne 2 -or -not $soldProduct.lowStock) { throw 'Buffet sale did not reduce server stock or low-stock state correctly.' }
 
             try {
               Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
@@ -250,7 +259,12 @@ jobs:
 
             $inventoryAfterRejectedSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
             $unchangedProduct = @($inventoryAfterRejectedSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
-            if ([int]$unchangedProduct.stock -ne 1 -or -not $unchangedProduct.lowStock) { throw 'Rejected buffet sale changed server stock.' }
+            if ([int]$unchangedProduct.stock -ne 2 -or -not $unchangedProduct.lowStock) { throw 'Rejected buffet sale changed server stock.' }
+
+            $profit = Invoke-RestMethod -Uri "$baseUrl/api/buffet/reports/profit" -Method Get
+            if ([int]$profit.totals.salesRevenue -ne 100000 -or [int]$profit.totals.purchaseCost -ne 10000 -or [decimal]$profit.totals.grossProfit -le 50000) {
+              throw 'Buffet profit report smoke failed.'
+            }
 
             $inventoryHistory = Invoke-RestMethod -Uri "$baseUrl/api/buffet/inventory-transactions" -Method Get
             if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Waste' })) { throw 'Inventory history did not contain waste movement.' }
@@ -305,9 +319,14 @@ jobs:
               throw 'Buffet invoice reverse smoke failed.'
             }
 
+            $profitAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/reports/profit" -Method Get
+            if ([decimal]$profitAfterReverse.totals.returnRevenue -lt 30000) {
+              throw 'Buffet reverse profit adjustment smoke failed.'
+            }
+
             $inventoryAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
             $reversedProduct = @($inventoryAfterReverse | Where-Object { $_.id -eq $inventoryProduct.id })[0]
-            if ([int]$reversedProduct.stock -ne 1) { throw 'Buffet invoice reverse did not restore stock.' }
+            if ([int]$reversedProduct.stock -ne 2) { throw 'Buffet invoice reverse did not restore stock.' }
 
             Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
 

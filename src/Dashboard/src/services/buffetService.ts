@@ -1,4 +1,4 @@
-import type { InventoryTransactionRecord, ProductRecord } from '../types';
+import type { BuffetProfitReport, InventoryTransactionRecord, ProductRecord } from '../types';
 
 type ProductDto = {
   id: string;
@@ -65,7 +65,7 @@ export async function createServerProduct(input: {
   return mapProduct(await response.json() as ProductDto);
 }
 
-export async function adjustServerStock(productId: string, quantity: number, direction: 'in' | 'out', notes: string, kind: 'Adjustment' | 'Purchase' | 'Sale' | 'Waste' | 'Return' = 'Adjustment') {
+export async function adjustServerStock(productId: string, quantity: number, direction: 'in' | 'out', notes: string, kind: 'Adjustment' | 'Purchase' | 'Sale' | 'Waste' | 'Return' = 'Adjustment', unitCost?: number) {
   const response = await fetch('/api/buffet/products/' + productId + '/stock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -74,6 +74,7 @@ export async function adjustServerStock(productId: string, quantity: number, dir
       direction,
       notes,
       kind,
+      unitCost,
     }),
   });
   if (!response.ok) throw new Error(await readError(response, 'اصلاح موجودی انجام نشد'));
@@ -131,4 +132,14 @@ export async function getServerInventoryTransactions(): Promise<InventoryTransac
   const response = await fetch('/api/buffet/inventory-transactions');
   if (!response.ok) throw new Error(await readError(response, 'دریافت گردش موجودی انجام نشد'));
   return await response.json() as InventoryTransactionRecord[];
+}
+
+
+export async function getServerBuffetProfit(from?: string, to?: string): Promise<BuffetProfitReport> {
+  const query = new URLSearchParams();
+  if (from) query.set('from', from);
+  if (to) query.set('to', to);
+  const response = await fetch('/api/buffet/reports/profit' + (query.size ? '?' + query.toString() : ''));
+  if (!response.ok) throw new Error(await readError(response, 'دریافت گزارش سود بوفه انجام نشد'));
+  return await response.json() as BuffetProfitReport;
 }

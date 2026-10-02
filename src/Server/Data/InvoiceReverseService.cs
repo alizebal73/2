@@ -113,12 +113,27 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
         var inventoryRestored = 0;
         foreach (var item in invoice.Items.Where(item => item.ProductId.HasValue && item.Quantity > 0 && item.Product is not null))
         {
+            var productId = item.ProductId!.Value;
+            var saleMovements = await database.InventoryTransactions.AsNoTracking()
+                .Where(movement => movement.ReferenceInvoiceId == invoice.Id
+                    && movement.ProductId == productId
+                    && movement.Kind == "Sale"
+                    && movement.Direction == TransactionDirection.Out)
+                .ToListAsync(cancellationToken);
+            var totalSoldQuantity = saleMovements.Sum(movement => movement.Quantity);
+            var totalSoldCost = saleMovements.Sum(movement => movement.Quantity * movement.UnitCost);
+            var restoredUnitCost = totalSoldQuantity > 0
+                ? totalSoldCost / totalSoldQuantity
+                : item.Product!.CostPrice;
             item.Product!.StockQuantity += item.Quantity;
             inventoryRestored += item.Quantity;
             database.InventoryTransactions.Add(new InventoryTransaction
             {
-                ProductId = item.ProductId!.Value,
+                ProductId = item.ProductId.Value,
                 Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice,
+                UnitCost = restoredUnitCost,
+                ReferenceInvoiceId = invoice.Id,
                 Direction = TransactionDirection.In,
                 Kind = "Return",
                 AppUserId = request.AppUserId,

@@ -388,6 +388,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         transaction.HasKey(item => item.Id);
         transaction.Property(item => item.Direction).HasConversion<string>().HasMaxLength(20);
         transaction.Property(item => item.Kind).HasMaxLength(20).IsRequired();
+        transaction.Property(item => item.UnitPrice).HasColumnType("decimal(18,2)");
+        transaction.Property(item => item.UnitCost).HasColumnType("decimal(18,2)");
         transaction.Property(item => item.Notes).HasMaxLength(250);
         transaction.HasOne(item => item.Product)
             .WithMany(item => item.InventoryTransactions)
@@ -397,6 +399,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany(item => item.InventoryTransactions)
             .HasForeignKey(item => item.AppUserId)
             .OnDelete(DeleteBehavior.SetNull);
+        transaction.HasIndex(item => item.ReferenceInvoiceId);
     }
 
     private static void ConfigureShift(ModelBuilder modelBuilder)
