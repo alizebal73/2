@@ -24,6 +24,14 @@ public sealed class AgentPresenceMonitor(
                 configuration.GetValue("Agent:CommandTimeoutSeconds", 15),
                 5,
                 120);
+            var updateCommandTimeoutSeconds = Math.Clamp(
+                configuration.GetValue("Agent:UpdateCommandTimeoutSeconds", 180),
+                30,
+                600);
+            var rollbackCommandTimeoutSeconds = Math.Clamp(
+                configuration.GetValue("Agent:RollbackCommandTimeoutSeconds", 60),
+                15,
+                300);
 
             try
             {
@@ -48,7 +56,18 @@ public sealed class AgentPresenceMonitor(
                     .ToListAsync(stoppingToken);
 
                 var timedOutCommands = pendingCommands
-                    .Where(command => (command.SentAt ?? command.RequestedAt) < commandCutoff)
+                    .Where(command =>
+                    {
+                        var timeoutSeconds = command.CommandType switch
+                        {
+                            AgentCommandTypes.Update => updateCommandTimeoutSeconds,
+                            AgentCommandTypes.Rollback => rollbackCommandTimeoutSeconds,
+                            _ => commandTimeoutSeconds
+                        };
+
+                        return (command.SentAt ?? command.RequestedAt)
+                            < now.AddSeconds(-timeoutSeconds);
+                    })
                     .ToList();
 
                 if (staleDevices.Count > 0)
