@@ -91,6 +91,7 @@ export type CustomerRecord = {
   hoursUsedToday?: number;
   dailyHourCap?: number;
   transactionHistory?: string[];
+  concurrentLoginLimit?: number;
 };
 
 export type ProductRecord = {
