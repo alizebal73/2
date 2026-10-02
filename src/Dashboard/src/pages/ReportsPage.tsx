@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createShiftExpense } from '../services/financeService';
-import { closeServerShift, getCurrentShift } from '../services/shiftService';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
 function parsePersianDate(value: string): Date | null {
@@ -167,18 +166,6 @@ export function ReportsPage() {
       setNotice('هزینه روی شیفت سرور ثبت شد');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'ثبت هزینه انجام نشد');
-    }
-  }
-
-  async function closeShift() {
-    try {
-      const current = await getCurrentShift();
-      if (!current) { setNotice('شیفت بازی برای بستن وجود ندارد'); return; }
-      const counted = amount(window.prompt('وجه نقد شمارش‌شده (تومان)', String(totals.cash)) ?? '');
-      const result = await closeServerShift(current.id, { cashClosing: counted, externalCash: 0 });
-      setNotice('شیفت بسته شد؛ اختلاف صندوق ' + money(result.difference) + ' تومان');
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'بستن شیفت انجام نشد');
     }
   }
 
