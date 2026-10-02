@@ -153,3 +153,9 @@ partial class AgentStationAssignment
 partial class ClientLifecycleState
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261003010000_Stage11GameAccountPool")]
+partial class Stage11GameAccountPool
+{
+}
