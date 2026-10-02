@@ -8,6 +8,7 @@ set "EXTRACT=%TEMP%\gamenet-manager-main"
 set "SOURCE="
 set "DOTNET_EXE="
 set "NPM_EXE="
+set "SERVER_READY=0"
 
 echo.
 echo ==========================================
@@ -123,14 +124,7 @@ echo [5/5] Starting Server and Dashboard...
 start "GameNet Server" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Server"" && "%DOTNET_EXE%" run --project ""%PREVIEW%\src\Server\GameNetManager.Server.csproj"""
 start "GameNet Dashboard" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Dashboard"" && "%NPM_EXE%" run dev -- --host 0.0.0.0"
 
-echo Waiting for services...
-"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5080 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
-if errorlevel 1 (
-  echo [ERROR] Server did not become ready on port 5080.
-  pause
-  exit /b 1
-)
-
+echo Waiting for Dashboard and Server...
 "%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5173 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
 if errorlevel 1 (
   echo [ERROR] Dashboard did not become ready on port 5173.
@@ -138,10 +132,25 @@ if errorlevel 1 (
   exit /b 1
 )
 
+"%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5080 -InformationLevel Quiet) { $ok=$true; break }; if ($_ -eq 60) { exit 1 }; Start-Sleep -Milliseconds 500 }"
+if errorlevel 1 (
+  echo [WARN] Server is not ready on port 5080.
+  echo [WARN] Dashboard will still open, but live API and SignalR data are unavailable.
+) else (
+  set "SERVER_READY=1"
+)
+
 echo.
 echo ==========================================
-echo [OK] GameNet Manager Preview is ready.
-echo     http://localhost:5173/
+if "%SERVER_READY%"=="1" (
+  echo [OK] GameNet Manager Preview is ready.
+  echo     Server:   http://localhost:5080
+  echo     Dashboard: http://localhost:5173/
+) else (
+  echo [OK] Dashboard Preview is ready.
+  echo     http://localhost:5173/
+  echo [WARN] Server/API is unavailable until the EF migration issue is fixed.
+)
 echo ==========================================
 start "" "http://localhost:5173/"
 echo.
