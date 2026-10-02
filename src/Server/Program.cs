@@ -2279,9 +2279,10 @@ app.MapGet("/api/customers/{customerId:guid}/free-benefits", async (HttpContext 
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
 
-    var transactions = await database.BenefitTransactions
+    var transactions = (await database.BenefitTransactions
         .AsNoTracking()
         .Where(item => item.CustomerId == customerId)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.CreatedAt)
         .Take(50)
         .Select(item => new FreeBenefitTransactionDto(
@@ -2291,7 +2292,7 @@ app.MapGet("/api/customers/{customerId:guid}/free-benefits", async (HttpContext 
             item.Minutes,
             item.Description,
             item.CreatedAt))
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     return Results.Ok(new FreeBenefitsSnapshotDto(customer.FreeMoney, customer.FreeTimeMinutes, transactions));
 })
