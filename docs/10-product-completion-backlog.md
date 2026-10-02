@@ -10,6 +10,30 @@
 - هر مرحله قبل از رفتن به مرحله بعد باید Build/Test/CI و در صورت UI، تست تعاملی لازم را پاس کند.
 - وابستگی‌ها زودتر از مصرف‌کننده پیاده‌سازی می‌شوند.
 
+## نقشهٔ یکپارچهٔ ۱۴ مرحلهٔ اصلی پروژه
+
+برای جلوگیری از قاطی‌شدن «فاز معماری»، «مرحلهٔ محصول» و «آیتم backlog»، از اینجا شماره‌گذاری اصلی پروژه این است:
+
+1. **Foundation** — ریپو، Runner، CI، اسکلت Server/Dashboard
+2. **Prototype & Behavior Transfer** — انتقال Prototype و رفتارهای پایه به React
+3. **Operational Completion** — تکمیل عملیات روزانه اپراتور و UX؛ A1 تا A8
+4. **Finance & Session Core** — Ledger، Reverse واقعی، Settlement، Split Payment، شیفت و انتقال جلسه
+5. **Customer & VIP Domain** — مشتری، کیف پول، بدهی، Free Time/Money، محدودیت ورود
+6. **Buffet & Inventory Domain** — سفارش بوفه، موجودی، ضایعات، مرجوعی، حداقل موجودی
+7. **Users & Permissions** — Permission واقعی، Approval سروری، چندصندوقی و تعارض عملیات
+8. **PC Agent Foundation** — Heartbeat، Health، Telemetry و اتصال ۴۰ PC
+9. **Real Client Commands & Kiosk** — فرمان‌های واقعی، Shell/Kiosk و Policy
+10. **Client Lifecycle** — Update/Rollback، Recovery و سلامت چرخهٔ کلاینت
+11. **Games & Accounts** — Game Library واقعی، Process Detection، Account Pool و Lease
+12. **Reporting & Audit** — Heatmap، درآمد/کارکرد، سود، Audit Explorer و گزارش‌های کامل
+13. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
+14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
+
+**جایگاه فعلی:** مرحلهٔ اصلی **۳ — Operational Completion**.  
+آیتم‌های A1 تا A8 زیر همین مرحله هستند. پس از بسته‌شدن واقعی A1 تا A8، وارد مرحلهٔ اصلی **۴ — Finance & Session Core** می‌شویم.
+
+این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
+
 ## اصلاحات اجرایی جدید — داشبورد / Attention Center
 
 ### پیگیری شارژ دستی
@@ -177,13 +201,13 @@
 
 ### A) Operational Intelligence / UX
 1. ✅ مرکز «نیازمند توجه» در داشبورد — پیاده‌سازی و CI سبز شد
-2. [~] جست‌وجوی سراسری و مرکز جست‌وجو/فرمان — پیاده‌سازی و CI سبز شد؛ تست تعاملی واقعی باقی مانده
-3. [~] پنل جزئیات جلسه (Session Center) — UI و اتصال عملیاتی پیاده‌سازی شد؛ منتظر CI و تست تعاملی
-4. [~] Timeline کوتاه ایستگاه — در Session Center پیاده‌سازی شد؛ منتظر CI و تست تعاملی
-5. [~] عملیات اخیر اپراتور — مرکز نمایش و پیگیری پیاده‌سازی شد؛ منتظر CI و تست تعاملی
-6. [~] Error UX استاندارد: خطا → معنی → اقدام بعدی — کامپوننت عمومی و مسیر API پیاده‌سازی شد؛ منتظر CI و تست تعاملی
-7. [~] Approval Flow برای عملیات حساس — Gate تأیید برای تخفیف حساس اپراتور پیاده‌سازی شد؛ منتظر CI و تست تعاملی
-8. [~] Undo UX برای عملیات برگشت‌پذیر (Reverse واقعی، بدون حذف رکورد) — Reverse برای شارژ/تمدید/کاهش/بوفه پیاده‌سازی شد؛ منتظر CI و تست تعاملی
+2. [~] جست‌وجوی سراسری و مرکز جست‌وجو/فرمان — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
+3. [~] پنل جزئیات جلسه (Session Center) — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
+4. [~] Timeline کوتاه ایستگاه — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
+5. [~] عملیات اخیر اپراتور — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
+6. [~] Error UX استاندارد: خطا → معنی → اقدام بعدی — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
+7. [~] Approval Flow برای عملیات حساس — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
+8. [~] Undo UX برای عملیات برگشت‌پذیر (Reverse واقعی، بدون حذف رکورد) — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
 
 ### B) Finance / Session
 9. Wallet Ledger واقعی
