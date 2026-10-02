@@ -49,3 +49,39 @@ public sealed record AgentStatusDto(
     double? CpuUsagePercent,
     long? MemoryAvailableBytes,
     long? UptimeSeconds);
+
+
+public static class AgentCommandTypes
+{
+    public const string Ping = "ping";
+
+    public static bool IsSupported(string? commandType)
+        => string.Equals(commandType?.Trim(), Ping, StringComparison.OrdinalIgnoreCase);
+}
+
+public sealed record AgentCommandRequest(
+    string CommandType,
+    string? PayloadJson);
+
+public sealed record AgentCommandEnvelope(
+    Guid CommandId,
+    string CommandType,
+    string? PayloadJson,
+    DateTimeOffset RequestedAt);
+
+public sealed record AgentCommandAcknowledgement(
+    Guid CommandId,
+    bool Success,
+    string? Message,
+    DateTimeOffset CompletedAt);
+
+public sealed record AgentCommandStatusDto(
+    Guid CommandId,
+    Guid AgentDeviceId,
+    string CommandType,
+    string Status,
+    DateTimeOffset RequestedAt,
+    DateTimeOffset? SentAt,
+    DateTimeOffset? CompletedAt,
+    bool? Succeeded,
+    string? ResultMessage);
