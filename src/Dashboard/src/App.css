@@ -3190,3 +3190,29 @@ button:focus-visible {
   border-color: rgba(167, 139, 250, 0.6);
   background: rgba(167, 139, 250, 0.14);
 }
+
+
+.sidebar-recent-side {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.sidebar-reverse-button {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(167, 139, 250, 0.32);
+  border-radius: 7px;
+  background: rgba(167, 139, 250, 0.08);
+  color: var(--purple);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.sidebar-reverse-button:hover {
+  border-color: rgba(167, 139, 250, 0.6);
+  background: rgba(167, 139, 250, 0.14);
+}
