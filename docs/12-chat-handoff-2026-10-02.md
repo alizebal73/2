@@ -401,3 +401,14 @@ Stage 8:
 - latest head CI: #555 / `37025656340` = success
 - merge to main هنوز انجام نشده است.
 - Stage 7 هنوز کامل/Done اعلام نشده؛ payroll کامل، permission hardening کامل و approvalهای حساس باقی‌مانده باید بررسی/تکمیل/تست شوند.
+
+## Continuation Update — current Stage 7 head
+
+- Repository: `alizebal73/2` only.
+- Branch: `stage7-users-permissions`.
+- PR: #2 — `Stage 7: real operator auth, users, permissions and approvals`.
+- Current implementation includes server-backed payroll/profile/ledger UI, payment method + receipt handling, permission-scoped customer reads/actions, approval-only invoice reverse, and approval-only wallet refund request/execute flow.
+- Direct wallet refund and direct invoice reverse routes no longer execute sensitive operations; they require the server approval path.
+- CI workflow smoke now covers salary accrual/payment, invalid salary payment validation, invoice reverse bypass, and wallet refund approval execution.
+- The previous verified CI failure (#566) was caused only by Dashboard syntax errors on an older head; those syntax errors were subsequently corrected. A new current-head CI run must be green before any Stage 7 checkbox is marked complete.
+- Do not advance to Stage 8 until current-head Server Build/Test + migration smoke + Dashboard lint/build + browser E2E are green and the remaining Read/Write permission matrix is reviewed.
