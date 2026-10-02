@@ -104,6 +104,7 @@ public sealed class BenefitTransaction : BaseEntity
     public BenefitTransactionType Type { get; set; }
     public decimal MoneyAmount { get; set; }
     public int Minutes { get; set; }
+    public Guid? ReferenceInvoiceId { get; set; }
     public string Description { get; set; } = string.Empty;
 }
 
@@ -236,6 +237,7 @@ public sealed class Session : BaseEntity
 public sealed class Invoice : BaseEntity
 {
     public Guid CustomerId { get; set; }
+    public Guid? SessionId { get; set; }
     public Customer Customer { get; set; } = default!;
     public Guid? AppUserId { get; set; }
     public AppUser? AppUser { get; set; }
@@ -273,7 +275,18 @@ public sealed class WalletTransaction : BaseEntity
     public decimal Amount { get; set; }
     public WalletTransactionType Type { get; set; }
     public Guid? ReferenceTransactionId { get; set; }
+    public Guid? ReferenceInvoiceId { get; set; }
     public string Description { get; set; } = string.Empty;
+}
+
+public sealed class InvoiceReversal : BaseEntity
+{
+    public Guid InvoiceId { get; set; }
+    public Invoice Invoice { get; set; } = default!;
+    public Guid? AppUserId { get; set; }
+    public AppUser? AppUser { get; set; }
+    public required string Reason { get; set; }
+    public bool ExternalRefundRequired { get; set; }
 }
 
 public sealed class InventoryTransaction : BaseEntity
