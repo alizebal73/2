@@ -192,7 +192,7 @@ public sealed class SessionSettlementTests : IDisposable
         var draft = new Invoice
         {
             Customer = customer,
-            Session = session,
+            SessionId = session.Id,
             TotalAmount = 50000m,
             Status = InvoiceStatus.Draft,
             Items =
