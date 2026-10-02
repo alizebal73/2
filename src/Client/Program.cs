@@ -729,7 +729,7 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
 
         var failedState = await manager.GetStateAsync(cancellation.Token);
         if (!string.Equals(failedState?.ActiveVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
-            || string.IsNullOrWhiteSpace(failedState.PreviousVersion))
+            || string.IsNullOrWhiteSpace(failedState?.PreviousVersion))
         {
             return 1;
         }
@@ -824,7 +824,6 @@ static async Task<bool> WaitForFreshHealthyVersionAsync(
 
         if (string.Equals(status?.ActiveVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
             && string.Equals(status?.HealthyVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(agentState?.AgentVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
             && freshHealth)
         {
             return true;
