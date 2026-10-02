@@ -57,6 +57,23 @@ export function BuffetPage() {
     setCart(current => ({ ...current, [id]: Math.max(0, Math.min(product.stock, (current[id] ?? 0) + delta)) }));
   }
 
+  async function purchaseProduct(product: ProductRecord) {
+    const quantity = numberValue(window.prompt('تعداد خرید', '1') ?? '');
+    if (quantity <= 0) { setNotice('تعداد خرید معتبر نیست'); return; }
+    const unitCost = numberValue(window.prompt('بهای خرید هر واحد (تومان)', String(product.buyPrice)) ?? '');
+    if (unitCost <= 0) { setNotice('بهای خرید معتبر نیست'); return; }
+    setBusy(true);
+    try {
+      await adjustServerStock(product.id, quantity, 'in', 'ثبت خرید بوفه', 'Purchase', unitCost);
+      await refresh();
+      setNotice('خرید ثبت شد و بهای میانگین موجودی به‌روزرسانی شد');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ثبت خرید انجام نشد'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function adjustStock(product: ProductRecord, direction: 'in' | 'out', kind: 'Adjustment' | 'Waste' | 'Return' = 'Adjustment', notesOverride?: string) {
     setBusy(true);
     try {
@@ -211,6 +228,7 @@ export function BuffetPage() {
               {low && <small className="low-stock">هشدار موجودی کم</small>}
               <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
               <button className="btn sm" disabled={busy} onClick={() => startEdit(product)}>ویرایش</button>
+              <button className="btn sm" disabled={busy} onClick={() => void purchaseProduct(product)}>ثبت خرید</button>
               <div className="product-stock-actions">
                 <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button>
                 <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out')}>− موجودی</button>
