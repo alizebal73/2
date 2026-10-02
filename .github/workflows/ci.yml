@@ -136,6 +136,11 @@ jobs:
               if ($status -ne 409) { throw }
             }
 
+            # Remove session.start while keeping the operator logged in, then prove the Server returns 403.
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('buffet.sell')
+            } | ConvertTo-Json) | Out-Null
+
             # Prove a non-admin operator cannot start a session without the permission.
             $operatorSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
             Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
