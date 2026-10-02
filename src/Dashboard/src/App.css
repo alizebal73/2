@@ -3569,3 +3569,37 @@ button:focus-visible {
     align-items: flex-start;
   }
 }
+
+
+.shift-close-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px 14px;
+  padding: 10px 0;
+  margin-bottom: 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.shift-close-grid .info-row {
+  margin: 0;
+}
+
+.shift-close-grid .info-row strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.operation-modal.wide {
+  width: min(760px, 100%);
+}
+
+.operation-modal textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+@media (max-width: 700px) {
+  .shift-close-grid {
+    grid-template-columns: 1fr;
+  }
+}
