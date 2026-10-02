@@ -21,7 +21,7 @@ export async function getWalletLedger(customerId: string): Promise<WalletLedgerE
   return rows.map(row => ({
     ...row,
     direction: row.type.toLowerCase() === 'credit' ? 'credit' : 'debit',
-    type: row.type.toLowerCase() === 'credit' ? 'charge' : 'debit',
+    type: row.type.toLowerCase() === 'credit' ? 'charge' : row.type.toLowerCase() === 'refund' ? 'refund' : 'debit',
   }));
 }
 
@@ -52,5 +52,46 @@ export async function recordWalletTransaction(
     ...row,
     direction: row.type.toLowerCase() === 'credit' ? 'credit' : 'debit',
     type: row.type.toLowerCase() === 'credit' ? 'charge' : 'debit',
+  };
+}
+
+
+export async function refundWalletTransaction(
+  customerId: string,
+  input: { amount: number; reason: string },
+): Promise<WalletLedgerEntry> {
+  if (!isGuid(customerId)) {
+    return mockService.recordWalletTransaction(customerId, {
+      amount: input.amount,
+      type: 'debit',
+      description: 'بازگشت وجه · ' + input.reason,
+    });
+  }
+
+  const response = await fetch('/api/customers/' + customerId + '/wallet-refunds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount: input.amount, reason: input.reason }),
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'ثبت بازگشت وجه انجام نشد');
+  }
+
+  const row = await response.json() as {
+    id: string;
+    customerId: string;
+    amount: number;
+    type: string;
+    description: string;
+    createdAt: string;
+    balanceAfter: number;
+  };
+
+  return {
+    ...row,
+    direction: 'debit',
+    type: 'refund',
   };
 }
