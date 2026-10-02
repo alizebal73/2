@@ -42,6 +42,15 @@ jobs:
       - name: Test .NET
         run: dotnet test GameNetManager.sln --no-build --configuration Release
 
+      - name: EF PendingModelChangesDiagnostic
+        shell: pwsh
+        run: |
+          $diag = Join-Path $env:RUNNER_TEMP 'gamenet-ef-diagnostic'
+          Remove-Item $diag -Recurse -Force -ErrorAction SilentlyContinue
+          dotnet ef migrations add PendingModelChangesDiagnostic --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --context GameNetDbContext --output-dir "$diag"
+          Write-Host '--- Generated diagnostic migration ---'
+          Get-ChildItem $diag -Recurse -File | ForEach-Object { Write-Host ("### " + $_.FullName); Get-Content $_.FullName }
+
       - name: Server startup and migration smoke
         shell: pwsh
         run: |
