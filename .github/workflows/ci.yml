@@ -115,6 +115,21 @@ jobs:
             $meBeforeAgent = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($meBeforeAgent.userName -ne 'admin') { throw 'Current operator endpoint failed before Agent smoke.' }
 
+            # Stage 11: prove the real Game Library + Account Pool API contract on the migrated database.
+            $stage11Name = 'CI Stage11 Game ' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+            $stage11Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              name = $stage11Name; version = '1.0.0'; category = 'FPS'; launcher = 'Steam'; installPath = 'D:\Games\Stage11'; executablePath = 'D:\Games\Stage11\game.exe';
+              launchArguments = ''; connectionType = 'آنلاین'; targetSystem = 'all'; targetZone = 'pc'; targetScope = 'all'; targetStations = ''; processNames = 'game.exe'; coverPath = ''; trailerPath = ''; active = $true
+            } | ConvertTo-Json)
+            if (-not $stage11Game.id -or $stage11Game.name -ne $stage11Name) { throw 'Stage 11 Game create smoke failed.' }
+            $stage11AccountName = 'CI Stage11 Account ' + [guid]::NewGuid().ToString('N').Substring(0, 8)
+            $stage11Account = Invoke-RestMethod -Uri "$baseUrl/api/game-accounts" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              title = $stage11AccountName; platform = 'Steam'; launcher = 'Steam'; login = 'stage11-login'; password = 'Stage11!Password'; owner = 'مجموعه'; guardStatus = '2FA'; allowedGameIds = @($stage11Game.id); active = $true
+            } | ConvertTo-Json)
+            if (-not $stage11Account.id -or $stage11Account.allowedGameIds.Count -ne 1) { throw 'Stage 11 Account Pool create smoke failed.' }
+            if ($stage11Account.PSObject.Properties.Name -contains 'passwordHash') { throw 'Stage 11 API leaked password hash.' }
+            Write-Host 'Stage 11 Game Library + Account Pool API smoke passed.'
+
             # Stage 8: prove a real Client Agent can register, connect to the dedicated SignalR hub,
             # persist a heartbeat, and become offline again after disconnect.
             $agentData = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent'
@@ -180,6 +195,17 @@ jobs:
               }
 
               Write-Host ("Stage 8 Agent heartbeat smoke passed: deviceId={0}; lastSeen={1}" -f $agentRow.deviceId, $agentRow.lastSeenAt)
+
+              # Stage 11 vertical slice: lease the pool account to the real CI Agent, reject double-use, then release it.
+              $lease = Invoke-RestMethod -Uri "$baseUrl/api/game-accounts/$($stage11Account.id)/lease" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ gameId = $stage11Game.id; agentDeviceId = $agentRow.agentId } | ConvertTo-Json)
+              if ($lease.status -ne 'in-use' -or $lease.activeGameId -ne $stage11Game.id -or $lease.assignedClientId -ne $agentRow.agentId) { throw 'Stage 11 Account Lease create smoke failed.' }
+              try {
+                Invoke-RestMethod -Uri "$baseUrl/api/game-accounts/$($stage11Account.id)/lease" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ gameId = $stage11Game.id; agentDeviceId = $agentRow.agentId } | ConvertTo-Json)
+                throw 'Stage 11 Account Lease allowed a duplicate active lease.'
+              } catch { if ($_.Exception.Response.StatusCode.value__ -ne 409) { throw } }
+              $released = Invoke-RestMethod -Uri "$baseUrl/api/game-accounts/$($stage11Account.id)/release" -Method Post -WebSession $adminSession
+              if ($released.status -ne 'free' -or $released.assignedClientId) { throw 'Stage 11 Account Lease release smoke failed.' }
+              Write-Host 'Stage 11 Account Lease smoke passed.'
 
               $lifecycleStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
               if ($lifecycleStatus.lifecycleState -ne 'Running') {

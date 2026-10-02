@@ -181,3 +181,43 @@ test('dashboard shows actionable Persian error UX', async ({ browser }) => {
   await expect(page.getByRole('alert').getByRole('button', { name: 'تلاش مجدد' })).toBeVisible();
   await context.close();
 });
+
+
+test('Games & Accounts real API contract UI', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200, contentType: 'application/json', body: JSON.stringify({
+      id: 'e2e-admin', fullName: 'مدیر تست', userName: 'admin', email: 'admin@gamenet.local', role: 'Admin', isActive: true,
+      lastLoginAt: new Date().toISOString(), permissions: ['game.manage', 'account.manage', 'client.control', 'session.start']
+    })
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
+  }));
+  await page.route('**/api/games*', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ id: 'game-1', name: 'Counter Test', version: '1.0', category: 'FPS', launcher: 'Steam',
+      installPath: 'D:/Games/Counter', executablePath: 'D:/Games/Counter/game.exe', launchArguments: '', connectionType: 'آنلاین',
+      targetSystem: 'all', targetZone: 'pc', targetScope: 'all', targetStations: '', processNames: 'game.exe',
+      coverPath: '', trailerPath: '', active: true, status: 'online', activeUsers: 0 }])
+  }));
+  await page.route('**/api/game-accounts*', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ id: 'account-1', title: 'Steam Pool 01', platform: 'Steam', launcher: 'Steam', login: 'pool01',
+      status: 'free', owner: 'مجموعه', expiresAt: null, allowedGameIds: ['game-1'], allowedGames: [{ id: 'game-1', name: 'Counter Test' }],
+      assignedClientId: null, assignedClientName: null, activeGameId: null, activeGameName: null, guardStatus: '2FA', active: true }])
+  }));
+  await page.route('**/api/agent/devices*', route => route.fulfill({
+    status: 200, contentType: 'application/json',
+    body: JSON.stringify([{ id: 'client-1', name: 'PC 01', isOnline: true, lifecycleState: 'Running' }])
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('gamenet-navigate', { detail: 'games' })));
+  await expect(page.getByRole('heading', { name: 'بازی‌ها' })).toBeVisible();
+  await expect(page.getByText('Counter Test')).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new CustomEvent('gamenet-navigate', { detail: 'accounts' })));
+  await expect(page.getByRole('heading', { name: 'حساب‌ها' })).toBeVisible();
+  await expect(page.getByText('Steam Pool 01')).toBeVisible();
+});
