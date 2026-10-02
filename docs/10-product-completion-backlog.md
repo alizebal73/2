@@ -331,12 +331,12 @@
 9. [~] Wallet Ledger واقعی — API/SQLite/Audit/adapter و نمایش Ledger پیاده شد؛ عملیات کیف پول Dashboard به adapter منتقل شده‌اند؛ مهاجرت کامل Customer/Finance از Mock باقی است
 10. [~] Refund / Reverse واقعی — Refund کیف پول مسیر مستقل Server/API + Audit + UI گرفت و تست سرور سبز شد؛ Permission/Approval و Reverse کامل مالی مرحله بعدی هنوز باقی است
 11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change پیاده شد و CI + Smoke سبز است؛ اتصال Invoice/Server و ثبت مالی نهایی باقی است
-12. [~] Split Payment — تسویه ترکیبی نقد/کارت/کیف پول پیاده‌سازی شد؛ منتظر CI و تست تعاملی
-13. [~] Shift Settlement + Shift Handover — فرم تسویه، تطبیق نقدی و یادداشت تحویل شیفت پیاده‌سازی شد؛ منتظر CI
-14. [~] Session Transfer / Change Tariff / Change Persons — انتقال جلسه، تغییر نرخ همان جلسه و تغییر نفرات به Session Center اضافه شد؛ منتظر CI
-15. [~] Free Time + Free Money کامل — Free Time در Billing و Free Money در تسویه/گزارش جدا شد؛ منتظر CI
-16. Concurrent Login Limit
-17. [~] Expense / Profit واقعی و قابل ممیزی — Expense و خلاصه سود عملیاتی از Server/SQLite + Audit اضافه شد؛ CI و اتصال کامل همه گزارش‌ها باقی
+12. [~] Split Payment — UI + Build/Test + Dashboard Smoke سبز؛ ثبت atomic سروری، Invoice و Audit نهایی باقی
+13. [~] Shift Settlement + Shift Handover — فرم + Mock/محاسبه + Build/Test/Smoke سبز؛ Shift Close سروری و Audit/Handover نهایی باقی
+14. [~] Session Transfer / Change Tariff / Change Persons — Session Center + Build/Test/Smoke سبز؛ Transaction/Audit/Permission سروری باقی
+15. [~] Free Time + Free Money کامل — Billing + مصرف Free Money + گزارش مستقل + Build/Test/Smoke سبز؛ Ledger/Server Transaction نهایی باقی
+16. [~] Concurrent Login Limit — قرارداد مشتری + Mock Login Guard + Client UX پیاده شد؛ enforcement سروری/Agent و چنددستگاهی واقعی باقی
+17. [~] Expense / Profit واقعی و قابل ممیزی — Expense/Operating Profit Server + SQLite + Audit + Reports adapter اضافه شد؛ CI/Smoke سبز و اتصال کامل Invoice/COGS/Profit باقی
 
 ### C) Client / Agent
 18. Client Health / Heartbeat / Telemetry
@@ -419,4 +419,4 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - در نسخه نهایی Server باید تراکنش Split را به‌صورت atomic ثبت کند و Audit/Permission نیز داشته باشد.
 
 ## وضعیت
-مورد ۱ Done است چون Build/Test/CI روی commit نهایی سبز شده است. موارد ۲ تا ۶ از نظر Build/Test/CI سبز شده‌اند، اما تا انجام تست تعاملی واقعی Done نمی‌شوند. مورد ۷ نیز در حال پیاده‌سازی است. سایر موارد باز هستند.
+مرحله اصلی ۳ — Operational Completion — بسته است و A1 تا A8 همگی از نظر Build/Test/Smoke تثبیت شده‌اند. مرحله اصلی ۴ — Finance & Session Core — در حال تکمیل است؛ B9 تا B17 vertical slice دارند، اما هر مورد فقط بعد از اتصال نهایی Server/Permission/Transaction/Audit به Done می‌رسد. HEAD فعلی روی CI و Dashboard Interaction Smoke سبز است.
