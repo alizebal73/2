@@ -401,9 +401,71 @@ app.MapPost("/api/approvals", async (
 })
 .WithName("CreateApprovalRequest");
 
+app.MapPost("/api/invoices/{invoiceId:guid}/reverse/request", async (
+    Guid invoiceId,
+    ApprovalOperationRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var reason = request.Reason?.Trim();
+    if (string.IsNullOrWhiteSpace(reason))
+        return Results.BadRequest(new { code = "invalid_reverse", message = "دلیل برگشت عملیات را وارد کنید." });
+
+    var invoice = await database.Invoices
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == invoiceId, cancellationToken);
+    if (invoice is null)
+        return Results.NotFound(new { code = "invoice_not_found", message = "فاکتور پیدا نشد." });
+
+    if (invoice.Status != InvoiceStatus.Paid)
+        return Results.Conflict(new { code = "reverse_conflict", message = "این فاکتور قابل درخواست برگشت نیست." });
+
+    var pending = await database.ApprovalRequests.AnyAsync(item =>
+        item.Action == "invoice.reverse"
+        && item.EntityName == "Invoice"
+        && item.EntityId == invoiceId.ToString()
+        && item.Status == ApprovalStatus.Pending, cancellationToken);
+    if (pending)
+        return Results.Conflict(new { code = "reverse_approval_pending", message = "برای این فاکتور یک درخواست برگشت در انتظار تصمیم است." });
+
+    var approval = new ApprovalRequest
+    {
+        Action = "invoice.reverse",
+        EntityName = "Invoice",
+        EntityId = invoiceId.ToString(),
+        Reason = reason,
+        RequestedByUserId = auth.User!.Id,
+        Status = ApprovalStatus.Pending
+    };
+    database.ApprovalRequests.Add(approval);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "InvoiceReverseApprovalRequest",
+        EntityName = "Invoice",
+        EntityId = invoiceId.ToString(),
+        AppUserId = auth.User.Id,
+        Details = "درخواست تأیید برگشت فاکتور · " + reason
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        id = approval.Id,
+        status = approval.Status.ToString(),
+        action = approval.Action,
+        entityId = invoiceId
+    });
+})
+.WithName("RequestInvoiceReverseApproval");
+
 app.MapPost("/api/approvals/{approvalId:guid}/approve", async (
     Guid approvalId,
     ApprovalDecisionRequest request,
+    InvoiceReverseService reverseService,
     HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
@@ -415,9 +477,65 @@ app.MapPost("/api/approvals/{approvalId:guid}/approve", async (
     if (approval is null) return Results.NotFound(new { code = "approval_not_found", message = "درخواست تأیید پیدا نشد." });
     if (approval.Status != ApprovalStatus.Pending)
         return Results.Conflict(new { code = "approval_not_pending", message = "این درخواست دیگر در وضعیت انتظار نیست." });
+    if (approval.RequestedByUserId == auth.User!.Id)
+        return Results.Conflict(new { code = "approval_self_decision", message = "ثبت‌کننده درخواست نمی‌تواند همان درخواست را تأیید کند." });
+
+    if (approval.Action.Equals("invoice.reverse", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!Guid.TryParse(approval.EntityId, out var invoiceId))
+            return Results.BadRequest(new { code = "invalid_approval_target", message = "شناسه فاکتور درخواست تأیید معتبر نیست." });
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var reverseResult = await reverseService.ReverseWithinTransactionAsync(
+                invoiceId,
+                new InvoiceReverseRequest(auth.User.Id, approval.Reason),
+                cancellationToken);
+
+            approval.Status = ApprovalStatus.Approved;
+            approval.DecidedByUserId = auth.User.Id;
+            approval.DecidedAt = DateTimeOffset.UtcNow;
+            approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? "تأیید و اجرا شد" : request.Note.Trim();
+
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "ApprovalApproveAndExecute",
+                EntityName = "ApprovalRequest",
+                EntityId = approval.Id.ToString(),
+                AppUserId = auth.User.Id,
+                Details = "تأیید و اجرای برگشت فاکتور · " + invoiceId
+            });
+
+            await database.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return Results.Ok(new
+            {
+                id = approval.Id,
+                status = approval.Status.ToString(),
+                operation = reverseResult
+            });
+        }
+        catch (KeyNotFoundException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.NotFound(new { code = "invoice_not_found", message = exception.Message });
+        }
+        catch (InvalidOperationException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.Conflict(new { code = "reverse_conflict", message = exception.Message });
+        }
+        catch (ArgumentException exception)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return Results.BadRequest(new { code = "invalid_reverse", message = exception.Message });
+        }
+    }
 
     approval.Status = ApprovalStatus.Approved;
-    approval.DecidedByUserId = auth.User!.Id;
+    approval.DecidedByUserId = auth.User.Id;
     approval.DecidedAt = DateTimeOffset.UtcNow;
     approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim();
 
@@ -2742,7 +2860,7 @@ app.MapPost("/api/invoices/{invoiceId:guid}/reverse", async (
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.manage", cancellationToken);
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
     if (auth.Error is not null) return auth.Error;
     request = request with { AppUserId = auth.User!.Id };
 
