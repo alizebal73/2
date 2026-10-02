@@ -230,6 +230,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         var session = modelBuilder.Entity<Session>();
         session.HasKey(item => item.Id);
         session.Property(item => item.TotalAmount).HasColumnType("decimal(18,2)");
+        session.Property(item => item.HourlyRateOverride).HasColumnType("decimal(18,2)");
+        session.Property(item => item.Persons).IsRequired();
         session.Property(item => item.State).HasConversion<string>().HasMaxLength(20);
         session.Property(item => item.Notes).HasMaxLength(500);
         session.HasOne(item => item.Customer)
