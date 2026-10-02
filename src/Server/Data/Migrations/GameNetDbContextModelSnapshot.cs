@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace GameNetManager.Server.Data.Migrations
+namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 {
     [DbContext(typeof(GameNetDbContext))]
     partial class GameNetDbContextModelSnapshot : ModelSnapshot
@@ -26,16 +26,8 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Code")
-                        .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Email")
                         .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Alias")
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
@@ -134,6 +126,49 @@ namespace GameNetManager.Server.Data.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("GameNetManager.Server.Data.BenefitTransaction", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Minutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("MoneyAmount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("ReferenceInvoiceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("ReferenceInvoiceId");
+
+                    b.ToTable("BenefitTransactions");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.Client", b =>
                 {
                     b.Property<Guid>("Id")
@@ -173,8 +208,19 @@ namespace GameNetManager.Server.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Alias")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
                     b.Property<decimal>("Balance")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ConcurrentLoginLimit")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
@@ -183,6 +229,12 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal>("FreeMoney")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("FreeTimeMinutes")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -190,15 +242,6 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.Property<bool>("IsVip")
                         .HasColumnType("INTEGER");
-
-                    b.Property<DateTimeOffset?>("VipActivatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("VipExpiresAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("VipPackageId")
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("NationalId")
                         .HasMaxLength(20)
@@ -212,16 +255,25 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Username")
                         .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("VipActivatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("VipExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("VipPackageId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("VipTier")
                         .IsRequired()
                         .HasMaxLength(20)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -244,6 +296,42 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasIndex("VipPackageId");
 
                     b.ToTable("Customers");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.CustomerLogin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ClientKey")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("LoggedInAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LoggedOutAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CustomerId", "ClientKey", "IsActive");
+
+                    b.ToTable("CustomerLogins");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Expense", b =>
@@ -326,13 +414,7 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid>("SessionId")
-                        .HasColumnType("TEXT");
-
                     b.Property<Guid>("CustomerId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("ReferenceTransactionId")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("GameId")
@@ -362,42 +444,6 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasIndex("GameId");
 
                     b.ToTable("GameAccounts");
-                });
-
-            modelBuilder.Entity("GameNetManager.Server.Data.InvoiceReversal", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("AppUserId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("ExternalRefundRequired")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("InvoiceId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AppUserId");
-
-                    b.HasIndex("InvoiceId")
-                        .IsUnique();
-
-                    b.ToTable("InvoiceReversals");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.InventoryTransaction", b =>
@@ -454,13 +500,13 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("SessionId")
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("PaidAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("SessionId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
@@ -525,6 +571,71 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasIndex("ProductId");
 
                     b.ToTable("InvoiceItems");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.InvoicePayment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.ToTable("InvoicePayments");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.InvoiceReversal", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AppUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("ExternalRefundRequired")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppUserId");
+
+                    b.HasIndex("InvoiceId")
+                        .IsUnique();
+
+                    b.ToTable("InvoiceReversals");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Permission", b =>
@@ -668,9 +779,15 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<DateTimeOffset?>("EndAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal?>("HourlyRateOverride")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("Persons")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset>("StartAt")
                         .HasColumnType("TEXT");
@@ -877,9 +994,15 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("DailyMinutes")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Description")
                         .HasMaxLength(250)
                         .HasColumnType("TEXT");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<int>("DurationDays")
                         .HasColumnType("INTEGER");
@@ -892,19 +1015,12 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("DailyMinutes")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal>("DiscountPercent")
-                        .HasColumnType("decimal(18,2)");
+                    b.Property<string>("OverflowRule")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<decimal>("Price")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("OverflowRule")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("Tier")
                         .IsRequired()
@@ -948,6 +1064,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<Guid?>("ReferenceInvoiceId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("ReferenceTransactionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -961,8 +1080,6 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("ReferenceInvoiceId");
-
-                    b.HasIndex("ReferenceTransactionId");
 
                     b.ToTable("WalletTransactions");
                 });
@@ -994,6 +1111,38 @@ namespace GameNetManager.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("AppUser");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.BenefitTransaction", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.Customer", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.VipPackage", "VipPackage")
+                        .WithMany("Customers")
+                        .HasForeignKey("VipPackageId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("VipPackage");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.CustomerLogin", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Customer");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Expense", b =>
@@ -1078,6 +1227,35 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Navigation("Invoice");
 
                     b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.InvoicePayment", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Invoice");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.InvoiceReversal", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("GameNetManager.Server.Data.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
+
+                    b.Navigation("Invoice");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Reservation", b =>
@@ -1265,6 +1443,11 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Navigation("Sessions");
 
                     b.Navigation("Stations");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.VipPackage", b =>
+                {
+                    b.Navigation("Customers");
                 });
 #pragma warning restore 612, 618
         }
