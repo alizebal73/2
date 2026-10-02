@@ -172,6 +172,39 @@ public sealed class AppUserPermission
     public Permission Permission { get; set; } = default!;
 }
 
+public sealed class AppUserSession : BaseEntity
+{
+    public Guid AppUserId { get; set; }
+    public AppUser AppUser { get; set; } = default!;
+    public required string TokenHash { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+    public DateTimeOffset? LastSeenAt { get; set; }
+}
+
+public enum ApprovalStatus
+{
+    Pending,
+    Approved,
+    Rejected,
+    Cancelled
+}
+
+public sealed class ApprovalRequest : BaseEntity
+{
+    public required string Action { get; set; }
+    public required string EntityName { get; set; }
+    public string? EntityId { get; set; }
+    public required string Reason { get; set; }
+    public Guid RequestedByUserId { get; set; }
+    public AppUser RequestedByUser { get; set; } = default!;
+    public Guid? DecidedByUserId { get; set; }
+    public AppUser? DecidedByUser { get; set; }
+    public ApprovalStatus Status { get; set; } = ApprovalStatus.Pending;
+    public string? DecisionNote { get; set; }
+    public DateTimeOffset? DecidedAt { get; set; }
+}
+
 public sealed class VipPackage : BaseEntity
 {
     public required string Name { get; set; }
