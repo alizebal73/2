@@ -334,7 +334,7 @@
 12. [~] Split Payment — تسویه ترکیبی نقد/کارت/کیف پول پیاده‌سازی شد؛ منتظر CI و تست تعاملی
 13. [~] Shift Settlement + Shift Handover — فرم تسویه، تطبیق نقدی و یادداشت تحویل شیفت پیاده‌سازی شد؛ منتظر CI
 14. [~] Session Transfer / Change Tariff / Change Persons — انتقال جلسه، تغییر نرخ همان جلسه و تغییر نفرات به Session Center اضافه شد؛ منتظر CI
-15. Free Time + Free Money کامل
+15. [~] Free Time + Free Money کامل — Free Time در Billing و Free Money در تسویه/گزارش جدا شد؛ منتظر CI
 16. Concurrent Login Limit
 17. Expense / Profit واقعی و قابل ممیزی
 
@@ -384,6 +384,14 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 → D27 → D28 → D29 → D30 → D31 → D32
 → E33 → E34 → E35 → E36 → E37 → E38 → E39 → E40 → E41 → E42
 → F43 → F44 → F45 → F46 → F47 → F48
+
+## قرارداد اجرایی B15 — Free Time + Free Money
+
+- Free Time (دقیقه رایگان) از Free Money (اعتبار رایگان تومانی) جدا نگه داشته می‌شود.
+- Free Time فقط روی زمان قابل صورتحساب اثر می‌گذارد.
+- Free Money در تسویه قابل مصرف است و از موجودی اعتبار رایگان مشتری کم می‌شود.
+- مصرف Free Money در تاریخچه مشتری و گزارش مالی با روش پرداخت مستقل «اعتبار رایگان» ثبت می‌شود.
+- اتصال نهایی سرور باید مصرف Free Time/Free Money را Transaction/Audit کند.
 
 ## قرارداد اجرایی B14 — Session Transfer / Change Tariff / Change Persons
 
