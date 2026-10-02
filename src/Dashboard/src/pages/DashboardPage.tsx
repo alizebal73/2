@@ -70,7 +70,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
   const [selectionRect, setSelectionRect] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
-  const selectionDragRef = useRef<{ stationId: string; startX: number; startY: number; dragging: boolean; ctrlKey: boolean } | null>(null);
+  const selectionDragRef = useRef<{ stationId: string; startX: number; startY: number; dragging: boolean; ctrlKey: boolean; shiftKey: boolean } | null>(null);
   const suppressNextStationClickRef = useRef(false);
 
   const stations = stationOverrides ?? snapshot?.stations ?? emptyStations;
@@ -233,7 +233,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           })
           .map(element => element.dataset.stationId)
           .filter((id): id is string => Boolean(id));
-        setSelectedStationIds(current => drag.ctrlKey ? Array.from(new Set([...current, ...selected])) : selected);
+        setSelectedStationIds(current => {
+          if (drag.shiftKey && selectionAnchorId) return Array.from(new Set([...current, ...selected]));
+          if (drag.ctrlKey) return Array.from(new Set([...current, ...selected]));
+          return selected;
+        });
         setSelectionAnchorId(selected[selected.length - 1] ?? null);
       }
       setSelectionRect(null);
@@ -245,7 +249,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [selectionRect]);
+  }, [selectionRect, selectionAnchorId]);
 
 
   const counts = useMemo(() => ({
@@ -759,13 +763,16 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       onMouseDown={event => {
         if (event.button !== 0) return;
         event.preventDefault();
+        event.stopPropagation();
         selectionDragRef.current = {
           stationId: station.id,
           startX: event.clientX,
           startY: event.clientY,
           dragging: false,
           ctrlKey: event.ctrlKey || event.metaKey,
+          shiftKey: event.shiftKey,
         };
+        window.getSelection()?.removeAllRanges();
       }}
       onClick={event => {
         event.stopPropagation();
@@ -782,7 +789,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         else if (station.state === 'busy' || station.state === 'paused') openSessionCenter(station);
         else setMessage(station.state === 'reserved' ? 'رزرو ساعت ۱۸:۰۰ — هنوز مشتری وارد نشده' : station.outOfServiceReason ?? 'این دستگاه خارج از سرویس است');
       }}
-      onDoubleClick={() => station.state === 'busy' && open('charge', station)}
+      onDragStart={event => event.preventDefault()}
+      onDoubleClick={event => {
+        event.preventDefault();
+        if (station.state === 'busy') open('charge', station);
+      }}
       onContextMenu={event => showContext(event, station)}
     >
       <div className="top"><div className="name">{station.name}</div><span className={`status-badge ${station.state}`}>{stateLabels[station.state as StationState] ?? station.state}</span></div>
