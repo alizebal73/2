@@ -113,23 +113,18 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
         var inventoryRestored = 0;
         foreach (var item in invoice.Items.Where(item => item.ProductId.HasValue && item.Quantity > 0 && item.Product is not null))
         {
+            var productId = item.ProductId!.Value;
             var saleMovements = await database.InventoryTransactions.AsNoTracking()
                 .Where(movement => movement.ReferenceInvoiceId == invoice.Id
-                    && movement.ProductId == item.ProductId!.Value
+                    && movement.ProductId == productId
                     && movement.Kind == "Sale"
                     && movement.Direction == TransactionDirection.Out)
-                .OrderByDescending(movement => movement.CreatedAt)
                 .ToListAsync(cancellationToken);
-            var matchedQty = 0;
-            decimal matchedCost = 0m;
-            foreach (var movement in saleMovements)
-            {
-                if (matchedQty >= item.Quantity) break;
-                var qty = Math.Min(item.Quantity - matchedQty, movement.Quantity);
-                matchedQty += qty;
-                matchedCost += qty * movement.UnitCost;
-            }
-            var restoredUnitCost = matchedQty > 0 ? matchedCost / matchedQty : item.Product!.CostPrice;
+            var totalSoldQuantity = saleMovements.Sum(movement => movement.Quantity);
+            var totalSoldCost = saleMovements.Sum(movement => movement.Quantity * movement.UnitCost);
+            var restoredUnitCost = totalSoldQuantity > 0
+                ? totalSoldCost / totalSoldQuantity
+                : item.Product!.CostPrice;
             item.Product!.StockQuantity += item.Quantity;
             inventoryRestored += item.Quantity;
             database.InventoryTransactions.Add(new InventoryTransaction
