@@ -5,7 +5,6 @@ import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } fro
 import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
 import { assignVipPackage, getVipPackages } from '../services/vipPackageService';
 import type { AppUserRecord, CustomerRecord, WalletLedgerEntry } from '../types';
-import { ApprovalDialog } from '../components/ApprovalDialog';
 import { hasPermission } from '../services/authService';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
@@ -26,8 +25,6 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
   const canManageCustomer = hasPermission(user, 'customer.manage');
   const canManageWallet = hasPermission(user, 'customer.wallet');
   const canManageDebt = hasPermission(user, 'customer.debt');
-  const canRequestApproval = hasPermission(user, 'finance.manage');
-  const canDecideApproval = hasPermission(user, 'approval.decide');
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selectedId, setSelectedId] = useState('c1');
   const [filter, setFilter] = useState<Filter>('all');
@@ -47,7 +44,6 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
   const [customerDebts, setCustomerDebts] = useState<Array<{ id: string; amount: number; issuedAt: string; description: string }>>([]);
   const [selectedDebtId, setSelectedDebtId] = useState('');
   const [debtPaymentMethod, setDebtPaymentMethod] = useState<'cash' | 'card' | 'wallet'>('cash');
-  const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string; sourceTransactionId?: string } | null>(null);
   const [refundSourceId, setRefundSourceId] = useState('');
   const [vipPackages, setVipPackages] = useState<import('../types').VipPackageRecord[]>([]);
   const [selectedVipPackageId, setSelectedVipPackageId] = useState('');
@@ -154,6 +150,7 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
   }
 
   async function executeRefund(refundAmount: number, reason: string, sourceTransactionId?: string) {
+    if (!canManageWallet) { setNotice('دسترسی مدیریت کیف پول ندارید'); return; }
     if (!selected) return;
     try {
       const entry = await refundWalletTransaction(selected.id, { amount: refundAmount, reason, sourceTransactionId });
@@ -161,7 +158,6 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
       setWalletLedger(current => [entry, ...current]);
       setAction('');
       setActionNote('');
-      setRefundApproval(null);
       setRefundSourceId('');
       setAmount('');
       setNotice('بازگشت وجه ثبت شد و در دفتر کیف پول باقی ماند');
@@ -231,10 +227,6 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
       if (value > selected.wallet) { setNotice('مبلغ بازگشت بیشتر از موجودی کیف پول مشتری است'); return; }
       if (!actionNote.trim()) { setNotice('دلیل بازگشت وجه را وارد کنید'); return; }
       if (!refundSourceId) { setNotice('تراکنش مبدأ بازگشت وجه را انتخاب کنید'); return; }
-      if (role === 'operator' && value > 100000) {
-        setRefundApproval({ amount: value, reason: actionNote.trim(), sourceTransactionId: refundSourceId });
-        return;
-      }
       await executeRefund(value, actionNote.trim(), refundSourceId);
       return;
     }
@@ -372,7 +364,7 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
         <div className="head">
           <div className="search-box"><input aria-label="جستجوی مشتری" value={query} onChange={event => setQuery(event.target.value)} placeholder="کد، نام، لقب، موبایل یا کد ملی…" /></div>
           <div className="view-switch">{([['all', 'همه'], ['vip', 'VIP'], ['debt', 'بدهکار']] as [Filter, string][]).map(([key, label]) =>
-            <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{label}</button>)}</div>
+            <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{label}</button> )}</div>
           <button className="btn primary sm" onClick={openNewCustomer}>+ مشتری جدید</button>
         </div>
         <div className="rows">{visible.map(customer =>
@@ -437,13 +429,13 @@ export function CustomersPage({ user }: { user: AppUserRecord }) {
         )) : <div className="customer-ledger-empty">هنوز سابقه سروری برای این مشتری ثبت نشده است.</div>}</div></div>
 
         <div className="customer-actions">
-          <button className="btn sm" onClick={() => openAction('wallet')}>شارژ کیف پول</button>
+          {canManageWallet && <><button className="btn sm" onClick={() => openAction('wallet')}>شارژ کیف پول</button>
           <button className="btn sm" onClick={() => openAction('gift')}>اعتبار رایگان</button>
           <button className="btn sm" onClick={() => openAction('freeTime')}>زمان رایگان</button>
-          <button className="btn sm" onClick={() => openAction('refund')}>بازگشت وجه</button>
-          {selected.debt > 0 && <button className="btn sm" onClick={() => openAction('debtSettle')}>تسویه بدهی</button>}
-          <button className="btn sm" onClick={() => openAction('edit')}>ویرایش مشتری</button>
-          <button className="btn sm" onClick={() => openAction('password')}>تغییر رمز</button>
+          <button className="btn sm" onClick={() => openAction('refund')}>بازگشت وجه</button></>}
+          {canManageDebt && selected.debt > 0 && <button className="btn sm" onClick={() => openAction('debtSettle')}>تسویه بدهی</button>}
+          {canManageCustomer && <><button className="btn sm" onClick={() => openAction('edit')}>ویرایش مشتری</button>
+          <button className="btn sm" onClick={() => openAction('password')}>تغییر رمز</button></>}
         </div>     </section>}
     </div>
 
