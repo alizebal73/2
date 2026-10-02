@@ -725,7 +725,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       minimumCharge: tariff?.minimumCharge ?? 0,
       roundingStep: roundingEnabled ? (tariff?.roundingStep ?? 1000) : 0,
     });
-    const timeCost = billing.timeAmount;
     const prepaidUsed = Math.min(billing.finalAmount, activeStation.sessionCredit ?? 0);
     const finalTotal = Math.max(0, billing.finalAmount - prepaidUsed);
     if (activeStation.serverSessionId && customer && isServerGuid(activeStation.serverSessionId) && ['cash', 'card', 'wallet', 'gift'].includes(method)) {
