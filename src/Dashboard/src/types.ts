@@ -276,6 +276,7 @@ export type SessionTimelineEvent = {
   title: string;
   detail: string;
   amount?: number;
+  serverReferenceId?: string;
 };
 
 
