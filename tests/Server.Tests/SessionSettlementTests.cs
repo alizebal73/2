@@ -211,7 +211,10 @@ public sealed class SessionSettlementTests : IDisposable
         db.AddRange(type, tariff, customer, station, product, session, draft);
         await db.SaveChangesAsync();
 
-        var service = new SessionSettlementService(db);
+        await db.DisposeAsync();
+
+        await using var settlementDb = new GameNetDbContext(options);
+        var service = new SessionSettlementService(settlementDb);
         var result = await service.SettleAsync(
             session.Id,
             new SessionSettlementRequest(
@@ -224,7 +227,7 @@ public sealed class SessionSettlementTests : IDisposable
                 0m),
             CancellationToken.None);
 
-        var invoice = await db.Invoices
+        var invoice = await settlementDb.Invoices
             .Include(item => item.Items)
             .SingleAsync(item => item.Id == draft.Id);
 
