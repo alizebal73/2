@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
-import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
+import type { AppUserRecord, CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
 import { mockService } from '../services/mockService';
 import { createServerCustomerDebt, getServerCustomers } from '../services/customerService';
 import { hasPermission } from '../services/authService';
@@ -31,6 +31,7 @@ type Props = {
   error: string;
   onNavigate: (page: 'client-shell') => void;
   role?: 'operator' | 'manager' | 'owner';
+  user: AppUserRecord;
 };
 
 type ContextMenu = { x: number; y: number; station: StationDto } | null;
@@ -39,7 +40,11 @@ type SessionFollowUp = { id: string; stationId: string; stationName: string; cus
 type PendingPayment = { id: string; stationId: string; stationName: string; customerId?: string; customerName: string; customerCode: string; amount: number; createdAt: string; };
 type AttentionItem = { id: string; kind: AttentionKind; station: StationDto; title: string; detail: string; actionLabel: string; followUpId?: string; };
 
-export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role = 'operator' }: Props) {
+export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role = 'operator', user }: Props) {
+  const canStartSession = hasPermission(user, 'session.start');
+  const canManageSession = hasPermission(user, 'session.manage');
+  const canSettleSession = hasPermission(user, 'session.settle');
+  const canControlClient = hasPermission(user, 'client.control');
   const [stationOverrides, setStationOverrides] = useState<StationDto[] | null>(null);
   const [zone, setZone] = useState<ZoneKey>('all');
   const [query, setQuery] = useState('');
@@ -431,6 +436,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   async function startSession() {
+    if (!canStartSession) { setMessage('دسترسی شروع جلسه ندارید'); return; }
     if (!activeStation || activeStation.state !== 'free') { setMessage('این ایستگاه دیگر آزاد نیست'); return; }
     const customer = findCustomer(customerCode);
     if (!customer) { setMessage('اول یوزر مشتری را وارد کنید و Enter بزنید.'); return; }
@@ -496,6 +502,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   function endSessionForPayment(station: StationDto) {
+    if (!canSettleSession) { setMessage('دسترسی تسویه جلسه ندارید'); return; }
     if (!['busy', 'paused'].includes(station.state)) { setMessage('این ایستگاه جلسه فعالی ندارد'); return; }
     if (station.serverSessionId) {
       setActiveStation(station);
@@ -700,6 +707,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   async function finishSession(method: string, bypassApproval = false) {
+    if (!canSettleSession) { setMessage('دسترسی تسویه جلسه ندارید'); return; }
     if (!activeStation) return;
     if (!bypassApproval && role === 'operator' && discountPercent > 10) {
       setApproval({ title: 'تخفیف بیشتر از حد مجاز اپراتور', detail: 'این تسویه شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.', action: 'settle', method });
@@ -821,6 +829,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   function pauseSession(stationOverride?: StationDto) {
+    if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     const station = stationOverride ?? activeStation;
     if (!station || station.state !== 'busy') { setMessage('فقط جلسه در حال بازی قابل توقف است'); return; }
     updateStation(station.id, { state: 'paused', pausedAt: new Date().toISOString() });
@@ -830,6 +839,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   function resumeSession(stationOverride?: StationDto) {
+    if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     const station = stationOverride ?? activeStation;
     if (!station || station.state !== 'paused' || !station.pausedAt) { setMessage('جلسه متوقفی برای ادامه وجود ندارد'); return; }
     const currentPaused = (Date.now() - new Date(station.pausedAt).getTime()) / 60000;
@@ -839,6 +849,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   function completeReduce() {
+    if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     if (!activeStation || !['busy', 'paused'].includes(activeStation.state)) { setMessage('فقط جلسه فعال یا متوقف قابل کاهش زمان است'); return; }
     const minutes = reduceMinutes === -1 ? Math.max(1, Number(customReduceMinutes.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))) || 0) : reduceMinutes;
     const current = duration(activeStation);
@@ -851,6 +862,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   function completeExtend() {
+    if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     if (!activeStation || activeStation.state !== 'busy') {
       setMessage('جلسه فعالی برای تمدید وجود ندارد');
       setModal(null);
@@ -871,6 +883,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   async function changeSessionRate(station: StationDto, rate: number) {
+    if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     if (!rate || rate <= 0) { setMessage('نرخ جلسه باید بیشتر از صفر باشد'); return; }
     const nextRate = Math.round(rate);
     try {
@@ -886,6 +899,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   async function changeSessionPersons(station: StationDto, persons: number) {
+    if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     const next = station.zone === 'pc' ? 1 : Math.max(1, Math.min(4, persons));
     try {
       if (station.serverSessionId) {
@@ -900,6 +914,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
 
   async function transferSession(station: StationDto, targetId: string) {
+    if (!canManageSession) { setMessage('دسترسی انتقال جلسه ندارید'); return; }
     const target = stations.find(item => item.id === targetId);
     if (!target || target.state !== 'free') { setMessage('ایستگاه مقصد دیگر آزاد نیست'); return; }
     try {
@@ -1175,11 +1190,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       {station.state === 'busy' && <><div className="person-dots">{'● '.repeat(station.persons ?? 1)}</div><div className="progress-bar"><span style={{ width: `${Math.min(100, minutes % 60 / 60 * 100)}%` }} /></div><span className="pulse" /></>}
       {station.state === 'off' && <small>{station.outOfServiceReason ?? 'در تعمیر'}</small>}
       <div className="station-hover-actions" draggable={false} onMouseDown={event => { event.stopPropagation(); window.getSelection()?.removeAllRanges(); }} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
-        {station.state === 'free' && <button type="button" className="quick primary" onClick={() => open('start', station)}>▶ شروع</button>}
+        {canStartSession && station.state === 'free' && <button type="button" className="quick primary" onClick={() => open('start', station)}>▶ شروع</button>}
         {station.state === 'busy' && <button type="button" className="quick" onClick={() => { setActiveStation(station); pauseSession(); }}>⏸ مکث</button>}
         {station.state === 'paused' && <button type="button" className="quick primary" onClick={() => { setActiveStation(station); resumeSession(); }}>▶ ادامه</button>}
-        {(station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => endSessionForPayment(station)}>🧾 پایان بازی</button>}
-        {(station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => open('extend', station)}>⏱ تمدید</button>}
+        {canSettleSession && (station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => endSessionForPayment(station)}>🧾 پایان بازی</button>}
+        {canManageSession && (station.state === 'busy' || station.state === 'paused') && <button type="button" className="quick" onClick={() => open('extend', station)}>⏱ تمدید</button>}
         <button
           type="button"
           className="quick more"
@@ -1259,7 +1274,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           <div className="search-box"><input aria-label="جست‌وجوی ایستگاه" value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی ایستگاه…" /></div>
           <div className="view-switch" aria-label="حالت نمایش">{(['v-card', 'v-compact', 'v-list'] as ViewMode[]).map((item, index) => <button key={item} type="button" className={view === item ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(item)}>{['▦', '▤', '☰'][index]}</button>)}</div>
           <label className="zoom-control">اندازه <input type="range" min="70" max="130" step="5" value={zoom} onChange={event => setZoom(Number(event.target.value))} />{money(zoom)}٪</label>
-          <button type="button" className="btn primary" onClick={() => open('start', stations.find(item => item.state === 'free') ?? null)}>+ شروع جلسه</button>
+          {canStartSession && <button type="button" className="btn primary" onClick={() => open('start', stations.find(item => item.state === 'free') ?? null)}>+ شروع جلسه</button>
           {selectedStationIds.length > 0 && <div className="station-selection-tools"><span>{selectedStationIds.length.toLocaleString('fa-IR')} ایستگاه انتخاب شده</span><button type="button" className="btn sm" onClick={() => { setSelectedStationIds([]); setSelectionAnchorId(null); }}>لغو انتخاب</button></div>}
         </div>
         {apiState === 'loading' && <p className="empty-state">در حال دریافت اطلاعات از سرور…</p>}
