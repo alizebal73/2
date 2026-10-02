@@ -375,9 +375,13 @@ jobs:
             # Restart from the persisted Agent state without the bootstrap registration token.
             $firstDeviceId = $offlineRow.deviceId
             $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+            $secondAgentData = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent-second-data'
             $secondAgentStdout = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent-second.stdout.log'
             $secondAgentStderr = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent-second.stderr.log'
-            Remove-Item $secondAgentStdout,$secondAgentStderr -Force -ErrorAction SilentlyContinue
+            Remove-Item $secondAgentData,$secondAgentStdout,$secondAgentStderr -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $secondAgentData -Force | Out-Null
+            Copy-Item -Path (Join-Path $agentData '*') -Destination $secondAgentData -Recurse -Force
+            $env:GAMENET_AGENT_DATA_DIR = $secondAgentData
 
             $secondAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
               'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
