@@ -586,3 +586,16 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 ## تصمیم ادامه
 **Stage 10 هنوز باز نمی‌شود.**
 ابتدا همین برش Stage 9 باید در `main` merge و وضعیت مستندات ثبت شود؛ سپس فقط با رعایت Gateهای فیزیکی و scope باقی‌ماندهٔ Stage 9 به مرحلهٔ انتشار بعدی می‌رویم.
+
+
+## Product Improvement Decisions — بعد از ممیزی Stage 1–9
+
+چهار نیاز محصول ثبت شدند و محل اجرای آن‌ها عمداً تفکیک شد تا باعث patchهای پراکنده نشوند:
+
+- **Settings**: بازطراحی Information Architecture و مرتب‌سازی مدرن در Stage 14 / UI Hardening.
+- **Permissions**: توسعه از Permission سطح صفحه به Action + Scope + Read/Export + بازهٔ زمانی، با enforce سروری؛ طراحی از الان و اجرای اصلی کنار Reporting/Finance Access.
+- **Operator Management**: API واقعی وجود داشت ولی UI ساخت/ویرایش اپراتور ناقص بود؛ یک برش کوچک UI برای «اپراتور جدید» و «ویرایش حساب» در حال تکمیل است.
+- **PC Internet Grouping**: گروه‌بندی اینترنت ۱/۲ باید header/line بصری واضح داشته باشد و همراه با Dashboard hardening اجرا شود.
+- **Update**: این اصلاحات نباید با installer/Updater عجولانه مخلوط شوند؛ Release/Update در پایان برش پایدار و قبل از rollout واقعی انجام می‌شود.
+
+قاعده: هر نیاز مشابه جدید در ممیزی‌ها ثبت می‌شود و محل اجرای مناسبش تعیین می‌شود؛ patch پراکنده روی UI اصلی ممنوع.

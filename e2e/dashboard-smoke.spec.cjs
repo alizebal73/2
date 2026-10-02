@@ -91,6 +91,73 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await expect(page.getByText('وضعیت مالی')).toBeVisible();
 });
 
+test('dashboard exposes operator account management', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-admin',
+      fullName: 'مدیر تست',
+      userName: 'admin',
+      email: 'admin@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['user.manage', 'shift.manage', 'payroll.view', 'payroll.manage', 'approval.decide']
+    })
+  }));
+  await page.route('**/api/users', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: 'user-01',
+      fullName: 'اپراتور تست',
+      userName: 'operator_test',
+      email: 'operator@gamenet.local',
+      role: 'Operator',
+      isActive: true,
+      permissions: ['session.start'],
+    }])
+  }));
+  await page.route('**/api/permissions', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: 'permission-01',
+      name: 'session.start',
+      description: 'شروع جلسه'
+    }])
+  }));
+  await page.route('**/api/payroll/users', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([])
+  }));
+  await page.route('**/api/approvals', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([])
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'کاربران و شیفت' }).click();
+  await expect(page.getByRole('heading', { name: 'کاربران و شیفت' })).toBeVisible();
+
+  await page.getByRole('button', { name: 'اپراتور جدید' }).click();
+  await expect(page.getByRole('dialog', { name: 'تعریف اپراتور جدید' })).toBeVisible();
+  await expect(page.getByLabel('نام کاربری')).toBeVisible();
+  await expect(page.getByLabel('رمز عبور')).toBeVisible();
+  await expect(page.getByLabel('نقش')).toHaveValue('Operator');
+  await page.getByRole('button', { name: 'انصراف' }).click();
+  await expect(page.getByRole('dialog', { name: 'تعریف اپراتور جدید' })).toHaveCount(0);
+});
+
 test('dashboard shows actionable Persian error UX', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
