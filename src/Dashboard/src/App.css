@@ -3044,3 +3044,64 @@ button:focus-visible {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+
+.approval-dialog {
+  width: min(460px, 100%);
+  text-align: center;
+}
+
+.approval-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 8px;
+  border-radius: 12px;
+  background: rgba(255, 180, 84, 0.12);
+  border: 1px solid rgba(255, 180, 84, 0.32);
+  color: var(--orange);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.approval-kicker {
+  display: block;
+  color: var(--orange);
+  font-size: 9px;
+}
+
+.approval-dialog h2 {
+  margin: 4px 0;
+  font-size: 16px;
+}
+
+.approval-dialog > p {
+  margin: 0 auto 11px;
+  max-width: 390px;
+  color: var(--dim);
+  font-size: 10.5px;
+  line-height: 1.8;
+}
+
+.approval-rule {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 13px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255, 180, 84, 0.24);
+  border-radius: 10px;
+  background: rgba(255, 180, 84, 0.06);
+  text-align: right;
+}
+
+.approval-rule strong {
+  color: var(--txt);
+  font-size: 10.5px;
+}
+
+.approval-rule span {
+  color: var(--dim);
+  font-size: 9px;
+  line-height: 1.7;
+}
