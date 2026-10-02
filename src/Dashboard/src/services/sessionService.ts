@@ -8,6 +8,8 @@ export type StartServerSessionRequest = {
   stationId: string;
   tariffId?: string;
   appUserId?: string;
+  hourlyRateOverride?: number;
+  persons?: number;
 };
 
 export type StartServerSessionResult = {
@@ -45,6 +47,8 @@ export async function startServerSession(
     stationId: input.stationId,
     ...(input.tariffId && isGuid(input.tariffId) ? { tariffId: input.tariffId } : {}),
     ...(input.appUserId && isGuid(input.appUserId) ? { appUserId: input.appUserId } : {}),
+    ...(input.hourlyRateOverride !== undefined ? { hourlyRateOverride: input.hourlyRateOverride } : {}),
+    ...(input.persons !== undefined ? { persons: input.persons } : {}),
   };
 
   const response = await fetch('/api/sessions', {
@@ -83,4 +87,36 @@ export async function settleServerSession(
   }
 
   return await response.json() as ServerSettlementResult;
+}
+
+
+export async function updateServerSessionDetails(
+  sessionId: string,
+  input: { hourlyRate?: number; persons?: number },
+): Promise<void> {
+  const response = await fetch('/api/sessions/' + sessionId + '/details', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'تغییرات جلسه روی سرور ثبت نشد');
+  }
+}
+
+export async function transferServerSession(
+  sessionId: string,
+  targetStationId: string,
+): Promise<{ sessionId: string; stationId: string }> {
+  const response = await fetch('/api/sessions/' + sessionId + '/transfer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ targetStationId }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'انتقال جلسه روی سرور انجام نشد');
+  }
+  return await response.json() as { sessionId: string; stationId: string };
 }
