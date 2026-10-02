@@ -140,6 +140,58 @@ public sealed class AgentHub(
         }
     }
 
+    public async Task AcknowledgeCommand(
+        AgentCommandAcknowledgement acknowledgement)
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        var command = await database.AgentCommands
+            .FirstOrDefaultAsync(
+                item => item.Id == acknowledgement.CommandId
+                    && item.AgentDeviceId == device.Id
+                    && item.Status == "Sent"
+                    && item.AgentConnectionId == Context.ConnectionId,
+                Context.ConnectionAborted);
+
+        if (command is null)
+            throw new HubException("فرمان معتبر پیدا نشد.");
+
+        command.Status = acknowledgement.Success ? "Succeeded" : "Failed";
+        command.Succeeded = acknowledgement.Success;
+        command.CompletedAt = acknowledgement.CompletedAt == default
+            ? DateTimeOffset.UtcNow
+            : acknowledgement.CompletedAt;
+        command.ResultMessage = string.IsNullOrWhiteSpace(acknowledgement.Message)
+            ? null
+            : acknowledgement.Message.Trim();
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = acknowledgement.Success ? "AgentCommandSucceeded" : "AgentCommandFailed",
+            EntityName = "AgentCommand",
+            EntityId = command.Id.ToString(),
+            Details = $"Agent {device.DeviceId} پاسخ فرمان {command.CommandType} را ثبت کرد."
+        });
+
+        await database.SaveChangesAsync(Context.ConnectionAborted);
+
+        await dashboardHub.Clients.All.SendAsync(
+            "AgentCommandUpdated",
+            new AgentCommandStatusDto(
+                command.Id,
+                command.AgentDeviceId,
+                command.CommandType,
+                command.Status,
+                command.RequestedAt,
+                command.SentAt,
+                command.CompletedAt,
+                command.Succeeded,
+                command.ResultMessage),
+            Context.ConnectionAborted);
+    }
+
     private async Task<AgentDevice?> ResolveDeviceAsync(
         HubCallerContext context,
         CancellationToken cancellationToken)
