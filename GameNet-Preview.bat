@@ -149,7 +149,7 @@ if "%SERVER_READY%"=="1" (
 ) else (
   echo [OK] Dashboard Preview is ready.
   echo     http://localhost:5173/
-  echo [WARN] Server/API is unavailable until the EF migration issue is fixed.
+  echo [WARN] Server/API is unavailable. Check the Server window for the error.
 )
 echo ==========================================
 start "" "http://localhost:5173/"
