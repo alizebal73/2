@@ -86,6 +86,17 @@ app.MapPost("/api/agent/register", async (
         && !await database.Stations.AnyAsync(item => item.Id == request.StationId.Value && item.IsActive, cancellationToken))
         return Results.BadRequest(new { code = "station_not_found", message = "ایستگاه انتخاب‌شده پیدا نشد." });
 
+    if (request.StationId.HasValue)
+    {
+        var stationAlreadyAssigned = await database.AgentDevices.AnyAsync(
+            item => item.DeviceId != deviceId
+                && item.StationId == request.StationId.Value
+                && item.IsActive,
+            cancellationToken);
+        if (stationAlreadyAssigned)
+            return Results.Conflict(new { code = "station_agent_already_assigned", message = "این ایستگاه قبلاً به یک Agent فعال متصل شده است." });
+    }
+
     var device = await database.AgentDevices
         .Include(item => item.Station)
         .FirstOrDefaultAsync(item => item.DeviceId == deviceId, cancellationToken);
