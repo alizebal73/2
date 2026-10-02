@@ -22,6 +22,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
     public DbSet<InvoicePayment> InvoicePayments => Set<InvoicePayment>();
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
+    public DbSet<BenefitTransaction> BenefitTransactions => Set<BenefitTransaction>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<Expense> Expenses => Set<Expense>();
@@ -306,6 +307,19 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         transaction.Property(item => item.Description).HasMaxLength(250).IsRequired();
         transaction.HasOne(item => item.Customer)
             .WithMany(item => item.WalletTransactions)
+            .HasForeignKey(item => item.CustomerId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureBenefitTransaction(ModelBuilder modelBuilder)
+    {
+        var transaction = modelBuilder.Entity<BenefitTransaction>();
+        transaction.HasKey(item => item.Id);
+        transaction.Property(item => item.Type).HasConversion<string>().HasMaxLength(30);
+        transaction.Property(item => item.MoneyAmount).HasColumnType("decimal(18,2)");
+        transaction.Property(item => item.Description).HasMaxLength(250).IsRequired();
+        transaction.HasOne(item => item.Customer)
+            .WithMany()
             .HasForeignKey(item => item.CustomerId)
             .OnDelete(DeleteBehavior.Cascade);
     }
