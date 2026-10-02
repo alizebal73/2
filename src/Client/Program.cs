@@ -99,6 +99,12 @@ try
         await SaveStateAsync(statePath, state);
     }
 
+    httpClient.DefaultRequestHeaders.Remove("X-GameNet-Device-Id");
+    httpClient.DefaultRequestHeaders.Remove("Authorization");
+    httpClient.DefaultRequestHeaders.TryAddWithoutValidation("X-GameNet-Device-Id", state.DeviceId);
+    httpClient.DefaultRequestHeaders.Authorization =
+        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", state.AgentToken);
+
     var hubUrl = $"{serverUrl.TrimEnd('/')}/hubs/agent";
 
     while (!shutdown.IsCancellationRequested)
