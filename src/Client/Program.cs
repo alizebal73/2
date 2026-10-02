@@ -27,6 +27,8 @@ Directory.CreateDirectory(dataDirectory);
 var statePath = Path.Combine(dataDirectory, "agent-state.json");
 var state = await LoadStateAsync(statePath);
 var testSessionFlowCompleted = false;
+if (!ClientLifecycleStates.IsKnown(state.LifecycleState))
+    state = state with { LifecycleState = ClientLifecycleStates.Starting };
 
 var name = string.IsNullOrWhiteSpace(configuredName)
     ? Environment.MachineName
@@ -63,8 +65,10 @@ try
     state = state with
     {
         Name = name,
-        StationId = stationId
+        StationId = stationId,
+        LifecycleState = ClientLifecycleStates.Starting
     };
+    await SaveStateAsync(statePath, state);
 
     if (string.IsNullOrWhiteSpace(state.AgentToken))
     {
@@ -116,6 +120,14 @@ try
             else
                 await lockScreen.UnlockAsync();
 
+            state = state with
+            {
+                LifecycleState = ClientLifecycleStates.Running,
+                LastUpdateError = null,
+                LastHealthyAt = DateTimeOffset.UtcNow
+            };
+            await SaveStateAsync(statePath, state);
+
             Console.WriteLine(
                 $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}; Kiosk={kioskEnabled}; LockOnDisconnect={lockOnDisconnect}");
 
@@ -142,8 +154,20 @@ try
 
         connection.Reconnected += async connectionId =>
         {
+            state = state with { LifecycleState = ClientLifecycleStates.Recovering };
+            await SaveStateAsync(statePath, state);
             Console.WriteLine($"Agent دوباره متصل شد ({connectionId}).");
-            await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, shutdown.Token);
+            var heartbeat = await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, shutdown.Token);
+            if (heartbeat.HasValue)
+            {
+                state = state with
+                {
+                    LifecycleState = ClientLifecycleStates.Running,
+                    LastUpdateError = null,
+                    LastHealthyAt = DateTimeOffset.UtcNow
+                };
+                await SaveStateAsync(statePath, state);
+            }
         };
 
         connection.Closed += async error =>
@@ -210,6 +234,8 @@ try
 
         if (!shutdown.IsCancellationRequested)
         {
+            state = state with { LifecycleState = lockOnDisconnect ? ClientLifecycleStates.Degraded : ClientLifecycleStates.Recovering };
+            await SaveStateAsync(statePath, state);
             Console.WriteLine("Agent در وضعیت آفلاین است؛ ۵ ثانیه بعد اتصال دوباره امتحان می‌شود.");
             await Task.Delay(TimeSpan.FromSeconds(5), shutdown.Token);
         }
@@ -478,4 +504,12 @@ static async Task HandleAgentCommandAsync(
 }
 
 
-record AgentState(string DeviceId, string Name, string AgentToken, Guid? StationId);
+record AgentState(
+    string DeviceId,
+    string Name,
+    string AgentToken,
+    Guid? StationId,
+    string LifecycleState = ClientLifecycleStates.Starting,
+    string? PendingUpdateVersion = null,
+    string? LastUpdateError = null,
+    DateTimeOffset? LastHealthyAt = null);
