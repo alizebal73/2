@@ -190,6 +190,1180 @@ jobs:
               }
               Write-Host ("Stage 10 lifecycle compatibility smoke passed: state={0}; compatible={1}; recommended={2}" -f $lifecycleStatus.lifecycleState, $lifecycleStatus.compatibility.compatible, $lifecycleStatus.compatibility.updateRecommended)
 
+              # Stage 10 Release Safety / Canary:
+              # validate the server-authoritative manifest and protected package before touching the canary Agent.
+              $onlineAgents = @($agentRows | Where-Object { $_.isOnline })
+              if ($onlineAgents.Count -ne 1 -or $onlineAgents[0].agentId -ne $agentRow.agentId) {
+                throw "Canary safety requires exactly one online Agent target; found $($onlineAgents.Count)."
+              }
+
+              $releaseManifest = Invoke-RestMethod -Uri "$baseUrl/api/release/manifest" -Method Get
+              $releasePackage = $releaseManifest.clientPackage
+              if (-not $releasePackage) {
+                throw 'Release manifest did not expose a Client package.'
+              }
+              if ($releasePackage.version -ne '0.7.1') {
+                throw "Release manifest package version mismatch: $($releasePackage.version)"
+              }
+              if ([string]::IsNullOrWhiteSpace($releasePackage.packageUrl) -or
+                  [string]::IsNullOrWhiteSpace($releasePackage.sha256) -or
+                  [int64]$releasePackage.sizeBytes -le 0) {
+                throw 'Release manifest package metadata is incomplete.'
+              }
+              if ($releasePackage.sha256 -notmatch '^[0-9a-fA-F]{64}              $updatePayload = @{
+                commandType = 'update'
+                payloadJson = (@{
+                  version = '0.7.1'
+                  packageUrl = "$baseUrl/api/release/client-package?version=0.7.1"
+                  sha256 = $env:App__ClientPackageSha256
+                  sizeBytes = (Get-Item $env:App__ClientPackagePath).Length
+                  activate = $true
+                } | ConvertTo-Json -Compress)
+              } | ConvertTo-Json -Compress
+
+              $updateCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body $updatePayload
+              $updateCompleted = $false
+              $updateStatus = $null
+              for ($i = 0; $i -lt 240; $i++) {
+                $updateStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($updateCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($updateStatus.status -in @('Succeeded','Failed')) { $updateCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $updateCompleted -or $updateStatus.status -ne 'Succeeded') {
+                Write-Host ("Stage 10 update command did not complete. Status={0}; Result={1}" -f $updateStatus.status, $updateStatus.resultMessage)
+                Write-Host '--- Agent stdout before update failure ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr before update failure ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                Write-Host '--- Server stdout before update failure ---'
+                if (Test-Path $stdout) { Get-Content $stdout }
+                Write-Host '--- Server stderr before update failure ---'
+                if (Test-Path $stderr) { Get-Content $stderr }
+                throw 'Stage 10 update command did not complete successfully.'
+              }
+              Write-Host ("Stage 10 update command succeeded: commandId={0}" -f $updateCommand.commandId)
+
+              $updatedAgent = $null
+              $updatedReady = $false
+              for ($i = 0; $i -lt 45; $i++) {
+                try {
+                  $agentRowsAfterUpdate = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $updatedAgent = @($agentRowsAfterUpdate | Where-Object { $_.agentId -eq $agentRow.agentId })[0]
+                  if ($updatedAgent -and $updatedAgent.isOnline -and $updatedAgent.lifecycleState -eq 'Running' -and $updatedAgent.agentVersion -eq '0.7.1') {
+                    $updatedReady = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+              if (-not $updatedReady) {
+                throw "Stage 10 update did not restart into the new healthy version. Current=$($updatedAgent | ConvertTo-Json -Depth 5 -Compress)"
+              }
+
+              $updatedLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+              if (-not $updatedLifecycle.compatibility.compatible -or $updatedLifecycle.lifecycleState -ne 'Running') {
+                throw 'Stage 10 updated client failed release compatibility or healthy lifecycle checks.'
+              }
+
+              $rollbackCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/rollback" -Method Post -WebSession $adminSession | ConvertTo-Json -Compress
+              $rollbackCommand = $rollbackCommand | ConvertFrom-Json
+              $rollbackCompleted = $false
+              $rollbackStatus = $null
+              for ($i = 0; $i -lt 120; $i++) {
+                $rollbackStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($rollbackCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($rollbackStatus.status -in @('Succeeded','Failed')) { $rollbackCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $rollbackCompleted -or $rollbackStatus.status -ne 'Succeeded') {
+                throw 'Stage 10 rollback command did not complete successfully.'
+              }
+
+              $rollbackReady = $false
+              $rolledBackAgent = $null
+              for ($i = 0; $i -lt 45; $i++) {
+                try {
+                  $rollbackRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $rolledBackAgent = @($rollbackRows | Where-Object { $_.agentId -eq $agentRow.agentId })[0]
+                  if ($rolledBackAgent -and $rolledBackAgent.isOnline -and $rolledBackAgent.lifecycleState -eq 'Running' -and $rolledBackAgent.agentVersion -eq $baselineAgentVersion) {
+                    $rollbackReady = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+              if (-not $rollbackReady) {
+                Write-Host '--- Agent stdout after rollback failure ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr after rollback failure ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                Write-Host '--- Persisted Agent state after rollback failure ---'
+                $agentStatePath = Join-Path $agentData 'agent-state.json'
+                if (Test-Path $agentStatePath) { Get-Content $agentStatePath }
+                Write-Host '--- Update state after rollback failure ---'
+                $updateStatePath = Join-Path $agentData 'update-active.json'
+                if (Test-Path $updateStatePath) { Get-Content $updateStatePath }
+                Write-Host '--- Server Agent row after rollback failure ---'
+                if ($rolledBackAgent) { $rolledBackAgent | ConvertTo-Json -Depth 5 }
+                throw "Stage 10 rollback did not restore the previous healthy version. Current=$($rolledBackAgent | ConvertTo-Json -Depth 5 -Compress)"
+              }
+
+              Write-Host ("Stage 10 update and rollback smoke passed: baseline={0}; updated=0.7.1; restored={1}" -f $baselineAgentVersion, $rolledBackAgent.agentVersion)
+            }
+            finally {
+              if (-not $agentProcess.HasExited) {
+                Stop-Process -Id $agentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+
+              $agentDataPattern = [regex]::Escape($agentData)
+              Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+                Where-Object {
+                  ($_.ProcessId -ne $PID) -and $_.CommandLine -and ($_.CommandLine -match $agentDataPattern)
+                } |
+                ForEach-Object {
+                  Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue
+                }
+
+              Start-Sleep -Seconds 2
+            }
+
+            $offlineRow = $null
+            $offlineReady = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              try {
+                $offlineRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                $offlineRow = @($offlineRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+                if ($offlineRow -and -not $offlineRow.isOnline) {
+                  $offlineReady = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+
+            if (-not $offlineReady) {
+              Write-Host '--- Agent stdout ---'
+              if (Test-Path $agentStdout) { Get-Content $agentStdout }
+              Write-Host '--- Agent stderr ---'
+              if (Test-Path $agentStderr) { Get-Content $agentStderr }
+              throw 'Stage 8 Agent did not transition to offline after disconnect.'
+            }
+
+            $offlineLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($offlineRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+            if ($offlineLifecycle.lifecycleState -ne 'Degraded') {
+              throw "Agent lifecycle state was not Degraded after offline transition: $($offlineLifecycle.lifecycleState)"
+            }
+            Write-Host ("Stage 10 degraded lifecycle smoke passed: state={0}" -f $offlineLifecycle.lifecycleState)
+
+            Write-Host 'Stage 8 Agent registration, SignalR connection, heartbeat and offline transition smoke passed.'
+
+            # Restart from the persisted Agent state without the bootstrap registration token.
+            $firstDeviceId = $offlineRow.deviceId
+            $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+            $secondAgentStdout = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent-second.stdout.log'
+            $secondAgentStderr = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent-second.stderr.log'
+            Remove-Item $secondAgentStdout,$secondAgentStderr -Force -ErrorAction SilentlyContinue
+
+            $secondAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+              'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
+            ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $secondAgentStdout -RedirectStandardError $secondAgentStderr
+
+            try {
+              $secondOnline = $false
+              $secondRow = $null
+              for ($i = 0; $i -lt 30; $i++) {
+                if ($secondAgentProcess.HasExited) { break }
+                try {
+                  $secondRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $secondRow = @($secondRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+                  if ($secondRow -and $secondRow.isOnline -and $secondRow.lastSeenAt) {
+                    $secondOnline = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $secondOnline) {
+                Write-Host '--- Second Agent stdout ---'
+                if (Test-Path $secondAgentStdout) { Get-Content $secondAgentStdout }
+                Write-Host '--- Second Agent stderr ---'
+                if (Test-Path $secondAgentStderr) { Get-Content $secondAgentStderr }
+                throw 'Persisted Agent identity could not reconnect without the bootstrap registration token.'
+              }
+
+              if ($secondRow.deviceId -ne $firstDeviceId) {
+                throw "Agent identity changed after restart: first=$firstDeviceId second=$($secondRow.deviceId)"
+              }
+
+              Write-Host ("Stage 8 Agent persisted identity smoke passed: deviceId={0}" -f $secondRow.deviceId)
+
+              $recoveredLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+              if ($recoveredLifecycle.lifecycleState -ne 'Running' -or -not $recoveredLifecycle.lastHealthyAt) {
+                Write-Host '--- Recovery lifecycle response ---'
+                $recoveredLifecycle | ConvertTo-Json -Depth 5
+                Write-Host '--- Second Agent stdout ---'
+                if (Test-Path $secondAgentStdout) { Get-Content $secondAgentStdout }
+                Write-Host '--- Second Agent stderr ---'
+                if (Test-Path $secondAgentStderr) { Get-Content $secondAgentStderr }
+                Write-Host '--- Persisted second Agent state ---'
+                $secondAgentStatePath = Join-Path $agentData 'agent-state.json'
+                if (Test-Path $secondAgentStatePath) { Get-Content $secondAgentStatePath }
+                Write-Host '--- Server Agent rows at recovery failure ---'
+                try {
+                  Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession | ConvertTo-Json -Depth 8
+                } catch {}
+                Write-Host '--- Server stdout at recovery failure ---'
+                if (Test-Path $stdout) { Get-Content $stdout }
+                Write-Host '--- Server stderr at recovery failure ---'
+                if (Test-Path $stderr) { Get-Content $stderr }
+                throw "Agent lifecycle did not recover to Running with a healthy timestamp: $($recoveredLifecycle.lifecycleState)"
+              }
+              Write-Host ("Stage 10 recovery lifecycle smoke passed: state={0}; lastHealthyAt={1}" -f $recoveredLifecycle.lifecycleState, $recoveredLifecycle.lastHealthyAt)
+
+              $clientIdentity = Invoke-RestMethod -Uri "$baseUrl/api/client/identity" -Method Get
+              if ($clientIdentity.deviceId -ne $secondRow.deviceId -or -not $clientIdentity.isOnline) {
+                $clientIdentity | ConvertTo-Json -Depth 5
+                throw 'Client identity endpoint did not resolve the local Agent device.'
+              }
+              Write-Host ("Stage 9 Client identity discovery smoke passed: deviceId={0}; stationId={1}" -f $clientIdentity.deviceId, $clientIdentity.stationId)
+
+              $commandRequestBody = @{
+                commandType = 'ping'
+                payloadJson = $null
+              } | ConvertTo-Json
+              $command = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body $commandRequestBody
+              if (-not $command.commandId -or $command.status -ne 'Sent') {
+                throw 'Stage 8 Agent command dispatch did not return a sent command.'
+              }
+
+              $commandCompleted = $false
+              $commandStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                try {
+                  $commandStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($command.commandId)" -Method Get -WebSession $adminSession
+                  if ($commandStatus.status -in @('Succeeded', 'Failed')) {
+                    $commandCompleted = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Milliseconds 500
+              }
+
+              if (-not $commandCompleted -or $commandStatus.status -ne 'Succeeded' -or $commandStatus.succeeded -ne $true) {
+                Write-Host '--- Second Agent stdout after command ---'
+                if (Test-Path $secondAgentStdout) { Get-Content $secondAgentStdout }
+                Write-Host '--- Second Agent stderr after command ---'
+                if (Test-Path $secondAgentStderr) { Get-Content $secondAgentStderr }
+                Write-Host '--- Command status ---'
+                if ($commandStatus) { $commandStatus | ConvertTo-Json -Depth 5 }
+                throw 'Stage 8 Agent ping command was not acknowledged successfully.'
+              }
+
+              Write-Host ("Stage 8 Agent command transport smoke passed: commandId={0}; result={1}" -f $commandStatus.commandId, $commandStatus.resultMessage)
+
+              $lockCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'lock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($lockCommand.status -ne 'Sent') { throw 'Agent lock command was not accepted for dispatch.' }
+
+              $lockCompleted = $false
+              $lockStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $lockStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($lockCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($lockStatus.status -in @('Succeeded', 'Failed')) { $lockCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $lockCompleted -or $lockStatus.status -ne 'Succeeded') {
+                throw 'Agent lock command did not complete successfully.'
+              }
+
+              $lockedRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $lockedRow = @($lockedRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if (-not $lockedRow.isLocked) { throw 'Agent lock acknowledgement did not persist IsLocked=true.' }
+
+              $unlockCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'unlock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($unlockCommand.status -ne 'Sent') { throw 'Agent unlock command was not accepted for dispatch.' }
+
+              $unlockCompleted = $false
+              $unlockStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $unlockStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($unlockCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($unlockStatus.status -in @('Succeeded', 'Failed')) { $unlockCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $unlockCompleted -or $unlockStatus.status -ne 'Succeeded') {
+                throw 'Agent unlock command did not complete successfully.'
+              }
+
+              $unlockedRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $unlockedRow = @($unlockedRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if ($unlockedRow.isLocked) { throw 'Agent unlock acknowledgement did not persist IsLocked=false.' }
+
+              Write-Host ("Stage 9 Agent lock/unlock smoke passed: agentId={0}" -f $secondRow.agentId)
+
+              $policy = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/policy" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                kioskEnabled = $true
+                lockOnDisconnect = $true
+              } | ConvertTo-Json)
+              if (-not $policy.kioskEnabled -or -not $policy.lockOnDisconnect) {
+                throw 'Agent kiosk policy did not persist enabled safety settings.'
+              }
+
+              $policyRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $policyRow = @($policyRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if (-not $policyRow.kioskEnabled -or -not $policyRow.lockOnDisconnect) {
+                throw 'Agent status API did not expose persisted kiosk policy.'
+              }
+
+              $logoutLockCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'logout-lock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($logoutLockCommand.status -ne 'Sent') {
+                throw 'Agent logout-lock command was not accepted for dispatch.'
+              }
+
+              $logoutLockStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $logoutLockStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($logoutLockCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($logoutLockStatus.status -in @('Succeeded', 'Failed')) { break }
+                Start-Sleep -Milliseconds 500
+              }
+              if ($logoutLockStatus.status -ne 'Succeeded') {
+                throw 'Agent logout-lock command did not complete successfully.'
+              }
+
+              $logoutLockRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $logoutLockRow = @($logoutLockRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if (-not $logoutLockRow.isLocked) {
+                throw 'Agent logout-lock acknowledgement did not persist IsLocked=true.'
+              }
+
+              $unlockAfterLogoutLock = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'unlock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($unlockAfterLogoutLock.status -ne 'Sent') { throw 'Agent unlock after logout-lock was not accepted.' }
+
+              for ($i = 0; $i -lt 20; $i++) {
+                $unlockAfterLogoutStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($unlockAfterLogoutLock.commandId)" -Method Get -WebSession $adminSession
+                if ($unlockAfterLogoutStatus.status -in @('Succeeded', 'Failed')) { break }
+                Start-Sleep -Milliseconds 500
+              }
+              if ($unlockAfterLogoutStatus.status -ne 'Succeeded') { throw 'Agent unlock after logout-lock did not complete.' }
+
+              Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/policy" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                kioskEnabled = $false
+                lockOnDisconnect = $false
+              } | ConvertTo-Json) | Out-Null
+
+              Write-Host ("Stage 9 Agent kiosk policy and logout-lock smoke passed: agentId={0}" -f $secondRow.agentId)
+
+              $multiProcesses = @()
+              try {
+                $multiAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-multi-agent'
+                New-Item -ItemType Directory -Path $multiAgentRoot -Force | Out-Null
+                $multiNames = @('CI Agent Stage 8 B', 'CI Agent Stage 8 C')
+                $multiStdout = @{}
+                $multiStderr = @{}
+                foreach ($multiName in $multiNames) {
+                  $safe = ($multiName -replace '[^A-Za-z0-9]+','-').Trim('-').ToLowerInvariant()
+                  $dir = Join-Path $multiAgentRoot $safe
+                  New-Item -ItemType Directory -Path $dir -Force | Out-Null
+                  $out = Join-Path $multiAgentRoot ($safe + '.stdout.log')
+                  $err = Join-Path $multiAgentRoot ($safe + '.stderr.log')
+                  $multiStdout[$multiName] = $out
+                  $multiStderr[$multiName] = $err
+                  $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
+                  $env:GAMENET_AGENT_NAME = $multiName
+                  $env:GAMENET_AGENT_DATA_DIR = $dir
+                  $multiProcesses += Start-Process -FilePath 'dotnet' -ArgumentList @(
+                  'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
+                ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
+                }
+
+                $allMultiOnline = $false
+              $multiRows = @()
+                for ($i = 0; $i -lt 30; $i++) {
+                  try {
+                    $rows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                    $multiRows = @($rows | Where-Object { $_.name -in $multiNames })
+                    if ($multiRows.Count -eq $multiNames.Count -and @($multiRows | Where-Object { $_.isOnline -and $_.lastSeenAt }).Count -eq $multiNames.Count) {
+                      $allMultiOnline = $true
+                      break
+                    }
+                  } catch {}
+                  Start-Sleep -Seconds 1
+                }
+
+                if (-not $allMultiOnline) {
+                  foreach ($multiName in $multiNames) {
+                    Write-Host ("--- {0} stdout ---" -f $multiName)
+                    if (Test-Path $multiStdout[$multiName]) { Get-Content $multiStdout[$multiName] }
+                    Write-Host ("--- {0} stderr ---" -f $multiName)
+                    if (Test-Path $multiStderr[$multiName]) { Get-Content $multiStderr[$multiName] }
+                  }
+                  throw 'Stage 8 multi-Agent concurrent online smoke failed.'
+                }
+
+                $multiDeviceIds = @($multiRows | Select-Object -ExpandProperty deviceId)
+                if ($multiDeviceIds.Count -ne @($multiDeviceIds | Select-Object -Unique).Count) {
+                  throw 'Stage 8 multi-Agent smoke detected duplicate device identities.'
+                }
+
+                Write-Host ("Stage 8 multi-Agent concurrency smoke passed: {0} agents online." -f $multiNames.Count)
+              } finally {
+                foreach ($process in $multiProcesses) {
+                  if (-not $process.HasExited) {
+                    Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                  }
+                }
+                $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+              }
+            }
+            finally {
+              if (-not $secondAgentProcess.HasExited) {
+                Stop-Process -Id $secondAgentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+              Start-Sleep -Seconds 1
+            }
+
+            # Stage 9: real Agent-driven session start/end using customer authentication and the existing settlement domain.
+            $sessionAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage9-session-agent'
+            $sessionAgentData = Join-Path $sessionAgentRoot 'data'
+            $sessionAgentStdout = Join-Path $sessionAgentRoot 'stdout.log'
+            $sessionAgentStderr = Join-Path $sessionAgentRoot 'stderr.log'
+            Remove-Item $sessionAgentRoot -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $sessionAgentData -Force | Out-Null
+
+            $sessionDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $sessionStation = @($sessionDashboard.stations | Where-Object { $_.type -eq 'PC' -and $_.state -eq 'Available' }) | Select-Object -First 1
+            if (-not $sessionStation) {
+              Write-Host '--- Available station snapshot ---'
+              @($sessionDashboard.stations | Where-Object { $_.state -eq 'Available' } | Select-Object -First 10) | ConvertTo-Json -Depth 5
+              throw 'No available PC station was found for Agent session smoke.'
+            }
+
+            $stage9SmokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            $stage9Customer = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              fullName = "Stage 9 Agent Smoke $stage9SmokeId"
+              username = "stage9_agent_$stage9SmokeId"
+              vipTier = 'none'
+              concurrentLoginLimit = 1
+              password = 'Stage9Smoke123!'
+            } | ConvertTo-Json)
+            if (-not $stage9Customer.id -or -not $stage9Customer.username) {
+              throw 'Stage 9 smoke customer creation failed.'
+            }
+
+            $customerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
+              usernameOrCode = $stage9Customer.username
+              password = 'Stage9Smoke123!'
+              clientKey = 'ci-stage9-session-agent'
+            } | ConvertTo-Json)
+            if (-not $customerAuth.authenticated -or -not $customerAuth.loginId -or $customerAuth.balance -ne 0) {
+              throw 'Customer authentication for Agent session smoke failed or returned incomplete financial state.'
+            }
+
+            $env:GAMENET_SERVER_URL = $baseUrl
+            $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
+            $env:GAMENET_AGENT_NAME = 'CI Agent Stage 9 Session'
+            $env:GAMENET_AGENT_DEVICE_ID = 'ci-stage9-session-agent'
+            $env:GAMENET_STATION_ID = $sessionStation.id
+            $env:GAMENET_AGENT_DATA_DIR = $sessionAgentData
+            $env:GAMENET_AGENT_HEADLESS = '1'
+            $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
+            $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $stage9Customer.id
+            $env:GAMENET_AGENT_TEST_LOGIN_ID = $customerAuth.loginId
+
+            $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+              'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
+            ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $sessionAgentStdout -RedirectStandardError $sessionAgentStderr
+
+            try {
+              $sessionFlowCompleted = $false
+              $sessionStartVerified = $false
+              $endedSessionId = $null
+              for ($i = 0; $i -lt 30; $i++) {
+                if ($sessionAgentProcess.HasExited) { break }
+                if (Test-Path $sessionAgentStdout) {
+                  $log = Get-Content $sessionAgentStdout -Raw
+
+                  if (-not $sessionStartVerified -and $log -match 'AGENT_SESSION_START_OK:([0-9a-fA-F-]+)') {
+                    $startedSessionId = $Matches[1]
+                    $activeRows = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+                    if (-not @($activeRows | Where-Object { $_.id -eq $startedSessionId -and $_.stationName -eq $sessionStation.name })) {
+                      throw 'Agent Session Start marker appeared but server active-session state did not contain the same SessionId/station.'
+                    }
+                    $sessionStartVerified = $true
+                    Write-Host ("Stage 9 Agent Session Start persisted server-side: sessionId={0}; station={1}" -f $startedSessionId, $sessionStation.name)
+                  }
+
+                  if ($log -match 'AGENT_SESSION_END_AUTH_GUARD_OK') {
+                    Write-Host 'Stage 9 Agent Session End login ownership guard passed.'
+                  }
+
+                  if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
+                    $endedSessionId = $Matches[1]
+                    $sessionFlowCompleted = $true
+                    break
+                  }
+                }
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $sessionStartVerified -or -not $sessionFlowCompleted) {
+                Write-Host '--- Stage 9 Session Agent stdout ---'
+                if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
+                Write-Host '--- Stage 9 Session Agent stderr ---'
+                if (Test-Path $sessionAgentStderr) { Get-Content $sessionAgentStderr }
+                throw 'Agent-driven Session Start/End smoke did not complete.'
+              }
+
+              $endedSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$endedSessionId/settle" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                totalAmount = 1000
+                parts = @(@{ method = 'cash'; amount = 1000 })
+                timeAmount = 1000
+                discountAmount = 0
+                prepaidAmount = 0
+              } | ConvertTo-Json)
+
+              if (-not $endedSession.invoiceId -or $endedSession.invoiceStatus -ne 'Paid') {
+                throw 'Ended Agent session could not be settled through the existing server settlement path.'
+              }
+
+              Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}" -f $endedSessionId, $sessionStation.id)
+
+              $duplicateDeviceId = "ci-stage9-duplicate-$stage9SmokeId"
+              try {
+                Invoke-RestMethod -Uri "$baseUrl/api/agent/register" -Method Post -ContentType 'application/json' -Headers @{
+                  'X-GameNet-Registration-Token' = 'Stage8CiRegistrationToken!'
+                } -Body (@{
+                  deviceId = $duplicateDeviceId
+                  name = 'CI Agent Stage 9 Duplicate Station'
+                  stationId = $sessionStation.id
+                  agentVersion = '0.1.0'
+                  osVersion = 'CI'
+                } | ConvertTo-Json) | Out-Null
+                throw 'Duplicate active Agent station registration was unexpectedly accepted.'
+              } catch {
+                $status = $_.Exception.Response.StatusCode.value__
+                if ($status -ne 409) { throw }
+                Write-Host 'Stage 9 duplicate Station-to-Agent assignment guard passed.'
+              }
+            }
+            finally {
+              if (-not $sessionAgentProcess.HasExited) {
+                Stop-Process -Id $sessionAgentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+              $env:GAMENET_AGENT_DEVICE_ID = $null
+              $env:GAMENET_STATION_ID = $null
+              $env:GAMENET_AGENT_TEST_SESSION_FLOW = $null
+              $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $null
+              $env:GAMENET_AGENT_TEST_LOGIN_ID = $null
+              $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+            }
+
+            $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
+            if ($me.userName -ne 'admin') { throw 'Current operator endpoint returned the wrong user.' }
+
+            $permissionCatalog = Invoke-RestMethod -Uri "$baseUrl/api/permissions" -Method Get -WebSession $adminSession
+            if (-not @($permissionCatalog | Where-Object { $_.name -eq 'session.start' }) -or -not @($permissionCatalog | Where-Object { $_.name -eq 'payroll.manage' })) { throw 'Permission catalog smoke failed.' }
+
+            $userSmokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            $managedUser = Invoke-RestMethod -Uri "$baseUrl/api/users" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              fullName = "Stage 7 Operator $userSmokeId"
+              userName = "operator_$userSmokeId"
+              email = "operator_$userSmokeId@gamenet.local"
+              password = 'Operator123!'
+              role = 'Operator'
+              isActive = $true
+            } | ConvertTo-Json)
+            if (-not $managedUser.id -or $managedUser.role -ne 'Operator') { throw 'AppUser create smoke failed.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('session.start','buffet.sell')
+            } | ConvertTo-Json) | Out-Null
+
+            $managedUsers = Invoke-RestMethod -Uri "$baseUrl/api/users" -Method Get -WebSession $adminSession
+            $managedRow = @($managedUsers | Where-Object { $_.id -eq $managedUser.id })[0]
+            if (-not @($managedRow.permissions | Where-Object { $_ -eq 'session.start' }) -or -not @($managedRow.permissions | Where-Object { $_ -eq 'buffet.sell' })) {
+              throw 'AppUser permission assignment smoke failed.'
+            }
+
+            $selfApproval = Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              action = 'discount'
+              entityName = 'Session'
+              entityId = ([Guid]::NewGuid().ToString())
+              reason = 'Stage 7 self-approval guard smoke'
+            } | ConvertTo-Json)
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($selfApproval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                note = 'Should be rejected'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Approval requester was allowed to approve its own request.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
+
+            # Remove session.start while keeping the operator logged in, then prove the Server returns 403.
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('buffet.sell','session.settle')
+            } | ConvertTo-Json) | Out-Null
+
+            # Prove a non-admin operator cannot start a session without the permission.
+            $operatorSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
+              userName = $managedUser.userName
+              password = 'Operator123!'
+            } | ConvertTo-Json) | Out-Null
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/sessions" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
+                customerId = [Guid]::Empty
+                stationId = [Guid]::Empty
+              } | ConvertTo-Json) | Out-Null
+              throw 'Limited operator was allowed to start a session without permission.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 403) { throw }
+            }
+
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
+                action = 'general.test'
+                entityName = 'Test'
+                entityId = 'unsupported'
+                reason = 'Stage 7 unsupported generic approval action smoke'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Unsupported generic approval action was accepted.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 400) { throw }
+            }
+
+            $approval = Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
+              action = 'discount'
+              entityName = 'Session'
+              entityId = ([Guid]::NewGuid().ToString())
+              reason = 'Stage 7 approval smoke'
+            } | ConvertTo-Json)
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorSession | Out-Null
+
+            $approvalDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($approval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 smoke approved'
+            } | ConvertTo-Json)
+            if ($approvalDecision.status -ne 'Approved') { throw 'Approval decision smoke failed.' }
+
+
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('payroll.view','payroll.manage')
+            } | ConvertTo-Json) | Out-Null
+
+            $operatorPayrollSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              userName = $managedUser.userName
+              password = 'Operator123!'
+            } | ConvertTo-Json) | Out-Null
+
+            $profile = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)" -Method Put -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              payType = 'monthly'
+              hourlyRate = 0
+              monthlySalary = 12000000
+              overtimeRate = 80000
+              employmentStartDate = (Get-Date).ToUniversalTime().ToString('o')
+              workSchedule = '09:00-17:00'
+              notes = 'Stage 7 payroll smoke'
+              isActive = $true
+            } | ConvertTo-Json)
+            if ($profile.payType -ne 'monthly' -or [int]$profile.monthlySalary -ne 12000000) { throw 'Payroll profile smoke failed.' }
+
+            $accrualEntry = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/entries" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              kind = 'SalaryAccrual'
+              amount = 50000
+              reason = 'Stage 7 salary accrual smoke'
+            } | ConvertTo-Json)
+            if ($accrualEntry.status -ne 'Approved' -or -not $accrualEntry.entryId) { throw 'Salary accrual should be immediately approved and persisted.' }
+
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/entries" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+                kind = 'SalaryPayment'
+                amount = 20000
+                reason = 'Stage 7 invalid salary payment smoke'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Salary payment without payment method was accepted.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 400) { throw }
+            }
+
+            $payrollEntry = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/entries" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              kind = 'Bonus'
+              amount = 10000
+              reason = 'Stage 7 payroll bonus smoke'
+              paymentMethod = 'cash'
+            } | ConvertTo-Json)
+            if ($payrollEntry.status -ne 'Pending' -or -not $payrollEntry.approvalId) { throw 'Payroll approval request smoke failed.' }
+
+            $pendingLedger = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/ledger" -Method Get -WebSession $adminSession
+            $pendingRow = @($pendingLedger | Where-Object { $_.id -eq $payrollEntry.entryId })[0]
+            if (-not $pendingRow -or $pendingRow.status -ne 'Pending') { throw 'Pending payroll ledger entry was not persisted.' }
+
+            $payrollDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($payrollEntry.approvalId)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 payroll approved'
+            } | ConvertTo-Json)
+            if ($payrollDecision.status -ne 'Approved') { throw 'Payroll approval execution smoke failed.' }
+
+            $salaryPayment = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/entries" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              kind = 'SalaryPayment'
+              amount = 20000
+              reason = 'Stage 7 salary payment smoke'
+              paymentMethod = 'cash'
+              receiptNumber = "SAL-$userSmokeId"
+            } | ConvertTo-Json)
+            if ($salaryPayment.status -ne 'Pending' -or -not $salaryPayment.approvalId) { throw 'Salary payment approval request smoke failed.' }
+
+            $salaryDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($salaryPayment.approvalId)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 salary payment approved'
+            } | ConvertTo-Json)
+            if ($salaryDecision.status -ne 'Approved') { throw 'Salary payment approval execution smoke failed.' }
+
+            $payrollUsers = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users" -Method Get -WebSession $adminSession
+            $payrollRow = @($payrollUsers | Where-Object { $_.userId -eq $managedUser.id })[0]
+            if ([int]$payrollRow.bonusTotal -ne 10000 -or [int]$payrollRow.employeePayable -ne 40000 -or [int]$payrollRow.paidThisMonth -ne 20000 -or [int]$payrollRow.accruedThisMonth -ne 50000) { throw 'Approved payroll entries did not update the server ledger balance correctly.' }
+
+            $operatorPayrollProfile = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/ledger" -Method Get -WebSession $operatorPayrollSession
+            if (-not @($operatorPayrollProfile | Where-Object { $_.id -eq $accrualEntry.entryId -and $_.status -eq 'Approved' })) { throw 'Approved salary accrual was not readable by the operator.' }
+            $savedPayment = @($operatorPayrollProfile | Where-Object { $_.id -eq $salaryPayment.entryId -and $_.status -eq 'Approved' })[0]
+            if (-not $savedPayment -or $savedPayment.paymentMethod -ne 'cash' -or $savedPayment.receiptNumber -ne "SAL-$userSmokeId") { throw 'Salary payment receipt/method was not persisted.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorPayrollSession | Out-Null
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('finance.manage')
+            } | ConvertTo-Json) | Out-Null
+
+            $customers = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Get -WebSession $adminSession
+            if (@($customers).Count -lt 1) { throw 'Customer API returned no seeded customers.' }
+
+            $packages = Invoke-RestMethod -Uri "$baseUrl/api/vip-packages" -Method Get -WebSession $adminSession
+            if (@($packages).Count -lt 1) { throw 'VIP package API returned no active packages.' }
+
+            $smokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            $newCustomer = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              fullName = "Stage 5 Smoke $smokeId"
+              username = "smoke_$smokeId"
+              vipTier = 'none'
+              concurrentLoginLimit = 3
+              password = 'Smoke123!'
+            } | ConvertTo-Json)
+
+            $customerId = $newCustomer.id
+            if (-not $customerId) { throw 'Customer create smoke did not return an id.' }
+
+            $updatedCustomer = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId") -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              fullName = "Stage 5 Smoke Updated $smokeId"
+              code = $newCustomer.code
+              username = $newCustomer.username
+              vipTier = 'none'
+              concurrentLoginLimit = 3
+            } | ConvertTo-Json)
+
+            if ($updatedCustomer.fullName -ne "Stage 5 Smoke Updated $smokeId") {
+              throw 'Customer update smoke returned the wrong name.'
+            }
+
+            $packageId = @($packages)[0].id
+            $assignment = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-package") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              vipPackageId = $packageId
+            } | ConvertTo-Json)
+
+            Write-Host ("VIP assignment response: packageId={0}; dailyMinutes={1}; totalMinutes={2}; discountPercent={3}" -f $assignment.packageId, $assignment.dailyMinutes, $assignment.totalMinutes, $assignment.discountPercent)
+            Write-Host ("Selected package: packageId={0}; dailyMinutes={1}; totalMinutes={2}" -f $packageId, @($packages)[0].dailyMinutes, @($packages)[0].totalMinutes)
+            if ($assignment.packageId -ne $packageId -or [int]$assignment.dailyMinutes -le 0 -or [int]$assignment.totalMinutes -le 0) {
+              throw 'VIP package assignment smoke returned incomplete data.'
+            }
+
+            $usageBefore = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get -WebSession $adminSession
+            if (-not $usageBefore.active -or [int]$usageBefore.usedTodayMinutes -ne 0 -or [int]$usageBefore.usedTotalMinutes -ne 0) {
+              throw 'Initial VIP usage smoke returned unexpected values.'
+            }
+
+            $dashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $availableStation = @($dashboard.stations | Where-Object { $_.state -eq 'Available' }) | Select-Object -First 1
+            if (-not $availableStation) { throw 'No available station was found for VIP usage smoke.' }
+
+            $startedSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              customerId = $customerId
+              stationId = $availableStation.id
+              persons = 1
+            } | ConvertTo-Json)
+            if (-not $startedSession.sessionId) { throw 'VIP usage session smoke did not return a session id.' }
+
+            Start-Sleep -Milliseconds 1200
+
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/pause") -Method Post -WebSession $adminSession | Out-Null
+            $pausedDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $pausedStation = @($pausedDashboard.stations | Where-Object { $_.serverSessionId -eq $startedSession.sessionId })[0]
+            if (-not $pausedStation -or $pausedStation.state -ne 'Paused' -or -not $pausedStation.sessionPausedAt) {
+              throw 'Server session pause did not surface as authoritative dashboard state.'
+            }
+
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/resume") -Method Post -WebSession $adminSession | Out-Null
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/time-adjustment") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ minutes = 2 } | ConvertTo-Json) | Out-Null
+            Invoke-RestMethod -Uri ("$baseUrl/api/sessions/$($startedSession.sessionId)/time-adjustment") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ minutes = -1 } | ConvertTo-Json) | Out-Null
+
+            $timedDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $timedStation = @($timedDashboard.stations | Where-Object { $_.serverSessionId -eq $startedSession.sessionId })[0]
+            if (-not $timedStation -or [int]$timedStation.sessionTimeAdjustmentMinutes -ne 1) {
+              throw 'Server session time adjustment did not persist correctly.'
+            }
+
+            $usageAfterSession = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get -WebSession $adminSession
+            if ([int]$usageAfterSession.usedTotalMinutes -lt 1 -or [int]$usageAfterSession.usedTodayMinutes -lt 1) {
+              throw 'VIP usage did not account for the active session.'
+            }
+            if ([int]$usageAfterSession.remainingTotalMinutes -ge [int]$assignment.totalMinutes -or [int]$usageAfterSession.remainingTodayMinutes -ge [int]$assignment.dailyMinutes) {
+              throw 'VIP remaining minutes did not decrease after the session started.'
+            }
+
+            $history = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/history") -Method Get -WebSession $adminSession
+            if (-not @($history | Where-Object { $_.type -eq 'session' -and $_.referenceId -eq $startedSession.sessionId })) {
+              throw 'Customer history did not include the newly started session.'
+            }
+
+            $loginKeys = @('smoke-a', 'smoke-b', 'smoke-c')
+            foreach ($clientKey in $loginKeys) {
+              $loginResult = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json)
+              if (-not $loginResult.acquired) { throw "Concurrent login acquire failed for $clientKey." }
+            }
+            try {
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'smoke-d' } | ConvertTo-Json) | Out-Null
+              throw 'Concurrent login limit was not enforced.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
+            foreach ($clientKey in $loginKeys) {
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json) | Out-Null
+            }
+
+            $auth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
+              usernameOrCode = $newCustomer.username
+              password = 'Smoke123!'
+              clientKey = 'credential-smoke'
+            } | ConvertTo-Json)
+            if (-not $auth.authenticated) { throw 'Customer credential authentication failed.' }
+            Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'credential-smoke' } | ConvertTo-Json) | Out-Null
+
+            $debt = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debt") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              amount = 55000
+              description = 'Stage 5 debt smoke'
+            } | ConvertTo-Json)
+            $debts = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debts") -Method Get -WebSession $adminSession
+            if (@($debts).Count -ne 1 -or [int]@($debts)[0].amount -ne 55000) { throw 'Customer debt listing smoke failed.' }
+            $settled = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debts/$($debt.invoiceId)/settle") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              method = 'cash'
+            } | ConvertTo-Json)
+            if ([int]$settled.debtRemaining -ne 0) { throw 'Customer debt settlement smoke failed.' }
+
+            $walletCredit = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/wallet-transactions") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              amount = 120000
+              type = 'credit'
+              description = 'Stage 7 wallet refund approval smoke'
+            } | ConvertTo-Json)
+            if ([int]$walletCredit.balanceAfter -ne 120000) { throw 'Wallet credit setup for refund approval smoke failed.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('customer.wallet')
+            } | ConvertTo-Json) | Out-Null
+
+            $operatorWalletSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorWalletSession -ContentType 'application/json' -Body (@{
+              userName = $managedUser.userName
+              password = 'Operator123!'
+            } | ConvertTo-Json) | Out-Null
+
+            try {
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/wallet-refunds") -Method Post -WebSession $operatorWalletSession -ContentType 'application/json' -Body (@{
+                amount = 50000
+                reason = 'Stage 7 direct wallet refund bypass smoke'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Direct wallet refund endpoint bypassed approval.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
+
+            $refundApproval = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/wallet-refunds/request") -Method Post -WebSession $operatorWalletSession -ContentType 'application/json' -Body (@{
+              amount = 50000
+              reason = 'Stage 7 executable wallet refund approval smoke'
+              sourceTransactionId = $walletCredit.id
+            } | ConvertTo-Json)
+            if ($refundApproval.status -ne 'Pending' -or -not $refundApproval.id) { throw 'Wallet refund approval request smoke failed.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorWalletSession | Out-Null
+            $walletRefundDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($refundApproval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 wallet refund approved'
+            } | ConvertTo-Json)
+            if ($walletRefundDecision.status -ne 'Approved' -or [int]$walletRefundDecision.operation.amount -ne 50000) { throw 'Wallet refund approval execution smoke failed.' }
+
+            $walletAfterRefund = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/wallet-ledger") -Method Get -WebSession $adminSession
+            $refundRow = @($walletAfterRefund | Where-Object { $_.id -eq $walletRefundDecision.operation.transactionId -and $_.type -eq 'Debit' })[0]
+            if (-not $refundRow -or [int]$refundRow.balanceAfter -ne 70000 -or $refundRow.referenceTransactionId -ne $walletCredit.id) {
+              throw 'Approved wallet refund did not persist the correct server ledger result.'
+            }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('finance.manage')
+            } | ConvertTo-Json) | Out-Null
+
+            $inventoryProducts = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get -WebSession $adminSession
+            if (@($inventoryProducts).Count -lt 1) { throw 'Buffet product API returned no products.' }
+
+            $inventoryId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            $inventoryProduct = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              name = "Stage 6 Smoke $inventoryId"
+              category = 'تنقلات'
+              unitPrice = 25000
+              costPrice = 12000
+              initialStock = 5
+              minimumStock = 2
+              unit = 'عدد'
+            } | ConvertTo-Json)
+
+            if (-not $inventoryProduct.id -or [int]$inventoryProduct.stock -ne 5 -or [int]$inventoryProduct.minimumStock -ne 2 -or $inventoryProduct.unit -ne 'عدد') {
+              throw 'Buffet product creation smoke failed.'
+            }
+
+            $purchase = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              quantity = 1
+              direction = 'In'
+              kind = 'Purchase'
+              unitCost = 10000
+              notes = 'Stage 6 purchase test'
+            } | ConvertTo-Json)
+            if ([int]$purchase.stock -ne 6 -or $purchase.kind -ne 'Purchase') { throw 'Inventory purchase smoke failed.' }
+
+            $stockOut = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              quantity = 1
+              direction = 'Out'
+              kind = 'Waste'
+              notes = 'Stage 6 waste test'
+            } | ConvertTo-Json)
+            if ([int]$stockOut.stock -ne 5 -or $stockOut.kind -ne 'Waste') { throw 'Inventory waste smoke failed.' }
+
+            $returned = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              quantity = 1
+              direction = 'In'
+              kind = 'Return'
+              notes = 'Stage 6 return test'
+            } | ConvertTo-Json)
+            if ([int]$returned.stock -ne 6 -or $returned.kind -ne 'Return') { throw 'Inventory return smoke failed.' }
+
+            $sale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              items = @(@{ productId = $inventoryProduct.id; quantity = 4 })
+              target = 'standalone'
+            } | ConvertTo-Json)
+            if ([int]$sale.total -ne 100000) { throw 'Buffet sale total smoke failed.' }
+
+            $inventoryAfterSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get -WebSession $adminSession
+            $soldProduct = @($inventoryAfterSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
+            if ([int]$soldProduct.stock -ne 2 -or -not $soldProduct.lowStock) { throw 'Buffet sale did not reduce server stock or low-stock state correctly.' }
+
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                items = @(@{ productId = $inventoryProduct.id; quantity = 99 })
+                target = 'standalone'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Insufficient stock sale was not rejected.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
+
+            $inventoryAfterRejectedSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get -WebSession $adminSession
+            $unchangedProduct = @($inventoryAfterRejectedSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
+            if ([int]$unchangedProduct.stock -ne 2 -or -not $unchangedProduct.lowStock) { throw 'Rejected buffet sale changed server stock.' }
+
+            $profit = Invoke-RestMethod -Uri "$baseUrl/api/buffet/reports/profit" -Method Get -WebSession $adminSession
+            if ([int]$profit.totals.salesRevenue -ne 100000 -or [int]$profit.totals.purchaseCost -ne 10000 -or [decimal]$profit.totals.grossProfit -le 50000) {
+              throw 'Buffet profit report smoke failed.'
+            }
+
+            $inventoryHistory = Invoke-RestMethod -Uri "$baseUrl/api/buffet/inventory-transactions" -Method Get -WebSession $adminSession
+            if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Waste' })) { throw 'Inventory history did not contain waste movement.' }
+            if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Return' })) { throw 'Inventory history did not contain return movement.' }
+            if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Sale' })) { throw 'Inventory history did not contain sale movement.' }
+
+            $updatedProduct = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)") -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              name = "Stage 6 Smoke Updated $inventoryId"
+              category = 'تنقلات'
+              unitPrice = 30000
+              costPrice = 14000
+              minimumStock = 1
+              unit = 'بسته'
+              isActive = $true
+            } | ConvertTo-Json)
+            if ($updatedProduct.name -ne "Stage 6 Smoke Updated $inventoryId" -or [int]$updatedProduct.price -ne 30000 -or [int]$updatedProduct.minimumStock -ne 1 -or $updatedProduct.unit -ne 'بسته') {
+              throw 'Buffet product update smoke failed.'
+            }
+
+            $activeSessions = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+            if (-not @($activeSessions | Where-Object { $_.id -eq $startedSession.sessionId })) {
+              throw 'Active session endpoint did not return the started session.'
+            }
+
+            $sessionSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              items = @(@{ productId = $inventoryProduct.id; quantity = 1 })
+              target = 'session'
+              sessionId = $startedSession.sessionId
+            } | ConvertTo-Json)
+
+            if ($sessionSale.target -ne 'session' -or $sessionSale.sessionId -ne $startedSession.sessionId -or -not $sessionSale.invoiceId -or [int]$sessionSale.buffetTotal -ne 30000) {
+              throw 'Buffet session sale did not create a draft invoice correctly.'
+            }
+
+            $sessionSettlement = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$($startedSession.sessionId)/settle" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              totalAmount = 60000
+              parts = @(@{ method = 'cash'; amount = 60000 })
+              timeAmount = 30000
+              discountAmount = 0
+              prepaidAmount = 0
+            } | ConvertTo-Json)
+
+            if ($sessionSettlement.invoiceId -ne $sessionSale.invoiceId -or [int]$sessionSettlement.totalAmount -ne 60000 -or $sessionSettlement.invoiceStatus -ne 'Paid') {
+              throw 'Session settlement did not finalize the buffet draft invoice.'
+            }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('finance.manage')
+            } | ConvertTo-Json) | Out-Null
+
+            $operatorFinanceSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorFinanceSession -ContentType 'application/json' -Body (@{
+              userName = $managedUser.userName
+              password = 'Operator123!'
+            } | ConvertTo-Json) | Out-Null
+
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                reason = 'Stage 7 direct reverse bypass smoke'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Direct invoice reverse endpoint bypassed the approval path.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
+
+            $reverseApproval = Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse/request" -Method Post -WebSession $operatorFinanceSession -ContentType 'application/json' -Body (@{
+              reason = 'Stage 7 executable approval reverse smoke'
+            } | ConvertTo-Json)
+            if ($reverseApproval.status -ne 'Pending' -or -not $reverseApproval.id) {
+              throw 'Invoice reverse approval request smoke failed.'
+            }
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorFinanceSession | Out-Null
+
+            $reversed = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($reverseApproval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 reverse approved and executed'
+            } | ConvertTo-Json)
+
+            if ($reversed.status -ne 'Approved' -or $reversed.operation.invoiceStatus -ne 'Cancelled' -or [int]$reversed.operation.inventoryRestored -ne 1) {
+              throw 'Executable invoice reverse approval smoke failed.'
+            }
+
+            $profitAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/reports/profit" -Method Get -WebSession $adminSession
+            if ([decimal]$profitAfterReverse.totals.returnRevenue -lt 30000) {
+              throw 'Buffet reverse profit adjustment smoke failed.'
+            }
+
+            $inventoryAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get -WebSession $adminSession
+            $reversedProduct = @($inventoryAfterReverse | Where-Object { $_.id -eq $inventoryProduct.id })[0]
+            if ([int]$reversedProduct.stock -ne 2) { throw 'Buffet invoice reverse did not restore stock.' }
+
+            $adminLogout = Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $adminSession
+            if (-not $adminLogout.success) { throw 'Server operator logout smoke failed.' }
+
+            Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
+
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+          }
+      - name: Install Dashboard
+        run: npm ci --prefix src/Dashboard
+
+      - name: Lint Dashboard
+        run: npm run lint --prefix src/Dashboard
+
+      - name: Build Dashboard
+        run: npm run build --prefix src/Dashboard
+
+      - name: Start Dashboard preview
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath 'npm.cmd' -ArgumentList @('run','preview','--prefix','src/Dashboard','--','--host','127.0.0.1','--port','4173') -PassThru
+          $process.Id | Out-File -FilePath (Join-Path $env:RUNNER_TEMP 'gamenet-dashboard.pid') -Encoding utf8
+          for ($i = 0; $i -lt 30; $i++) {
+            try {
+              $response = Invoke-WebRequest -Uri 'http://127.0.0.1:4173/' -UseBasicParsing -TimeoutSec 2
+              if ($response.StatusCode -eq 200) { break }
+            } catch {}
+            Start-Sleep -Seconds 1
+          }
+          if (-not $response) { throw 'Dashboard preview did not start on port 4173.' }
+
+      - name: Install Dashboard browser test dependency
+        shell: pwsh
+        run: npm install --prefix src/Dashboard --no-save --no-package-lock @playwright/test@1.63.0
+
+      - name: Dashboard interaction smoke
+        shell: pwsh
+        run: |
+          $env:NODE_PATH = Join-Path $env:GITHUB_WORKSPACE 'src\Dashboard\node_modules'
+          npx --prefix src/Dashboard playwright test --config "$env:GITHUB_WORKSPACE\e2e\playwright.config.cjs" --workers=1
+
+      - name: Stop Dashboard preview
+        if: always()
+        shell: pwsh
+        run: |
+          $pidFile = Join-Path $env:RUNNER_TEMP 'gamenet-dashboard.pid'
+          if (Test-Path $pidFile) {
+            $processId = Get-Content $pidFile | Select-Object -First 1
+            if ($processId) { Stop-Process -Id ([int]$processId) -Force -ErrorAction SilentlyContinue }
+            Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
+          }
+) {
+                throw 'Release manifest SHA256 is not a valid 64-character hash.'
+              }
+
+              $agentStatePath = Join-Path $agentData 'agent-state.json'
+              if (-not (Test-Path $agentStatePath)) {
+                throw 'Canary Agent persisted state was not created before release validation.'
+              }
+              $agentState = Get-Content $agentStatePath -Raw | ConvertFrom-Json
+              if ([string]::IsNullOrWhiteSpace($agentState.AgentToken) -or
+                  [string]::IsNullOrWhiteSpace($agentState.DeviceId)) {
+                throw 'Canary Agent persisted credentials are incomplete.'
+              }
+
+              $downloadPath = Join-Path $env:RUNNER_TEMP 'gamenet-stage10-canary-package.zip'
+              Remove-Item $downloadPath -Force -ErrorAction SilentlyContinue
+              Invoke-WebRequest -Uri $releasePackage.packageUrl -Method Get -Headers @{
+                Authorization = "Bearer $($agentState.AgentToken)"
+                'X-GameNet-Device-Id' = $agentState.DeviceId
+              } -OutFile $downloadPath -UseBasicParsing
+              $downloadedSize = (Get-Item $downloadPath).Length
+              $downloadedHash = (Get-FileHash -Algorithm SHA256 -Path $downloadPath).Hash.ToLowerInvariant()
+              if ($downloadedSize -ne [int64]$releasePackage.sizeBytes -or
+                  $downloadedHash -ne $releasePackage.sha256.ToLowerInvariant()) {
+                throw "Protected canary package integrity mismatch. ManifestSize=$($releasePackage.sizeBytes); ActualSize=$downloadedSize; ManifestSha=$($releasePackage.sha256); ActualSha=$downloadedHash"
+              }
+
+              Write-Host ("Stage 10 release safety manifest/package smoke passed: version={0}; size={1}; sha256={2}" -f $releasePackage.version, $downloadedSize, $downloadedHash)
+
               $baselineAgentVersion = $agentRow.agentVersion
               $updatePayload = @{
                 commandType = 'update'
