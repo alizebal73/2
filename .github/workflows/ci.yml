@@ -138,7 +138,7 @@ jobs:
 
             # Remove session.start while keeping the operator logged in, then prove the Server returns 403.
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
-              permissionNames = @('buffet.sell')
+              permissionNames = @('buffet.sell','session.settle')
             } | ConvertTo-Json) | Out-Null
 
             # Prove a non-admin operator cannot start a session without the permission.
@@ -156,6 +156,19 @@ jobs:
             } catch {
               $status = $_.Exception.Response.StatusCode.value__
               if ($status -ne 403) { throw }
+            }
+
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
+                action = 'general.test'
+                entityName = 'Test'
+                entityId = 'unsupported'
+                reason = 'Stage 7 unsupported generic approval action smoke'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Unsupported generic approval action was accepted.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 400) { throw }
             }
 
             $approval = Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
