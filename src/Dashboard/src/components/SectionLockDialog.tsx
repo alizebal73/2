@@ -32,7 +32,7 @@ export function SectionLockDialog({ page, onClose, onUnlock }: Props) {
       setNotice('رمز اشتباه است.');
       return;
     }
-    onUnlock(protectedPage);
+    onUnlock(protectedPage as PageKey);
   }
 
   return (
