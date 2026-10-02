@@ -586,13 +586,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     }
 
     try {
-      if (wallet > 0 && customer) {
-        const entry = await recordWalletTransaction(customer.id, { amount: wallet, type: 'debit', description: 'تسویه ترکیبی جلسه ' + activeStation.name });
-        setCustomers(current => current.map(item => item.id === customer.id
-          ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['تسویه ترکیبی از کیف پول · ' + money(wallet) + ' تومان', ...(item.transactionHistory ?? [])] }
-          : item));
-      }
-
       if (activeStation.serverSessionId && customer && isServerGuid(activeStation.serverSessionId) && isServerGuid(customer.id)) {
       try {
         const parts = [
@@ -620,6 +613,13 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         setMessage(userErrorMessage(error, 'تسویه ترکیبی سروری انجام نشد'));
         return;
       }
+    }
+
+    if (wallet > 0 && customer) {
+      const entry = await recordWalletTransaction(customer.id, { amount: wallet, type: 'debit', description: 'تسویه ترکیبی جلسه ' + activeStation.name });
+      setCustomers(current => current.map(item => item.id === customer.id
+        ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['تسویه ترکیبی از کیف پول · ' + money(wallet) + ' تومان', ...(item.transactionHistory ?? [])] }
+        : item));
     }
 
     const paymentParts: string[] = [];
