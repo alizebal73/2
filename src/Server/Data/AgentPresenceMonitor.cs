@@ -131,6 +131,11 @@ public sealed class AgentPresenceMonitor(
 
                         foreach (var command in unfinishedCommands)
                         {
+                            // Update/Rollback intentionally disconnect the Agent during a controlled restart.
+                            // Keep AwaitingHealth alive until its dedicated command timeout.
+                            if (command.Status == "AwaitingHealth")
+                                continue;
+
                             command.Status = "Failed";
                             command.Succeeded = false;
                             command.CompletedAt = now;
