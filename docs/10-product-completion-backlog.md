@@ -179,7 +179,7 @@
 
 ## وضعیت اجرایی مرحلهٔ ۷ — Users & Permissions
 
-### برش تأییدشده تا CI #514
+### برش تأییدشده تا CI #520
 - ✅ احراز هویت واقعی اپراتور با Session سروری، Cookie امن و PBKDF2؛ `/api/auth/login`، `/api/auth/me` و `/api/auth/logout`.
 - ✅ مدل AppUser / Permission / AppUserSession / ApprovalRequest و Migration/Seeder واقعی سرور.
 - ✅ کاتالوگ Permissionهای رسمی پروژه و تخصیص دسترسی به کاربر.
@@ -188,11 +188,11 @@
 - ✅ Permission Enforcement روی endpointهای حساس موجود: Customer، VIP، Buffet/Inventory، Debt/Wallet/Benefits، Finance، Shift، Session و Invoice Reverse.
 - ✅ Actor identity دیگر از request.AppUserId برای عملیات حساس پذیرفته نمی‌شود؛ در endpointهای محافظت‌شده شناسهٔ کاربر جاری Server منبع Audit/AppUserId است.
 - ✅ CI Smoke یک Operator محدود را عمداً با Permission ناقص وارد می‌کند و 403 واقعی برای عملیات بدون مجوز را اثبات می‌کند.
-- ✅ Run #507: Build/Test .NET، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke همگی سبز.
+- ✅ Run #520: Build/Test .NET، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke همگی سبز؛ Approval اجرایی Reverse فاکتور نیز از درخواست اپراتور تا تأیید مدیر و اجرای واقعی در همین Smoke تست شد.
 
 ### بازمانده‌های مرحلهٔ ۷
 - ✅ Multi-cashier concurrency و conflict handling: `UpdatedAt` به‌عنوان Concurrency Token سروری، به‌روزرسانی خودکار زمان تغییر، تبدیل تعارض EF به HTTP 409 فارسی و تست دو اپراتور روی یک رکورد؛ CI #514 سبز.
-- ⬜ Approval اجرایی متصل به عملیات حساس واقعی، نه فقط ثبت/تصمیم درخواست مستقل.
+- ✅ Approval اجرایی متصل به Reverse واقعی فاکتور: مسیر درخواست با `finance.manage`، تصمیم با `approval.decide`، اجرای Reverse داخل Transaction تصمیم، Audit، و جلوگیری از تأیید توسط ثبت‌کننده؛ CI #520 سبز.
 - ⬜ Ledger/Payroll واقعی پرسنل و پرداخت حقوق.
 - ⬜ Hardening بیشتر Permissionهای Read/Write در UI و تفکیک دقیق مشاهده/ویرایش در هر دامنه.
 
