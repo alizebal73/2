@@ -21,11 +21,20 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
         InvoiceReverseRequest request,
         CancellationToken cancellationToken)
     {
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        var result = await ReverseWithinTransactionAsync(invoiceId, request, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
+
+    public async Task<InvoiceReverseResult> ReverseWithinTransactionAsync(
+        Guid invoiceId,
+        InvoiceReverseRequest request,
+        CancellationToken cancellationToken)
+    {
         var reason = request.Reason?.Trim();
         if (string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("دلیل برگشت عملیات را وارد کنید.");
-
-        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
         var invoice = await database.Invoices
             .Include(item => item.Customer)
@@ -165,7 +174,6 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
         });
 
         await database.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
 
         return new InvoiceReverseResult(
             invoice.Id,
