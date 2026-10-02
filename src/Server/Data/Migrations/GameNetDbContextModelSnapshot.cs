@@ -427,6 +427,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("TEXT");
 
@@ -910,6 +913,8 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("ReferenceInvoiceId");
 
                     b.HasIndex("ReferenceTransactionId");
 
