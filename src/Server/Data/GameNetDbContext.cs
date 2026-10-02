@@ -118,6 +118,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         customer.Property(item => item.NationalId).HasMaxLength(20);
         customer.Property(item => item.VipTier).HasMaxLength(20).IsRequired();
         customer.Property(item => item.Notes).HasMaxLength(500);
+        customer.Property(item => item.PasswordHash).HasMaxLength(250);
         customer.Property(item => item.Balance).HasColumnType("decimal(18,2)");
         customer.Property(item => item.FreeMoney).HasColumnType("decimal(18,2)");
         customer.Property(item => item.ConcurrentLoginLimit).IsRequired();
