@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 namespace GameNetManager.Server.Data;
 
 public sealed record SettlementPart(string Method, decimal Amount);
-public sealed record SessionSettlementRequest(decimal TotalAmount, IReadOnlyList<SettlementPart> Parts, Guid? AppUserId);
+public sealed record SessionSettlementRequest(decimal TotalAmount, IReadOnlyList<SettlementPart> Parts, Guid? AppUserId, int FreeTimeMinutes = 0);
 
 public sealed class SessionSettlementService(GameNetDbContext database)
 {
@@ -12,7 +12,8 @@ public sealed class SessionSettlementService(GameNetDbContext database)
     {
         "cash",
         "card",
-        "wallet"
+        "wallet",
+        "gift"
     };
 
     public async Task<SettlementResult> SettleAsync(
@@ -20,8 +21,8 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         SessionSettlementRequest request,
         CancellationToken cancellationToken)
     {
-        if (request.TotalAmount <= 0)
-            throw new ArgumentException("مبلغ تسویه باید بیشتر از صفر باشد.");
+        if (request.TotalAmount < 0)
+            throw new ArgumentException("مبلغ تسویه نمی‌تواند منفی باشد.");
 
         if (request.Parts is null || request.Parts.Count == 0)
             throw new ArgumentException("حداقل یک روش پرداخت لازم است.");
@@ -54,6 +55,47 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         var walletPart = normalizedParts
             .Where(item => item.Method == "wallet")
             .Sum(item => item.Amount);
+
+        var giftPart = normalizedParts
+            .Where(item => item.Method == "gift")
+            .Sum(item => item.Amount);
+
+        var elapsedMinutes = Math.Max(0, (DateTimeOffset.UtcNow - session.StartAt).TotalMinutes);
+        if (request.FreeTimeMinutes < 0 || request.FreeTimeMinutes > Math.Ceiling(elapsedMinutes))
+            throw new InvalidOperationException("دقیقه اعتبار رایگان مصرف‌شده با زمان جلسه سازگار نیست.");
+
+        if (request.FreeTimeMinutes > session.Customer.FreeTimeMinutes)
+            throw new InvalidOperationException("اعتبار زمانی رایگان مشتری برای این مصرف کافی نیست.");
+
+        if (giftPart > session.Customer.FreeMoney)
+            throw new InvalidOperationException("اعتبار مالی رایگان مشتری برای این سهم کافی نیست.");
+
+        if (request.FreeTimeMinutes > 0)
+        {
+            session.Customer.FreeTimeMinutes -= request.FreeTimeMinutes;
+            database.BenefitTransactions.Add(new BenefitTransaction
+            {
+                CustomerId = session.CustomerId,
+                Type = BenefitTransactionType.FreeTimeDebit,
+                Minutes = request.FreeTimeMinutes,
+                MoneyAmount = 0m,
+                Description = "مصرف اعتبار زمانی رایگان در تسویه " + session.Station.Name
+            });
+        }
+
+        if (giftPart > 0)
+        {
+            session.Customer.FreeMoney -= giftPart;
+            database.BenefitTransactions.Add(new BenefitTransaction
+            {
+                CustomerId = session.CustomerId,
+                Type = BenefitTransactionType.FreeMoneyDebit,
+                Minutes = 0,
+                MoneyAmount = giftPart,
+                Description = "مصرف اعتبار مالی رایگان در تسویه " + session.Station.Name
+            });
+        }
+
 
         if (walletPart > session.Customer.Balance)
             throw new InvalidOperationException("موجودی کیف پول برای سهم انتخاب‌شده کافی نیست.");
