@@ -1153,9 +1153,13 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         const remaining = station.prepaidEndsAt
           ? Math.max(0, Math.ceil((new Date(station.prepaidEndsAt).getTime() - now) / 60000))
           : station.remainingMinutes;
+        const username = station.customerUsername || station.customerCode || customer?.username;
+        const customerName = station.customerFullName || customer?.name;
+        const customerDebt = station.customerDebt ?? customer?.debt ?? 0;
+        const customerNote = station.customerNote || customer?.notes || customer?.alias || '—';
         return <div className="station-customer-summary">
-          <div className="station-customer-line"><strong>{station.customerCode || 'مهمان'}</strong><span>{customer?.name ?? 'بدون مشتری ثبت‌شده'}</span></div>
-          {customer && <div className="station-customer-line secondary"><span>بدهی: {money(customer.debt)} تومان</span><span>{(customer.notes || customer.alias || '—').split(/s+/).slice(0, 3).join(' ')}</span></div>}
+          <div className="station-customer-line"><strong>{username || 'مهمان'}</strong><span>{customerName || 'بدون مشتری ثبت‌شده'}</span></div>
+          {(customer || station.customerUsername) && <div className="station-customer-line secondary"><span>بدهی: {money(customerDebt)} تومان</span><span>{customerNote.split(/\s+/).slice(0, 3).join(' ')}</span></div>}
           {station.state === 'busy' && <div className="station-remaining">{remaining == null ? 'جلسه باز' : remaining <= 0 ? 'زمان تمام‌شده' : 'باقی‌مانده: ' + money(remaining) + ' دقیقه'}</div>}
         </div>;
       })()}
