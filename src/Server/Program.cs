@@ -650,6 +650,86 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (
 })
 .WithName("CreateCustomerDebt");
 
+app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
+    Guid customerId,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var customer = await database.Customers.AsNoTracking().Include(item => item.VipPackage).FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    if (customer.VipPackageId is null || customer.VipPackage is null || customer.VipActivatedAt is null)
+        return Results.Ok(new { active = false, usedTodayMinutes = 0, remainingTodayMinutes = 0, usedTotalMinutes = 0, remainingTotalMinutes = 0 });
+
+    var now = DateTimeOffset.UtcNow;
+    var activatedAt = customer.VipActivatedAt.Value;
+    var todayStart = now.Date;
+    var sessions = await database.Sessions.AsNoTracking()
+        .Where(item => item.CustomerId == customerId && item.StartAt >= activatedAt && item.StartAt <= now)
+        .Select(item => new { item.StartAt, item.EndAt })
+        .ToListAsync(cancellationToken);
+
+    var totalUsed = 0;
+    var todayUsed = 0;
+    foreach (var session in sessions)
+    {
+        var end = session.EndAt ?? now;
+        var start = session.StartAt < activatedAt ? activatedAt : session.StartAt;
+        var minutes = (int)Math.Ceiling(Math.Max(0, (end - start).TotalMinutes));
+        totalUsed += minutes;
+        var todayStartAt = session.StartAt < todayStart ? todayStart : session.StartAt;
+        if (end > todayStart && todayStartAt < end)
+            todayUsed += (int)Math.Ceiling(Math.Max(0, (end - todayStartAt).TotalMinutes));
+    }
+
+    return Results.Ok(new
+    {
+        active = true,
+        usedTodayMinutes = todayUsed,
+        remainingTodayMinutes = Math.Max(0, customer.VipPackage.DailyMinutes - todayUsed),
+        usedTotalMinutes = totalUsed,
+        remainingTotalMinutes = Math.Max(0, customer.VipPackage.TotalMinutes - totalUsed)
+    });
+})
+.WithName("GetCustomerVipUsage");
+
+app.MapGet("/api/customers/{customerId:guid}/history", async (
+    Guid customerId,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var exists = await database.Customers.AsNoTracking().AnyAsync(item => item.Id == customerId, cancellationToken);
+    if (!exists)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    var wallet = await database.WalletTransactions.AsNoTracking()
+        .Where(item => item.CustomerId == customerId)
+        .Select(item => new CustomerHistoryItemDto(item.Id, "wallet", item.Description, item.Amount, item.CreatedAt, item.ReferenceInvoiceId))
+        .ToListAsync(cancellationToken);
+
+    var benefits = await database.BenefitTransactions.AsNoTracking()
+        .Where(item => item.CustomerId == customerId)
+        .Select(item => new CustomerHistoryItemDto(item.Id, "benefit", item.Description, item.MoneyAmount, item.CreatedAt, item.ReferenceInvoiceId))
+        .ToListAsync(cancellationToken);
+
+    var invoices = await database.Invoices.AsNoTracking()
+        .Where(item => item.CustomerId == customerId)
+        .Select(item => new CustomerHistoryItemDto(item.Id, "invoice", item.Status.ToString(), item.TotalAmount, item.IssuedAt, item.SessionId))
+        .ToListAsync(cancellationToken);
+
+    var sessions = await database.Sessions.AsNoTracking()
+        .Where(item => item.CustomerId == customerId)
+        .Select(item => new CustomerHistoryItemDto(item.Id, "session", "جلسه", item.TotalAmount, item.StartAt, item.Id))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(wallet.Concat(benefits).Concat(invoices).Concat(sessions)
+        .OrderByDescending(item => item.CreatedAt)
+        .Take(100)
+        .ToList());
+})
+.WithName("GetCustomerHistory");
+
 app.MapGet("/api/customers/{customerId:guid}/free-benefits", async (
     Guid customerId,
     GameNetDbContext database,
@@ -1653,6 +1733,7 @@ public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, d
 public sealed record FinanceTransactionDto(Guid Id, DateTimeOffset ClosedAt, string Description, decimal Amount, string Method, string Status);
 
 public sealed record CustomerDebtRequest(decimal Amount, string? Description, Guid? AppUserId);
+public sealed record CustomerHistoryItemDto(Guid Id, string Type, string Description, decimal Amount, DateTimeOffset CreatedAt, Guid? ReferenceId);
 public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, Guid? AppUserId);
 public sealed record StockAdjustmentRequest(int Quantity, TransactionDirection Direction, string? Notes, Guid? AppUserId);
 public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
