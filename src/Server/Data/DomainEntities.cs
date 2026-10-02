@@ -258,6 +258,16 @@ public sealed class Game : BaseEntity
 {
     public required string Name { get; set; }
     public string? Genre { get; set; }
+    public string? Version { get; set; }
+    public string? Launcher { get; set; }
+    public string? InstallPath { get; set; }
+    public string? ExecutablePath { get; set; }
+    public string? LaunchArguments { get; set; }
+    public string? ConnectionType { get; set; }
+    public string? TargetSystem { get; set; }
+    public string? TargetZone { get; set; }
+    public string? ProcessNames { get; set; }
+    public string? CoverPath { get; set; }
     public bool IsActive { get; set; } = true;
     public ICollection<GameAccount> GameAccounts { get; set; } = new List<GameAccount>();
 }
