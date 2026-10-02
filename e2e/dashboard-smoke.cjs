@@ -1,11 +1,26 @@
+const fs = require('fs');
 const { chromium } = require('playwright');
+
+function findBrowser() {
+  const candidates = [
+    process.env.GAMENET_BROWSER_PATH,
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
+    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+  ].filter(Boolean);
+  return candidates.find(path => fs.existsSync(path));
+}
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
 (async () => {
-  const browser = await chromium.launch({ headless: true });
+  const executablePath = findBrowser();
+  if (!executablePath) throw new Error('هیچ Chrome یا Edge نصب‌شده‌ای روی Runner پیدا نشد.');
+  console.log('Using browser:', executablePath);
+  const browser = await chromium.launch({ headless: true, executablePath });
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
 
