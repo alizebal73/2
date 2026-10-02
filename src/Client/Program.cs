@@ -550,9 +550,18 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
 
             case AgentCommandTypes.Update:
             {
-                var payload = JsonSerializer.Deserialize<ClientUpdateCommandPayload>(command.PayloadJson ?? string.Empty);
-                if (payload is null)
-                    throw new InvalidOperationException("دادهٔ Update معتبر نیست.");
+                var payload = JsonSerializer.Deserialize<ClientUpdateCommandPayload>(
+                    command.PayloadJson ?? string.Empty,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (payload is null
+                    || string.IsNullOrWhiteSpace(payload.Version)
+                    || string.IsNullOrWhiteSpace(payload.PackageUrl)
+                    || string.IsNullOrWhiteSpace(payload.Sha256)
+                    || payload.SizeBytes <= 0)
+                {
+                    throw new InvalidOperationException("دادهٔ Update ناقص یا نامعتبر است.");
+                }
 
                 Console.WriteLine($"CLIENT_UPDATE_SNAPSHOT_START:{agentVersion}");
                 await updateManager.EnsureCurrentVersionSnapshotAsync(
@@ -610,7 +619,13 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         Console.WriteLine($"اجرای فرمان Agent به‌دلیل پایان زمان ناموفق بود: {message}");
     }
     catch (Exception exception) when (
-        exception is HubException or HttpRequestException or InvalidOperationException or ObjectDisposedException or IOException)
+        exception is HubException
+            or HttpRequestException
+            or InvalidOperationException
+            or ArgumentException
+            or JsonException
+            or ObjectDisposedException
+            or IOException)
     {
         success = false;
         error = exception.Message;
