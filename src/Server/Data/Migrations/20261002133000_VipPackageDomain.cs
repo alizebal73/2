@@ -63,33 +63,193 @@ public partial class VipPackageDomain : Migration
             type: "TEXT",
             nullable: true);
 
-        migrationBuilder.CreateIndex(
-            name: "IX_Customers_VipPackageId",
-            table: "Customers",
-            column: "VipPackageId");
+        migrationBuilder.Sql(
+            """
+            PRAGMA foreign_keys = OFF;
 
-        migrationBuilder.AddForeignKey(
-            name: "FK_Customers_VipPackages_VipPackageId",
-            table: "Customers",
-            column: "VipPackageId",
-            principalTable: "VipPackages",
-            principalColumn: "Id",
-            onDelete: ReferentialAction.SetNull);
+            CREATE TABLE "Customers__VipPackageDomain" (
+                "Id" TEXT NOT NULL,
+                "FullName" TEXT NOT NULL,
+                "Code" TEXT NULL,
+                "Username" TEXT NULL,
+                "Alias" TEXT NULL,
+                "NationalId" TEXT NULL,
+                "Phone" TEXT NULL,
+                "Email" TEXT NULL,
+                "IsVip" INTEGER NOT NULL,
+                "VipTier" TEXT NOT NULL DEFAULT 'none',
+                "VipPackageId" TEXT NULL,
+                "VipActivatedAt" TEXT NULL,
+                "VipExpiresAt" TEXT NULL,
+                "Balance" decimal(18,2) NOT NULL,
+                "FreeMoney" decimal(18,2) NOT NULL DEFAULT 0,
+                "FreeTimeMinutes" INTEGER NOT NULL DEFAULT 0,
+                "ConcurrentLoginLimit" INTEGER NOT NULL DEFAULT 1,
+                "Notes" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NULL,
+                CONSTRAINT "PK_Customers" PRIMARY KEY ("Id"),
+                CONSTRAINT "FK_Customers_VipPackages_VipPackageId"
+                    FOREIGN KEY ("VipPackageId") REFERENCES "VipPackages" ("Id") ON DELETE SET NULL
+            );
+
+            INSERT INTO "Customers__VipPackageDomain" (
+                "Id",
+                "FullName",
+                "Code",
+                "Username",
+                "Alias",
+                "NationalId",
+                "Phone",
+                "Email",
+                "IsVip",
+                "VipTier",
+                "VipPackageId",
+                "VipActivatedAt",
+                "VipExpiresAt",
+                "Balance",
+                "FreeMoney",
+                "FreeTimeMinutes",
+                "ConcurrentLoginLimit",
+                "Notes",
+                "CreatedAt",
+                "UpdatedAt"
+            )
+            SELECT
+                "Id",
+                "FullName",
+                "Code",
+                "Username",
+                "Alias",
+                "NationalId",
+                "Phone",
+                "Email",
+                "IsVip",
+                "VipTier",
+                "VipPackageId",
+                "VipActivatedAt",
+                "VipExpiresAt",
+                "Balance",
+                "FreeMoney",
+                "FreeTimeMinutes",
+                "ConcurrentLoginLimit",
+                "Notes",
+                "CreatedAt",
+                "UpdatedAt"
+            FROM "Customers";
+
+            DROP TABLE "Customers";
+            ALTER TABLE "Customers__VipPackageDomain" RENAME TO "Customers";
+
+            CREATE UNIQUE INDEX "IX_Customers_Code" ON "Customers" ("Code");
+            CREATE UNIQUE INDEX "IX_Customers_Email" ON "Customers" ("Email");
+            CREATE UNIQUE INDEX "IX_Customers_NationalId" ON "Customers" ("NationalId");
+            CREATE UNIQUE INDEX "IX_Customers_Phone" ON "Customers" ("Phone");
+            CREATE UNIQUE INDEX "IX_Customers_Username" ON "Customers" ("Username");
+            CREATE INDEX "IX_Customers_VipPackageId" ON "Customers" ("VipPackageId");
+
+            PRAGMA foreign_keys = ON;
+            """,
+            suppressTransaction: true);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropForeignKey("FK_Customers_VipPackages_VipPackageId", "Customers");
-        migrationBuilder.DropIndex("IX_Customers_VipPackageId", "Customers");
+        migrationBuilder.Sql(
+            """
+            PRAGMA foreign_keys = OFF;
 
-        migrationBuilder.DropColumn("VipPackageId", "Customers");
-        migrationBuilder.DropColumn("VipActivatedAt", "Customers");
-        migrationBuilder.DropColumn("VipExpiresAt", "Customers");
+            CREATE TABLE "Customers__VipPackageDomainDown" (
+                "Id" TEXT NOT NULL,
+                "FullName" TEXT NOT NULL,
+                "Code" TEXT NULL,
+                "Username" TEXT NULL,
+                "Alias" TEXT NULL,
+                "NationalId" TEXT NULL,
+                "Phone" TEXT NULL,
+                "Email" TEXT NULL,
+                "IsVip" INTEGER NOT NULL,
+                "VipTier" TEXT NOT NULL DEFAULT 'none',
+                "Balance" decimal(18,2) NOT NULL,
+                "FreeMoney" decimal(18,2) NOT NULL DEFAULT 0,
+                "FreeTimeMinutes" INTEGER NOT NULL DEFAULT 0,
+                "ConcurrentLoginLimit" INTEGER NOT NULL DEFAULT 1,
+                "Notes" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "UpdatedAt" TEXT NULL,
+                CONSTRAINT "PK_Customers" PRIMARY KEY ("Id")
+            );
 
-        migrationBuilder.DropColumn("DailyMinutes", "VipPackages");
-        migrationBuilder.DropColumn("DiscountPercent", "VipPackages");
-        migrationBuilder.DropColumn("OverflowRule", "VipPackages");
-        migrationBuilder.DropColumn("TotalMinutes", "VipPackages");
-        migrationBuilder.DropColumn("Tier", "VipPackages");
+            INSERT INTO "Customers__VipPackageDomainDown" (
+                "Id",
+                "FullName",
+                "Code",
+                "Username",
+                "Alias",
+                "NationalId",
+                "Phone",
+                "Email",
+                "IsVip",
+                "VipTier",
+                "Balance",
+                "FreeMoney",
+                "FreeTimeMinutes",
+                "ConcurrentLoginLimit",
+                "Notes",
+                "CreatedAt",
+                "UpdatedAt"
+            )
+            SELECT
+                "Id",
+                "FullName",
+                "Code",
+                "Username",
+                "Alias",
+                "NationalId",
+                "Phone",
+                "Email",
+                "IsVip",
+                "VipTier",
+                "Balance",
+                "FreeMoney",
+                "FreeTimeMinutes",
+                "ConcurrentLoginLimit",
+                "Notes",
+                "CreatedAt",
+                "UpdatedAt"
+            FROM "Customers";
+
+            DROP TABLE "Customers";
+            ALTER TABLE "Customers__VipPackageDomainDown" RENAME TO "Customers";
+
+            CREATE UNIQUE INDEX "IX_Customers_Code" ON "Customers" ("Code");
+            CREATE UNIQUE INDEX "IX_Customers_Email" ON "Customers" ("Email");
+            CREATE UNIQUE INDEX "IX_Customers_NationalId" ON "Customers" ("NationalId");
+            CREATE UNIQUE INDEX "IX_Customers_Phone" ON "Customers" ("Phone");
+            CREATE UNIQUE INDEX "IX_Customers_Username" ON "Customers" ("Username");
+
+            PRAGMA foreign_keys = ON;
+            """,
+            suppressTransaction: true);
+
+        migrationBuilder.DropColumn(
+            name: "DailyMinutes",
+            table: "VipPackages");
+
+        migrationBuilder.DropColumn(
+            name: "DiscountPercent",
+            table: "VipPackages");
+
+        migrationBuilder.DropColumn(
+            name: "OverflowRule",
+            table: "VipPackages");
+
+        migrationBuilder.DropColumn(
+            name: "TotalMinutes",
+            table: "VipPackages");
+
+        migrationBuilder.DropColumn(
+            name: "Tier",
+            table: "VipPackages");
     }
 }
