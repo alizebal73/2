@@ -21,6 +21,9 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<VipPackage> VipPackages => Set<VipPackage>();
     public DbSet<Game> Games => Set<Game>();
     public DbSet<GameAccount> GameAccounts => Set<GameAccount>();
+    public DbSet<GameAccountPoolEntry> GameAccountPoolEntries => Set<GameAccountPoolEntry>();
+    public DbSet<GameAccountAllowedGame> GameAccountAllowedGames => Set<GameAccountAllowedGame>();
+    public DbSet<GameAccountLease> GameAccountLeases => Set<GameAccountLease>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Reservation> Reservations => Set<Reservation>();
     public DbSet<Session> Sessions => Set<Session>();
@@ -82,6 +85,9 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureVipPackage(modelBuilder);
         ConfigureGame(modelBuilder);
         ConfigureGameAccount(modelBuilder);
+        ConfigureGameAccountPool(modelBuilder);
+        ConfigureGameAccountAllowedGame(modelBuilder);
+        ConfigureGameAccountLease(modelBuilder);
         ConfigureClient(modelBuilder);
         ConfigureReservation(modelBuilder);
         ConfigureSession(modelBuilder);
@@ -370,6 +376,19 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         game.HasIndex(item => item.Name).IsUnique();
         game.Property(item => item.Name).HasMaxLength(120).IsRequired();
         game.Property(item => item.Genre).HasMaxLength(80);
+        game.Property(item => item.Version).HasMaxLength(60);
+        game.Property(item => item.Launcher).HasMaxLength(40);
+        game.Property(item => item.InstallPath).HasMaxLength(500);
+        game.Property(item => item.ExecutablePath).HasMaxLength(260);
+        game.Property(item => item.LaunchArguments).HasMaxLength(1000);
+        game.Property(item => item.ConnectionType).HasMaxLength(30);
+        game.Property(item => item.TargetSystem).HasMaxLength(30);
+        game.Property(item => item.TargetZone).HasMaxLength(30);
+        game.Property(item => item.TargetScope).HasMaxLength(20);
+        game.Property(item => item.TargetStations).HasMaxLength(1000);
+        game.Property(item => item.ProcessNames).HasMaxLength(500);
+        game.Property(item => item.CoverPath).HasMaxLength(500);
+        game.Property(item => item.TrailerPath).HasMaxLength(500);
     }
 
     private static void ConfigureGameAccount(ModelBuilder modelBuilder)
