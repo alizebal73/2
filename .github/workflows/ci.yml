@@ -380,6 +380,23 @@ jobs:
 
               $recoveredLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
               if ($recoveredLifecycle.lifecycleState -ne 'Running' -or -not $recoveredLifecycle.lastHealthyAt) {
+                Write-Host '--- Recovery lifecycle response ---'
+                $recoveredLifecycle | ConvertTo-Json -Depth 5
+                Write-Host '--- Second Agent stdout ---'
+                if (Test-Path $secondAgentStdout) { Get-Content $secondAgentStdout }
+                Write-Host '--- Second Agent stderr ---'
+                if (Test-Path $secondAgentStderr) { Get-Content $secondAgentStderr }
+                Write-Host '--- Persisted second Agent state ---'
+                $secondAgentStatePath = Join-Path $agentData 'agent-state.json'
+                if (Test-Path $secondAgentStatePath) { Get-Content $secondAgentStatePath }
+                Write-Host '--- Server Agent rows at recovery failure ---'
+                try {
+                  Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession | ConvertTo-Json -Depth 8
+                } catch {}
+                Write-Host '--- Server stdout at recovery failure ---'
+                if (Test-Path $stdout) { Get-Content $stdout }
+                Write-Host '--- Server stderr at recovery failure ---'
+                if (Test-Path $stderr) { Get-Content $stderr }
                 throw "Agent lifecycle did not recover to Running with a healthy timestamp: $($recoveredLifecycle.lifecycleState)"
               }
               Write-Host ("Stage 10 recovery lifecycle smoke passed: state={0}; lastHealthyAt={1}" -f $recoveredLifecycle.lifecycleState, $recoveredLifecycle.lastHealthyAt)
