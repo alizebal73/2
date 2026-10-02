@@ -1,4 +1,3 @@
-import { mockService } from './mockService';
 import type { WalletLedgerEntry } from '../types';
 
 function isGuid(value: string) {
@@ -6,7 +5,7 @@ function isGuid(value: string) {
 }
 
 export async function getWalletLedger(customerId: string): Promise<WalletLedgerEntry[]> {
-  if (!isGuid(customerId)) return mockService.getWalletLedger(customerId);
+  if (!isGuid(customerId)) throw new Error('شناسه مشتری سروری معتبر نیست.');
   const response = await fetch('/api/customers/' + customerId + '/wallet-ledger');
   if (!response.ok) throw new Error('دریافت دفتر کیف پول انجام نشد');
   const rows = await response.json() as Array<{
@@ -31,7 +30,7 @@ export async function recordWalletTransaction(
   customerId: string,
   input: { amount: number; type: 'credit' | 'debit'; description: string },
 ): Promise<WalletLedgerEntry> {
-  if (!isGuid(customerId)) return mockService.recordWalletTransaction(customerId, input);
+  if (!isGuid(customerId)) throw new Error('شناسه مشتری سروری معتبر نیست.');
   const response = await fetch('/api/customers/' + customerId + '/wallet-transactions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -64,13 +63,7 @@ export async function refundWalletTransaction(
   customerId: string,
   input: { amount: number; reason: string; sourceTransactionId?: string },
 ): Promise<WalletLedgerEntry> {
-  if (!isGuid(customerId)) {
-    return mockService.recordWalletTransaction(customerId, {
-      amount: input.amount,
-      type: 'debit',
-      description: 'بازگشت وجه · ' + input.reason,
-    });
-  }
+  if (!isGuid(customerId)) throw new Error('شناسه مشتری سروری معتبر نیست.');
 
   const response = await fetch('/api/customers/' + customerId + '/wallet-refunds', {
     method: 'POST',
