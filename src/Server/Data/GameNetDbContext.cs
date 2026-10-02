@@ -108,11 +108,15 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         customer.HasIndex(item => item.Username).IsUnique();
         customer.HasIndex(item => item.Phone).IsUnique();
         customer.HasIndex(item => item.Email).IsUnique();
+        customer.HasIndex(item => item.NationalId).IsUnique();
         customer.Property(item => item.FullName).HasMaxLength(120).IsRequired();
         customer.Property(item => item.Code).HasMaxLength(20);
         customer.Property(item => item.Username).HasMaxLength(60);
         customer.Property(item => item.Phone).HasMaxLength(20);
         customer.Property(item => item.Email).HasMaxLength(120);
+        customer.Property(item => item.Alias).HasMaxLength(120);
+        customer.Property(item => item.NationalId).HasMaxLength(20);
+        customer.Property(item => item.VipTier).HasMaxLength(20).IsRequired();
         customer.Property(item => item.Notes).HasMaxLength(500);
         customer.Property(item => item.Balance).HasColumnType("decimal(18,2)");
         customer.Property(item => item.FreeMoney).HasColumnType("decimal(18,2)");
