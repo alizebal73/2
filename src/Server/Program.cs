@@ -65,6 +65,97 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
 .WithName("GetDashboardSnapshot");
 
 
+app.MapGet("/api/customers/{customerId:guid}/free-benefits", async (
+    Guid customerId,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    var transactions = await database.BenefitTransactions
+        .AsNoTracking()
+        .Where(item => item.CustomerId == customerId)
+        .OrderByDescending(item => item.CreatedAt)
+        .Take(50)
+        .Select(item => new FreeBenefitTransactionDto(
+            item.Id,
+            item.Type.ToString(),
+            item.MoneyAmount,
+            item.Minutes,
+            item.Description,
+            item.CreatedAt))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new FreeBenefitsSnapshotDto(customer.FreeMoney, customer.FreeTimeMinutes, transactions));
+})
+.WithName("GetCustomerFreeBenefits");
+
+app.MapPost("/api/customers/{customerId:guid}/free-benefits", async (
+    Guid customerId,
+    FreeBenefitRequestDto request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    var moneyAmount = Math.Max(0m, request.MoneyAmount);
+    var minutes = Math.Max(0, request.Minutes);
+    if (moneyAmount <= 0 && minutes <= 0)
+        return Results.BadRequest(new { code = "invalid_benefit", message = "مبلغ یا دقیقه رایگان معتبر وارد کنید." });
+
+    var mode = request.Mode?.Trim().ToLowerInvariant();
+    if (mode is not ("credit" or "debit"))
+        return Results.BadRequest(new { code = "invalid_benefit_mode", message = "نوع عملیات اعتبار رایگان معتبر نیست." });
+
+    var description = string.IsNullOrWhiteSpace(request.Description) ? "تنظیم اعتبار رایگان" : request.Description.Trim();
+
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    if (moneyAmount > 0)
+    {
+        if (mode == "debit" && customer.FreeMoney < moneyAmount)
+            return Results.BadRequest(new { code = "insufficient_free_money", message = "اعتبار مالی رایگان کافی نیست." });
+        customer.FreeMoney = mode == "credit" ? customer.FreeMoney + moneyAmount : customer.FreeMoney - moneyAmount;
+    }
+
+    if (minutes > 0)
+    {
+        if (mode == "debit" && customer.FreeTimeMinutes < minutes)
+            return Results.BadRequest(new { code = "insufficient_free_time", message = "اعتبار زمانی رایگان کافی نیست." });
+        customer.FreeTimeMinutes = mode == "credit" ? customer.FreeTimeMinutes + minutes : customer.FreeTimeMinutes - minutes;
+    }
+
+    database.BenefitTransactions.Add(new BenefitTransaction
+    {
+        CustomerId = customer.Id,
+        Type = moneyAmount > 0
+            ? (mode == "credit" ? BenefitTransactionType.FreeMoneyCredit : BenefitTransactionType.FreeMoneyDebit)
+            : (mode == "credit" ? BenefitTransactionType.FreeTimeCredit : BenefitTransactionType.FreeTimeDebit),
+        MoneyAmount = moneyAmount,
+        Minutes = minutes,
+        Description = description
+    });
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "FreeBenefitChange",
+        EntityName = "CustomerBenefit",
+        EntityId = customer.Id.ToString(),
+        Details = (mode == "credit" ? "اعطای اعتبار رایگان" : "کسر اعتبار رایگان")
+            + " · " + (moneyAmount > 0 ? moneyAmount.ToString("0.##") + " تومان" : minutes + " دقیقه")
+            + " · " + description
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+
+    return Results.Ok(new FreeBenefitsSnapshotDto(customer.FreeMoney, customer.FreeTimeMinutes, Array.Empty<FreeBenefitTransactionDto>()));
+})
+.WithName("ChangeCustomerFreeBenefits");
+
 app.MapGet("/api/customers/{customerId:guid}/wallet-ledger", async (
     Guid customerId,
     GameNetDbContext database,
@@ -837,6 +928,10 @@ public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid 
 public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
 public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
 public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, decimal Revenue, decimal Expense, decimal OperatingProfit);
+
+public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
+public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
+public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);
 
 public sealed record ShiftSnapshotDto(
     Guid Id,
