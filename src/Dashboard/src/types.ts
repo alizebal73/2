@@ -44,6 +44,11 @@ export type StationDto = {
   agentOnline?: boolean;
   agentLastSeenAt?: string | null;
   agentVersion?: string | null;
+  sessionStartedAt?: string | null;
+  sessionPausedAt?: string | null;
+  sessionPausedMinutes?: number;
+  sessionTimeAdjustmentMinutes?: number;
+  sessionPrepaidAmount?: number;
 };
 
 export type StartSessionInput = {
