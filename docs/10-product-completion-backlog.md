@@ -411,6 +411,12 @@
 **هستهٔ مرحله ۴ تکمیل شد.** B9 تا B17 مسیرهای اصلی مالی/جلسه را روی Server/SQLite/Audit و CI/Smoke سبز تثبیت کرده‌اند. موارد مشترک Permission/Approval نهایی عمداً به مرحلهٔ ۷ منتقل شده‌اند و موارد Customer Domain که به مدل مشتری مربوط‌اند، در مرحلهٔ ۵ ادامه پیدا می‌کنند.
 
 ## شروع مرحله اصلی ۵ — Customer & VIP Domain
+### پیشروی ثبت‌شدهٔ مرحله ۵
+
+- **Customer CRUD سروری**: Create/Update + Alias/NationalId/VipTier + Unique validation + Audit + SQLite migration + Dashboard adapter/UI + Persistence Test + CI سبز.
+- **صفحه مشتریان** دیگر برای «مشتری جدید» پیام نمایشی نمی‌دهد؛ ایجاد و ویرایش اصلی به Server متصل است.
+- **مرحله ۵ هنوز باز است**؛ VIP Package/Consumption و Credential UX باید تکمیل و تست شوند.
+
 
 ### محدوده
 - Customer منبع حقیقت سرور
