@@ -35,6 +35,10 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Alias")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -187,6 +191,10 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<bool>("IsVip")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("NationalId")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
@@ -199,6 +207,11 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("VipTier")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -208,6 +221,9 @@ namespace GameNetManager.Server.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("Email")
+                        .IsUnique();
+
+                    b.HasIndex("NationalId")
                         .IsUnique();
 
                     b.HasIndex("Phone")
