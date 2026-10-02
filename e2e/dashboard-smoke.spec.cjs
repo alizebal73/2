@@ -54,10 +54,18 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await expect(page.locator('.station-selection-tools')).toContainText('۳');
 
   await page.keyboard.press('Escape');
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.mouse.move(8, 140);
+  const cardBoxes = await Promise.all(
+    ['pc-01', 'pc-02', 'pc-03', 'pc-04'].map(id => page.locator(`[data-station-id="${id}"]`).boundingBox()),
+  );
+  expect(cardBoxes.every(Boolean)).toBe(true);
+  const boxes = cardBoxes.filter((box) => box !== null);
+  const left = Math.max(2, Math.min(...boxes.map(box => box.left)) - 12);
+  const top = Math.max(2, Math.min(...boxes.map(box => box.top)) - 12);
+  const right = Math.max(...boxes.map(box => box.right)) + 12;
+  const bottom = Math.max(...boxes.map(box => box.bottom)) + 12;
+  await page.mouse.move(left, top);
   await page.mouse.down();
-  await page.mouse.move(1432, 900, { steps: 20 });
+  await page.mouse.move(right, bottom, { steps: 20 });
   await page.mouse.up();
   await expect(page.locator('.station-selection-tools')).toContainText('۴');
   const selectedTextAfterDrag = await page.evaluate(() => window.getSelection()?.toString() ?? '');
