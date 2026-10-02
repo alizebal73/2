@@ -726,6 +726,50 @@ app.MapPost("/api/approvals/{approvalId:guid}/approve", async (
     if (approval.RequestedByUserId == auth.User!.Id)
         return Results.Conflict(new { code = "approval_self_decision", message = "ثبت‌کننده درخواست نمی‌تواند همان درخواست را تأیید کند." });
 
+    if (approval.Action.Equals("payroll.entry", StringComparison.OrdinalIgnoreCase))
+    {
+        if (!Guid.TryParse(approval.EntityId, out var payrollEntryId))
+            return Results.BadRequest(new { code = "invalid_approval_target", message = "شناسه عملیات حقوقی معتبر نیست." });
+
+        var entry = await database.PayrollLedgerEntries.FirstOrDefaultAsync(item => item.Id == payrollEntryId, cancellationToken);
+        if (entry is null) return Results.NotFound(new { code = "payroll_entry_not_found", message = "رکورد حقوقی پیدا نشد." });
+        if (entry.Status != ApprovalStatus.Pending)
+            return Results.Conflict(new { code = "payroll_entry_not_pending", message = "این عملیات حقوقی دیگر در انتظار تأیید نیست." });
+
+        var approvedRows = await database.PayrollLedgerEntries
+            .Where(item => item.EmployeeProfileId == entry.EmployeeProfileId && item.Status == ApprovalStatus.Approved)
+            .ToListAsync(cancellationToken);
+
+        var nextEmployeePayable = approvedRows.Sum(item => item.EmployeePayableDelta) + entry.EmployeePayableDelta;
+        var nextOwnerReceivable = approvedRows.Sum(item => item.OwnerReceivableDelta) + entry.OwnerReceivableDelta;
+        if (nextEmployeePayable < 0)
+            return Results.Conflict(new { code = "payroll_negative_employee_payable", message = "مانده حقوق پس از این عملیات منفی می‌شود." });
+        if (nextOwnerReceivable < 0)
+            return Results.Conflict(new { code = "payroll_negative_owner_receivable", message = "مانده طلب مالک پس از این عملیات منفی می‌شود." });
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        entry.Status = ApprovalStatus.Approved;
+        entry.ApprovedByUserId = auth.User.Id;
+        entry.ApprovedAt = DateTimeOffset.UtcNow;
+        approval.Status = ApprovalStatus.Approved;
+        approval.DecidedByUserId = auth.User.Id;
+        approval.DecidedAt = DateTimeOffset.UtcNow;
+        approval.DecisionNote = string.IsNullOrWhiteSpace(request.Note) ? "تأیید و اجرا شد" : request.Note.Trim();
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "PayrollEntryApproved",
+            EntityName = "PayrollLedgerEntry",
+            EntityId = entry.Id.ToString(),
+            AppUserId = auth.User.Id,
+            Details = "تأیید عملیات حقوقی · " + entry.Kind + " · " + entry.Amount.ToString("0.##") + " تومان"
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Results.Ok(new { id = approval.Id, status = approval.Status.ToString(), entryId = entry.Id });
+    }
+
     if (approval.Action.Equals("invoice.reverse", StringComparison.OrdinalIgnoreCase))
     {
         if (!Guid.TryParse(approval.EntityId, out var invoiceId))
@@ -812,6 +856,24 @@ app.MapPost("/api/approvals/{approvalId:guid}/reject", async (
     if (approval is null) return Results.NotFound(new { code = "approval_not_found", message = "درخواست تأیید پیدا نشد." });
     if (approval.Status != ApprovalStatus.Pending)
         return Results.Conflict(new { code = "approval_not_pending", message = "این درخواست دیگر در وضعیت انتظار نیست." });
+
+    if (approval.Action.Equals("payroll.entry", StringComparison.OrdinalIgnoreCase)
+        && Guid.TryParse(approval.EntityId, out var rejectedPayrollEntryId))
+    {
+        var entry = await database.PayrollLedgerEntries.FirstOrDefaultAsync(item => item.Id == rejectedPayrollEntryId, cancellationToken);
+        if (entry is not null && entry.Status == ApprovalStatus.Pending)
+        {
+            entry.Status = ApprovalStatus.Rejected;
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "PayrollEntryRejected",
+                EntityName = "PayrollLedgerEntry",
+                EntityId = entry.Id.ToString(),
+                AppUserId = auth.User!.Id,
+                Details = "رد عملیات حقوقی · " + entry.Kind
+            });
+        }
+    }
 
     approval.Status = ApprovalStatus.Rejected;
     approval.DecidedByUserId = auth.User!.Id;
