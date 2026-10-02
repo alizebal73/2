@@ -288,6 +288,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("ReferenceTransactionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid>("GameId")
                         .HasColumnType("TEXT");
 
@@ -848,6 +851,8 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("ReferenceTransactionId");
 
                     b.ToTable("WalletTransactions");
                 });
