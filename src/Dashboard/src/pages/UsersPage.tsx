@@ -21,6 +21,9 @@ export function UsersPage() {
   const [manualCash, setManualCash] = useState('');
   const [shiftNote, setShiftNote] = useState('');
   const [shiftOperator, setShiftOperator] = useState('');
+  const [closeShiftOpen, setCloseShiftOpen] = useState(false);
+  const [countedCash, setCountedCash] = useState('');
+  const [handoverNote, setHandoverNote] = useState('');
 
   async function refresh() {
     const [userRows, shift, history, saved] = await Promise.all([mockService.getUsers(), mockService.getCurrentShift(), mockService.getShifts(), mockService.getPermissions()]);
@@ -56,16 +59,25 @@ export function UsersPage() {
     } catch (error) { setNotice(userErrorMessage(error, 'باز کردن شیفت ناموفق بود')); }
   }
 
+  function openCloseShift() {
+    if (!currentShift) { setNotice('شیفت بازی برای بستن وجود ندارد'); return; }
+    setCountedCash('');
+    setHandoverNote('');
+    setCloseShiftOpen(true);
+  }
+
   async function closeShift() {
     if (!currentShift) return;
-    const value = window.prompt('وجه نقد شمارش‌شده (تومان)', '0');
-    if (value === null) return;
-    const counted = Number(value.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
+    const counted = Number(countedCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
     const adjusted = Number(manualCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
-    const result = await mockService.closeShift(counted, adjusted, shiftNote.trim());
-    await refresh();
-    setManualCash(''); setShiftNote('');
-    setNotice('شیفت بسته شد؛ اختلاف ثبت‌شده ' + money(result.difference ?? 0) + ' تومان');
+    try {
+      const result = await mockService.closeShift(counted, adjusted, [shiftNote.trim(), handoverNote.trim()].filter(Boolean).join(' · '));
+      await refresh();
+      setManualCash(''); setShiftNote(''); setHandoverNote(''); setCountedCash(''); setCloseShiftOpen(false);
+      setNotice('شیفت بسته شد؛ اختلاف ثبت‌شده ' + money(result.difference ?? 0) + ' تومان');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'بستن شیفت ناموفق بود'));
+    }
   }
 
   async function savePermissions() {
@@ -83,8 +95,8 @@ export function UsersPage() {
     <div className="page-header"><div><p>کاربران، دسترسی و شیفت</p><h1>کاربران و شیفت</h1></div></div>
     <div className="toolbar">
       {!currentShift && <label className="shift-operator-select">اپراتور شیفت<select value={shiftOperator} onChange={event => setShiftOperator(event.target.value)}>{users.filter(user => user.role !== 'owner').map(user => <option key={user.id} value={user.name}>{user.name} · {user.shift}</option>)}</select></label>}
-      <button className="btn" onClick={() => void (currentShift ? closeShift() : openShift())}>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>
-      <button className="btn danger" onClick={() => void closeShift()} disabled={!currentShift}>بستن شیفت</button>
+      <button className="btn" onClick={() => void (currentShift ? openCloseShift() : openShift())>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>
+      <button className="btn danger" onClick={() => openCloseShift()} disabled={!currentShift}>بستن شیفت</button>
       <button className="btn primary" onClick={() => setDraft({ id: crypto.randomUUID(), name: '', role: 'operator', shift: 'عصر', sales: 0, permissions: [], payType: 'hourly', hourlyRate: 0, monthlySalary: 0, overtimeRate: 0, workStart: '16:00', workEnd: '00:00', bonusTotal: 0, deductionTotal: 0 })}>+ کاربر جدید</button>
     </div>
     <div className="summary-grid">
@@ -110,6 +122,35 @@ export function UsersPage() {
       <h3>🕘 شیفت‌های اخیر</h3>
       {shifts.map(shift => <div className="info-row" key={shift.id}><span>{shift.operator} · {new Date(shift.openedAt).toLocaleString('fa-IR')} تا {shift.closedAt ? new Date(shift.closedAt).toLocaleString('fa-IR') : 'باز'}</span><strong>{money(shift.sales ?? 0)} ت · اختلاف {money(shift.difference ?? 0)} ت</strong></div>)}
     </section>
+    {closeShiftOpen && currentShift && (() => {
+      const expectedCash = (shifts.find(shift => shift.id === currentShift.id)?.expectedCash ?? 0)
+        || shifts.filter(shift => shift.id === currentShift.id).reduce((sum, shift) => sum + (shift.expectedCash ?? 0), 0);
+      const adjusted = expectedCash + (Number(manualCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0);
+      const counted = Number(countedCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
+      const difference = counted - adjusted;
+      return <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setCloseShiftOpen(false)}>
+        <section className="operation-modal wide" role="dialog" aria-modal="true">
+          <button className="modal-close" onClick={() => setCloseShiftOpen(false)} aria-label="بستن">×</button>
+          <h2>تسویه و تحویل شیفت</h2>
+          <div className="shift-close-grid">
+            <div className="info-row"><span>اپراتور</span><strong>{currentShift.operator}</strong></div>
+            <div className="info-row"><span>شروع شیفت</span><strong>{new Date(currentShift.openedAt).toLocaleString('fa-IR')}</strong></div>
+            <div className="info-row"><span>وجه مورد انتظار</span><strong>{money(adjusted)} تومان</strong></div>
+            <div className="info-row"><span>وجه شمارش‌شده</span><strong className={difference < 0 ? 'debt-value' : difference > 0 ? 'value green' : ''}>{money(counted)} تومان</strong></div>
+            <div className="info-row"><span>اختلاف صندوق</span><strong className={difference === 0 ? 'value green' : difference < 0 ? 'debt-value' : 'value orange'}>{money(difference)} تومان</strong></div>
+          </div>
+          <div className="modal-grid-2">
+            <label>وجه شمارش‌شده (تومان)<input autoFocus inputMode="numeric" value={countedCash} onChange={event => setCountedCash(event.target.value)} placeholder="مثلاً ۳٬۲۰۰٬۰۰۰" /></label>
+            <label>تطبیق نقدی خارج از سیستم<input inputMode="numeric" value={manualCash} onChange={event => setManualCash(event.target.value)} placeholder="۰" /></label>
+          </div>
+          <label>یادداشت تحویل شیفت<textarea rows={4} value={handoverNote} onChange={event => setHandoverNote(event.target.value)} placeholder="مشکل دستگاه، بدهی پیگیری‌نشده، سفارش باز، وجه دستی یا هر نکته‌ای که باید به شیفت بعد منتقل شود…" /></label>
+          <div className="modal-actions">
+            <button className="btn primary" onClick={() => void closeShift()}>ثبت تسویه و بستن شیفت</button>
+            <button className="btn" onClick={() => setCloseShiftOpen(false)}>انصراف</button>
+          </div>
+        </section>
+      </div>;
+    })()}
     {payUserId && <div className="modal-backdrop"><section className="operation-modal"><button className="modal-close" onClick={() => setPayUserId(null)}>×</button><h2>تغییر حقوقی · {users.find(item => item.id === payUserId)?.name}</h2><label>مبلغ (تومان)<input autoFocus inputMode="numeric" value={payAmount} onChange={event => setPayAmount(event.target.value)} /></label><label>دلیل<input value={payReason} onChange={event => setPayReason(event.target.value)} placeholder="پاداش، جریمه، اصلاح محاسبه…" /></label><div className="modal-actions"><button className="btn primary" onClick={() => { const value = Number(payAmount.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0; if(!value || !payReason.trim()){ setNotice('مبلغ و دلیل را وارد کنید'); return; } setUsers(current => current.map(user => user.id === payUserId ? { ...user, bonusTotal: (user.bonusTotal ?? 0) + value } : user)); setPayUserId(null); setNotice('پاداش ثبت شد؛ کسری‌ها باید با عملیات جداگانه و تأیید ثبت شوند.'); }}>ثبت پاداش</button><button className="btn danger" onClick={() => { const value = Number(payAmount.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0; if(!value || !payReason.trim()){ setNotice('مبلغ و دلیل را وارد کنید'); return; } setUsers(current => current.map(user => user.id === payUserId ? { ...user, deductionTotal: (user.deductionTotal ?? 0) + value } : user)); setPayUserId(null); setNotice('کسری حقوق ثبت شد؛ در مرحله مالی باید به تأیید مجاز برسد.'); }}>ثبت کسری حقوق</button><button className="btn" onClick={() => setPayUserId(null)}>انصراف</button></div></section></div>}
     {draft && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setDraft(null)}><section className="operation-modal"><button className="modal-close" onClick={() => setDraft(null)}>×</button><h2>{users.some(user => user.id === draft.id) ? 'ویرایش کاربر و حقوق' : 'کاربر جدید'}</h2><label>نام<input value={draft.name} onChange={event => setDraft({...draft,name:event.target.value})} /></label><label>نقش<select value={draft.role} onChange={event => setDraft({...draft,role:event.target.value as UserRecord['role']})}><option value="owner">صاحب</option><option value="admin">مدیر</option><option value="operator">اپراتور</option></select></label><label>شیفت<input value={draft.shift} onChange={event => setDraft({...draft,shift:event.target.value})} /></label><div className="modal-grid-2"><label>نوع حقوق<select value={draft.payType ?? 'hourly'} onChange={event => setDraft({...draft,payType:event.target.value as UserRecord['payType']})}><option value="hourly">ساعتی</option><option value="monthly">ماهانه</option></select></label><label>نرخ ساعتی<input inputMode="numeric" value={draft.hourlyRate ?? 0} onChange={event => setDraft({...draft,hourlyRate:Number(event.target.value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0})} /></label></div><label>حقوق ماهانه<input inputMode="numeric" value={draft.monthlySalary ?? 0} onChange={event => setDraft({...draft,monthlySalary:Number(event.target.value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0})} /></label><div className="modal-grid-2"><label>شروع کار<input type="time" value={draft.workStart ?? ''} onChange={event => setDraft({...draft,workStart:event.target.value})} /></label><label>پایان کار<input type="time" value={draft.workEnd ?? ''} onChange={event => setDraft({...draft,workEnd:event.target.value})} /></label></div><div className="modal-actions"><button className="btn primary" onClick={() => void saveUser()}>ذخیره</button><button className="btn" onClick={() => setDraft(null)}>انصراف</button></div></section></div>}
     {notice && <div className="operation-toast">{notice}<button onClick={() => setNotice('')}>×</button></div>}
