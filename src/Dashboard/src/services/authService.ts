@@ -93,3 +93,9 @@ export async function decideApproval(id: string, approved: boolean, note?: strin
     body: JSON.stringify({ note }),
   });
 }
+
+
+export function hasPermission(user: AppUserRecord, permission: string): boolean {
+  const role = user.role.toLowerCase();
+  return role === 'admin' || role === 'owner' || user.permissions.includes(permission);
+}
