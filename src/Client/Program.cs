@@ -665,6 +665,10 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         Console.WriteLine($"اجرای فرمان Agent ناموفق بود: {message}");
     }
 
+    var awaitingFinalResult = success
+        && restartVersion is not null
+        && command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback;
+
     try
     {
         await connection.InvokeAsync(
@@ -673,7 +677,9 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 command.CommandId,
                 success,
                 message,
-                DateTimeOffset.UtcNow),
+                DateTimeOffset.UtcNow,
+                Final: !awaitingFinalResult,
+                FinalStatus: awaitingFinalResult ? null : success ? "Succeeded" : "Failed"),
             cancellationToken);
     }
     catch (Exception exception) when (
@@ -683,13 +689,16 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
     }
 
     return new AgentCommandExecutionOutcome(
+        command.CommandId,
+        command.CommandType,
         success,
         message,
         error,
         pendingUpdateVersion,
         rollbackVersion,
         restartVersion,
-        restartVersion is not null);
+        restartVersion is not null,
+        awaitingFinalResult);
 }
 
 static async Task LaunchUpdateWatchdogAsync(string dataDirectory, string targetVersion, int parentProcessId)
