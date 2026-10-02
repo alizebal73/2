@@ -184,7 +184,53 @@ jobs:
 
             Write-Host 'Stage 8 Agent registration, SignalR connection, heartbeat and offline transition smoke passed.'
 
+            # Restart from the persisted Agent state without the bootstrap registration token.
+            $firstDeviceId = $offlineRow.deviceId
+            $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+            $secondAgentStdout = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent-second.stdout.log'
+            $secondAgentStderr = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent-second.stderr.log'
+            Remove-Item $secondAgentStdout,$secondAgentStderr -Force -ErrorAction SilentlyContinue
 
+            $secondAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+              'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+            ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $secondAgentStdout -RedirectStandardError $secondAgentStderr
+
+            try {
+              $secondOnline = $false
+              $secondRow = $null
+              for ($i = 0; $i -lt 30; $i++) {
+                if ($secondAgentProcess.HasExited) { break }
+                try {
+                  $secondRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $secondRow = @($secondRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+                  if ($secondRow -and $secondRow.isOnline -and $secondRow.lastSeenAt) {
+                    $secondOnline = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $secondOnline) {
+                Write-Host '--- Second Agent stdout ---'
+                if (Test-Path $secondAgentStdout) { Get-Content $secondAgentStdout }
+                Write-Host '--- Second Agent stderr ---'
+                if (Test-Path $secondAgentStderr) { Get-Content $secondAgentStderr }
+                throw 'Persisted Agent identity could not reconnect without the bootstrap registration token.'
+              }
+
+              if ($secondRow.deviceId -ne $firstDeviceId) {
+                throw "Agent identity changed after restart: first=$firstDeviceId second=$($secondRow.deviceId)"
+              }
+
+              Write-Host ("Stage 8 Agent persisted identity smoke passed: deviceId={0}" -f $secondRow.deviceId)
+            }
+            finally {
+              if (-not $secondAgentProcess.HasExited) {
+                Stop-Process -Id $secondAgentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+              Start-Sleep -Seconds 1
+            }
 
             $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($me.userName -ne 'admin') { throw 'Current operator endpoint returned the wrong user.' }
