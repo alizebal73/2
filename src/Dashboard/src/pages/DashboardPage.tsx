@@ -3,6 +3,7 @@ import type { CSSProperties, MouseEvent } from 'react';
 import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
 import { mockService } from '../services/mockService';
 import { createServerCustomerDebt, getServerCustomers } from '../services/customerService';
+import { hasPermission } from '../services/authService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { isServerGuid, reverseServerInvoice, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
