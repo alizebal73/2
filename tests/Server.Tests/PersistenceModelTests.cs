@@ -105,6 +105,9 @@ public sealed class PersistenceModelTests : IDisposable
             var customer = new Customer
             {
                 FullName = "Ali Reza",
+                Alias = "Ali",
+                NationalId = "0012345678",
+                VipTier = "gold",
                 Phone = "09120000000",
                 Email = "ali@example.com",
                 IsVip = true,
@@ -175,6 +178,9 @@ public sealed class PersistenceModelTests : IDisposable
 
             var savedCustomer = await db.Customers.SingleAsync(c => c.Email == "ali@example.com");
             Assert.True(savedCustomer.IsVip);
+            Assert.Equal("Ali", savedCustomer.Alias);
+            Assert.Equal("0012345678", savedCustomer.NationalId);
+            Assert.Equal("gold", savedCustomer.VipTier);
             Assert.Equal(250000m, savedCustomer.Balance);
 
             var savedProduct = await db.Products.SingleAsync(p => p.Name == "Energy Drink");
