@@ -667,6 +667,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       onExtend={() => { setSessionCenterStation(null); open('extend', liveSessionCenterStation); }}
       onReduce={() => { setSessionCenterStation(null); open('reduce', liveSessionCenterStation); }}
       onSettle={() => endSessionForPayment(liveSessionCenterStation)}
+      onRateChange={rate => { updateStation(liveSessionCenterStation.id, { sessionRate: rate }); addSessionTimeline(liveSessionCenterStation.id, 'note', 'تغییر نرخ جلسه', 'نرخ جدید ' + money(rate) + ' تومان/ساعت', rate); setMessage('نرخ همین جلسه به ' + money(rate) + ' تومان در ساعت تغییر کرد.'); }}
       timeline={sessionTimeline.filter(item => item.stationId === liveSessionCenterStation.id)}
     />}
     {context && <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}>
