@@ -1,10 +1,17 @@
 using GameNetManager.Client;
+using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Text.Json;
 using GameNetManager.Shared.Contracts;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.SignalR.Client;
+
+if (args.Length > 0 && string.Equals(args[0], "--gamenet-update-watchdog", StringComparison.OrdinalIgnoreCase))
+{
+    Environment.ExitCode = await RunUpdateWatchdogAsync(args.Skip(1).ToArray());
+    return;
+}
 
 const string defaultServerUrl = "http://localhost:5080";
 var serverUrl = Environment.GetEnvironmentVariable("GAMENET_SERVER_URL") ?? defaultServerUrl;
@@ -38,7 +45,7 @@ var stationId = state.StationId;
 if (Guid.TryParse(stationText, out var parsedStationId))
     stationId = parsedStationId;
 
-var agentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.1.0";
+var agentVersion = await ResolveAgentVersionAsync(AppContext.BaseDirectory);
 var osVersion = Environment.OSVersion.VersionString;
 
 Console.WriteLine(
@@ -56,6 +63,7 @@ using var httpClient = new HttpClient
 {
     BaseAddress = new Uri(serverUrl.TrimEnd('/') + "/")
 };
+var updateManager = new ClientUpdateManager(httpClient, dataDirectory, statePath);
 
 try
 {
@@ -99,8 +107,44 @@ try
         var kioskEnabled = false;
         var lockOnDisconnect = true;
 
-        connection.On<AgentCommandEnvelope>("AgentCommand", command =>
-            HandleAgentCommandAsync(connection, command, lockScreen, shutdown.Token));
+        connection.On<AgentCommandEnvelope>("AgentCommand", async command =>
+        {
+            var outcome = await HandleAgentCommandAsync(
+                connection,
+                command,
+                lockScreen,
+                updateManager,
+                agentVersion,
+                shutdown.Token);
+
+            if (outcome.PendingUpdateVersion is not null)
+            {
+                state = state with
+                {
+                    LifecycleState = outcome.RequiresRestart ? ClientLifecycleStates.Updating : ClientLifecycleStates.UpdatePending,
+                    PendingUpdateVersion = outcome.PendingUpdateVersion,
+                    LastUpdateError = outcome.Error
+                };
+                await SaveStateAsync(statePath, state);
+            }
+
+            if (outcome.RollbackVersion is not null)
+            {
+                state = state with
+                {
+                    LifecycleState = outcome.RequiresRestart ? ClientLifecycleStates.Recovering : ClientLifecycleStates.Degraded,
+                    PendingUpdateVersion = null,
+                    LastUpdateError = outcome.Error
+                };
+                await SaveStateAsync(statePath, state);
+            }
+
+            if (outcome.RequiresRestart && outcome.RestartVersion is not null)
+            {
+                await LaunchUpdateWatchdogAsync(dataDirectory, outcome.RestartVersion);
+                shutdown.Cancel();
+            }
+        });
 
         connection.On<AgentPolicyDto>("AgentPolicyChanged", policy =>
         {
@@ -126,6 +170,7 @@ try
                 LastUpdateError = null,
                 LastHealthyAt = DateTimeOffset.UtcNow
             };
+            await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
             await SaveStateAsync(statePath, state);
 
             Console.WriteLine(
@@ -166,6 +211,7 @@ try
                     LastUpdateError = null,
                     LastHealthyAt = DateTimeOffset.UtcNow
                 };
+                await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
                 await SaveStateAsync(statePath, state);
             }
         };
@@ -204,6 +250,18 @@ try
                     osVersion,
                     lockScreen,
                     shutdown.Token);
+
+                if (heartbeatSeconds.HasValue)
+                {
+                    await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
+                    state = state with
+                    {
+                        LifecycleState = ClientLifecycleStates.Running,
+                        LastUpdateError = null,
+                        LastHealthyAt = DateTimeOffset.UtcNow
+                    };
+                    await SaveStateAsync(statePath, state);
+                }
 
                 var delaySeconds = Math.Clamp(heartbeatSeconds ?? 10, 3, 60);
                 await Task.Delay(TimeSpan.FromSeconds(delaySeconds), shutdown.Token);
