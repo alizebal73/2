@@ -676,25 +676,28 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
     if (request.Quantity <= 0)
         return Results.BadRequest(new { code = "invalid_quantity", message = "تعداد باید بیشتر از صفر باشد." });
 
+    if (!Enum.TryParse<TransactionDirection>(request.Direction?.Trim(), true, out var direction))
+        return Results.BadRequest(new { code = "invalid_direction", message = "نوع حرکت موجودی معتبر نیست." });
+
     var product = await database.Products.FirstOrDefaultAsync(item => item.Id == productId && item.IsActive, cancellationToken);
     if (product is null)
         return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
 
-    if (request.Direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
+    if (direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
         return Results.Conflict(new { code = "insufficient_stock", message = "موجودی برای این خروج کافی نیست." });
 
-    product.StockQuantity += request.Direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
+    product.StockQuantity += direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
     database.InventoryTransactions.Add(new InventoryTransaction
     {
         ProductId = product.Id,
         Quantity = request.Quantity,
-        Direction = request.Direction,
+        Direction = direction,
         AppUserId = request.AppUserId,
         Notes = request.Notes
     });
     database.AuditLogs.Add(new AuditLog
     {
-        Action = request.Direction == TransactionDirection.In ? "InventoryIncrease" : "InventoryDecrease",
+        Action = direction == TransactionDirection.In ? "InventoryIncrease" : "InventoryDecrease",
         EntityName = "Product",
         EntityId = product.Id.ToString(),
         Details = request.Quantity.ToString() + " · " + (request.Notes ?? ""),
@@ -2108,7 +2111,7 @@ public sealed record CustomerDebtRequest(decimal Amount, string? Description, Gu
 public sealed record CustomerHistoryItemDto(Guid Id, string Type, string Description, decimal Amount, DateTimeOffset CreatedAt, Guid? ReferenceId);
 public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, Guid? AppUserId);
 public sealed record UpdateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, bool IsActive = true, Guid? AppUserId = null);
-public sealed record StockAdjustmentRequest(int Quantity, TransactionDirection Direction, string? Notes, Guid? AppUserId);
+public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId);
 public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
 public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId);
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
