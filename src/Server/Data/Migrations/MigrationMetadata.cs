@@ -105,3 +105,9 @@ partial class UserAuthorizationAndApprovals
 partial class EmployeePayroll
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002194500_AgentDeviceFoundation")]
+partial class AgentDeviceFoundation
+{
+}
