@@ -172,10 +172,30 @@
 13. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
 14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
 
-**جایگاه فعلی:** مرحلهٔ اصلی **۶ — Buffet & Inventory Domain**.  
-مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core) و مرحلهٔ ۵ (Customer & VIP Domain) بسته شده‌اند. موارد Permission/Approval سراسری که عمداً به مرحلهٔ ۷ واگذار شده‌اند، carry-over هستند و مانع ادامهٔ دامنه‌های بعدی نیستند.
+**جایگاه فعلی:** مرحلهٔ اصلی **۷ — Users & Permissions**.  
+مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ در حال تکمیل است؛ برش احراز هویت/Permission/Approval و سخت‌گیری سروری روی endpointهای حساس تا CI #507 با موفقیت پیاده‌سازی و تست شده، و موارد چندصندوقی/تعارض عملیات/حقوق پرسنل همچنان باز هستند.
 
 این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
+
+## وضعیت اجرایی مرحلهٔ ۷ — Users & Permissions
+
+### برش تأییدشده تا CI #507
+- ✅ احراز هویت واقعی اپراتور با Session سروری، Cookie امن و PBKDF2؛ `/api/auth/login`، `/api/auth/me` و `/api/auth/logout`.
+- ✅ مدل AppUser / Permission / AppUserSession / ApprovalRequest و Migration/Seeder واقعی سرور.
+- ✅ کاتالوگ Permissionهای رسمی پروژه و تخصیص دسترسی به کاربر.
+- ✅ Approval سروری برای ایجاد/تصمیم‌گیری درخواست‌های حساس با Audit.
+- ✅ Dashboard Login Gate و Users/Permissions UI از دادهٔ واقعی Server.
+- ✅ Permission Enforcement روی endpointهای حساس موجود: Customer، VIP، Buffet/Inventory، Debt/Wallet/Benefits، Finance، Shift، Session و Invoice Reverse.
+- ✅ Actor identity دیگر از request.AppUserId برای عملیات حساس پذیرفته نمی‌شود؛ در endpointهای محافظت‌شده شناسهٔ کاربر جاری Server منبع Audit/AppUserId است.
+- ✅ CI Smoke یک Operator محدود را عمداً با Permission ناقص وارد می‌کند و 403 واقعی برای عملیات بدون مجوز را اثبات می‌کند.
+- ✅ Run #507: Build/Test .NET، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke همگی سبز.
+
+### بازمانده‌های مرحلهٔ ۷
+- ⬜ Multi-cashier concurrency و conflict handling.
+- ⬜ Approval اجرایی متصل به عملیات حساس واقعی، نه فقط ثبت/تصمیم درخواست مستقل.
+- ⬜ Ledger/Payroll واقعی پرسنل و پرداخت حقوق.
+- ⬜ Hardening بیشتر Permissionهای Read/Write در UI و تفکیک دقیق مشاهده/ویرایش در هر دامنه.
+
 
 ## تکمیل‌های سراسری مرحله ۳ — نیازهای جدید اپراتور
 
