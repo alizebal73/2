@@ -1326,17 +1326,17 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       {context.station.state === 'paused' && <button onClick={() => contextAction('resume')}>▶ ادامه جلسه</button>}
       {(context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('extend')}>⏱ تمدید وقت</button>}
       {(context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('reduce')}>↘ کاهش زمان</button>}
-      <button onClick={() => contextAction('switch-net')}>🌐 تغییر اینترنت ۱ ↔ ۲</button>
-      <button onClick={() => contextAction('move-user')}>🔀 جابه‌جایی یوزر</button>
-      <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>
-      <button onClick={() => contextAction('login-id')}>🔑 ورود با شناسه</button>
-      <button onClick={() => contextAction('message')}>💬 پیام به مشتری</button>
-      <button onClick={() => contextAction('screenshot')}>📸 اسکرین‌شات</button>
-      <button onClick={() => contextAction('restart-shell')}>🔄 ری‌استارت Shell</button>
-      <button onClick={() => contextAction('restart')}>⏻ ری‌استارت Windows</button>
-      <button onClick={() => contextAction('shutdown')}>⛔ خاموش کردن</button>
-      <button onClick={() => contextAction('offline')}>🛠 خارج از سرویس / فعال‌سازی</button>
-      <button onClick={() => contextAction('settings')}>⚙ تنظیمات کامل کلاینت</button>
+      {canControlClient && <button onClick={() => contextAction('switch-net')}>🌐 تغییر اینترنت ۱ ↔ ۲</button>}
+      {canManageSession && <button onClick={() => contextAction('move-user')}>🔀 جابه‌جایی یوزر</button>}
+      {canControlClient && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
+      {canControlClient && <button onClick={() => contextAction('login-id')}>🔑 ورود با شناسه</button>}
+      {canControlClient && <button onClick={() => contextAction('message')}>💬 پیام به مشتری</button>}
+      {canControlClient && <button onClick={() => contextAction('screenshot')}>📸 اسکرین‌شات</button>}
+      {canControlClient && <button onClick={() => contextAction('restart-shell')}>🔄 ری‌استارت Shell</button>}
+      {canControlClient && <button onClick={() => contextAction('restart')}>⏻ ری‌استارت Windows</button>}
+      {canControlClient && <button onClick={() => contextAction('shutdown')}>⛔ خاموش کردن</button>}
+      {canControlClient && <button onClick={() => contextAction('offline')}>🛠 خارج از سرویس / فعال‌سازی</button>}
+      {canControlClient && <button onClick={() => contextAction('settings')}>⚙ تنظیمات کامل کلاینت</button>}
     </div>}
     {reverseRequest && <ReverseDialog open={Boolean(reverseRequest)} title={reverseRequest.title} detail={reverseRequest.detail} onCancel={() => setReverseRequest(null)} onConfirm={() => reverseTimelineEvent(reverseRequest)} />}
     {approval && <ApprovalDialog
