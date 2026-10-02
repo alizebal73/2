@@ -332,7 +332,7 @@
 10. [~] Refund / Reverse واقعی — Refund کیف پول Server/API + Audit + UI + Approval/Smoke سبز شد؛ Reference/Reverse کامل مالی و Permission سروری در ادامه باقی است
 11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change + Server Atomic Settlement + Invoice/Wallet/Audit + تست اتمیک و Smoke سبز؛ اتصال مستقیم Dashboard به Session/Invoice سرور و Permission نهایی باقی
 12. ✅ Split Payment — UI + ثبت اتمیک سروری + Invoice + Audit + Dashboard Smoke سبز؛ Permission نهایی طبق مرحله ۷ تکمیل می‌شود
-13. [~] Shift Settlement + Shift Handover — فرم + Mock/محاسبه + Build/Test/Smoke سبز؛ Shift Close سروری و Audit/Handover نهایی باقی
+13. [~] Shift Settlement + Shift Handover — Shift Open/Close سروری + فروش نقدی از InvoicePayment + هزینه + تطبیق نقدی + Audit + Build/Test/Smoke سبز؛ اتصال کامل Users/Permission هنوز باقی
 14. [~] Session Transfer / Change Tariff / Change Persons — Session Center + Build/Test/Smoke سبز؛ Transaction/Audit/Permission سروری باقی
 15. [~] Free Time + Free Money کامل — Billing + مصرف Free Money + گزارش مستقل + Build/Test/Smoke سبز؛ Ledger/Server Transaction نهایی باقی
 16. [~] Concurrent Login Limit — قرارداد مشتری + Mock Login Guard + Client UX پیاده شد؛ enforcement سروری/Agent و چنددستگاهی واقعی باقی
