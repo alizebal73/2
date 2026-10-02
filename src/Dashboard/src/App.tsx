@@ -230,6 +230,10 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
       }
     };
 
+    connection.on('AgentSessionChanged', () => {
+      if (active) void loadSnapshot();
+    });
+
     void loadSnapshot();
 
     return () => {
