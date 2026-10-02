@@ -584,6 +584,11 @@ public sealed class AgentHub(
             device.OsVersion,
             device.CpuUsagePercent,
             device.MemoryAvailableBytes,
-            device.UptimeSeconds);
+            device.UptimeSeconds,
+            device.LifecycleState,
+            device.PendingUpdateVersion,
+            device.LastUpdateError,
+            device.LastHealthyAt,
+            device.LifecycleStateChangedAt);
     }
 }
