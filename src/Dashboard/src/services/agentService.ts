@@ -40,3 +40,30 @@ export async function getAgentCommand(commandId: string) {
 
   return response.json();
 }
+
+
+export async function sendAgentCommand(agentId: string, commandType: string, payloadJson?: string | null) {
+  const response = await fetch('/api/agent/devices/' + agentId + '/commands', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ commandType, payloadJson: payloadJson ?? null }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'ارسال فرمان Agent انجام نشد');
+  }
+  return await response.json() as AgentCommandStatusDto;
+}
+
+export async function updateAgentPolicy(agentId: string, policy: { kioskEnabled: boolean; lockOnDisconnect: boolean }) {
+  const response = await fetch('/api/agent/devices/' + agentId + '/policy', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(policy),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'تنظیم Policy Agent انجام نشد');
+  }
+  return await response.json() as { agentId: string; kioskEnabled: boolean; lockOnDisconnect: boolean };
+}
