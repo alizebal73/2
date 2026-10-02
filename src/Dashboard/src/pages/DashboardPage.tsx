@@ -885,7 +885,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       onCharge={() => { setSessionCenterStation(null); open('charge', liveSessionCenterStation); }}
       onExtend={() => { setSessionCenterStation(null); open('extend', liveSessionCenterStation); }}
       onReduce={() => { setSessionCenterStation(null); open('reduce', liveSessionCenterStation); }}
-      onSettle={() => endSessionForPayment(liveSessionCenterStation)}
+      onSettle={() => { setSessionCenterStation(null); open('settle', liveSessionCenterStation); }}
       onRateChange={rate => { updateStation(liveSessionCenterStation.id, { sessionRate: rate }); addSessionTimeline(liveSessionCenterStation.id, 'note', 'تغییر نرخ جلسه', 'نرخ جدید ' + money(rate) + ' تومان/ساعت', rate); setMessage('نرخ همین جلسه به ' + money(rate) + ' تومان در ساعت تغییر کرد.'); }}
       timeline={sessionTimeline.filter(item => item.stationId === liveSessionCenterStation.id)}
     />}
