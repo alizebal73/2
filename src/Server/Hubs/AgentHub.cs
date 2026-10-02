@@ -53,23 +53,48 @@ public sealed class AgentHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var device = await ResolveConnectedDeviceAsync(CancellationToken.None);
-        if (device is not null && device.ConnectionId == Context.ConnectionId)
-        {
-            device.IsOnline = false;
-            device.ConnectionId = null;
-            device.ConnectedAt = null;
-            device.LifecycleState = ClientLifecycleStates.Degraded;
-            device.LifecycleStateChangedAt = DateTimeOffset.UtcNow;
-            if (device.LockOnDisconnect)
-            {
-                device.IsLocked = true;
-                device.LockedAt = DateTimeOffset.UtcNow;
-                logger.LogWarning("Agent {DeviceId} disconnected; LockOnDisconnect policy locked the device.", device.DeviceId);
-            }
-            await database.SaveChangesAsync();
+        var now = DateTimeOffset.UtcNow;
+        var connectionId = Context.ConnectionId;
 
-            await BroadcastStatusAsync(device, DateTimeOffset.UtcNow, CancellationToken.None);
+        if (Context.Items.TryGetValue(AgentDeviceContextKey, out var rawDeviceId)
+            && rawDeviceId is Guid deviceId)
+        {
+            var disconnected = await database.AgentDevices
+                .Where(item => item.Id == deviceId
+                    && item.IsActive
+                    && item.IsOnline
+                    && item.ConnectionId == connectionId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.IsOnline, false)
+                    .SetProperty(item => item.ConnectionId, (string?)null)
+                    .SetProperty(item => item.ConnectedAt, (DateTimeOffset?)null)
+                    .SetProperty(item => item.LifecycleState, ClientLifecycleStates.Degraded)
+                    .SetProperty(item => item.LifecycleStateChangedAt, now)
+                    .SetProperty(item => item.IsLocked, item => item.LockOnDisconnect || item.IsLocked)
+                    .SetProperty(item => item.LockedAt, item => item.LockOnDisconnect ? now : item.LockedAt));
+
+            if (disconnected > 0)
+            {
+                var device = await database.AgentDevices
+                    .AsNoTracking()
+                    .Include(item => item.Station)
+                    .FirstOrDefaultAsync(item => item.Id == deviceId);
+
+                if (device is not null)
+                {
+                    if (device.LockOnDisconnect)
+                        logger.LogWarning("Agent {DeviceId} disconnected; LockOnDisconnect policy locked the device.", device.DeviceId);
+
+                    await BroadcastStatusAsync(device, now, CancellationToken.None);
+                }
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Ignoring stale Agent disconnect. DeviceId={DeviceId}, ConnectionId={ConnectionId}",
+                    deviceId,
+                    connectionId);
+            }
         }
 
         await base.OnDisconnectedAsync(exception);
