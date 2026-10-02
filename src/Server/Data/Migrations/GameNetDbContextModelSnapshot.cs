@@ -59,12 +59,18 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<bool>("IsLocked")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("KioskEnabled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTimeOffset?>("LockedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("LastIpAddress")
                         .HasMaxLength(80)
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("LockOnDisconnect")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("LastSeenAt")
                         .HasColumnType("TEXT");
