@@ -97,7 +97,7 @@ jobs:
             if ($me.userName -ne 'admin') { throw 'Current operator endpoint returned the wrong user.' }
 
             $permissionCatalog = Invoke-RestMethod -Uri "$baseUrl/api/permissions" -Method Get -WebSession $adminSession
-            if (-not @($permissionCatalog | Where-Object { $_.name -eq 'session.start' })) { throw 'Permission catalog smoke failed.' }
+            if (-not @($permissionCatalog | Where-Object { $_.name -eq 'session.start' }) -or -not @($permissionCatalog | Where-Object { $_.name -eq 'payroll.manage' })) { throw 'Permission catalog smoke failed.' }
 
             $userSmokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
             $managedUser = Invoke-RestMethod -Uri "$baseUrl/api/users" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
@@ -171,6 +171,57 @@ jobs:
             } | ConvertTo-Json)
             if ($approvalDecision.status -ne 'Approved') { throw 'Approval decision smoke failed.' }
 
+
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('payroll.view','payroll.manage')
+            } | ConvertTo-Json) | Out-Null
+
+            $operatorPayrollSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              userName = $managedUser.userName
+              password = 'Operator123!'
+            } | ConvertTo-Json) | Out-Null
+
+            $profile = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)" -Method Put -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              payType = 'monthly'
+              hourlyRate = 0
+              monthlySalary = 12000000
+              overtimeRate = 80000
+              employmentStartDate = (Get-Date).ToUniversalTime().ToString('o')
+              workSchedule = '09:00-17:00'
+              notes = 'Stage 7 payroll smoke'
+              isActive = $true
+            } | ConvertTo-Json)
+            if ($profile.payType -ne 'monthly' -or [int]$profile.monthlySalary -ne 12000000) { throw 'Payroll profile smoke failed.' }
+
+            $payrollEntry = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/entries" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              kind = 'Bonus'
+              amount = 10000
+              reason = 'Stage 7 payroll ledger smoke'
+              paymentMethod = 'cash'
+            } | ConvertTo-Json)
+            if ($payrollEntry.status -ne 'Pending' -or -not $payrollEntry.approvalId) { throw 'Payroll approval request smoke failed.' }
+
+            $pendingLedger = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/ledger" -Method Get -WebSession $adminSession
+            $pendingRow = @($pendingLedger | Where-Object { $_.id -eq $payrollEntry.entryId })[0]
+            if (-not $pendingRow -or $pendingRow.status -ne 'Pending') { throw 'Pending payroll ledger entry was not persisted.' }
+
+            $payrollDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($payrollEntry.approvalId)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 payroll approved'
+            } | ConvertTo-Json)
+            if ($payrollDecision.status -ne 'Approved') { throw 'Payroll approval execution smoke failed.' }
+
+            $payrollUsers = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users" -Method Get -WebSession $adminSession
+            $payrollRow = @($payrollUsers | Where-Object { $_.userId -eq $managedUser.id })[0]
+            if ([int]$payrollRow.bonusTotal -ne 10000 -or [int]$payrollRow.employeePayable -ne 10000) { throw 'Approved payroll entry did not update the server ledger balance.' }
+
+            $operatorPayrollProfile = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/ledger" -Method Get -WebSession $operatorPayrollSession
+            if (-not @($operatorPayrollProfile | Where-Object { $_.id -eq $payrollEntry.entryId -and $_.status -eq 'Approved' })) { throw 'Approved payroll ledger row was not readable by the operator.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorPayrollSession | Out-Null
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('finance.manage')
+            } | ConvertTo-Json) | Out-Null
 
             $customers = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Get -WebSession $adminSession
             if (@($customers).Count -lt 1) { throw 'Customer API returned no seeded customers.' }
