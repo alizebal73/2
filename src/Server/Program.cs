@@ -384,6 +384,79 @@ app.MapGet("/api/finance/summary", async (
 
 
 
+app.MapPost("/api/sessions", async (
+    StartSessionRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+    if (request.CustomerId == Guid.Empty || request.StationId == Guid.Empty)
+    {
+        return Results.BadRequest(new { code = "invalid_session_reference", message = "مشتری و ایستگاه معتبر نیستند." });
+    }
+
+    var customerExists = await database.Customers.AnyAsync(item => item.Id == request.CustomerId, cancellationToken);
+    var station = await database.Stations.FirstOrDefaultAsync(item => item.Id == request.StationId, cancellationToken);
+
+    if (!customerExists)
+    {
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+    }
+
+    if (station is null)
+    {
+        return Results.NotFound(new { code = "station_not_found", message = "ایستگاه پیدا نشد." });
+    }
+
+    if (station.State != StationState.Available)
+    {
+        return Results.Conflict(new { code = "station_not_available", message = "این ایستگاه دیگر آزاد نیست." });
+    }
+
+    if (request.TariffId is not null)
+    {
+        var tariffExists = await database.Tariffs.AnyAsync(item => item.Id == request.TariffId.Value, cancellationToken);
+        if (!tariffExists)
+        {
+            return Results.BadRequest(new { code = "tariff_not_found", message = "تعرفه انتخاب‌شده پیدا نشد." });
+        }
+    }
+
+    var session = new Session
+    {
+        CustomerId = request.CustomerId,
+        StationId = request.StationId,
+        TariffId = request.TariffId,
+        AppUserId = request.AppUserId,
+        StartAt = DateTimeOffset.UtcNow,
+        State = SessionState.Active,
+        TotalAmount = 0m
+    };
+
+    database.Sessions.Add(session);
+    station.State = StationState.Occupied;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "SessionStart",
+        EntityName = "Session",
+        EntityId = session.Id.ToString(),
+        Details = "شروع جلسه · ایستگاه " + station.Name,
+        AppUserId = request.AppUserId
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+
+    return Results.Ok(new StartSessionResultDto(
+        session.Id,
+        station.Id,
+        session.CustomerId,
+        session.StartAt));
+})
+.WithName("StartSession");
+
 app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
     Guid sessionId,
     SessionSettlementRequest request,
@@ -452,6 +525,9 @@ static bool IsMigrationRecoveryCandidate(Exception exception)
 
 public partial class Program { }
 
+
+public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId);
+public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, DateTimeOffset StartAt);
 
 public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
 public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
