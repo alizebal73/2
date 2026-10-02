@@ -86,6 +86,7 @@ export type AgentStatusDto = {
   stationId?: string | null;
   stationName?: string | null;
   isOnline: boolean;
+  isLocked: boolean;
   lastSeenAt?: string | null;
   connectedAt?: string | null;
   agentVersion?: string | null;
