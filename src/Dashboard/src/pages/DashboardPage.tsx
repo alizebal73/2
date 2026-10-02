@@ -1161,14 +1161,27 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
             {roundingEnabled ? <div>مبلغ نهایی طبق رند تعرفه تا {money(settlementTariff?.roundingStep ?? 1000)} تومان گرد شد.</div> : <div>رند غیرفعال است.</div>}
           </div>}
         </div>
-        <div className="modal-grid-2 settlement-payment-inputs">
-          <label>مبلغ دریافتی نقدی (در صورت پرداخت نقدی)<input inputMode="numeric" value={receivedAmount} onChange={event => setReceivedAmount(event.target.value)} placeholder={money(finalTotal)} /></label>
-          <div className="settlement-change"><span>مبلغ برگشتی</span><strong>{money(change)} تومان</strong></div>
-        </div>
+        {!splitPaymentEnabled ? (
+          <div className="modal-grid-2 settlement-payment-inputs">
+            <label>مبلغ دریافتی نقدی (در صورت پرداخت نقدی)<input inputMode="numeric" value={receivedAmount} onChange={event => setReceivedAmount(event.target.value)} placeholder={money(finalTotal)} /></label>
+            <div className="settlement-change"><span>مبلغ برگشتی</span><strong>{money(change)} تومان</strong></div>
+          </div>
+        ) : (
+          <div className="split-payment-box">
+            <div className="split-payment-head"><strong>پرداخت ترکیبی</strong><span>جمع باید دقیقاً {money(finalTotal)} تومان باشد</span></div>
+            <label>نقدی<input inputMode="numeric" value={splitCash} onChange={event => setSplitCash(event.target.value)} /></label>
+            <label>کارتخوان<input inputMode="numeric" value={splitCard} onChange={event => setSplitCard(event.target.value)} /></label>
+            <label>کیف پول<input inputMode="numeric" value={splitWallet} onChange={event => setSplitWallet(event.target.value)} /></label>
+            <div className="split-payment-total"><span>جمع واردشده</span><strong>{money(number(splitCash) + number(splitCard) + number(splitWallet))} تومان</strong></div>
+          </div>
+        )}
         <div className="modal-actions">
-          <button className="btn" onClick={() => finishSession('cash')}>پرداخت نقدی</button>
-          <button className="btn" onClick={() => finishSession('card')}>کارتخوان</button>
-          <button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button>
+          <button type="button" className={'btn ' + (splitPaymentEnabled ? 'active' : '')} onClick={() => setSplitPaymentEnabled(value => !value)}>تقسیم پرداخت</button>
+          {!splitPaymentEnabled && <button className="btn" onClick={() => finishSession('cash')}>پرداخت نقدی</button>}
+          {!splitPaymentEnabled && <button className="btn" onClick={() => finishSession('card')}>کارتخوان</button>}
+          {!splitPaymentEnabled && <button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button>}
+          {!splitPaymentEnabled && <button className="btn" onClick={() => finishSession('gift')}>اعتبار رایگان</button>}
+          {splitPaymentEnabled && <button className="btn primary" onClick={() => finishSplitSession(finalTotal)}>ثبت تسویه ترکیبی</button>}
           <button className="btn danger" onClick={() => finishSession('debt')}>پرداخت بعداً / ثبت بدهی</button>
           <button className="btn" onClick={() => window.print()}>چاپ فاکتور</button>
         </div>
