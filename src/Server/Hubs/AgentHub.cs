@@ -59,6 +59,8 @@ public sealed class AgentHub(
             device.IsOnline = false;
             device.ConnectionId = null;
             device.ConnectedAt = null;
+            device.LifecycleState = ClientLifecycleStates.Degraded;
+            device.LifecycleStateChangedAt = DateTimeOffset.UtcNow;
             if (device.LockOnDisconnect)
             {
                 device.IsLocked = true;
