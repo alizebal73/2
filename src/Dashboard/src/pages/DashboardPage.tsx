@@ -451,6 +451,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
 
   function endSessionForPayment(station: StationDto) {
     if (!['busy', 'paused'].includes(station.state)) { setMessage('این ایستگاه جلسه فعالی ندارد'); return; }
+    if (station.serverSessionId) {
+      setActiveStation(station);
+      open('settle', station);
+      return;
+    }
     const { customer, total } = calculateSessionDue(station);
     addSessionTimeline(station.id, 'settle', 'پایان بازی', 'مبلغ قابل دریافت ' + money(total) + ' تومان', total);
     updateStation(station.id, {
