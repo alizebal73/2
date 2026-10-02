@@ -128,6 +128,12 @@ export type UserRecord = {
   workEnd?: string;
   bonusTotal?: number;
   deductionTotal?: number;
+  paidSalaryTotal?: number;
+  employeePayable?: number;
+  ownerReceivable?: number;
+  damageTotal?: number;
+  advanceTotal?: number;
+  lastPaymentAt?: string;
 };
 
 export type PricingScheduleRule = {
