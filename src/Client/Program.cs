@@ -168,8 +168,7 @@ static async Task<int?> SendHeartbeatAsync(
                 osVersion,
                 null,
                 GC.GetGCMemoryInfo().TotalAvailableMemoryBytes,
-                Environment.TickCount64 / 1000),
-            cancellationToken);
+                Environment.TickCount64 / 1000));
 
         Console.WriteLine($"Heartbeat موفق؛ زمان سرور: {response.ServerUtcNow:HH:mm:ss}.");
         return response.HeartbeatIntervalSeconds;
