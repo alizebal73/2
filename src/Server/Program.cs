@@ -937,7 +937,7 @@ app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
         .Where(item =>
             item.CustomerId == customerId
             && item.StartAt >= activatedAt
-            && item.StartAt <= usageEnd)
+            && item.StartAt <= now)
         .Select(item => new { item.StartAt, item.EndAt })
         .ToListAsync(cancellationToken);
 
@@ -945,6 +945,9 @@ app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
     var todayUsed = 0;
     foreach (var session in sessions)
     {
+        if (session.StartAt >= usageEnd)
+            continue;
+
         var rawEnd = session.EndAt ?? usageEnd;
         var end = rawEnd > usageEnd ? usageEnd : rawEnd;
         var start = session.StartAt < activatedAt ? activatedAt : session.StartAt;
