@@ -298,9 +298,7 @@ jobs:
               $agentDataPattern = [regex]::Escape($agentData)
               Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
                 Where-Object {
-                  $_.ProcessId -ne $PID
-                    -and $_.CommandLine
-                    -and $_.CommandLine -match $agentDataPattern
+                  ($_.ProcessId -ne $PID) -and $_.CommandLine -and ($_.CommandLine -match $agentDataPattern)
                 } |
                 ForEach-Object {
                   Stop-Process -Id ([int]$_.ProcessId) -Force -ErrorAction SilentlyContinue
