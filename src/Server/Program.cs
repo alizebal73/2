@@ -399,8 +399,13 @@ app.MapGet("/api/payroll/users/{userId:guid}/ledger", async (
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "payroll.view", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var rows = await database.PayrollLedgerEntries.AsNoTracking()
+    var storedRows = await database.PayrollLedgerEntries.AsNoTracking()
         .Where(item => item.EmployeeProfile.AppUserId == userId)
+        .Include(item => item.EmployeeProfile)
+        .ThenInclude(item => item.AppUser)
+        .ToListAsync(cancellationToken);
+
+    var rows = storedRows
         .OrderByDescending(item => item.CreatedAt)
         .Take(200)
         .Select(item => new
@@ -421,7 +426,7 @@ app.MapGet("/api/payroll/users/{userId:guid}/ledger", async (
             paymentMethod = item.PaymentMethod,
             receiptNumber = item.ReceiptNumber
         })
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     return Results.Ok(rows);
 })
