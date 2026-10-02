@@ -697,7 +697,7 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
 
     var dataDirectory = arguments[0];
     var targetVersion = arguments[1];
-    using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+    using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(120));
     using var httpClient = new HttpClient();
     var statePath = Path.Combine(dataDirectory, "agent-state.json");
     var manager = new ClientUpdateManager(httpClient, dataDirectory, statePath);
@@ -708,107 +708,178 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
     {
         await Task.Delay(TimeSpan.FromSeconds(1), cancellation.Token);
 
-        var targetRoot = Path.Combine(manager.VersionsDirectory, targetVersion);
-        var targetAssembly = Path.Combine(targetRoot, "GameNetManager.Client.dll");
-        var targetExe = Path.Combine(targetRoot, "GameNetManager.Client.exe");
+        var baselineHealthyAt = await ReadAgentLastHealthyAtAsync(dataDirectory, cancellation.Token);
+        child = StartVersionProcess(manager, dataDirectory, targetVersion);
 
-        if (File.Exists(targetExe))
+        var healthy = await WaitForFreshHealthyVersionAsync(
+            manager,
+            dataDirectory,
+            targetVersion,
+            baselineHealthyAt,
+            child,
+            cancellation.Token);
+
+        if (healthy)
         {
-            child = Process.Start(new ProcessStartInfo
-            {
-                FileName = targetExe,
-                WorkingDirectory = targetRoot,
-                UseShellExecute = false,
-                CreateNoWindow = false,
-                Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory }
-            });
-        }
-        else if (File.Exists(targetAssembly))
-        {
-            child = Process.Start(new ProcessStartInfo
-            {
-                FileName = Environment.ProcessPath ?? "dotnet",
-                WorkingDirectory = targetRoot,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                ArgumentList = { targetAssembly },
-                Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory }
-            });
-        }
-        else
-        {
-            throw new FileNotFoundException("فایل اجرایی نسخهٔ هدف پیدا نشد.", targetRoot);
+            await manager.CommitHealthyAsync(targetVersion, cancellation.Token);
+            return 0;
         }
 
-        if (child is null)
-            throw new InvalidOperationException("نسخهٔ جدید اجرا نشد.");
-
-        for (var i = 0; i < 50; i++)
-        {
-            cancellation.Token.ThrowIfCancellationRequested();
-
-            var status = await manager.GetStateAsync(cancellation.Token);
-            if (string.Equals(status?.ActiveVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(status?.HealthyVersion, targetVersion, StringComparison.OrdinalIgnoreCase))
-            {
-                await manager.CommitHealthyAsync(targetVersion, cancellation.Token);
-                return 0;
-            }
-
-            if (child.HasExited)
-                break;
-
-            await Task.Delay(TimeSpan.FromSeconds(1), cancellation.Token);
-        }
+        TryTerminateProcess(child);
 
         var failedState = await manager.GetStateAsync(cancellation.Token);
-        if (!string.Equals(failedState?.ActiveVersion, targetVersion, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(failedState?.ActiveVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(failedState.PreviousVersion))
+        {
             return 1;
+        }
 
+        var rollbackBaselineHealthyAt = await ReadAgentLastHealthyAtAsync(dataDirectory, cancellation.Token);
         var rollbackVersion = await manager.RollbackAsync(cancellation.Token);
-        var rollbackRoot = Path.Combine(manager.VersionsDirectory, rollbackVersion);
-        var rollbackAssembly = Path.Combine(rollbackRoot, "GameNetManager.Client.dll");
-        var rollbackExe = Path.Combine(rollbackRoot, "GameNetManager.Client.exe");
+        var rollbackChild = StartVersionProcess(manager, dataDirectory, rollbackVersion);
 
-        if (File.Exists(rollbackExe))
+        var rollbackHealthy = await WaitForFreshHealthyVersionAsync(
+            manager,
+            dataDirectory,
+            rollbackVersion,
+            rollbackBaselineHealthyAt,
+            rollbackChild,
+            cancellation.Token);
+
+        if (rollbackHealthy)
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = rollbackExe,
-                WorkingDirectory = rollbackRoot,
-                UseShellExecute = false,
-                Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory }
-            });
-        }
-        else if (File.Exists(rollbackAssembly))
-        {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = Environment.ProcessPath ?? "dotnet",
-                WorkingDirectory = rollbackRoot,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                ArgumentList = { rollbackAssembly },
-                Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory }
-            });
+            await manager.CommitHealthyAsync(rollbackVersion, cancellation.Token);
+            return 1;
         }
 
-        return 1;
+        TryTerminateProcess(rollbackChild);
+        return 2;
     }
     catch
     {
-        try
-        {
-            await manager.RollbackAsync(CancellationToken.None);
-        }
-        catch
-        {
-        }
-
+        TryTerminateProcess(child);
         return 1;
     }
 }
 
+static Process StartVersionProcess(
+    ClientUpdateManager manager,
+    string dataDirectory,
+    string targetVersion)
+{
+    var targetRoot = Path.Combine(manager.VersionsDirectory, targetVersion);
+    var targetAssembly = Path.Combine(targetRoot, "GameNetManager.Client.dll");
+    var targetExe = Path.Combine(targetRoot, "GameNetManager.Client.exe");
+
+    Process? process;
+    if (File.Exists(targetExe))
+    {
+        process = Process.Start(new ProcessStartInfo
+        {
+            FileName = targetExe,
+            WorkingDirectory = targetRoot,
+            UseShellExecute = false,
+            CreateNoWindow = false,
+            Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory }
+        });
+    }
+    else if (File.Exists(targetAssembly))
+    {
+        process = Process.Start(new ProcessStartInfo
+        {
+            FileName = Environment.ProcessPath ?? "dotnet",
+            WorkingDirectory = targetRoot,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            ArgumentList = { targetAssembly },
+            Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory }
+        });
+    }
+    else
+    {
+        throw new FileNotFoundException("فایل اجرایی نسخهٔ هدف پیدا نشد.", targetRoot);
+    }
+
+    return process ?? throw new InvalidOperationException("نسخهٔ هدف اجرا نشد.");
+}
+
+static async Task<bool> WaitForFreshHealthyVersionAsync(
+    ClientUpdateManager manager,
+    string dataDirectory,
+    string targetVersion,
+    DateTimeOffset? baselineHealthyAt,
+    Process child,
+    CancellationToken cancellationToken)
+{
+    for (var i = 0; i < 60; i++)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var status = await manager.GetStateAsync(cancellationToken);
+        var agentState = await ReadAgentStateAsync(dataDirectory, cancellationToken);
+
+        var freshHealth =
+            agentState?.LastHealthyAt.HasValue == true
+            && (!baselineHealthyAt.HasValue || agentState.LastHealthyAt.Value > baselineHealthyAt.Value);
+
+        if (string.Equals(status?.ActiveVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(status?.HealthyVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(agentState?.AgentVersion, targetVersion, StringComparison.OrdinalIgnoreCase)
+            && freshHealth)
+        {
+            return true;
+        }
+
+        if (child.HasExited)
+            break;
+
+        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+    }
+
+    return false;
+}
+
+static async Task<DateTimeOffset?> ReadAgentLastHealthyAtAsync(
+    string dataDirectory,
+    CancellationToken cancellationToken)
+{
+    var state = await ReadAgentStateAsync(dataDirectory, cancellationToken);
+    return state?.LastHealthyAt;
+}
+
+static async Task<AgentState?> ReadAgentStateAsync(
+    string dataDirectory,
+    CancellationToken cancellationToken)
+{
+    var path = Path.Combine(dataDirectory, "agent-state.json");
+    if (!File.Exists(path))
+        return null;
+
+    try
+    {
+        await using var stream = File.OpenRead(path);
+        return await JsonSerializer.DeserializeAsync<AgentState>(stream, cancellationToken: cancellationToken);
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+static void TryTerminateProcess(Process? process)
+{
+    if (process is null)
+        return;
+
+    try
+    {
+        if (!process.HasExited)
+            process.Kill(entireProcessTree: true);
+    }
+    catch
+    {
+    }
+}
 
 
 record AgentState(
