@@ -22,13 +22,13 @@
 
 ## وضعیت فعلی پروژه
 
-- **Product Completion:** مرحله اصلی ۳ — Operational Completion — بسته شده است؛ A1 تا A8 Build/Test/Interaction Smoke سبز هستند. پروژه اکنون در مرحله اصلی ۴ — Finance & Session Core — قرار دارد و B9 تا B17 در حال تکمیل نهایی هستند.
+- **Product Completion:** مرحله اصلی ۵ — Customer & VIP Domain — جاری است؛ مراحل ۳ و ۴ بسته شده‌اند و تغییرات جدید فقط بعد از CI سبز و ثبت در roadmap معتبرند.
 
 - **مرحله ۱A — Foundation:** ✅ پیاده‌سازی شده: Solution .NET 10، Server، Dashboard React/TypeScript، Client SignalR، Shared DTO، SQLite/EF Core و migration اولیه.
 - **مرحله ۱B — UI/Behavior Migration:** ✅ پیاده‌سازی و ممیزی استاتیک انجام شد؛ تمام منوهای اصلی، ۱۰ صفحه، راست‌کلیک Dashboard/Client، مودال‌های اصلی، Flow سرعت F1 و F4-F8، هات‌کی‌های قابل‌تغییر، گزارش/فیلتر/بازه شمسی، شیفت و ماتریس دسترسی، Backup/Restore، تنظیمات، Account Pool، Client Shell و PINهای دمو به React منتقل شده‌اند.
 - **مرحله اصلی ۱ — Foundation:** ✅ بسته شده در نقشه ۱۴ مرحله‌ای.
 - **مرحله اصلی ۲ — Prototype & Behavior Transfer:** ✅ بستهٔ انتقال UI/Behavior به React انجام شده و CIهای مربوط به آن سبز شده‌اند.
-- **مرحله اصلی ۳ — Operational Completion:** 🚧 مرحله جاری. آیتم‌های A1 تا A8 پیاده‌سازی شده‌اند و CI آن‌ها سبز است؛ تست تعاملی واقعی UI هنوز باید روی اجرای قابل‌مشاهده انجام شود. اصلاح انتخاب گروهی/Drag کارت‌های ایستگاه نیز روی HEAD فعلی با CI سبز تثبیت شد.
+- **مرحله اصلی ۳ — Operational Completion:** ✅ بسته. A1 تا A8 و اصلاح انتخاب/Drag ایستگاه‌ها روی HEAD تست و ثبت شده‌اند.
 - **دروازه ورود به مرحله ۴:** پس از تأیید تعاملی A1 تا A8؛ سپس Finance & Session Core شروع می‌شود.
 - **قرار مهم:** prototype/index.html و prototype/client.html مرجع رفتار و UI نسخه اولیه هستند؛ بازنویسی و حذف قابلیت مجاز نیست.
 - **تکنولوژی تاییدشده:** ASP.NET Core + SignalR + SQLite + React (RTL) + WPF (کلاینت فاز ۳)
@@ -98,7 +98,7 @@
 ## تصمیم‌های اخیر — ۱۴۰۵/۰۷/۱۰
 - Migration دیتابیس دیگر در خطا، فایل SQLite را خودکار حذف یا بازسازی نمی‌کند؛ Recovery باید صریح و کنترل‌شده باشد.
 - ناوبری نهایی بدون «مدیریت» به‌عنوان صفحه اصلی خواهد بود؛ قابلیت‌ها در Dashboard / Customers / Buffet / Tariffs / Reports / Users & Shift / Settings مالک مشخص دارند.
-- مرکز مدیریت فعلی فقط یک ابزار موقت QA برای تکمیل Stage 1B است و تا انتقال کامل قابلیت‌ها به صفحات مالک، از ناوبری اصلی حذف نمی‌شود.
+- مرکز مدیریت فعلی فقط ابزار QA موقت است و معیار وضعیت محصول نیست؛ مرجع مالکیت هر قابلیت در Action Map و roadmap فعلی ثبت شده است.
 
 
 ## تصمیم جدید — Action Map / ۱۴۰۵/۱۰/۱۰
