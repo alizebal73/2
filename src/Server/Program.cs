@@ -15,6 +15,7 @@ builder.Services.AddSignalR();
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
+builder.Services.AddScoped<AccountPoolService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
@@ -50,6 +51,427 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
 app.MapGet("/api/server-info", (IWebHostEnvironment environment) =>
     Results.Ok(new ServerInfoDto("GameNet Manager", environment.EnvironmentName, DateTimeOffset.UtcNow)))
     .WithName("GetServerInfo");
+
+app.MapGet("/api/games", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "game.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var games = await database.Games
+        .AsNoTracking()
+        .Where(item => item.IsActive)
+        .OrderBy(item => item.Name)
+        .Select(item => new GameRecordDto(
+            item.Id,
+            item.Name,
+            item.Version,
+            item.Genre,
+            item.Status,
+            0,
+            item.Path,
+            item.Executable,
+            item.Cover,
+            item.Trailer,
+            item.LaunchArgs,
+            item.ConnectionType,
+            item.IsActive,
+            item.TargetSystem,
+            item.Target,
+            item.TargetZone,
+            item.TargetStations))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(games);
+}).WithName("GetGames");
+
+app.MapPost("/api/games", async (
+    SaveGameRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "game.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    if (string.IsNullOrWhiteSpace(request.Name))
+        return Results.BadRequest(new { code = "game_name_required", message = "نام بازی الزامی است." });
+
+    var duplicate = await database.Games.AnyAsync(item => item.Name == request.Name.Trim() && item.IsActive, cancellationToken);
+    if (duplicate) return Results.Conflict(new { code = "game_exists", message = "این بازی قبلاً ثبت شده است." });
+
+    var game = new Game
+    {
+        Name = request.Name.Trim(),
+        Version = request.Version?.Trim() ?? string.Empty,
+        Genre = request.Genre?.Trim(),
+        Status = string.IsNullOrWhiteSpace(request.Status) ? "offline" : request.Status.Trim(),
+        Path = request.Path?.Trim() ?? string.Empty,
+        Executable = request.Executable?.Trim() ?? string.Empty,
+        Cover = request.Cover?.Trim() ?? string.Empty,
+        Trailer = request.Trailer?.Trim() ?? string.Empty,
+        LaunchArgs = request.LaunchArgs?.Trim() ?? string.Empty,
+        ConnectionType = request.ConnectionType?.Trim() ?? "آنلاین",
+        TargetSystem = request.TargetSystem?.Trim() ?? "all",
+        Target = request.Target?.Trim() ?? "all",
+        TargetZone = request.TargetZone?.Trim() ?? "pc",
+        TargetStations = request.TargetStations?.Trim() ?? string.Empty,
+        IsActive = request.Active
+    };
+
+    database.Games.Add(game);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "GameCreated",
+        EntityName = "Game",
+        EntityId = game.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ثبت بازی · " + game.Name
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, 0,
+        game.Path, game.Executable, game.Cover, game.Trailer, game.LaunchArgs, game.ConnectionType,
+        game.IsActive, game.TargetSystem, game.Target, game.TargetZone, game.TargetStations));
+}).WithName("CreateGame");
+
+app.MapPut("/api/games/{gameId:guid}", async (
+    Guid gameId,
+    SaveGameRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "game.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var game = await database.Games.FirstOrDefaultAsync(item => item.Id == gameId, cancellationToken);
+    if (game is null) return Results.NotFound(new { code = "game_not_found", message = "بازی پیدا نشد." });
+
+    var duplicate = await database.Games.AnyAsync(item => item.Id != gameId && item.Name == request.Name.Trim() && item.IsActive, cancellationToken);
+    if (duplicate) return Results.Conflict(new { code = "game_exists", message = "نام این بازی قبلاً استفاده شده است." });
+
+    game.Name = request.Name.Trim();
+    game.Version = request.Version?.Trim() ?? string.Empty;
+    game.Genre = request.Genre?.Trim();
+    game.Status = string.IsNullOrWhiteSpace(request.Status) ? "offline" : request.Status.Trim();
+    game.Path = request.Path?.Trim() ?? string.Empty;
+    game.Executable = request.Executable?.Trim() ?? string.Empty;
+    game.Cover = request.Cover?.Trim() ?? string.Empty;
+    game.Trailer = request.Trailer?.Trim() ?? string.Empty;
+    game.LaunchArgs = request.LaunchArgs?.Trim() ?? string.Empty;
+    game.ConnectionType = request.ConnectionType?.Trim() ?? "آنلاین";
+    game.TargetSystem = request.TargetSystem?.Trim() ?? "all";
+    game.Target = request.Target?.Trim() ?? "all";
+    game.TargetZone = request.TargetZone?.Trim() ?? "pc";
+    game.TargetStations = request.TargetStations?.Trim() ?? string.Empty;
+    game.IsActive = request.Active;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "GameUpdated",
+        EntityName = "Game",
+        EntityId = game.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ویرایش بازی · " + game.Name
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, 0,
+        game.Path, game.Executable, game.Cover, game.Trailer, game.LaunchArgs, game.ConnectionType,
+        game.IsActive, game.TargetSystem, game.Target, game.TargetZone, game.TargetStations));
+}).WithName("UpdateGame");
+
+app.MapDelete("/api/games/{gameId:guid}", async (
+    Guid gameId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "game.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var game = await database.Games.FirstOrDefaultAsync(item => item.Id == gameId, cancellationToken);
+    if (game is null) return Results.NotFound(new { code = "game_not_found", message = "بازی پیدا نشد." });
+
+    var activeLease = await database.AccountLeases.AnyAsync(item => item.GameId == gameId && item.State == AccountLeaseState.Active, cancellationToken);
+    if (activeLease)
+        return Results.Conflict(new { code = "game_has_active_lease", message = "تا وقتی حساب فعالی برای این بازی تخصیص دارد، حذف بازی مجاز نیست." });
+
+    game.IsActive = false;
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "GameArchived",
+        EntityName = "Game",
+        EntityId = game.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "غیرفعال‌سازی بازی · " + game.Name
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { archived = true });
+}).WithName("ArchiveGame");
+
+app.MapGet("/api/account-pool", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var accounts = await database.AccountPoolEntries
+        .AsNoTracking()
+        .Include(item => item.AssignedAgentDevice)
+        .Where(item => item.IsActive)
+        .OrderBy(item => item.Platform)
+        .ThenBy(item => item.Title)
+        .ToListAsync(cancellationToken);
+
+    var gameMap = await database.Games.AsNoTracking().ToDictionaryAsync(item => item.Id, item => item.Name, cancellationToken);
+    var rows = accounts.Select(item => new AccountPoolEntryDto(
+        item.Id,
+        item.Title,
+        item.Platform,
+        item.Login,
+        item.Owner,
+        item.ExpiresAt,
+        item.AllowedGameIdsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(id => Guid.TryParse(id, out var guid) && gameMap.TryGetValue(guid, out var name) ? name : null)
+            .Where(name => name is not null)
+            .Cast<string>()
+            .ToArray(),
+        item.Status.ToString(),
+        item.AssignedAgentDevice?.Name,
+        item.AssignedAgentDeviceId)).ToList();
+
+    return Results.Ok(rows);
+}).WithName("GetAccountPool");
+
+app.MapPost("/api/account-pool", async (
+    SaveAccountPoolEntryRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    if (string.IsNullOrWhiteSpace(request.Title))
+        return Results.BadRequest(new { code = "account_title_required", message = "نام اکانت الزامی است." });
+
+    var gameIds = request.AllowedGameIds.Distinct().ToArray();
+    if (gameIds.Length > 0)
+    {
+        var count = await database.Games.CountAsync(item => gameIds.Contains(item.Id) && item.IsActive, cancellationToken);
+        if (count != gameIds.Length)
+            return Results.BadRequest(new { code = "invalid_games", message = "یکی از بازی‌های انتخاب‌شده معتبر نیست." });
+    }
+
+    var account = new AccountPoolEntry
+    {
+        Title = request.Title.Trim(),
+        Platform = request.Platform.Trim(),
+        Login = request.Login?.Trim(),
+        SecretHash = string.IsNullOrWhiteSpace(request.Secret) ? null : PasswordSecurity.Hash(request.Secret),
+        Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim(),
+        ExpiresAt = request.ExpiresAt,
+        AllowedGameIdsCsv = string.Join(",", gameIds),
+        Status = Enum.TryParse<AccountPoolStatus>(request.Status, true, out var status) ? status : AccountPoolStatus.Free,
+        IsActive = true
+    };
+
+    database.AccountPoolEntries.Add(account);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AccountPoolCreated",
+        EntityName = "AccountPoolEntry",
+        EntityId = account.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ثبت اکانت استخر · " + account.Title
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(account.Id);
+}).WithName("CreateAccountPoolEntry");
+
+app.MapPut("/api/account-pool/{accountId:guid}", async (
+    Guid accountId,
+    SaveAccountPoolEntryRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var account = await database.AccountPoolEntries.FirstOrDefaultAsync(item => item.Id == accountId && item.IsActive, cancellationToken);
+    if (account is null) return Results.NotFound(new { code = "account_not_found", message = "اکانت استخر پیدا نشد." });
+
+    if (account.Status == AccountPoolStatus.InUse && !string.Equals(request.Status, AccountPoolStatus.InUse.ToString(), StringComparison.OrdinalIgnoreCase))
+        return Results.Conflict(new { code = "account_in_use", message = "اکانت در حال استفاده است و ابتدا باید Lease آن آزاد شود." });
+
+    var gameIds = request.AllowedGameIds.Distinct().ToArray();
+    var count = await database.Games.CountAsync(item => gameIds.Contains(item.Id) && item.IsActive, cancellationToken);
+    if (count != gameIds.Length)
+        return Results.BadRequest(new { code = "invalid_games", message = "یکی از بازی‌های انتخاب‌شده معتبر نیست." });
+
+    account.Title = request.Title.Trim();
+    account.Platform = request.Platform.Trim();
+    account.Login = request.Login?.Trim();
+    if (!string.IsNullOrWhiteSpace(request.Secret))
+        account.SecretHash = PasswordSecurity.Hash(request.Secret);
+    account.Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim();
+    account.ExpiresAt = request.ExpiresAt;
+    account.AllowedGameIdsCsv = string.Join(",", gameIds);
+    if (Enum.TryParse<AccountPoolStatus>(request.Status, true, out var status))
+        account.Status = status;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AccountPoolUpdated",
+        EntityName = "AccountPoolEntry",
+        EntityId = account.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ویرایش اکانت استخر · " + account.Title
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { updated = true });
+}).WithName("UpdateAccountPoolEntry");
+
+app.MapPost("/api/account-pool/{accountId:guid}/unlock", async (
+    Guid accountId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var account = await database.AccountPoolEntries.FirstOrDefaultAsync(item => item.Id == accountId && item.IsActive, cancellationToken);
+    if (account is null) return Results.NotFound(new { code = "account_not_found", message = "اکانت استخر پیدا نشد." });
+    if (account.Status == AccountPoolStatus.InUse)
+        return Results.Conflict(new { code = "account_in_use", message = "اکانت در حال استفاده است." });
+
+    account.Status = AccountPoolStatus.Free;
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AccountPoolUnlocked",
+        EntityName = "AccountPoolEntry",
+        EntityId = account.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "رفع قفل اکانت استخر · " + account.Title
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { unlocked = true });
+}).WithName("UnlockAccountPoolEntry");
+
+app.MapPost("/api/account-pool/allocate", async (
+    AllocateAccountRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    AccountPoolService accountPool,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    try
+    {
+        var (account, lease) = await accountPool.AllocateAsync(
+            request.GameId,
+            request.AgentDeviceId,
+            request.CustomerId,
+            request.SessionId,
+            cancellationToken);
+
+        if (account is null || lease is null)
+            return Results.Conflict(new { code = "account_pool_empty", message = "اکانت آزاد و سازگار برای این بازی وجود ندارد." });
+
+        await database.Entry(account).Reference(item => item.AssignedAgentDevice).LoadAsync(cancellationToken);
+        var game = await database.Games.AsNoTracking().FirstAsync(item => item.Id == lease.GameId, cancellationToken);
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "AccountLeaseCreated",
+            EntityName = "AccountLease",
+            EntityId = lease.Id.ToString(),
+            AppUserId = auth.User!.Id,
+            Details = "تخصیص اتمیک اکانت · " + account.Title + " · " + game.Name
+        });
+        await database.SaveChangesAsync(cancellationToken);
+
+        return Results.Ok(new AccountLeaseDto(
+            lease.Id,
+            account.Id,
+            game.Id,
+            account.Title,
+            account.Platform,
+            account.Login,
+            account.AssignedAgentDevice?.Name,
+            lease.LeasedAt,
+            lease.State.ToString()));
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.BadRequest(new { code = "allocation_invalid", message = exception.Message });
+    }
+}).WithName("AllocateAccount");
+
+app.MapPost("/api/account-pool/leases/{leaseId:guid}/release", async (
+    Guid leaseId,
+    ReleaseAccountLeaseRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    AccountPoolService accountPool,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var lease = await accountPool.ReleaseAsync(leaseId, cancellationToken);
+    if (lease is null)
+        return Results.NotFound(new { code = "lease_not_found", message = "Lease فعال پیدا نشد." });
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AccountLeaseReleased",
+        EntityName = "AccountLease",
+        EntityId = lease.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "آزادسازی اکانت · " + (request.Reason ?? "بدون توضیح")
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { released = true });
+}).WithName("ReleaseAccountLease");
+
+app.MapGet("/api/account-pool/leases", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var leases = await database.AccountLeases
+        .AsNoTracking()
+        .Include(item => item.AccountPoolEntry)
+        .Include(item => item.Game)
+        .Include(item => item.AgentDevice)
+        .Where(item => item.State == AccountLeaseState.Active)
+        .OrderByDescending(item => item.LeasedAt)
+        .Select(item => new AccountLeaseDto(
+            item.Id,
+            item.AccountPoolEntryId,
+            item.GameId,
+            item.AccountPoolEntry.Title,
+            item.AccountPoolEntry.Platform,
+            item.AccountPoolEntry.Login,
+            item.AgentDevice == null ? null : item.AgentDevice.Name,
+            item.LeasedAt,
+            item.State.ToString()))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(leases);
+}).WithName("GetActiveAccountLeases");
 
 app.MapPost("/api/agent/register", async (
     AgentRegistrationRequest request,
