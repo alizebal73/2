@@ -229,7 +229,7 @@ jobs:
                 commandType = 'ping'
                 payloadJson = $null
               } | ConvertTo-Json
-              $command = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.id)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body $commandRequestBody
+              $command = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body $commandRequestBody
               if (-not $command.commandId -or $command.status -ne 'Sent') {
                 throw 'Stage 8 Agent command dispatch did not return a sent command.'
               }
