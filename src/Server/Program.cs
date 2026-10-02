@@ -617,6 +617,9 @@ app.MapGet("/api/buffet/products", async (
             price = item.UnitPrice,
             buyPrice = item.CostPrice,
             stock = item.StockQuantity,
+            minimumStock = item.MinimumStock,
+            unit = item.Unit,
+            lowStock = item.StockQuantity <= item.MinimumStock,
             active = item.IsActive
         })
         .ToListAsync(cancellationToken);
@@ -640,6 +643,8 @@ app.MapPost("/api/buffet/products", async (
         UnitPrice = request.UnitPrice,
         CostPrice = request.CostPrice,
         StockQuantity = request.InitialStock,
+        MinimumStock = Math.Max(0, request.MinimumStock),
+        Unit = string.IsNullOrWhiteSpace(request.Unit) ? "عدد" : request.Unit.Trim(),
         IsActive = true
     };
     database.Products.Add(product);
@@ -650,6 +655,7 @@ app.MapPost("/api/buffet/products", async (
             Product = product,
             Quantity = request.InitialStock,
             Direction = TransactionDirection.In,
+            Kind = "Initial",
             AppUserId = request.AppUserId,
             Notes = "موجودی اولیه"
         });
@@ -679,6 +685,20 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
     if (!Enum.TryParse<TransactionDirection>(request.Direction?.Trim(), true, out var direction))
         return Results.BadRequest(new { code = "invalid_direction", message = "نوع حرکت موجودی معتبر نیست." });
 
+    var kind = string.IsNullOrWhiteSpace(request.Kind) ? "Adjustment" : request.Kind.Trim();
+    if (!new[] { "Adjustment", "Purchase", "Sale", "Waste", "Return" }.Contains(kind, StringComparer.OrdinalIgnoreCase))
+        return Results.BadRequest(new { code = "invalid_inventory_kind", message = "نوع حرکت موجودی معتبر نیست." });
+
+    if (kind.Equals("Waste", StringComparison.OrdinalIgnoreCase) && direction != TransactionDirection.Out)
+        return Results.BadRequest(new { code = "invalid_waste_direction", message = "ضایعات باید خروجی باشد." });
+
+    if (kind.Equals("Return", StringComparison.OrdinalIgnoreCase) && direction != TransactionDirection.In)
+        return Results.BadRequest(new { code = "invalid_return_direction", message = "مرجوعی باید ورودی باشد." });
+
+    if ((kind.Equals("Waste", StringComparison.OrdinalIgnoreCase) || kind.Equals("Return", StringComparison.OrdinalIgnoreCase))
+        && string.IsNullOrWhiteSpace(request.Notes))
+        return Results.BadRequest(new { code = "missing_inventory_reason", message = "دلیل ضایعات یا مرجوعی را وارد کنید." });
+
     var product = await database.Products.FirstOrDefaultAsync(item => item.Id == productId && item.IsActive, cancellationToken);
     if (product is null)
         return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
@@ -692,6 +712,7 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         ProductId = product.Id,
         Quantity = request.Quantity,
         Direction = direction,
+        Kind = kind,
         AppUserId = request.AppUserId,
         Notes = request.Notes
     });
@@ -700,11 +721,11 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         Action = direction == TransactionDirection.In ? "InventoryIncrease" : "InventoryDecrease",
         EntityName = "Product",
         EntityId = product.Id.ToString(),
-        Details = request.Quantity.ToString() + " · " + (request.Notes ?? ""),
+        Details = kind + " · " + request.Quantity.ToString() + " · " + (request.Notes ?? ""),
         AppUserId = request.AppUserId
     });
     await database.SaveChangesAsync(cancellationToken);
-    return Results.Ok(new { id = product.Id, stock = product.StockQuantity });
+    return Results.Ok(new { id = product.Id, stock = product.StockQuantity, lowStock = product.StockQuantity <= product.MinimumStock, kind });
 })
 .WithName("AdjustBuffetStock");
  
@@ -718,13 +739,15 @@ app.MapPut("/api/buffet/products/{productId:guid}", async (
     if (product is null)
         return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
 
-    if (string.IsNullOrWhiteSpace(request.Name) || request.UnitPrice < 0 || request.CostPrice < 0)
+    if (string.IsNullOrWhiteSpace(request.Name) || request.UnitPrice < 0 || request.CostPrice < 0 || request.MinimumStock < 0)
         return Results.BadRequest(new { code = "invalid_product", message = "اطلاعات محصول معتبر نیست." });
 
     product.Name = request.Name.Trim();
     product.Category = string.IsNullOrWhiteSpace(request.Category) ? "سایر" : request.Category.Trim();
     product.UnitPrice = request.UnitPrice;
     product.CostPrice = request.CostPrice;
+    product.MinimumStock = request.MinimumStock;
+    product.Unit = string.IsNullOrWhiteSpace(request.Unit) ? "عدد" : request.Unit.Trim();
     product.IsActive = request.IsActive;
 
     database.AuditLogs.Add(new AuditLog
@@ -745,6 +768,9 @@ app.MapPut("/api/buffet/products/{productId:guid}", async (
         price = product.UnitPrice,
         buyPrice = product.CostPrice,
         stock = product.StockQuantity,
+        minimumStock = product.MinimumStock,
+        unit = product.Unit,
+        lowStock = product.StockQuantity <= product.MinimumStock,
         active = product.IsActive
     });
 })
@@ -765,6 +791,7 @@ app.MapGet("/api/buffet/inventory-transactions", async (
             productName = item.Product.Name,
             quantity = item.Quantity,
             direction = item.Direction.ToString(),
+            kind = item.Kind,
             notes = item.Notes,
             createdAt = item.CreatedAt
         })
@@ -810,6 +837,7 @@ app.MapPost("/api/buffet/sales", async (
             ProductId = product.Id,
             Quantity = item.Quantity,
             Direction = TransactionDirection.Out,
+            Kind = "Sale",
             AppUserId = request.AppUserId,
             Notes = request.Target == "session" ? "فروش به جلسه" : "فروش مستقل"
         });
@@ -2111,9 +2139,9 @@ public sealed record FinanceTransactionDto(Guid Id, DateTimeOffset ClosedAt, str
 
 public sealed record CustomerDebtRequest(decimal Amount, string? Description, Guid? AppUserId);
 public sealed record CustomerHistoryItemDto(Guid Id, string Type, string Description, decimal Amount, DateTimeOffset CreatedAt, Guid? ReferenceId);
-public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, Guid? AppUserId);
-public sealed record UpdateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, bool IsActive = true, Guid? AppUserId = null);
-public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId);
+public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, int MinimumStock = 0, string? Unit = null, Guid? AppUserId = null);
+public sealed record UpdateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int MinimumStock = 0, string? Unit = null, bool IsActive = true, Guid? AppUserId = null);
+public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment");
 public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
 public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId);
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
