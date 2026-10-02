@@ -135,7 +135,7 @@ public sealed class InvoiceReverseTests : IDisposable
         var invoice = new Invoice
         {
             Customer = customer,
-            Session = session,
+            SessionId = session.Id,
             TotalAmount = 60000m,
             Status = InvoiceStatus.Paid,
             Items =
