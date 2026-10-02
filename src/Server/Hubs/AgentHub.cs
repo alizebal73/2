@@ -102,10 +102,32 @@ public sealed class AgentHub(
                 : null;
             device.MemoryAvailableBytes = request.MemoryAvailableBytes is > 0
                 ? request.MemoryAvailableBytes
-                : null;
-            device.UptimeSeconds = request.UptimeSeconds is >= 0
+                : null;            device.UptimeSeconds = request.UptimeSeconds is >= 0
                 ? request.UptimeSeconds
                 : null;
+            if (!string.IsNullOrWhiteSpace(request.LifecycleState) && ClientLifecycleStates.IsKnown(request.LifecycleState))
+            {
+                var lifecycle = request.LifecycleState.Trim();
+                if (!string.Equals(device.LifecycleState, lifecycle, StringComparison.Ordinal))
+                {
+                    device.LifecycleState = lifecycle;
+                    device.LifecycleStateChangedAt = now;
+                }
+
+                if (string.Equals(lifecycle, ClientLifecycleStates.Running, StringComparison.Ordinal))
+                    device.LastHealthyAt = now;
+            }
+
+            if (request.PendingUpdateVersion is not null)
+                device.PendingUpdateVersion = string.IsNullOrWhiteSpace(request.PendingUpdateVersion)
+                    ? null
+                    : request.PendingUpdateVersion.Trim();
+
+            if (request.LastUpdateError is not null)
+                device.LastUpdateError = string.IsNullOrWhiteSpace(request.LastUpdateError)
+                    ? null
+                    : request.LastUpdateError.Trim()[..Math.Min(500, request.LastUpdateError.Trim().Length)];
+
             device.ConnectionId = Context.ConnectionId;
 
             if (request.IsLocked && !device.IsLocked)
