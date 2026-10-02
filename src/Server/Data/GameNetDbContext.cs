@@ -20,6 +20,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
+    public DbSet<InvoicePayment> InvoicePayments => Set<InvoicePayment>();
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<Shift> Shifts => Set<Shift>();
@@ -263,6 +264,18 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany(item => item.Invoices)
             .HasForeignKey(item => item.AppUserId)
             .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private static void ConfigureInvoicePayment(ModelBuilder modelBuilder)
+    {
+        var payment = modelBuilder.Entity<InvoicePayment>();
+        payment.HasKey(item => item.Id);
+        payment.Property(item => item.Method).HasMaxLength(20).IsRequired();
+        payment.Property(item => item.Amount).HasColumnType("decimal(18,2)");
+        payment.HasOne(item => item.Invoice)
+            .WithMany()
+            .HasForeignKey(item => item.InvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureInvoiceItem(ModelBuilder modelBuilder)
