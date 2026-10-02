@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { mockService } from '../services/mockService';
+import { archiveServerGame, applyServerGames, getServerGames, saveServerGame } from '../services/gameService';
 import type { GameRecord } from '../types';
 
 type GameFilter = 'all' | 'online' | 'offline' | 'program';
 
 const emptyGame = (): GameRecord => ({
-  id: crypto.randomUUID(),
+  id: '',
   name: '',
   version: '',
   category: 'FPS',
@@ -35,7 +35,7 @@ export function GamesPage() {
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
 
   useEffect(() => {
-    void mockService.getGames().then(setGames);
+    void getServerGames().then(setGames).catch(error => setNotice(error instanceof Error ? error.message : 'دریافت بازی‌ها ناموفق بود'));
   }, []);
 
   const visibleGames = useMemo(() => games.filter(game => {
@@ -55,21 +55,21 @@ export function GamesPage() {
       setNotice('نام بازی و فایل اجرایی الزامی است');
       return;
     }
-    await mockService.saveGame(draft);
-    setGames(await mockService.getGames());
+    const saved = await saveServerGame(draft);
+    setGames(current => current.some(item => item.id === saved.id) ? current.map(item => item.id === saved.id ? saved : item) : [...current, saved]);
     setDraft(null);
     setNotice('بازی ذخیره شد');
   }
 
   async function deleteGame(game: GameRecord) {
     if (!window.confirm(`بازی «${game.name}» حذف شود؟`)) return;
-    await mockService.deleteGame(game.id);
-    setGames(await mockService.getGames());
+    await archiveServerGame(game.id);
+    setGames(current => current.filter(item => item.id !== game.id));
     setNotice('بازی حذف شد');
   }
 
   async function applyGames(gameIds: string[]) {
-    await mockService.applyGamesToClients(gameIds);
+    await applyServerGames(gameIds);
     setNotice(`اعمال ${gameIds.length} بازی به کلاینت‌ها در صف قرار گرفت`);
   }
 
