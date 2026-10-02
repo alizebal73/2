@@ -184,7 +184,7 @@ function DashboardApp() {
       )}
 
       <div className="page-shell">
-        <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={snapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={setActivePage} /></div>
+        <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={snapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={setActivePage} role={role} /></div>
         <div hidden={activePage !== 'games'}><GamesPage /></div>
         <div hidden={activePage !== 'client-shell'}><ClientShellPage /></div>
         <div hidden={activePage !== 'customers'}><CustomersPage /></div>
