@@ -1,5 +1,5 @@
 export type SessionPaymentPart = {
-  method: 'cash' | 'card' | 'wallet';
+  method: 'cash' | 'card' | 'wallet' | 'gift';
   amount: number;
 };
 
@@ -70,6 +70,7 @@ export async function settleServerSession(
   totalAmount: number,
   parts: SessionPaymentPart[],
   appUserId?: string,
+  freeTimeMinutes = 0,
 ): Promise<ServerSettlementResult> {
   const response = await fetch('/api/sessions/' + sessionId + '/settle', {
     method: 'POST',
@@ -78,6 +79,7 @@ export async function settleServerSession(
       totalAmount,
       parts,
       appUserId: appUserId && isGuid(appUserId) ? appUserId : null,
+      freeTimeMinutes,
     }),
   });
 
