@@ -1131,9 +1131,14 @@ app.MapPost("/api/buffet/products", async (
 app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
     Guid productId,
     StockAdjustmentRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     if (request.Quantity <= 0)
         return Results.BadRequest(new { code = "invalid_quantity", message = "تعداد باید بیشتر از صفر باشد." });
 
@@ -1335,9 +1340,14 @@ app.MapGet("/api/buffet/reports/profit", async (
 
 app.MapPost("/api/buffet/sales", async (
     BuffetSaleRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.sell", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     if (request.Items is null || request.Items.Count == 0)
         return Results.BadRequest(new { code = "empty_sale", message = "سبد فروش خالی است." });
 
@@ -2230,9 +2240,14 @@ app.MapGet("/api/shifts/history", async (
 
 app.MapPost("/api/shifts/start", async (
     StartShiftRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     if (request.CashOpening < 0)
         return Results.BadRequest(new { code = "invalid_cash_opening", message = "مبلغ شروع صندوق نمی‌تواند منفی باشد." });
 
@@ -2278,9 +2293,13 @@ app.MapPost("/api/shifts/start", async (
 app.MapPost("/api/shifts/{shiftId:guid}/close", async (
     Guid shiftId,
     CloseShiftRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     if (request.CashClosing < 0 || request.ExternalCash < 0)
         return Results.BadRequest(new { code = "invalid_cash_value", message = "مبالغ صندوق نمی‌توانند منفی باشند." });
 
@@ -2351,9 +2370,14 @@ app.MapPost("/api/shifts/{shiftId:guid}/close", async (
 
 app.MapPost("/api/sessions", async (
     StartSessionRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.start", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
     if (request.CustomerId == Guid.Empty || request.StationId == Guid.Empty)
@@ -2427,9 +2451,13 @@ app.MapPost("/api/sessions", async (
 app.MapMethods("/api/sessions/{sessionId:guid}/details", new[] { "PATCH" }, async (
     Guid sessionId,
     SessionDetailsRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var session = await database.Sessions
         .Include(item => item.Station)
         .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
@@ -2528,9 +2556,13 @@ app.MapGet("/api/sessions/active", async (
 app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
     Guid sessionId,
     SessionTransferRequest request,
+    HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     if (request.TargetStationId == Guid.Empty)
         return Results.BadRequest(new { code = "invalid_target_station", message = "ایستگاه مقصد معتبر نیست." });
 
@@ -2577,8 +2609,14 @@ app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
     Guid sessionId,
     SessionSettlementRequest request,
     SessionSettlementService settlement,
+    HttpContext context,
+    GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.settle", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     try
     {
         var result = await settlement.SettleAsync(sessionId, request, cancellationToken);
@@ -2603,8 +2641,14 @@ app.MapPost("/api/invoices/{invoiceId:guid}/reverse", async (
     Guid invoiceId,
     InvoiceReverseRequest request,
     InvoiceReverseService reverseService,
+    HttpContext context,
+    GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+
     try
     {
         var result = await reverseService.ReverseAsync(invoiceId, request, cancellationToken);
