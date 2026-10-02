@@ -95,6 +95,68 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.ToTable("AgentDevices");
                 });
 
+            modelBuilder.Entity("GameNetManager.Server.Data.AgentCommand", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AgentDeviceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AgentConnectionId")
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CommandType")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PayloadJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("RequestedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("RequestedByAppUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultMessage")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("SentAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool?>("Succeeded")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AgentDeviceId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("AgentCommands");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.AppUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1448,6 +1510,17 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AgentCommand", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AgentDevice", "AgentDevice")
+                        .WithMany()
+                        .HasForeignKey("AgentDeviceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AgentDevice");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.AppUserPermission", b =>
