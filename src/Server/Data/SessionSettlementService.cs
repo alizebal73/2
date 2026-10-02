@@ -63,58 +63,10 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         var elapsedMinutes = Math.Max(0, (DateTimeOffset.UtcNow - session.StartAt).TotalMinutes);
         if (request.FreeTimeMinutes < 0 || request.FreeTimeMinutes > Math.Ceiling(elapsedMinutes))
             throw new InvalidOperationException("دقیقه اعتبار رایگان مصرف‌شده با زمان جلسه سازگار نیست.");
-
-        if (request.FreeTimeMinutes > session.Customer.FreeTimeMinutes)
-            throw new InvalidOperationException("اعتبار زمانی رایگان مشتری برای این مصرف کافی نیست.");
-
-        if (giftPart > session.Customer.FreeMoney)
-            throw new InvalidOperationException("اعتبار مالی رایگان مشتری برای این سهم کافی نیست.");
-
-        if (request.FreeTimeMinutes > 0)
-        {
-            session.Customer.FreeTimeMinutes -= request.FreeTimeMinutes;
-            database.BenefitTransactions.Add(new BenefitTransaction
-            {
-                CustomerId = session.CustomerId,
-                Type = BenefitTransactionType.FreeTimeDebit,
-                Minutes = request.FreeTimeMinutes,
-                MoneyAmount = 0m,
-                Description = "مصرف اعتبار زمانی رایگان در تسویه " + session.Station.Name
-            });
-        }
-
-        if (giftPart > 0)
-        {
-            session.Customer.FreeMoney -= giftPart;
-            database.BenefitTransactions.Add(new BenefitTransaction
-            {
-                CustomerId = session.CustomerId,
-                Type = BenefitTransactionType.FreeMoneyDebit,
-                Minutes = 0,
-                MoneyAmount = giftPart,
-                Description = "مصرف اعتبار مالی رایگان در تسویه " + session.Station.Name
-            });
-        }
-
-
-        if (walletPart > session.Customer.Balance)
-            throw new InvalidOperationException("موجودی کیف پول برای سهم انتخاب‌شده کافی نیست.");
-
-        if (walletPart > 0)
-        {
-            session.Customer.Balance -= walletPart;
-            database.WalletTransactions.Add(new WalletTransaction
-            {
-                CustomerId = session.CustomerId,
-                Amount = walletPart,
-                Type = WalletTransactionType.Debit,
-                Description = "تسویه جلسه " + session.Station.Name
-            });
-        }
-
         var invoice = new Invoice
         {
             CustomerId = session.CustomerId,
+            SessionId = session.Id,
             AppUserId = request.AppUserId,
             TotalAmount = request.TotalAmount,
             Status = InvoiceStatus.Paid,
@@ -131,6 +83,62 @@ public sealed class SessionSettlementService(GameNetDbContext database)
                 }
             }
         };
+
+        database.Invoices.Add(invoice);
+
+
+        if (request.FreeTimeMinutes > session.Customer.FreeTimeMinutes)
+            throw new InvalidOperationException("اعتبار زمانی رایگان مشتری برای این مصرف کافی نیست.");
+
+        if (giftPart > session.Customer.FreeMoney)
+            throw new InvalidOperationException("اعتبار مالی رایگان مشتری برای این سهم کافی نیست.");
+
+        if (request.FreeTimeMinutes > 0)
+        {
+            session.Customer.FreeTimeMinutes -= request.FreeTimeMinutes;
+            database.BenefitTransactions.Add(new BenefitTransaction
+            {
+                CustomerId = session.CustomerId,
+                Type = BenefitTransactionType.FreeTimeDebit,
+                Minutes = request.FreeTimeMinutes,
+                MoneyAmount = 0m,
+                Description = "مصرف اعتبار زمانی رایگان در تسویه " + session.Station.Name,
+                ReferenceInvoiceId = invoice.Id
+            });
+        }
+
+        if (giftPart > 0)
+        {
+            session.Customer.FreeMoney -= giftPart;
+            database.BenefitTransactions.Add(new BenefitTransaction
+            {
+                CustomerId = session.CustomerId,
+                Type = BenefitTransactionType.FreeMoneyDebit,
+                Minutes = 0,
+                MoneyAmount = giftPart,
+                Description = "مصرف اعتبار مالی رایگان در تسویه " + session.Station.Name,
+                ReferenceInvoiceId = invoice.Id
+            });
+        }
+
+
+        if (walletPart > session.Customer.Balance)
+            throw new InvalidOperationException("موجودی کیف پول برای سهم انتخاب‌شده کافی نیست.");
+
+        if (walletPart > 0)
+        {
+            session.Customer.Balance -= walletPart;
+            database.WalletTransactions.Add(new WalletTransaction
+            {
+                CustomerId = session.CustomerId,
+                Amount = walletPart,
+                Type = WalletTransactionType.Debit,
+                ReferenceInvoiceId = invoice.Id,
+                Description = "تسویه جلسه " + session.Station.Name
+            });
+        }
+
+
 
         database.Invoices.Add(invoice);
         foreach (var part in normalizedParts)
