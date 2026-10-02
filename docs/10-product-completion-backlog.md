@@ -515,8 +515,10 @@
 - **CI Smoke**: ایجاد کالا → اصلاح موجودی → فروش → رد فروش نامعتبر → بررسی ثابت‌ماندن موجودی → History → ویرایش کالا، در Run #467 سبز شد ✅
 - **تأییدشده در Run #482**: حداقل موجودی قابل‌تنظیم (`MinimumStock`)، واحد شمارش (`Unit`)، نوع تراکنش (`InventoryTransaction.Kind`) و مسیرهای واقعی Waste/Return در Server + Dashboard + Migration ✅
 - **تأییدشده در Run #482**: فروش بوفه به Draft Invoice همان Session، انتخاب Session مقصد، نهایی‌سازی همان Invoice در Settlement، و Reverse/Cancel با برگشت موجودی و اعتبار زمانی ✅
-- **هنوز باز است**: جریان کامل Purchase/ورود موجودی با ثبت بهای خرید و گزارش سود کالا؛ این دو برای اعلام تکمیل کامل Stage 6 باقی مانده‌اند.
-- **قانون**: تا تکمیل و تست جریان Purchase + Profit، Stage 6 کامل اعلام نمی‌شود.
+- **تکمیل Purchase**: ثبت خرید با بهای واحد، ثبت تاریخی UnitCost/UnitPrice در InventoryTransaction و محاسبه بهای میانگین موجودی پیاده‌سازی شد ✅
+- **تکمیل Profit**: گزارش سود بوفه بر مبنای گردش تاریخی Sale/Purchase/Waste/Return و اتصال آن به Reports Center پیاده‌سازی شد؛ Reverse نیز بهای تاریخی فروش را حفظ می‌کند ✅
+- **تأیید نهایی در Run #488**: Build/Test .NET، Migration/Server Smoke، Dashboard Lint/Build، Preview و Dashboard Interaction Smoke همگی سبز شدند ✅
+- **Stage 6**: اکنون تکمیل و تست‌شده است ✅
 
 ## وضعیت مرحله اصلی ۳ — Operational Completion
 
