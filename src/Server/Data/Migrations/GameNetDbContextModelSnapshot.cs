@@ -72,6 +72,25 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<bool>("LockOnDisconnect")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("LifecycleState")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LastHealthyAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastUpdateError")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("LifecycleStateChangedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PendingUpdateVersion")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset?>("LastSeenAt")
                         .HasColumnType("TEXT");
 
