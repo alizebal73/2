@@ -216,7 +216,7 @@ public sealed class ClientUpdateManager
 
         var next = new ClientUpdateState(
             current.ActiveVersion,
-            null,
+            current.PreviousVersion,
             version,
             current.ActivatedAt);
 
@@ -239,8 +239,8 @@ public sealed class ClientUpdateManager
 
         var next = new ClientUpdateState(
             current.PreviousVersion,
-            current.ActiveVersion,
-            current.HealthyVersion,
+            null,
+            current.PreviousVersion,
             DateTimeOffset.UtcNow);
 
         await SaveStateAsync(next, cancellationToken);
