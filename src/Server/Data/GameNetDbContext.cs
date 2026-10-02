@@ -189,8 +189,11 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         vipPackage.HasKey(item => item.Id);
         vipPackage.HasIndex(item => item.Name).IsUnique();
         vipPackage.Property(item => item.Name).HasMaxLength(120).IsRequired();
+        vipPackage.Property(item => item.Tier).HasMaxLength(30).IsRequired();
         vipPackage.Property(item => item.Description).HasMaxLength(250);
         vipPackage.Property(item => item.Price).HasColumnType("decimal(18,2)");
+        vipPackage.Property(item => item.DiscountPercent).HasColumnType("decimal(18,2)");
+
     }
 
     private static void ConfigureGame(ModelBuilder modelBuilder)
