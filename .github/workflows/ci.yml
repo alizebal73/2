@@ -190,6 +190,15 @@ jobs:
               }
               Write-Host ("Stage 10 lifecycle compatibility smoke passed: state={0}; compatible={1}; recommended={2}" -f $lifecycleStatus.lifecycleState, $lifecycleStatus.compatibility.compatible, $lifecycleStatus.compatibility.updateRecommended)
 
+              # Release Safety / Canary gate: exactly one online CI Agent plus a server-authoritative release manifest.
+              if (@($agentRows | Where-Object { $_.isOnline }).Count -ne 1) { throw 'Canary gate requires exactly one online Agent target.' }
+              $releaseManifest = Invoke-RestMethod -Uri "$baseUrl/api/release/manifest" -Method Get
+              if (-not $releaseManifest.clientPackage) { throw 'Release manifest did not expose a Client package.' }
+              if ($releaseManifest.clientPackage.version -ne $env:App__ClientPackageVersion) { throw 'Release manifest package version does not match the configured package.' }
+              if ([int64]$releaseManifest.clientPackage.sizeBytes -ne (Get-Item $env:App__ClientPackagePath).Length) { throw 'Release manifest package size does not match the package on Server.' }
+              if ($releaseManifest.clientPackage.sha256 -ne $env:App__ClientPackageSha256) { throw 'Release manifest package hash does not match the package on Server.' }
+              Write-Host ("Stage 10 release safety/canary manifest gate passed: target={0}; version={1}" -f $agentRow.deviceId, $releaseManifest.clientPackage.version)
+
               $baselineAgentVersion = $agentRow.agentVersion
               $updatePayload = @{
                 commandType = 'update'
