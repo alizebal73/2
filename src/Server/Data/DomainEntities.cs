@@ -314,6 +314,7 @@ public sealed class InventoryTransaction : BaseEntity
     public int Quantity { get; set; }
     public decimal UnitPrice { get; set; }
     public decimal UnitCost { get; set; }
+    public Guid? ReferenceInvoiceId { get; set; }
     public TransactionDirection Direction { get; set; }
     public string Kind { get; set; } = "Adjustment";
     public string? Notes { get; set; }
