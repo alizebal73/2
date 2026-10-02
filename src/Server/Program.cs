@@ -84,7 +84,7 @@ app.MapPost("/api/auth/login", async (
     var token = AuthorizationService.CreateToken();
     var session = new AppUserSession
     {
-        AppUserId = auth.User.Id,
+        AppUserId = user.Id,
         TokenHash = PasswordSecurity.HashToken(token),
         ExpiresAt = DateTimeOffset.UtcNow.AddHours(AuthorizationService.SessionHours),
         LastSeenAt = DateTimeOffset.UtcNow
@@ -669,7 +669,7 @@ app.MapPost("/api/approvals", async (
         Action = "ApprovalRequestCreate",
         EntityName = "ApprovalRequest",
         EntityId = approval.Id.ToString(),
-        AppUserId = user.Id,
+        AppUserId = auth.User.Id,
         Details = "درخواست تأیید · " + approval.Action + " · " + approval.Reason
     });
     await database.SaveChangesAsync(cancellationToken);
