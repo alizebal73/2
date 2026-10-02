@@ -877,11 +877,22 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     const minutes = reduceMinutes === -1 ? Math.max(1, Number(customReduceMinutes.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))) || 0) : reduceMinutes;
     const current = duration(activeStation);
     if (!minutes || minutes >= current) { setMessage('زمان کاهش باید کمتر از زمان استفاده‌شده باشد'); return; }
-    const nextStartedAt = new Date(new Date(activeStation.startedAt ?? Date.now()).getTime() + minutes * 60000).toISOString();
-    updateStation(activeStation.id, { startedAt: nextStartedAt, sessionMinutes: Math.max(0, current - minutes) });
-    addSessionTimeline(activeStation.id, 'reduce', 'کاهش زمان', money(minutes) + ' دقیقه از زمان صورتحساب کم شد', minutes);
-    setModal(null);
-    setMessage(money(minutes) + ' دقیقه از زمان قابل صورتحساب کم شد');
+    try {
+      if (activeStation.serverSessionId) await adjustServerSessionTime(activeStation.serverSessionId, -minutes);
+      const currentStartedAt = activeStation.startedAt ?? activeStation.sessionStartedAt ?? new Date().toISOString();
+      const nextStartedAt = new Date(new Date(currentStartedAt).getTime() + minutes * 60000).toISOString();
+      updateStation(activeStation.id, {
+        startedAt: nextStartedAt,
+        sessionStartedAt: nextStartedAt,
+        sessionMinutes: Math.max(0, current - minutes),
+        sessionTimeAdjustmentMinutes: (activeStation.sessionTimeAdjustmentMinutes ?? 0) - minutes,
+      });
+      addSessionTimeline(activeStation.id, 'reduce', 'کاهش زمان', money(minutes) + ' دقیقه از زمان صورتحساب کم شد', minutes);
+      setModal(null);
+      setMessage(money(minutes) + ' دقیقه از زمان قابل صورتحساب کم شد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'کاهش زمان روی سرور ثبت نشد'));
+    }
   }
 
   function completeExtend() {
@@ -898,11 +909,22 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       setMessage('مدت تمدید معتبر نیست');
       return;
     }
-    const nextStartedAt = new Date(new Date(activeStation.startedAt ?? Date.now()).getTime() - minutes * 60000).toISOString();
-    updateStation(activeStation.id, { sessionMinutes: duration(activeStation) + minutes, startedAt: nextStartedAt });
-    addSessionTimeline(activeStation.id, 'extend', 'تمدید جلسه', money(minutes) + ' دقیقه به جلسه اضافه شد', minutes);
-    setModal(null);
-    setMessage(`${money(minutes)} دقیقه به جلسه ${activeStation.name} اضافه شد`);
+    try {
+      if (activeStation.serverSessionId) await adjustServerSessionTime(activeStation.serverSessionId, minutes);
+      const currentStartedAt = activeStation.startedAt ?? activeStation.sessionStartedAt ?? new Date().toISOString();
+      const nextStartedAt = new Date(new Date(currentStartedAt).getTime() - minutes * 60000).toISOString();
+      updateStation(activeStation.id, {
+        sessionMinutes: duration(activeStation) + minutes,
+        startedAt: nextStartedAt,
+        sessionStartedAt: nextStartedAt,
+        sessionTimeAdjustmentMinutes: (activeStation.sessionTimeAdjustmentMinutes ?? 0) + minutes,
+      });
+      addSessionTimeline(activeStation.id, 'extend', 'تمدید جلسه', money(minutes) + ' دقیقه به جلسه اضافه شد', minutes);
+      setModal(null);
+      setMessage(money(minutes) + ' دقیقه به جلسه ' + activeStation.name + ' اضافه شد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'تمدید جلسه روی سرور ثبت نشد'));
+    }
   }
 
   async function changeSessionRate(station: StationDto, rate: number) {
