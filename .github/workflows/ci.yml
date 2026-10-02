@@ -123,7 +123,7 @@ jobs:
             $approval = Invoke-RestMethod -Uri "$baseUrl/api/approvals" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               action = 'discount'
               entityName = 'Session'
-              entityId = $startedSession.sessionId
+              entityId = ([Guid]::NewGuid().ToString())
               reason = 'Stage 7 approval smoke'
             } | ConvertTo-Json)
             $approvalDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($approval.id)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
