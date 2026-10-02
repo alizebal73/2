@@ -193,6 +193,70 @@ jobs:
             } | ConvertTo-Json)
             if ([int]$settled.debtRemaining -ne 0) { throw 'Customer debt settlement smoke failed.' }
 
+            $inventoryProducts = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
+            if (@($inventoryProducts).Count -lt 1) { throw 'Buffet product API returned no products.' }
+
+            $inventoryId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            $inventoryProduct = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Post -ContentType 'application/json' -Body (@{
+              name = "Stage 6 Smoke $inventoryId"
+              category = 'تنقلات'
+              unitPrice = 25000
+              costPrice = 12000
+              initialStock = 5
+            } | ConvertTo-Json)
+
+            if (-not $inventoryProduct.id -or [int]$inventoryProduct.stock -ne 5) {
+              throw 'Buffet product creation smoke failed.'
+            }
+
+            $stockOut = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
+              quantity = 1
+              direction = 'Out'
+              notes = 'Stage 6 manual test'
+            } | ConvertTo-Json)
+            if ([int]$stockOut.stock -ne 4) { throw 'Inventory stock adjustment smoke failed.' }
+
+            $sale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
+              items = @(@{ productId = $inventoryProduct.id; quantity = 2 })
+              target = 'standalone'
+            } | ConvertTo-Json)
+            if ([int]$sale.total -ne 50000) { throw 'Buffet sale total smoke failed.' }
+
+            $inventoryAfterSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
+            $soldProduct = @($inventoryAfterSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
+            if ([int]$soldProduct.stock -ne 2) { throw 'Buffet sale did not reduce server stock atomically.' }
+
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
+                items = @(@{ productId = $inventoryProduct.id; quantity = 99 })
+                target = 'standalone'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Insufficient stock sale was not rejected.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
+
+            $inventoryAfterRejectedSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
+            $unchangedProduct = @($inventoryAfterRejectedSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
+            if ([int]$unchangedProduct.stock -ne 2) { throw 'Rejected buffet sale changed server stock.' }
+
+            $inventoryHistory = Invoke-RestMethod -Uri "$baseUrl/api/buffet/inventory-transactions" -Method Get
+            if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id })) {
+              throw 'Inventory transaction history did not contain the new product movements.'
+            }
+
+            $updatedProduct = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)") -Method Put -ContentType 'application/json' -Body (@{
+              name = "Stage 6 Smoke Updated $inventoryId"
+              category = 'تنقلات'
+              unitPrice = 30000
+              costPrice = 14000
+              isActive = $true
+            } | ConvertTo-Json)
+            if ($updatedProduct.name -ne "Stage 6 Smoke Updated $inventoryId" -or [int]$updatedProduct.price -ne 30000) {
+              throw 'Buffet product update smoke failed.'
+            }
+
             Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
 
           } finally {
