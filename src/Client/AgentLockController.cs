@@ -25,10 +25,14 @@ public sealed class AgentLockController : IDisposable
         lock (sync)
         {
             ThrowIfDisposed();
-            if (desiredLocked)
+            desiredLocked = true;
+
+            if (!OperatingSystem.IsWindows() || !Environment.UserInteractive)
                 return Task.CompletedTask;
 
-            desiredLocked = true;
+            if (form is not null && !form.IsDisposed)
+                return Task.CompletedTask;
+
             if (uiThread is not null)
                 return Task.CompletedTask;
 
