@@ -148,7 +148,7 @@ try
 
             if (outcome.RequiresRestart && outcome.RestartVersion is not null)
             {
-                await LaunchUpdateWatchdogAsync(dataDirectory, outcome.RestartVersion);
+                await LaunchUpdateWatchdogAsync(dataDirectory, outcome.RestartVersion, Environment.ProcessId);
                 shutdown.Cancel();
             }
         });
@@ -481,7 +481,7 @@ static async Task SaveStateAsync(string path, AgentState state)
         state,
         new JsonSerializerOptions { WriteIndented = true });
 
-    var tempPath = path + ".tmp";
+    var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
     await File.WriteAllTextAsync(tempPath, json);
 
     try
@@ -649,7 +649,7 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         restartVersion is not null);
 }
 
-static async Task LaunchUpdateWatchdogAsync(string dataDirectory, string targetVersion)
+static async Task LaunchUpdateWatchdogAsync(string dataDirectory, string targetVersion, int parentProcessId)
 {
     var entryPoint = Assembly.GetEntryAssembly()?.Location;
     var processPath = Environment.ProcessPath
@@ -669,12 +669,13 @@ static async Task LaunchUpdateWatchdogAsync(string dataDirectory, string targetV
     startInfo.ArgumentList.Add("--gamenet-update-watchdog");
     startInfo.ArgumentList.Add(dataDirectory);
     startInfo.ArgumentList.Add(targetVersion);
+    startInfo.ArgumentList.Add(parentProcessId.ToString());
     startInfo.Environment["GAMENET_AGENT_DATA_DIR"] = dataDirectory;
 
     var watchdog = Process.Start(startInfo)
         ?? throw new InvalidOperationException("Watchdog به‌روزرسانی اجرا نشد.");
 
-    Console.WriteLine($"CLIENT_UPDATE_WATCHDOG_STARTED:{watchdog.Id}:{targetVersion}");
+    Console.WriteLine($"CLIENT_UPDATE_WATCHDOG_STARTED:{watchdog.Id}:{targetVersion}:PARENT={parentProcessId}");
 }
 
 static async Task<string> ResolveAgentVersionAsync(string installRoot)
@@ -697,6 +698,10 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
 
     var dataDirectory = arguments[0];
     var targetVersion = arguments[1];
+    var parentProcessId = 0;
+    if (arguments.Length >= 3)
+        _ = int.TryParse(arguments[2], out parentProcessId);
+
     using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(120));
     using var httpClient = new HttpClient();
     var statePath = Path.Combine(dataDirectory, "agent-state.json");
@@ -706,7 +711,10 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
 
     try
     {
-        await Task.Delay(TimeSpan.FromSeconds(1), cancellation.Token);
+        if (parentProcessId > 0)
+            await WaitForParentProcessExitAsync(parentProcessId, cancellation.Token);
+        else
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellation.Token);
 
         var baselineHealthyAt = await ReadAgentLastHealthyAtAsync(dataDirectory, cancellation.Token);
         child = StartVersionProcess(manager, dataDirectory, targetVersion);
@@ -760,6 +768,29 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
         TryTerminateProcess(child);
         return 1;
     }
+}
+
+static async Task WaitForParentProcessExitAsync(int parentProcessId, CancellationToken cancellationToken)
+{
+    for (var i = 0; i < 30; i++)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        try
+        {
+            using var parent = Process.GetProcessById(parentProcessId);
+            if (parent.HasExited)
+                return;
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+
+        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+    }
+
+    throw new TimeoutException("Agent قبلی قبل از شروع نسخهٔ جدید متوقف نشد.");
 }
 
 static Process StartVersionProcess(
