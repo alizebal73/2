@@ -4,6 +4,7 @@ import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimeli
 import { mockService } from '../services/mockService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { SessionCenter } from '../features/session/SessionCenter';
+import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
 
 const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه‌ها (۴۰)', console: 'کنسول‌ها (۱۶)', table: 'میزها (۵)' };
 const stateLabels: Record<StationState, string> = { free: 'آزاد', busy: 'در حال بازی', paused: 'متوقف', reserved: 'رزرو', off: 'خارج از سرویس' };
@@ -26,6 +27,7 @@ type Props = {
 type ContextMenu = { x: number; y: number; station: StationDto } | null;
 type AttentionKind = 'action' | 'warning' | 'info';
 type SessionFollowUp = { id: string; stationId: string; stationName: string; customerCode: string; amount: number; createdAt: string; status: 'watching' | 'unpaid' | 'paid'; };
+type PendingPayment = { id: string; stationId: string; stationName: string; customerId?: string; customerName: string; customerCode: string; amount: number; createdAt: string; };
 type AttentionItem = { id: string; kind: AttentionKind; station: StationDto; title: string; detail: string; actionLabel: string; followUpId?: string; };
 
 export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Props) {
@@ -42,15 +44,12 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [tariffs, setTariffs] = useState<import('../types').TariffRecord[]>([]);
   const [customerCode, setCustomerCode] = useState('');
   const [persons, setPersons] = useState(1);
-  const [manualRate, setManualRate] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'settle-later' | 'prepaid'>('settle-later');
   const [amount, setAmount] = useState('');
   const [chargeTarget, setChargeTarget] = useState<'session' | 'wallet' | 'discount'>('session');
   const [context, setContext] = useState<ContextMenu>(null);
-  const [attentionOpen, setAttentionOpen] = useState(false);
   const [sessionFollowUps, setSessionFollowUps] = useState<SessionFollowUp[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [sessionTimeline, setSessionTimeline] = useState<SessionTimelineEvent[]>([]);
-  const [recentActionsOpen, setRecentActionsOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
@@ -206,7 +205,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
 
 
   function focusAttentionItem(item: AttentionItem) {
-    setAttentionOpen(false);
     setZone(item.station.zone as ZoneKey);
     setQuery(item.station.name);
     window.setTimeout(() => { document.getElementById(`station-${item.station.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80);
@@ -220,7 +218,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   function open(kind: ModalKind, station: StationDto | null = null) {
     setActiveStation(station);
     setAmount('');
-    setManualRate(station ? String(Math.round(station.ratePerHour)) : '');
     setPersons(station?.zone === 'pc' ? 1 : 2);
     setChargeTarget('session');
     setCustomerCode(station?.customerCode ?? '');
@@ -233,19 +230,157 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     setContext(null);
     setModal(kind);
   }
+  function findCustomer(needle: string) {
+    const value = needle.trim().toLocaleLowerCase('fa-IR');
+    if (!value) return undefined;
+    return customers.find(item => [item.code, item.username, item.mobile, item.id, item.name, item.alias].filter(Boolean).some(candidate => String(candidate).toLocaleLowerCase('fa-IR') === value));
+  }
+
+  function lookupStartCustomer() {
+    const found = findCustomer(customerCode);
+    if (!found) {
+      setMessage('مشتری با این شناسه پیدا نشد؛ کد، نام کاربری یا موبایل را بررسی کنید.');
+      return;
+    }
+    setCustomerCode(found.username || found.code || customerCode.trim());
+    setMessage('پروفایل ' + found.name + ' پیدا شد و آماده ورود است.');
+  }
+
+  function openCustomerProfile() {
+    window.dispatchEvent(new CustomEvent('gamenet-navigate', { detail: 'customers' }));
+    setModal(null);
+  }
+
   function startSession() {
     if (!activeStation || activeStation.state !== 'free') { setMessage('این ایستگاه دیگر آزاد نیست'); return; }
-    const customer = customers.find(item => item.code === customerCode || item.username === customerCode);
-    const tariff = tariffs.find(item => item.active && item.stationType === activeStation.type && item.tier === (customer && customer.vip !== 'none' ? 'vip' : 'normal'))
+    const customer = findCustomer(customerCode);
+    if (!customer) { setMessage('اول یوزر مشتری را وارد کنید و Enter بزنید.'); return; }
+    const tariff = tariffs.find(item => item.active && item.stationType === activeStation.type && item.tier === (customer.vip !== 'none' ? 'vip' : 'normal'))
       ?? tariffs.find(item => item.active && item.stationType === activeStation.type);
-    const baseRate = customer && customer.vip !== 'none' && tariff
+    const baseRate = customer.vip !== 'none' && tariff
       ? Math.max(0, Math.round(tariff.pricePerHour * (1 - Math.min(100, Math.max(0, tariff.vipDiscount)) / 100)))
       : (tariff?.pricePerHour ?? activeStation.ratePerHour);
     const sessionRate = tariff ? resolvePricingRate(baseRate, tariff.schedule, new Date()) : activeStation.ratePerHour;
-    updateStation(activeStation.id, { state: 'busy', startedAt: new Date().toISOString(), sessionMinutes: 0, sessionRate, amountSoFar: 0, persons, customerCode, buffetTotal: 0, pausedAt: undefined, pausedMinutes: 0 });
+    updateStation(activeStation.id, { state: 'busy', startedAt: new Date().toISOString(), sessionMinutes: 0, sessionRate, amountSoFar: 0, persons: activeStation.zone === 'pc' ? 1 : persons, customerCode: customer.username, buffetTotal: 0, sessionCredit: undefined, prepaidEndsAt: undefined, pausedAt: undefined, pausedMinutes: 0 });
+    addSessionTimeline(activeStation.id, 'start', 'شروع جلسه', customer.code + ' · ' + customer.name + ' · نرخ ' + money(sessionRate) + ' تومان/ساعت');
     setModal(null);
-    setMessage(`جلسه ${activeStation.name} شروع شد`);
+    setMessage('یوزر ' + customer.code + ' وارد ' + activeStation.name + ' شد؛ زمان و مبلغ در طول بازی محاسبه می‌شود.');
   }
+  function calculateSessionDue(station: StationDto) {
+    const customer = customers.find(item => item.code === station.customerCode || item.username === station.customerCode || item.id === station.customerCode);
+    const tariff = tariffs.find(item => item.stationType === station.type);
+    const billing = calculateBilling({
+      elapsedMinutes: duration(station),
+      ratePerHour: station.sessionRate ?? station.ratePerHour,
+      buffetAmount: station.buffetTotal ?? 0,
+      freeMinutes: customer?.freeTimeMinutes ?? 0,
+      discountPercent: 0,
+      minimumCharge: tariff?.minimumCharge ?? 0,
+      roundingStep: tariff?.roundingStep ?? 1000,
+    });
+    const prepaidUsed = Math.min(billing.finalAmount, station.sessionCredit ?? 0);
+    return { customer, total: Math.max(0, billing.finalAmount - prepaidUsed) };
+  }
+
+  function endSessionForPayment(station: StationDto) {
+    if (!['busy', 'paused'].includes(station.state)) { setMessage('این ایستگاه جلسه فعالی ندارد'); return; }
+    const { customer, total } = calculateSessionDue(station);
+    addSessionTimeline(station.id, 'settle', 'پایان بازی', 'مبلغ قابل دریافت ' + money(total) + ' تومان', total);
+    updateStation(station.id, {
+      state: 'free',
+      startedAt: undefined,
+      sessionMinutes: undefined,
+      sessionRate: undefined,
+      amountSoFar: undefined,
+      customerCode: undefined,
+      persons: undefined,
+      buffetTotal: undefined,
+      sessionCredit: undefined,
+      prepaidEndsAt: undefined,
+      pausedAt: undefined,
+      pausedMinutes: undefined,
+    });
+    setSessionCenterStation(null);
+    setModal(null);
+    if (total > 0) {
+      setPendingPayments(current => [...current, {
+        id: crypto.randomUUID(),
+        stationId: station.id,
+        stationName: station.name,
+        customerId: customer?.id,
+        customerName: customer?.name ?? 'مهمان',
+        customerCode: customer?.code ?? customer?.username ?? station.customerCode ?? 'مهمان',
+        amount: total,
+        createdAt: new Date().toISOString(),
+      }]);
+      setMessage('جلسه تمام شد؛ مبلغ ' + money(total) + ' تومان در «پرداخت‌های در انتظار» قرار گرفت.');
+    } else {
+      setMessage('جلسه تمام شد و مبلغی برای دریافت باقی نمانده است.');
+    }
+  }
+
+  function recordReportPayment(payment: PendingPayment, amount: number, method: 'cash' | 'card' | 'wallet') {
+    if (amount <= 0) return;
+    void mockService.addReportRow({
+      id: crypto.randomUUID(),
+      station: payment.stationName,
+      timeAmount: amount,
+      buffet: 0,
+      packageAmount: 0,
+      amount,
+      method,
+      operator: 'علی محمدی',
+      type: 'time',
+      closedAt: new Date().toISOString(),
+    });
+  }
+
+  function settlePendingPayment(id: string) {
+    const payment = pendingPayments.find(item => item.id === id);
+    if (!payment) return;
+    recordReportPayment(payment, payment.amount, 'card');
+    setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId: payment.stationId, createdAt: new Date().toISOString(), kind: 'settle', title: 'تسویه دریافت شد', detail: money(payment.amount) + ' تومان دریافت شد · ' + payment.customerName, amount: payment.amount }, ...current].slice(0, 300));
+    setPendingPayments(current => current.filter(item => item.id !== id));
+    setMessage('تسویه ' + money(payment.amount) + ' تومان ثبت شد.');
+  }
+
+  function deductPendingFromWallet(id: string) {
+    const payment = pendingPayments.find(item => item.id === id);
+    if (!payment) return;
+    const customer = payment.customerId ? customers.find(item => item.id === payment.customerId) : customers.find(item => item.code === payment.customerCode || item.username === payment.customerCode);
+    if (!customer) { setMessage('این پرداخت مشتری ثبت‌شده ندارد؛ از گزینه «ثبت بدهی» استفاده کنید.'); return; }
+    const walletAmount = Math.min(customer.wallet, payment.amount);
+    const difference = payment.amount - walletAmount;
+    setCustomers(current => current.map(item => item.id === customer.id ? {
+      ...item,
+      wallet: item.wallet - walletAmount,
+      debt: item.debt + difference,
+      transactionHistory: [
+        (difference > 0 ? 'کسر از کیف پول + ثبت مابه‌التفاوت در بدهی · ' : 'کسر از کیف پول · ') + money(payment.amount) + ' تومان',
+        ...(item.transactionHistory ?? []),
+      ],
+    } : item));
+    if (walletAmount > 0) recordReportPayment(payment, walletAmount, 'wallet');
+    setPendingPayments(current => current.filter(item => item.id !== id));
+    setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId: payment.stationId, createdAt: new Date().toISOString(), kind: 'settle', title: difference > 0 ? 'کیف پول + بدهی' : 'تسویه از کیف پول', detail: money(walletAmount) + ' تومان از کیف پول' + (difference > 0 ? ' و ' + money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد' : ' کسر شد'), amount: payment.amount }, ...current].slice(0, 300));
+    setMessage(difference > 0 ? money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد.' : 'مبلغ کامل از کیف پول کسر شد.');
+  }
+
+  function registerPendingDebt(id: string) {
+    const payment = pendingPayments.find(item => item.id === id);
+    if (!payment) return;
+    const customer = payment.customerId ? customers.find(item => item.id === payment.customerId) : customers.find(item => item.code === payment.customerCode || item.username === payment.customerCode);
+    if (!customer) { setMessage('مشتری ثبت‌شده پیدا نشد؛ این مبلغ برای مهمان را دستی پیگیری کنید.'); return; }
+    setCustomers(current => current.map(item => item.id === customer.id ? {
+      ...item,
+      debt: item.debt + payment.amount,
+      transactionHistory: ['ثبت بدهی پایان بازی · ' + money(payment.amount) + ' تومان', ...(item.transactionHistory ?? [])],
+    } : item));
+    setPendingPayments(current => current.filter(item => item.id !== id));
+    setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId: payment.stationId, createdAt: new Date().toISOString(), kind: 'settle', title: 'بدهی ثبت شد', detail: payment.customerName + ' · ' + money(payment.amount) + ' تومان', amount: payment.amount }, ...current].slice(0, 300));
+    setMessage('بدهی ' + money(payment.amount) + ' تومان ثبت شد.');
+  }
+
   function finishSession(method: string) {
     if (!activeStation) return;
     const elapsed = duration(activeStation);
