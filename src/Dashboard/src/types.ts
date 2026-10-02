@@ -158,6 +158,10 @@ export type UserRecord = {
   hourlyRate?: number;
   monthlySalary?: number;
   overtimeRate?: number;
+  phone?: string;
+  employmentStartDate?: string | null;
+  workSchedule?: string | null;
+  notes?: string | null;
   workStart?: string;
   workEnd?: string;
   bonusTotal?: number;
