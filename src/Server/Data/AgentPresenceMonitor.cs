@@ -74,33 +74,47 @@ public sealed class AgentPresenceMonitor(
                 {
                     foreach (var staleDevice in staleDevices)
                     {
-                        await database.Entry(staleDevice).ReloadAsync(stoppingToken);
+                        var observedConnectionId = staleDevice.ConnectionId;
+                        var observedLastSeenAt = staleDevice.LastSeenAt;
 
-                        var device = staleDevice;
-                        if (!device.IsActive
-                            || !device.IsOnline
-                            || !device.LastSeenAt.HasValue
-                            || device.LastSeenAt.Value >= cutoff)
+                        if (!staleDevice.IsActive
+                            || !staleDevice.IsOnline
+                            || !observedLastSeenAt.HasValue
+                            || observedLastSeenAt.Value >= cutoff)
                         {
-                            // The Agent may have reconnected after the stale list was materialized.
-                            // Reload the tracked entity from the database before forcing an offline transition.
                             continue;
                         }
 
-                        device.IsOnline = false;
-                        device.ConnectionId = null;
+                        var affected = await database.AgentDevices
+                            .Where(device => device.Id == staleDevice.Id
+                                && device.IsActive
+                                && device.IsOnline
+                                && device.ConnectionId == observedConnectionId
+                                && device.LastSeenAt == observedLastSeenAt)
+                            .ExecuteUpdateAsync(setters => setters
+                                .SetProperty(device => device.IsOnline, false)
+                                .SetProperty(device => device.ConnectionId, (string?)null)
+                                .SetProperty(device => device.LifecycleState, ClientLifecycleStates.Degraded)
+                                .SetProperty(device => device.LifecycleStateChangedAt, now)
+                                .SetProperty(device => device.IsLocked, device => device.LockOnDisconnect ? true : device.IsLocked)
+                                .SetProperty(device => device.LockedAt, device => device.LockOnDisconnect ? now : device.LockedAt),
+                                stoppingToken);
 
-                        if (!string.Equals(device.LifecycleState, ClientLifecycleStates.Degraded, StringComparison.Ordinal))
+                        if (affected == 0)
                         {
-                            device.LifecycleState = ClientLifecycleStates.Degraded;
-                            device.LifecycleStateChangedAt = now;
+                            // A fresh Agent connection/heartbeat changed the row after the stale list was materialized.
+                            continue;
                         }
 
-                        if (device.LockOnDisconnect && !device.IsLocked)
-                        {
-                            device.IsLocked = true;
-                            device.LockedAt = now;
+                        var device = await database.AgentDevices
+                            .AsNoTracking()
+                            .FirstOrDefaultAsync(item => item.Id == staleDevice.Id, stoppingToken);
 
+                        if (device is null)
+                            continue;
+
+                        if (device.LockOnDisconnect && device.IsLocked)
+                        {
                             database.AuditLogs.Add(new AuditLog
                             {
                                 Action = "AgentAutoLockOnDisconnect",
