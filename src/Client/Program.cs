@@ -262,6 +262,11 @@ try
                     LastHealthyAt = DateTimeOffset.UtcNow
                 };
                 await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
+                state = await FinalizePendingLifecycleCommandAsync(
+                    connection,
+                    state,
+                    agentVersion,
+                    shutdown.Token);
                 await SaveStateAsync(statePath, state);
             }
         };
@@ -311,6 +316,11 @@ try
                         LastUpdateError = null,
                         LastHealthyAt = DateTimeOffset.UtcNow
                     };
+                    state = await FinalizePendingLifecycleCommandAsync(
+                        connection,
+                        state,
+                        agentVersion,
+                        shutdown.Token);
                     await SaveStateAsync(statePath, state);
                 }
 
