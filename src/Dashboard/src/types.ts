@@ -114,6 +114,9 @@ export type ProductRecord = {
   price: number;
   buyPrice: number;
   stock: number;
+  minimumStock: number;
+  unit: string;
+  lowStock: boolean;
   maxStock: number;
 };
 
@@ -337,6 +340,7 @@ export type InventoryTransactionRecord = {
   productName: string;
   quantity: number;
   direction: 'In' | 'Out';
+  kind: 'Initial' | 'Adjustment' | 'Purchase' | 'Sale' | 'Waste' | 'Return' | string;
   notes?: string;
   createdAt: string;
 };
