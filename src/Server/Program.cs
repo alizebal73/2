@@ -452,7 +452,8 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (
             "Refund",
             ledger.Description,
             ledger.CreatedAt,
-            customer.Balance));
+            customer.Balance,
+            ledger.ReferenceTransactionId));
     }
     catch
     {
