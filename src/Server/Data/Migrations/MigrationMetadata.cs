@@ -66,3 +66,10 @@ partial class CustomerIdentityVipTier
 partial class VipPackageDomain
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002135000_CustomerCredentials")]
+partial class CustomerCredentials
+{
+}
