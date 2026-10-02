@@ -14,6 +14,9 @@ type Props = {
   onReduce: () => void;
   onSettle: () => void;
   onRateChange: (rate: number) => void;
+  onPersonsChange: (persons: number) => void;
+  availableStations: StationDto[];
+  onTransfer: (stationId: string) => void;
   timeline: SessionTimelineEvent[];
 };
 
@@ -32,9 +35,13 @@ export function SessionCenter({
   onReduce,
   onSettle,
   onRateChange,
+  onPersonsChange,
+  availableStations,
+  onTransfer,
   timeline,
 }: Props) {
   const [rateInput, setRateInput] = useState(String(Math.round(station.sessionRate ?? station.ratePerHour)));
+  const [transferOpen, setTransferOpen] = useState(false);
   useEffect(() => setRateInput(String(Math.round(station.sessionRate ?? station.ratePerHour))), [station.sessionRate, station.ratePerHour]);
   const duration = Math.max(0, durationMinutes);
   const timeAmount = Math.max(0, Math.round((station.sessionRate ?? station.ratePerHour) * duration / 60));
@@ -91,7 +98,12 @@ export function SessionCenter({
                 </div>
                 <small>این عدد فقط روی همین جلسه اثر دارد.</small>
               </div>
-              <div><span>نفرات</span><strong>{station.persons ?? 1} نفر</strong></div>
+              <div className="session-person-editor">
+                <span>نفرات</span>
+                {station.zone === 'pc'
+                  ? <strong>۱ نفر · ثابت</strong>
+                  : <div>{[1, 2, 3, 4].map(value => <button type="button" className={'btn sm ' + ((station.persons ?? 1) === value ? 'active' : '')} key={value} onClick={() => onPersonsChange(value)}>{money(value)}</button>)}</div>}
+              </div>
               <div><span>هزینه زمان</span><strong>{money(timeAmount)} تومان</strong></div>
               <div><span>بوفه</span><strong>{money(buffetAmount)} تومان</strong></div>
             </div>
@@ -151,7 +163,14 @@ export function SessionCenter({
           <button type="button" className="btn" onClick={onCharge}>＋ شارژ جلسه</button>
           <button type="button" className="btn" onClick={onExtend}>⏱ تمدید</button>
           <button type="button" className="btn" onClick={onReduce}>↘ کاهش زمان</button>
+          <button type="button" className="btn" onClick={() => setTransferOpen(value => !value)}>🔀 انتقال جلسه</button>
           <button type="button" className="btn danger" onClick={onSettle}>⏹ پایان بازی</button>
+          {transferOpen && <div className="session-transfer-popover">
+            <strong>انتقال به ایستگاه آزاد</strong>
+            {availableStations.length === 0
+              ? <small>ایستگاه آزادی برای انتقال وجود ندارد.</small>
+              : availableStations.map(target => <button type="button" key={target.id} onClick={() => { onTransfer(target.id); setTransferOpen(false); }}>{target.name} · {target.type}</button>)}
+          </div>}
         </div>
       </section>
     </div>
