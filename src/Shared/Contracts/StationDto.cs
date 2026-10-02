@@ -12,4 +12,6 @@ public sealed record StationDto(
     decimal CustomerDebt = 0,
     string? CustomerNote = null,
     int? RemainingMinutes = null,
-    int? Network = null);
+    int? Network = null,
+    Guid? ServerSessionId = null,
+    decimal BuffetTotal = 0);
