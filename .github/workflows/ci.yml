@@ -279,7 +279,7 @@ jobs:
               throw 'Buffet product creation smoke failed.'
             }
 
-            $purchase = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -WebSession $adminSession -WebSession $adminSession -WebSession $adminSession -ContentType 'application/json' -Body (@{
+            $purchase = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               quantity = 1
               direction = 'In'
               kind = 'Purchase'
@@ -288,7 +288,7 @@ jobs:
             } | ConvertTo-Json)
             if ([int]$purchase.stock -ne 6 -or $purchase.kind -ne 'Purchase') { throw 'Inventory purchase smoke failed.' }
 
-            $stockOut = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
+            $stockOut = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               quantity = 1
               direction = 'Out'
               kind = 'Waste'
@@ -296,7 +296,7 @@ jobs:
             } | ConvertTo-Json)
             if ([int]$stockOut.stock -ne 5 -or $stockOut.kind -ne 'Waste') { throw 'Inventory waste smoke failed.' }
 
-            $returned = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
+            $returned = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               quantity = 1
               direction = 'In'
               kind = 'Return'
@@ -304,7 +304,7 @@ jobs:
             } | ConvertTo-Json)
             if ([int]$returned.stock -ne 6 -or $returned.kind -ne 'Return') { throw 'Inventory return smoke failed.' }
 
-            $sale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -WebSession $adminSession -WebSession $adminSession -ContentType 'application/json' -Body (@{
+            $sale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               items = @(@{ productId = $inventoryProduct.id; quantity = 4 })
               target = 'standalone'
             } | ConvertTo-Json)
@@ -315,7 +315,7 @@ jobs:
             if ([int]$soldProduct.stock -ne 2 -or -not $soldProduct.lowStock) { throw 'Buffet sale did not reduce server stock or low-stock state correctly.' }
 
             try {
-              Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
+              Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
                 items = @(@{ productId = $inventoryProduct.id; quantity = 99 })
                 target = 'standalone'
               } | ConvertTo-Json) | Out-Null
@@ -357,7 +357,7 @@ jobs:
               throw 'Active session endpoint did not return the started session.'
             }
 
-            $sessionSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
+            $sessionSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               items = @(@{ productId = $inventoryProduct.id; quantity = 1 })
               target = 'session'
               sessionId = $startedSession.sessionId
