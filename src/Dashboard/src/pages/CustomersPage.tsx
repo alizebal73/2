@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { mockService } from '../services/mockService';
 import { userErrorMessage } from '../utils/userError';
 import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
+import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
 import type { CustomerRecord, WalletLedgerEntry } from '../types';
 import { ApprovalDialog } from '../components/ApprovalDialog';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 type Filter = 'all' | 'vip' | 'debt';
-type CustomerAction = '' | 'new' | 'edit' | 'wallet' | 'debt' | 'gift' | 'refund' | 'package' | 'password';
+type CustomerAction = '' | 'new' | 'edit' | 'wallet' | 'debt' | 'gift' | 'freeTime' | 'refund' | 'package' | 'password';
 
 type CustomerDraft = {
   name: string;
@@ -32,6 +33,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([]);
+  const [serverFreeBenefits, setServerFreeBenefits] = useState<{ freeMoney: number; freeTimeMinutes: number } | null>(null);
   const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string } | null>(null);
 
   useEffect(() => { void mockService.getCustomers().then(setCustomers); }, []);
@@ -49,7 +51,19 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   useEffect(() => {
     if (!selected?.id) { setWalletLedger([]); return; }
     let active = true;
-    void getWalletLedger(selected.id).then(rows => { if (active) setWalletLedger(rows); }).catch(() => { if (active) setWalletLedger([]); });
+    void Promise.all([
+      getWalletLedger(selected.id),
+      getFreeBenefits(selected.id).catch(() => null),
+    ]).then(([rows, benefits]) => {
+      if (!active) return;
+      setWalletLedger(rows);
+      if (benefits) {
+        setServerFreeBenefits({ freeMoney: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes });
+        setCustomers(current => current.map(item => item.id === selected.id
+          ? { ...item, giftCredit: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes }
+          : item));
+      } else setServerFreeBenefits(null);
+    }).catch(() => { if (active) { setWalletLedger([]); setServerFreeBenefits(null); } });
     return () => { active = false; };
   }, [selected?.id]);
 
@@ -187,7 +201,28 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       }
     }
     else if (action === 'debt') updateCustomer(selected.id, { debt: selected.debt + value }, `ثبت بدهی · ${money(value)} تومان`);
-    else if (action === 'gift') updateCustomer(selected.id, { giftCredit: selected.giftCredit + value }, `اعتبار رایگان · ${money(value)} تومان`);
+    else if (action === 'gift') {
+      try {
+        const benefits = await changeFreeBenefits(selected.id, { moneyAmount: value, mode: 'credit', description: 'اعطای اعتبار مالی رایگان توسط اپراتور' });
+        updateCustomer(selected.id, { giftCredit: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes }, 'اعتبار مالی رایگان · ' + money(value) + ' تومان');
+        setServerFreeBenefits({ freeMoney: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes });
+      } catch (error) {
+        setNotice(userErrorMessage(error, 'ثبت اعتبار مالی رایگان انجام نشد'));
+        return;
+      }
+    }
+    else if (action === 'freeTime') {
+      const minutes = value;
+      if (minutes <= 0) { setNotice('تعداد دقیقه معتبر وارد کنید'); return; }
+      try {
+        const benefits = await changeFreeBenefits(selected.id, { minutes, mode: 'credit', description: 'اعطای زمان رایگان توسط اپراتور' });
+        updateCustomer(selected.id, { freeTimeMinutes: benefits.freeTimeMinutes, giftCredit: benefits.freeMoney }, minutes + ' دقیقه زمان رایگان');
+        setServerFreeBenefits({ freeMoney: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes });
+      } catch (error) {
+        setNotice(userErrorMessage(error, 'ثبت زمان رایگان انجام نشد'));
+        return;
+      }
+    }
     else if (action === 'package') {
       const vip = selected.vip === 'none' ? 'silver' : selected.vip;
       updateCustomer(selected.id, {
@@ -281,7 +316,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <button className="btn sm" onClick={() => openAction('edit')}>ویرایش</button>
           <button className="btn sm" onClick={() => openAction('wallet')}>شارژ کیف پول</button>
           <button className="btn sm" onClick={() => openAction('debt')}>ثبت بدهی</button>
-          <button className="btn sm" onClick={() => openAction('gift')}>اعتبار رایگان</button>
+          <button className="btn sm" onClick={() => openAction('gift')}>اعتبار رایگان</button><button className="btn sm" onClick={() => openAction('freeTime')}>زمان رایگان</button>
           <button className="btn sm" onClick={() => openAction('package')}>فعال‌سازی/تغییر VIP</button>
           <button className="btn sm" onClick={() => openAction('password')}>تغییر رمز ورود</button>
         </div>
@@ -316,9 +351,16 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
 
         {['wallet', 'debt', 'gift'].includes(action) && <>
           <h2>{({ wallet: 'شارژ کیف پول', debt: 'ثبت بدهی', gift: 'اعتبار رایگان', refund: 'کسر اعتبار / بازگشت وجه' } as Record<string, string>)[action]} · {selected?.name}</h2>
-          <label>مبلغ (تومان)<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label>
+          <label>{action === 'gift' ? 'مبلغ (تومان)' : 'مقدار (تومان)'}<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label>
           
           <div className="modal-actions"><button className="btn primary" onClick={submitAction}>ثبت عملیات</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
+        </>}
+
+        {action === 'freeTime' && <>
+          <h2>زمان رایگان · {selected?.name}</h2>
+          <div className="info-row"><span>زمان رایگان فعلی</span><strong>{money(serverFreeBenefits?.freeTimeMinutes ?? selected?.freeTimeMinutes ?? 0)} دقیقه</strong></div>
+          <label>تعداد دقیقه اضافه<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label>
+          <div className="modal-actions"><button className="btn primary" onClick={() => void submitAction()}>ثبت زمان رایگان</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
         </>}
 
         {action === 'package' && <>
