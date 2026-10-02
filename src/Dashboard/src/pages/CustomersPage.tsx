@@ -3,6 +3,7 @@ import { mockService } from '../services/mockService';
 import { userErrorMessage } from '../utils/userError';
 import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
 import type { CustomerRecord, WalletLedgerEntry } from '../types';
+import { ApprovalDialog } from '../components/ApprovalDialog';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 type Filter = 'all' | 'vip' | 'debt';
@@ -18,7 +19,7 @@ type CustomerDraft = {
   password: string;
 };
 
-export function CustomersPage() {
+export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'manager' | 'owner' }) {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selectedId, setSelectedId] = useState('c1');
   const [filter, setFilter] = useState<Filter>('all');
@@ -31,6 +32,7 @@ export function CustomersPage() {
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([]);
+  const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string } | null>(null);
 
   useEffect(() => { void mockService.getCustomers().then(setCustomers); }, []);
   const visible = useMemo(() => customers.filter(customer => {
@@ -85,6 +87,23 @@ export function CustomersPage() {
       .replace(/[٬,s]/g, '')) || 0;
   }
 
+  async function executeRefund(refundAmount: number, reason: string) {
+    if (!selected) return;
+    try {
+      const entry = await refundWalletTransaction(selected.id, { amount: refundAmount, reason });
+      updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'بازگشت وجه · ' + money(refundAmount) + ' تومان');
+      setWalletLedger(current => [entry, ...current]);
+      setAction('');
+      setActionNote('');
+      setRefundApproval(null);
+      setAmount('');
+      setNotice('بازگشت وجه ثبت شد و در دفتر کیف پول باقی ماند');
+    } catch (error) {
+      setRefundApproval(null);
+      setNotice(userErrorMessage(error, 'ثبت بازگشت وجه انجام نشد'));
+    }
+  }
+
   async function submitAction() {
     if (action === 'new') {
       const name = draft.name.trim();
@@ -135,13 +154,14 @@ export function CustomersPage() {
     }
 
     if (action === 'refund') {
+      if (value <= 0) { setNotice('مبلغ معتبر وارد کنید'); return; }
       if (value > selected.wallet) { setNotice('مبلغ بازگشت بیشتر از موجودی کیف پول مشتری است'); return; }
       if (!actionNote.trim()) { setNotice('دلیل بازگشت وجه را وارد کنید'); return; }
-      try {
-        const entry = await refundWalletTransaction(selected.id, { amount: value, reason: actionNote.trim() });
-        updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'بازگشت وجه · ' + money(value) + ' تومان');
-        setAction(''); setActionNote(''); setNotice('مبلغ از کیف پول کسر و بازگشت وجه ثبت شد');
-      } catch (error) { setNotice(userErrorMessage(error, 'ثبت بازگشت وجه انجام نشد')); }
+      if (role === 'operator' && value > 100000) {
+        setRefundApproval({ amount: value, reason: actionNote.trim() });
+        return;
+      }
+      await executeRefund(value, actionNote.trim());
       return;
     }
     if (action === 'password') {
@@ -318,6 +338,17 @@ export function CustomersPage() {
         </>}
       </section>
     </div>}
+
+    {refundApproval && (
+      <ApprovalDialog
+        open
+        title="تأیید بازگشت وجه"
+        detail={'بازگشت ' + money(refundApproval.amount) + ' تومان برای «' + (selected?.name ?? 'مشتری') + '» به تأیید مدیر نیاز دارد. دلیل: ' + refundApproval.reason}
+        requestLabel="تأیید و ثبت بازگشت وجه"
+        onReject={() => setRefundApproval(null)}
+        onApprove={() => executeRefund(refundApproval.amount, refundApproval.reason)}
+      />
+    )}
 
     {notice && <div className="operation-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
   </>;
