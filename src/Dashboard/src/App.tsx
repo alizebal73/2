@@ -19,8 +19,9 @@ import { UserErrorBanner } from './components/UserErrorBanner';
 import { SectionLockDialog } from './components/SectionLockDialog';
 import { readPageLocks } from './services/securityService';
 import type { PageLockMap } from './types';
-import type { DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
+import type { DashboardSnapshotDto, PageKey, ServerInfoDto, StationDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
+import { mockService } from './services/mockService';
 
 type HubState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 type DemoRole = 'operator' | 'manager' | 'owner';
@@ -141,10 +142,38 @@ function DashboardApp() {
           setSnapshot(data);
           setApiState('online');
         }
-      } catch (cause) {
-        if (active) {
-          setApiState('offline');
-          setError('ارتباط با سرور برقرار نشد');
+      } catch {
+        if (!active) return;
+
+        setApiState('offline');
+        setError('ارتباط با سرور برقرار نشد');
+
+        // Development-only visual fallback: keep the UI browsable while
+        // the real Server is unavailable. Production never uses mock data.
+        if (import.meta.env.DEV) {
+          try {
+            const managedStations = await mockService.getManagedStations();
+            const previewStations: StationDto[] = managedStations.map((station) => ({
+              id: station.id,
+              name: station.name,
+              zone: station.zone,
+              type: station.type,
+              ratePerHour: station.ratePerHour,
+              state: station.status === 'off'
+                ? 'off'
+                : station.status === 'reserved'
+                  ? 'reserved'
+                  : 'free',
+            }));
+
+            setSnapshot({
+              totalStations: previewStations.length,
+              stations: previewStations,
+              generatedAt: new Date().toISOString(),
+            });
+          } catch {
+            setSnapshot(null);
+          }
         }
       }
     };
