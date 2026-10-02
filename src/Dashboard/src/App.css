@@ -3271,3 +3271,82 @@ button:focus-visible {
   background: rgba(58, 169, 255, 0.1);
   box-shadow: 0 0 0 1px rgba(58, 169, 255, 0.08);
 }
+
+
+.customer-ledger {
+  display: grid;
+  gap: 4px;
+}
+
+.customer-ledger-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 1px solid #19243c;
+  border-radius: 9px;
+  background: #0d1526;
+}
+
+.customer-ledger-sign {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  font-weight: 900;
+  font-size: 11px;
+}
+
+.customer-ledger-sign.credit {
+  color: var(--green);
+  background: rgba(34, 229, 138, 0.1);
+}
+
+.customer-ledger-sign.debit {
+  color: var(--red);
+  background: rgba(255, 93, 115, 0.1);
+}
+
+.customer-ledger-main,
+.customer-ledger-money {
+  min-width: 0;
+}
+
+.customer-ledger-main strong,
+.customer-ledger-main small,
+.customer-ledger-money strong,
+.customer-ledger-money small {
+  display: block;
+}
+
+.customer-ledger-main strong {
+  font-size: 10.5px;
+}
+
+.customer-ledger-main small,
+.customer-ledger-money small {
+  margin-top: 2px;
+  color: var(--dim);
+  font-size: 8.5px;
+}
+
+.customer-ledger-money {
+  text-align: left;
+}
+
+.customer-ledger-money strong {
+  color: var(--txt);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.customer-ledger-empty {
+  padding: 13px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  color: var(--dim);
+  font-size: 9.5px;
+  text-align: center;
+}
