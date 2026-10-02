@@ -257,6 +257,66 @@ app.MapGet("/api/agent/devices", async (
 
 
 
+app.MapGet("/api/agent/devices/{deviceId:guid}/lifecycle", async (
+    Guid deviceId,
+    HttpContext context,
+    GameNetDbContext database,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var device = await database.AgentDevices
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == deviceId && item.IsActive, cancellationToken);
+
+    if (device is null)
+        return Results.NotFound(new { code = "agent_not_found", message = "Agent پیدا نشد." });
+
+    var productVersion = configuration["App:ProductVersion"] ?? "0.7.0";
+    var minimum = configuration["App:MinimumClientVersion"] ?? "0.1.0";
+    var recommended = configuration["App:RecommendedClientVersion"] ?? "0.1.0";
+    var channel = configuration["App:UpdateChannel"] ?? "stable";
+
+    static bool IsCompatible(string clientVersion, string minimumVersion)
+        => Version.TryParse(clientVersion, out var client)
+            && Version.TryParse(minimumVersion, out var minimum)
+            && client >= minimum;
+
+    static bool IsUpdateRecommended(string clientVersion, string recommendedVersion)
+        => Version.TryParse(clientVersion, out var client)
+            && Version.TryParse(recommendedVersion, out var recommended)
+            && client < recommended;
+
+    var compatibility = new ClientReleaseCompatibilityDto(
+        productVersion,
+        minimum,
+        recommended,
+        channel,
+        IsCompatible(device.AgentVersion ?? "0.0.0", minimum),
+        IsUpdateRecommended(device.AgentVersion ?? "0.0.0", recommended));
+
+    return Results.Ok(new ClientLifecycleStatusDto(
+        device.Id,
+        device.DeviceId,
+        device.LifecycleState,
+        device.AgentVersion ?? "0.0.0",
+        device.PendingUpdateVersion,
+        device.LastUpdateError,
+        device.LastHealthyAt,
+        device.LifecycleStateChangedAt,
+        device.IsActive
+            && device.LastSeenAt.HasValue
+            && DateTimeOffset.UtcNow - device.LastSeenAt.Value <= TimeSpan.FromSeconds(Math.Clamp(configuration.GetValue("Agent:OfflineAfterSeconds", 30), 6, 300)),
+        compatibility));
+})
+.WithName("GetAgentLifecycleStatus");
+
 app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
     Guid deviceId,
     AgentCommandRequest request,
