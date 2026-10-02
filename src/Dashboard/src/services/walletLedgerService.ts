@@ -91,11 +91,13 @@ export async function refundWalletTransaction(
     description: string;
     createdAt: string;
     balanceAfter: number;
+    referenceTransactionId?: string | null;
   };
 
   return {
     ...row,
     direction: 'debit',
     type: 'refund',
+    referenceTransactionId: row.referenceTransactionId ?? input.sourceTransactionId,
   };
 }
