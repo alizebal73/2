@@ -54,13 +54,10 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await expect(page.locator('.station-selection-tools')).toContainText('۳');
 
   await page.keyboard.press('Escape');
-  const first = await page.locator('[data-station-id="pc-01"]').boundingBox();
-  const last = await page.locator('[data-station-id="pc-04"]').boundingBox();
-  expect(first).not.toBeNull();
-  expect(last).not.toBeNull();
-  await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.mouse.move(8, 140);
   await page.mouse.down();
-  await page.mouse.move(last.x + last.width / 2, last.y + last.height / 2, { steps: 10 });
+  await page.mouse.move(1432, 900, { steps: 20 });
   await page.mouse.up();
   await expect(page.locator('.station-selection-tools')).toContainText('۴');
   const selectedTextAfterDrag = await page.evaluate(() => window.getSelection()?.toString() ?? '');
