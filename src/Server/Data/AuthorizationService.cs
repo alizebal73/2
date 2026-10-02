@@ -72,6 +72,24 @@ public static class AuthorizationService
         return user.Permissions.Any(item => string.Equals(item.Permission.Name, permission, StringComparison.OrdinalIgnoreCase));
     }
 
+    public static async Task<(AppUser? User, IResult? Error)> RequireAnyPermissionAsync(
+        HttpContext context,
+        GameNetDbContext database,
+        CancellationToken cancellationToken,
+        params string[] permissions)
+    {
+        var user = await ResolveUserAsync(context, database, cancellationToken);
+        if (user is null)
+            return (null, Results.Unauthorized());
+
+        if (!permissions.Any(permission => HasPermission(user, permission)))
+            return (user, Results.Json(
+                new { code = "permission_denied", message = "دسترسی لازم برای این عملیات را ندارید." },
+                statusCode: StatusCodes.Status403Forbidden));
+
+        return (user, null);
+    }
+
     public static async Task<(AppUser? User, IResult? Error)> RequirePermissionAsync(
         HttpContext context,
         GameNetDbContext database,
