@@ -965,6 +965,22 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   async function applyCharge(method: string) {
     const value = number(amount);
     if (!value || !activeStation) { setMessage('مبلغ معتبر وارد کنید'); return; }
+
+    if (method === 'debt' && !hasPermission(user, 'customer.debt')) {
+      setMessage('دسترسی ثبت بدهی مشتری را ندارید');
+      return;
+    }
+
+    if ((chargeTarget === 'wallet' || chargeTarget === 'discount') && !hasPermission(user, 'customer.wallet')) {
+      setMessage('دسترسی مدیریت کیف پول مشتری را ندارید');
+      return;
+    }
+
+    if (chargeTarget === 'session' && !hasPermission(user, 'session.manage')) {
+      setMessage('دسترسی مدیریت مالی جلسه را ندارید');
+      return;
+    }
+
     const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
     try {
       if (method === 'debt') {
@@ -1319,12 +1335,12 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     />}
     {context && <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}>
       <strong>{context.station.name} · {stateLabels[context.station.state as StationState]}</strong>
-      {(context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('details')}>▣ جزئیات کامل جلسه</button>}
-      {(context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('settle')}>🧾 تسویه و بستن جلسه</button>}
-      {context.station.state === 'busy' && <button onClick={() => contextAction('pause')}>⏸ توقف موقت جلسه</button>}
-      {context.station.state === 'paused' && <button onClick={() => contextAction('resume')}>▶ ادامه جلسه</button>}
-      {(context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('extend')}>⏱ تمدید وقت</button>}
-      {(context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('reduce')}>↘ کاهش زمان</button>}
+      {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('details')}>▣ جزئیات کامل جلسه</button>}
+      {canSettleSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('settle')}>🧾 تسویه و بستن جلسه</button>}
+      {canManageSession && context.station.state === 'busy' && <button onClick={() => contextAction('pause')}>⏸ توقف موقت جلسه</button>}
+      {canManageSession && context.station.state === 'paused' && <button onClick={() => contextAction('resume')}>▶ ادامه جلسه</button>}
+      {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('extend')}>⏱ تمدید وقت</button>}
+      {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('reduce')}>↘ کاهش زمان</button>
       {canControlClient && <button onClick={() => contextAction('switch-net')}>🌐 تغییر اینترنت ۱ ↔ ۲</button>}
       {canManageSession && <button onClick={() => contextAction('move-user')}>🔀 جابه‌جایی یوزر</button>}
       {canControlClient && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
