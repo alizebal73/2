@@ -52,7 +52,7 @@ const pagePermissions: Partial<Record<PageKey, string[]>> = {
   'client-shell': ['client.control'],
   accounts: ['account.manage'],
   reports: ['finance.view'],
-  users: ['user.manage', 'shift.manage'],
+  users: ['user.manage', 'shift.manage', 'payroll.view', 'payroll.manage'],
   settings: ['user.manage'],
 };
 
