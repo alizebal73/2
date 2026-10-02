@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { mockService } from '../services/mockService';
+import { userErrorMessage } from '../utils/userError';
 import type { UserRecord } from '../types';
 
 const permissionRows = ['شروع/پایان جلسه','شارژ مستقیم','ثبت بدهی/هدیه','بوفه','مشتریان','گزارش کامل','تعرفه‌ها','کاربران','تنظیمات','کنترل کلاینت','Account Pool','تخفیف','بستن شیفت','مدیریت بازی‌ها'];
@@ -52,7 +53,7 @@ export function UsersPage() {
       const result = await mockService.startShift(shiftOperator);
       setCurrentShift(result);
       setNotice('شیفت جدید باز شد');
-    } catch (error) { setNotice(error instanceof Error ? error.message : 'باز کردن شیفت ناموفق بود'); }
+    } catch (error) { setNotice(userErrorMessage(error, 'باز کردن شیفت ناموفق بود')); }
   }
 
   async function closeShift() {
