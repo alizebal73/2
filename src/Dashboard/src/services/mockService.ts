@@ -15,6 +15,7 @@ import type {
   StationManagementRecord,
   VipPackageRecord,
   ExpenseRecord as TypedExpenseRecord,
+  WalletLedgerEntry,
 } from '../types';
 
 const customers: CustomerRecord[] = [
@@ -23,6 +24,24 @@ const customers: CustomerRecord[] = [
   { id: 'c3', code: '2021', nationalId: '0023456789', name: 'پارسا رضایی', alias: 'Parsa', mobile: '09120000003', vip: 'none', wallet: 0, debt: 20000, giftCredit: 0, discountLevel: 5, username: 'parsa.r', lastSeen: '۱ ساعت پیش', status: 'active', hoursUsedToday: 1, transactionHistory: ['بدهی ثبت‌شده · ۲۰٬۰۰۰ تومان'] },
   { id: 'c4', code: '1051', nationalId: '0076543210', name: 'مهدی جهان', alias: 'Mehdi', mobile: '09120000004', vip: 'gold', wallet: 470000, debt: 0, giftCredit: 25000, discountLevel: 22, packageName: 'Gold VIP', username: 'mehdi.j', lastSeen: 'حال حاضر', status: 'active', hoursUsedToday: 5, dailyHourCap: 4, transactionHistory: ['سقف روزانه تکمیل شد · مازاد نیم‌بها'] },
 ];
+
+const walletLedger: Record<string, WalletLedgerEntry[]> = {
+  c1: [
+    { id: 'wl-c1-1', customerId: 'c1', amount: 500000, direction: 'credit', type: 'charge', description: 'شارژ کیف پول', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), balanceAfter: 500000 },
+    { id: 'wl-c1-2', customerId: 'c1', amount: 50000, direction: 'debit', type: 'settlement', description: 'تسویه جلسه PC-03', createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), balanceAfter: 450000 },
+  ],
+  c2: [
+    { id: 'wl-c2-1', customerId: 'c2', amount: 150000, direction: 'credit', type: 'charge', description: 'شارژ کیف پول', createdAt: new Date(Date.now() - 86400000).toISOString(), balanceAfter: 150000 },
+    { id: 'wl-c2-2', customerId: 'c2', amount: 30000, direction: 'debit', type: 'settlement', description: 'تسویه جلسه PC-09', createdAt: new Date(Date.now() - 30 * 60000).toISOString(), balanceAfter: 120000 },
+  ],
+  c3: [
+    { id: 'wl-c3-1', customerId: 'c3', amount: 20000, direction: 'credit', type: 'charge', description: 'شارژ کیف پول', createdAt: new Date(Date.now() - 2 * 86400000).toISOString(), balanceAfter: 20000 },
+    { id: 'wl-c3-2', customerId: 'c3', amount: 20000, direction: 'debit', type: 'settlement', description: 'تسویه جلسه PC-11', createdAt: new Date(Date.now() - 90 * 60000).toISOString(), balanceAfter: 0 },
+  ],
+  c4: [
+    { id: 'wl-c4-1', customerId: 'c4', amount: 470000, direction: 'credit', type: 'charge', description: 'شارژ کیف پول', createdAt: new Date(Date.now() - 4 * 86400000).toISOString(), balanceAfter: 470000 },
+  ],
+};
 
 const products: ProductRecord[] = [
   { id: 'p1', name: 'انرژی درینک', category: 'نوشیدنی', price: 25000, buyPrice: 14000, stock: 42, maxStock: 60 },
@@ -209,6 +228,29 @@ export const mockService = {
     return { stationId, minutes, extendedAt: new Date().toISOString() };
   },
   getInvoices: async () => [...invoices],
+  getWalletLedger: async (customerId: string) => [...(walletLedger[customerId] ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  recordWalletTransaction: async (
+    customerId: string,
+    input: { amount: number; type: 'credit' | 'debit'; description: string }
+  ) => {
+    const customer = customers.find(item => item.id === customerId);
+    if (!customer || input.amount <= 0) throw new Error('مشتری یا مبلغ تراکنش معتبر نیست');
+    if (input.type === 'debit' && customer.wallet < input.amount) throw new Error('موجودی کیف پول کافی نیست');
+    customer.wallet = input.type === 'credit' ? customer.wallet + input.amount : customer.wallet - input.amount;
+    const current = walletLedger[customerId] ?? [];
+    const entry: WalletLedgerEntry = {
+      id: crypto.randomUUID(),
+      customerId,
+      amount: input.amount,
+      direction: input.type === 'credit' ? 'credit' : 'debit',
+      type: input.type === 'credit' ? 'charge' : 'debit',
+      description: input.description,
+      createdAt: new Date().toISOString(),
+      balanceAfter: customer.wallet,
+    };
+    walletLedger[customerId] = [entry, ...current];
+    return entry;
+  },
   getCustomers: async () => customers,
   getProducts: async () => products,
   saveProduct: async (product: ProductRecord) => { const index = products.findIndex(item => item.id === product.id); if (index < 0) products.push(product); else products[index] = product; return product; },
