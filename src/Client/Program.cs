@@ -918,7 +918,12 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
         TryTerminateProcess(rollbackChild);
 
         var failedRollbackState = await manager.GetStateAsync(cancellation.Token);
+        var agentLifecycleState = await ReadAgentStateAsync(dataDirectory, cancellation.Token);
         var canRecoverManualRollback = string.Equals(
+                agentLifecycleState?.PendingCommandType,
+                AgentCommandTypes.Rollback,
+                StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
                 failedRollbackState?.PendingRollbackVersion,
                 rollbackVersion,
                 StringComparison.OrdinalIgnoreCase)
