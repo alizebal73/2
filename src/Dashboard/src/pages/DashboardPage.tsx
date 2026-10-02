@@ -623,7 +623,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       buffet: activeStation.buffetTotal ?? 0,
       packageAmount: 0,
       amount: finalTotal,
-      method: method === 'cash' ? 'cash' : method === 'card' ? 'card' : 'wallet',
+      method: method === 'cash' ? 'cash' : method === 'card' ? 'card' : method === 'gift' ? 'gift' : 'wallet',
       operator: 'علی محمدی',
       type: 'time',
       closedAt
