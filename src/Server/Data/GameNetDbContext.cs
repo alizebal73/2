@@ -399,6 +399,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany(item => item.InventoryTransactions)
             .HasForeignKey(item => item.AppUserId)
             .OnDelete(DeleteBehavior.SetNull);
+        transaction.HasIndex(item => item.ReferenceInvoiceId);
     }
 
     private static void ConfigureShift(ModelBuilder modelBuilder)
