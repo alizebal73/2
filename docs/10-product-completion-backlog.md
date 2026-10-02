@@ -462,7 +462,7 @@
 
 ## فهرست اصلی
 
-> مرحله اصلی فعلی: **۶ — Buffet & Inventory Domain**؛ هستهٔ B9 → B17 در مرحلهٔ ۴ و دامنهٔ Customer/VIP در مرحلهٔ ۵ تکمیل و تست شده‌اند؛ hardening مجوزها در مرحلهٔ ۷ دنبال می‌شود.
+> مرحله اصلی فعلی: **۷ — Users & Permissions**؛ هستهٔ مراحل ۴، ۵ و ۶ تکمیل و تست شده‌اند و باقی‌مانده‌های امنیت/Permission/Approval/Payroll در همین مرحله بسته می‌شوند.
 
 ### A) Operational Intelligence / UX
 1. ✅ مرکز «نیازمند توجه» در داشبورد — پیاده‌سازی و CI سبز شد
@@ -483,7 +483,7 @@
 - برای پرداخت نقدی مبلغ دریافتی قابل ورود است و مبلغ برگشتی محاسبه می‌شود.
 - Free Time در Breakdown لحاظ می‌شود.
 - Split Payment هنوز جداست و در B12 تکمیل می‌شود.
-- Invoice/Settlement واقعی Server هنوز باید مالک نهایی محاسبه و ثبت شود.
+- Invoice/Settlement واقعی Server مالک نهایی ثبت و Transaction/Audit آن روی Server است؛ مسیر Dashboard به endpoint واقعی Settlement متصل است.
 
 ## اجرای مرحله اصلی ۴ — B10 Refund
 
@@ -497,12 +497,11 @@
 - تست Server برای حفظ رکورد اصلی + ثبت Debit + Audit اضافه شد.
 
 ### مرز باقی‌مانده
-- Permission سروری
-- Approval برای Refundهای حساس
-- Reference صریح به تراکنش/Invoice مبدأ
-- Refund واقعی برای Session/Buffet/Package
-- Reverse کامل و چندمرحله‌ای
-این موارد در B10/B11 و مرحله ۷/مالی تکمیل می‌شوند.
+- ✅ Permission سروری و Audit برای Wallet Refund.
+- ✅ Approval اجرایی برای Refund حساس با اجرای واقعی در Transaction.
+- ✅ Reference صریح به تراکنش مبدأ در Ledger Refund.
+- ✅ Reverse واقعی Session/Buffet از مسیر Invoice Reverse؛ Refundهای مستقل Package هنوز دامنهٔ جداگانه محسوب می‌شوند.
+- ⬜ تکمیل سناریوهای مستقل Package Refund، در صورت ورود به دامنهٔ محصول.
 
 ## وضعیت تاریخی مرحله اصلی ۴ — Finance & Session Core
 
