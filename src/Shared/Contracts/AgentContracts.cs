@@ -28,7 +28,8 @@ public sealed record AgentHeartbeatRequest(
     string? OsVersion,
     double? CpuUsagePercent,
     long? MemoryAvailableBytes,
-    long? UptimeSeconds);
+    long? UptimeSeconds,
+    bool IsLocked);
 
 public sealed record AgentHeartbeatResponse(
     Guid AgentId,
