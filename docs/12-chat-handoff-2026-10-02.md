@@ -449,147 +449,58 @@ Stage 8:
 این بخش «حقیقت فعلی ممیزی» است و بر یادداشت‌های تاریخی قدیمی‌تر اولویت دارد.
 
 ## نتیجه کلی
-
 - Repo مورد بررسی فقط `alizebal73/2`.
-- Stage 1 تا Stage 7: از نظر قابلیت‌های ثبت‌شده، کد فعلی، migrationها و smoke/CI موجود، بسته هستند.
-- Stage 8: **هنوز Done نیست**.
-- آخرین CI سبز تأییدشده برای Foundation قبلی Stage 8، Run #632 روی head `12e4eacd7cdb3f2a239e150973335b56c180a1e6`.
-- تغییرات جدید Command Transport روی head فعلی ادامه یافته و Run #647 در زمان ثبت این ممیزی هنوز `pending` است؛ بنابراین Ping Command هنوز نباید Done علامت بخورد.
+- Stage 1 تا Stage 7: بسته، تست‌شده و Stage 7 با PR #2 به `main` merge شده است.
+- Stage 8 Foundation: **Done و با CI Run #676 سبز تأیید شد.**
+- Current verified Stage 8 head: `4ef20a3facf2aaa613e1d20f52bf977f2570fde5`.
+- CI Run #676: Build/Test، Migration/Server Smoke، Dashboard Lint/Build، Preview و Browser Interaction Smoke همگی `success`.
+- Stage 8 دیگر شامل Lock/Unlock، Agent-driven Session Start/End، Kiosk/Shell و rollout فیزیکی نیست؛ این‌ها عمداً Stage 9+ هستند.
 
-## ممیزی مرحله‌به‌مرحله
+## ممیزی Stage 1 تا 7
+- Stage 1 Foundation: ✅
+- Stage 2 Prototype & Behavior Transfer: ✅
+- Stage 3 Operational Completion: ✅
+- Stage 4 Finance & Session Core: ✅
+- Stage 5 Customer & VIP Domain: ✅
+- Stage 6 Buffet & Inventory Domain: ✅
+- Stage 7 Users/Permissions/Approvals: ✅ Merge شده در `bc4307f73edb0e535f7a57061aace9dac95e3c1e` و با CI نهایی سبز.
 
-### Stage 1 — Foundation
-وضعیت: ✅ بسته
+## Stage 8 — موارد تأییدشده
+- ✅ Agent Device identity و registration token
+- ✅ persistent per-device token و restart بدون bootstrap token
+- ✅ dedicated `/hubs/agent` و authenticated Agent connection
+- ✅ heartbeat، LastSeen، basic telemetry
+- ✅ stale presence monitor و online/offline state واقعی Dashboard
+- ✅ resilient Agent reconnect و atomic local state
+- ✅ persisted `AgentCommands` با Server-side `client.control`
+- ✅ SignalR command dispatch و acknowledgement/result persistence با `ping`
+- ✅ smoke هم‌زمان چند Agent و unique DeviceId
+- ✅ Server-authoritative Session timing
+- ✅ Pause/Resume و TimeAdjustment سروری + Migration/Audit
+- ✅ Dashboard merge بر اساس Server truth
+- ✅ Run #676 سبز روی Build/Test/Server smoke/Dashboard lint-build/E2E
 
-مواردی که در ساختار فعلی وجود و تثبیت شده‌اند:
-- Solution و پروژه‌های Server / Dashboard / Client / Shared / Tests
-- CI و self-hosted runner
-- Server ASP.NET Core 10 + EF Core + SQLite + SignalR
-- Dashboard React/TypeScript/Vite
-- Client .NET 10
-- Shared contracts
-- Migration/startup واقعی
+## Stage 8 — موارد عمداً Stage 9+
+- ⏩ Lock/Unlock واقعی
+- ⏩ Agent-driven Session Start/End
+- ⏩ Kiosk/Shell policy و full Client command catalog
+- ⏩ Safe Offline/Recovery عملیاتی سطح Client
+- ⬜ تست فیزیکی 2–3 PC و rollout 40+ به‌عنوان validation/deployment gate
 
-مورد ناقص فراموش‌شده‌ای که از Stage 1 مانده باشد در بررسی فعلی پیدا نشد.
+## تصمیم ورود به Stage 9
+Stage 8 Foundation بسته است. Stage 9 از همین merge commit شروع می‌شود و هدفش تبدیل Command Transport موجود به فرمان‌های واقعی Client/Kiosk است؛ اولین برش باید Lock/Unlock واقعی با Permission، persistence، acknowledgement، timeout/failure و audit باشد و سپس Session Start/End از Agent به آن متصل شود.
 
-### Stage 2 — Prototype & Behavior Transfer
-وضعیت: ✅ بسته
+## یافته‌های ممیزی Cross-Stage
+- `Tariff` هنوز در Dashboard برای برخی مسیرها از `mockService.getTariffs()` می‌آید؛ تا Stage واقعی Tariff به‌عنوان قابلیت واقعی Done محسوب نمی‌شود.
+- Mockهای Accounts/Games/Tariffs/ClientShell عمداً به Stageهای بعدی منتقل شده‌اند.
+- Timeline/UX محلی فقط تا جایی مجاز است که منبع حقیقت مالی/مجوز/دامنه نباشد.
+- Release/Update architecture و migration safety باید در تمام Stageهای بعد حفظ شود.
 
-- رفتارهای اصلی Prototype به Dashboard/Server معماری فعلی منتقل شده‌اند.
-- Prototype هنوز فقط reference است و برنامهٔ موازی محسوب نمی‌شود.
-- Routeهای اصلی Dashboard تثبیت شده‌اند.
-- مورد قابل‌اثباتی که نشان دهد Stage 2 نیمه‌کاره رها شده، پیدا نشد.
-
-### Stage 3 — Operational Completion
-وضعیت: ✅ بسته
-
-در Dashboard فعلی:
-- کارت ایستگاه قیمت ساعتی را به‌عنوان مقدار اصلی کارت نمایش نمی‌دهد.
-- اطلاعات مشتری روی کارت قابل نمایش است: username/code، نام، بدهی، یادداشت.
-- زمان باقی‌مانده و وضعیت جلسه/ایستگاه وجود دارد.
-- Session Center، Attention Center، Timeline، Recent Actions، Search/Command Center، Error UX، انتخاب چندایستگاهی و UX عملیاتی موجودند.
-- Permissionهای UI در Stage 7 روی عملیات حساس harden شده‌اند.
-
-یافته ممیزی:
-- Timeline محلی و بعضی کنترل‌های UX عمداً هنوز برای رفتار محلی/Mock استفاده می‌شوند و منبع حقیقت مالی محسوب نمی‌شوند؛ این موضوع در قراردادهای معماری ثبت شده و نقص پنهان محسوب نمی‌شود.
-
-### Stage 4 — Finance & Session Core
-وضعیت: ✅ بسته
-
-موارد اصلی موجود:
-- Wallet Ledger
-- Refund/Reverse
-- Atomic Settlement
-- Split Payment
-- Shift Settlement/Handover
-- Session Transfer / Tariff / Persons
-- Free Time / Free Money
-- Concurrent Login Limit
-- Expense / Profit
-- Invoice / Audit / Transaction safety
-
-Smoke فعلی CI نیز مسیرهای Session / Buffet / Settlement / Reverse را پوشش می‌دهد.
-
-یافته ممیزی:
-- اتصال نهایی مالی روی Server است و Dashboard برای مسیرهای اصلی از endpointهای سروری استفاده می‌کند.
-- موارد اختصاصی Agent عمداً به Stage 8 منتقل شده‌اند و جاافتاده محسوب نمی‌شوند.
-
-### Stage 5 — Customer & VIP Domain
-وضعیت: ✅ بسته
-
-موارد تأییدشده:
-- Customer CRUD
-- VIP Package و assignment
-- Debt + settlement
-- PBKDF2 credentials
-- Customer authentication
-- Concurrent login limit
-- VIP usage
-- Customer history
-- Wallet / Free Benefits / financial identity
-
-CI smoke برای این حوزه‌ها موجود و در handoff ثبت شده است.
-
-### Stage 6 — Buffet & Inventory Domain
-وضعیت: ✅ بسته
-
-موارد تأییدشده:
-- Buffet catalog
-- Product update
-- Minimum stock / Unit
-- Inventory adjustment / Waste / Return
-- Atomic sale
-- Session draft invoice
-- Settlement reuse
-- Reverse + stock restore
-- Purchase + UnitCost
-- Weighted average cost
-- Historical sale pricing
-- Profit report
-- Inventory history
-
-Run #488 به‌عنوان gate تکمیل Stage 6 ثبت شده و Stage 6 merge شده است.
-
-### Stage 7 — Users & Permissions
-وضعیت: ✅ بسته و Merge شده
-
-- PR #2 merge شده با merge commit `bc4307f73edb0e535f7a57061aace9dac95e3c1e`.
-- Payroll/employee ledger و salary payment
-- Permission Read/Write hardening
-- authenticated actor enforcement
-- Approval واقعی برای Invoice Reverse و Wallet Refund
-- concurrency / HTTP 409
-- UI permission hardening
-- generic approval allowlist
-
-Run #591 به‌عنوان verification ثبت شده است.
-
-### Stage 8 — PC Agent Foundation
-وضعیت: ⚠️ در حال تکمیل — Done نیست
-
-تکمیل/تأییدشده:
-- Agent identity / registration
-- persistent Agent token
-- dedicated `/hubs/agent`
-- heartbeat / LastSeen
-- basic telemetry
-- online/offline state
-- stale presence monitor
-- reconnect + persisted local identity
-- Dashboard server-authoritative Agent status
-- CI registration/heartbeat/offline/restart identity smoke
-- persisted Agent Command foundation
-- `ping` command transport: Server persists → SignalR dispatch → Agent acknowledge → Server result persistence
-
-اما این موارد **هنوز تکمیل نشده‌اند**:
-1. Lock / Unlock واقعی
-2. Agent-driven Session Start / End
-3. Timer زنده که برای عملیات PC متکی به Server truth باشد
-4. Safe Offline / Recovery behavior در سطح عملیاتی
-5. تست واقعی روی 2–3 PC فیزیکی
-6. سپس آمادگی rollout برای 40+ PC
-
-بنابراین حتی با سبزشدن Run #647، Stage 8 فقط وقتی Done می‌شود که این موارد واقعاً پیاده‌سازی و تست شوند.
+## قاعده ادامه
+- هیچ آیتم Stage 9 را قبل از تست واقعی Done علامت نزن.
+- Server همچنان منبع حقیقت است.
+- هر command: Permission → persistence/correlation → SignalR dispatch → acknowledgement/result → Audit.
+- قبل از rollout گسترده، validation فیزیکی 2–3 PC الزامی است.
 
 ## یافته‌های Cross-Stage که نباید گم شوند
 
