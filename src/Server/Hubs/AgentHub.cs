@@ -100,6 +100,13 @@ public sealed class AgentHub(
                 : null;
             device.ConnectionId = Context.ConnectionId;
 
+            if (request.IsLocked && !device.IsLocked)
+            {
+                device.IsLocked = true;
+                device.LockedAt = now;
+                logger.LogWarning("Agent reported a locked client state after command acknowledgement for {DeviceId}.", device.DeviceId);
+            }
+
             await database.SaveChangesAsync(Context.ConnectionAborted);
             logger.LogInformation(
                 "Agent heartbeat persisted. DeviceId={DeviceId}, LastSeenAt={LastSeenAt}",
