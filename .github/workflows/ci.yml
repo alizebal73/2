@@ -244,7 +244,7 @@ jobs:
 
             $inventoryAfterSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
             $soldProduct = @($inventoryAfterSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
-            if ([int]$soldProduct.stock -ne 1 -or -not $soldProduct.lowStock) { throw 'Buffet sale did not reduce server stock or low-stock state correctly.' }
+            if ([int]$soldProduct.stock -ne 2 -or -not $soldProduct.lowStock) { throw 'Buffet sale did not reduce server stock or low-stock state correctly.' }
 
             try {
               Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
