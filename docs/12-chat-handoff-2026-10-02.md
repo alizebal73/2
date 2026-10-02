@@ -621,8 +621,8 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 - Repo: `alizebal73/2` only.
 - Branch: `stage10-client-lifecycle`
 - PR #9: open, not merged.
-- Current verified head: `46ca0311392a00f4910fcae8527f214910eb60fa`
-- Run #806: **success** on the exact current head.
+- Last fully verified product head: `46ca0311392a00f4910fcae8527f214910eb60fa`
+- Run #806: **success** on the exact verified product head.
 - Stage 10 verified slice includes:
   - persisted Client lifecycle state on AgentDevice
   - Server-authoritative release compatibility
@@ -640,7 +640,9 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 - AgentPresenceMonitor re-reads the authoritative device row before applying a stale transition so a fresh reconnect cannot be overwritten by an old stale snapshot.
 - CI cleanup explicitly terminates restarted Agent descendants before the offline/recovery gate.
 - Installer remains local-only; no installer/package artifact is uploaded as a GitHub release asset.
-- Stage 10 is now ready to move from Update/Health/Rollback into **Release Safety / Canary Gate hardening**.
+- Stage 10 Update/Health/Rollback is verified.
+- Release Safety / Canary Gate is the next scope.
+- The existing green CI workflow remains the release baseline; do not declare Canary/Release Safety Done until a dedicated gate is implemented and the exact head is green.
 - Next execution path:
   1. Manifest/package release gate
   2. CI canary gate on one real CI Agent
