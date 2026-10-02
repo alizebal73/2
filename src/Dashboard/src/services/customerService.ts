@@ -35,6 +35,13 @@ function mapCustomer(row: {
   lastSeen: string;
   status: 'active' | 'warning' | 'locked';
   concurrentLoginLimit: number;
+  vipPackageId?: string;
+  vipPackageName?: string;
+  vipActivatedAt?: string;
+  vipExpiresAt?: string;
+  vipDailyMinutes?: number;
+  vipTotalMinutes?: number;
+  vipDiscountPercent?: number;
 }): CustomerRecord {
   const vip = row.vip === 'gold' || row.vip === 'silver' || row.vip === 'bronze' || row.vip === 'custom' ? row.vip : 'none';
   return {
@@ -50,7 +57,13 @@ function mapCustomer(row: {
     giftCredit: row.giftCredit,
     freeTimeMinutes: row.freeTimeMinutes,
     discountLevel: 0,
-    packageName: vip === 'none' ? undefined : vip === 'gold' ? 'Gold VIP' : vip === 'silver' ? 'Silver VIP' : vip === 'bronze' ? 'Bronze VIP' : 'VIP سفارشی',
+    packageName: row.vipPackageName ?? (vip === 'none' ? undefined : vip === 'gold' ? 'Gold VIP' : vip === 'silver' ? 'Silver VIP' : vip === 'bronze' ? 'Bronze VIP' : 'VIP سفارشی'),
+    vipPackageId: row.vipPackageId,
+    vipActivatedAt: row.vipActivatedAt,
+    vipExpiresAt: row.vipExpiresAt,
+    vipDailyMinutes: row.vipDailyMinutes,
+    vipTotalMinutes: row.vipTotalMinutes,
+    vipDiscountPercent: row.vipDiscountPercent,
     username: row.username ?? row.code ?? '',
     lastSeen: row.lastSeen,
     status: row.status,
