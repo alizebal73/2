@@ -21,7 +21,7 @@ export function UsersPage({ user }: UsersPageProps) {
   const [serverUsers, setServerUsers] = useState<AppUserRecord[]>([]);
   const [permissionCatalog, setPermissionCatalog] = useState<Array<{ id: string; name: string; description?: string }>>([]);
   const [payrollUsers, setPayrollUsers] = useState<PayrollUserRecord[]>([]);
-  const [pendingPayrollApprovals, setPendingPayrollApprovals] = useState<ApprovalRecord[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState<ApprovalRecord[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [currentShift, setCurrentShift] = useState<any>(null);
@@ -107,9 +107,9 @@ export function UsersPage({ user }: UsersPageProps) {
 
       if (canDecideApproval) {
         const rows = await getApprovals();
-        setPendingPayrollApprovals(rows.filter(row => row.action === 'payroll.entry' && row.status === 'Pending'));
+        setPendingApprovals(rows.filter(row => row.status === 'Pending'));
       } else {
-        setPendingPayrollApprovals([]);
+        setPendingApprovals([]);
       }
     } catch (error) {
       setNotice(userErrorMessage(error, 'اطلاعات کاربران/حقوق از سرور دریافت نشد'));
@@ -282,7 +282,7 @@ export function UsersPage({ user }: UsersPageProps) {
     }
   }
 
-  async function decidePayrollApproval(id: string, approved: boolean) {
+  async function decideApproval(id: string, approved: boolean) {
     if (!canDecideApproval) return;
     try {
       await decideApproval(id, approved, approved ? 'تأیید عملیات حقوقی' : 'رد عملیات حقوقی');
@@ -367,14 +367,14 @@ export function UsersPage({ user }: UsersPageProps) {
         </div>)}
       </div>
     </section>}
-    {canDecideApproval && pendingPayrollApprovals.length > 0 && <section className="card-panel" style={{ margin:'0 22px 20px', padding:14 }}>
-      <h3>عملیات حقوق در انتظار تأیید</h3>
-      {pendingPayrollApprovals.map(row => <div className="info-row" key={row.id}>
+    {canDecideApproval && pendingApprovals.length > 0 && <section className="card-panel" style={{ margin:'0 22px 20px', padding:14 }}>
+      <h3>عملیات در انتظار تأیید</h3>
+      {pendingApprovals.map(row => <div className="info-row" key={row.id}>
         <span><strong>{row.action}</strong> · {row.reason}</span>
         <span>{row.requestedBy} · {new Date(row.createdAt).toLocaleString('fa-IR')}</span>
         <div style={{display:'flex',gap:6}}>
-          <button className="btn sm primary" onClick={() => void decidePayrollApproval(row.id, true)}>تأیید</button>
-          <button className="btn sm danger" onClick={() => void decidePayrollApproval(row.id, false)}>رد</button>
+          <button className="btn sm primary" onClick={() => void decideApproval(row.id, true)}>تأیید</button>
+          <button className="btn sm danger" onClick={() => void decideApproval(row.id, false)}>رد</button>
         </div>
       </div>)}
     </section>}
