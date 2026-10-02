@@ -124,24 +124,60 @@ try
                 agentVersion,
                 shutdown.Token);
 
-            if (outcome.PendingUpdateVersion is not null)
+            if (outcome.AwaitingFinalResult)
             {
                 state = state with
                 {
-                    LifecycleState = outcome.RequiresRestart ? ClientLifecycleStates.Updating : ClientLifecycleStates.UpdatePending,
+                    LifecycleState = command.CommandType == AgentCommandTypes.Update
+                        ? ClientLifecycleStates.Updating
+                        : ClientLifecycleStates.Recovering,
+                    PendingUpdateVersion = command.CommandType == AgentCommandTypes.Update
+                        ? outcome.RestartVersion
+                        : null,
+                    LastUpdateError = null,
+                    PendingCommandId = command.CommandId,
+                    PendingCommandType = command.CommandType,
+                    PendingCommandTargetVersion = outcome.RestartVersion,
+                    PendingCommandOutcome = null
+                };
+                await SaveStateAsync(statePath, state);
+            }
+            else if (outcome.PendingUpdateVersion is not null)
+            {
+                state = state with
+                {
+                    LifecycleState = outcome.RequiresRestart
+                        ? ClientLifecycleStates.Updating
+                        : ClientLifecycleStates.UpdatePending,
                     PendingUpdateVersion = outcome.PendingUpdateVersion,
                     LastUpdateError = outcome.Error
                 };
                 await SaveStateAsync(statePath, state);
             }
-
-            if (outcome.RollbackVersion is not null)
+            else if (outcome.RollbackVersion is not null)
             {
                 state = state with
                 {
-                    LifecycleState = outcome.RequiresRestart ? ClientLifecycleStates.Recovering : ClientLifecycleStates.Degraded,
+                    LifecycleState = outcome.RequiresRestart
+                        ? ClientLifecycleStates.Recovering
+                        : ClientLifecycleStates.Degraded,
                     PendingUpdateVersion = null,
                     LastUpdateError = outcome.Error
+                };
+                await SaveStateAsync(statePath, state);
+            }
+            else if (!outcome.Success
+                && command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback)
+            {
+                state = state with
+                {
+                    LifecycleState = ClientLifecycleStates.Failed,
+                    PendingUpdateVersion = null,
+                    PendingCommandId = null,
+                    PendingCommandType = null,
+                    PendingCommandTargetVersion = null,
+                    PendingCommandOutcome = null,
+                    LastUpdateError = outcome.Error ?? outcome.Message
                 };
                 await SaveStateAsync(statePath, state);
             }
