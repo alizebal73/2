@@ -206,6 +206,185 @@ public sealed class AgentHub(
             Context.ConnectionAborted);
     }
 
+    public async Task<AgentSessionStartResponse> StartSession(
+        AgentSessionStartRequest request)
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        if (!device.StationId.HasValue)
+            throw new HubException("Agent به ایستگاه متصل نیست.");
+
+        if (device.IsLocked)
+            throw new HubException("دستگاه قفل است و شروع جلسه ممکن نیست.");
+
+        var customer = await database.Customers
+            .FirstOrDefaultAsync(item => item.Id == request.CustomerId, Context.ConnectionAborted);
+        if (customer is null)
+            throw new HubException("مشتری پیدا نشد.");
+
+        var login = await database.CustomerLogins
+            .FirstOrDefaultAsync(
+                item => item.Id == request.CustomerLoginId
+                    && item.CustomerId == customer.Id
+                    && item.IsActive
+                    && item.ClientKey == device.DeviceId,
+                Context.ConnectionAborted);
+        if (login is null)
+            throw new HubException("ورود معتبر مشتری برای این دستگاه پیدا نشد.");
+
+        var station = await database.Stations
+            .FirstOrDefaultAsync(item => item.Id == device.StationId.Value, Context.ConnectionAborted);
+        if (station is null)
+            throw new HubException("ایستگاه Agent پیدا نشد.");
+
+        if (station.State != StationState.Available)
+            throw new HubException("این ایستگاه دیگر آزاد نیست.");
+
+        if (request.TariffId.HasValue
+            && !await database.Tariffs.AnyAsync(item => item.Id == request.TariffId.Value, Context.ConnectionAborted))
+            throw new HubException("تعرفه انتخاب‌شده پیدا نشد.");
+
+        await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
+
+        var session = new Session
+        {
+            CustomerId = customer.Id,
+            StationId = station.Id,
+            TariffId = request.TariffId,
+            AppUserId = null,
+            StartAt = DateTimeOffset.UtcNow,
+            State = SessionState.Active,
+            TotalAmount = 0m,
+            HourlyRateOverride = request.HourlyRateOverride > 0 ? request.HourlyRateOverride : null,
+            Persons = Math.Max(1, request.Persons ?? 1)
+        };
+
+        database.Sessions.Add(session);
+        station.State = StationState.Occupied;
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "AgentSessionStart",
+            EntityName = "Session",
+            EntityId = session.Id.ToString(),
+            Details = $"شروع جلسه از Agent · دستگاه {device.DeviceId} · مشتری {customer.Id}"
+        });
+
+        await database.SaveChangesAsync(Context.ConnectionAborted);
+        await transaction.CommitAsync(Context.ConnectionAborted);
+
+        await dashboardHub.Clients.All.SendAsync(
+            "AgentSessionChanged",
+            new
+            {
+                sessionId = session.Id,
+                stationId = station.Id,
+                customerId = customer.Id,
+                state = "Active",
+                changedAt = session.StartAt
+            },
+            Context.ConnectionAborted);
+
+        return new AgentSessionStartResponse(
+            session.Id,
+            station.Id,
+            customer.Id,
+            session.StartAt);
+    }
+
+    public async Task<AgentSessionEndResponse> EndSession(
+        AgentSessionEndRequest request)
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        if (!device.StationId.HasValue)
+            throw new HubException("Agent به ایستگاه متصل نیست.");
+
+        var session = await database.Sessions
+            .Include(item => item.Station)
+            .FirstOrDefaultAsync(item => item.Id == request.SessionId, Context.ConnectionAborted);
+
+        if (session is null)
+            throw new HubException("جلسه پیدا نشد.");
+
+        if (session.StationId != device.StationId.Value)
+            throw new HubException("این جلسه متعلق به ایستگاه Agent نیست.");
+
+        var login = request.CustomerLoginId.HasValue
+            ? await database.CustomerLogins.FirstOrDefaultAsync(
+                item => item.Id == request.CustomerLoginId.Value
+                    && item.CustomerId == session.CustomerId
+                    && item.ClientKey == device.DeviceId,
+                Context.ConnectionAborted)
+            : null;
+
+        var now = DateTimeOffset.UtcNow;
+
+        if (session.State == SessionState.Completed || session.State == SessionState.Cancelled)
+            throw new HubException("این جلسه دیگر قابل پایان‌دادن نیست.");
+
+        if (session.State == SessionState.Ended)
+        {
+            if (login is not null && login.IsActive)
+            {
+                login.IsActive = false;
+                login.LoggedOutAt = session.EndAt ?? now;
+                await database.SaveChangesAsync(Context.ConnectionAborted);
+            }
+
+            return new AgentSessionEndResponse(
+                session.Id,
+                session.StationId,
+                session.EndAt ?? now,
+                session.State.ToString());
+        }
+
+        await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
+
+        session.EndAt = now;
+        session.State = SessionState.Ended;
+        session.Station.State = StationState.Available;
+
+        if (login is not null && login.IsActive)
+        {
+            login.IsActive = false;
+            login.LoggedOutAt = now;
+        }
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "AgentSessionEnd",
+            EntityName = "Session",
+            EntityId = session.Id.ToString(),
+            Details = $"پایان جلسه از Agent · دستگاه {device.DeviceId}"
+        });
+
+        await database.SaveChangesAsync(Context.ConnectionAborted);
+        await transaction.CommitAsync(Context.ConnectionAborted);
+
+        await dashboardHub.Clients.All.SendAsync(
+            "AgentSessionChanged",
+            new
+            {
+                sessionId = session.Id,
+                stationId = session.StationId,
+                customerId = session.CustomerId,
+                state = "Ended",
+                changedAt = now
+            },
+            Context.ConnectionAborted);
+
+        return new AgentSessionEndResponse(
+            session.Id,
+            session.StationId,
+            now,
+            session.State.ToString());
+    }
+
     private async Task<AgentDevice?> ResolveDeviceAsync(
         HubCallerContext context,
         CancellationToken cancellationToken)
