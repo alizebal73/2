@@ -11,6 +11,7 @@ export type CustomerWriteInput = {
   vipTier: CustomerRecord['vip'];
   concurrentLoginLimit?: number;
   notes?: string;
+  password?: string;
 };
 
 async function readError(response: Response, fallback: string) {
@@ -96,10 +97,37 @@ export async function createServerCustomer(input: CustomerWriteInput): Promise<C
       vipTier: input.vipTier,
       concurrentLoginLimit: input.concurrentLoginLimit ?? 1,
       notes: input.notes || null,
+      password: input.password || null,
     }),
   });
   if (!response.ok) throw new Error(await readError(response, 'ثبت مشتری در سرور انجام نشد'));
   return mapCustomer(await response.json() as Parameters<typeof mapCustomer>[0]);
+}
+
+export async function changeServerCustomerPassword(customerId: string, password: string) {
+  const response = await fetch('/api/customers/' + customerId + '/password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) throw new Error(await readError(response, 'تغییر رمز ورود مشتری انجام نشد'));
+  return response.json() as Promise<{ changed: boolean }>;
+}
+
+export async function getCustomerDebts(customerId: string) {
+  const response = await fetch('/api/customers/' + customerId + '/debts');
+  if (!response.ok) throw new Error(await readError(response, 'دریافت بدهی‌های مشتری انجام نشد'));
+  return response.json() as Promise<Array<{ id: string; amount: number; issuedAt: string; description: string }>>;
+}
+
+export async function settleCustomerDebt(customerId: string, invoiceId: string, method: 'cash' | 'card' | 'wallet') {
+  const response = await fetch('/api/customers/' + customerId + '/debts/' + invoiceId + '/settle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ method }),
+  });
+  if (!response.ok) throw new Error(await readError(response, 'تسویه بدهی مشتری انجام نشد'));
+  return response.json() as Promise<{ invoiceId: string; customerId: string; amount: number; method: string; debtRemaining: number; walletBalanceAfter: number }>;
 }
 
 export async function getCustomerVipUsage(customerId: string) {
