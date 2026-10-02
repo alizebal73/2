@@ -1792,7 +1792,11 @@ app.MapPost("/api/customer-auth/login", async (
             fullName = customer.FullName,
             loginId = existing.Id,
             activeCount = active.Count,
-            limit = customer.ConcurrentLoginLimit
+            limit = customer.ConcurrentLoginLimit,
+            balance = customer.Balance,
+            freeMoney = customer.FreeMoney,
+            freeTimeMinutes = customer.FreeTimeMinutes,
+            vipTier = customer.VipTier
         });
     }
 
@@ -1832,10 +1836,90 @@ app.MapPost("/api/customer-auth/login", async (
         fullName = customer.FullName,
         loginId = login.Id,
         activeCount = active.Count + 1,
-        limit = customer.ConcurrentLoginLimit
+        limit = customer.ConcurrentLoginLimit,
+        balance = customer.Balance,
+        freeMoney = customer.FreeMoney,
+        freeTimeMinutes = customer.FreeTimeMinutes,
+        vipTier = customer.VipTier
     });
 })
 .WithName("CustomerAuthenticate");
+
+app.MapGet("/api/customer-auth/state", async (
+    Guid customerId,
+    Guid loginId,
+    string clientKey,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var normalizedClientKey = clientKey?.Trim();
+    if (string.IsNullOrWhiteSpace(normalizedClientKey))
+        return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
+
+    var customer = await database.Customers
+        .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    var login = await database.CustomerLogins
+        .FirstOrDefaultAsync(
+            item => item.Id == loginId
+                && item.CustomerId == customerId
+                && item.IsActive
+                && item.ClientKey == normalizedClientKey,
+            cancellationToken);
+
+    if (login is null)
+        return Results.Ok(new
+        {
+            authenticated = false,
+            customerId,
+            loginId,
+            username = customer.Username,
+            fullName = customer.FullName,
+            balance = customer.Balance,
+            freeMoney = customer.FreeMoney,
+            freeTimeMinutes = customer.FreeTimeMinutes,
+            vipTier = customer.VipTier,
+            session = (object?)null
+        });
+
+    var device = await database.AgentDevices
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.DeviceId == normalizedClientKey && item.IsActive, cancellationToken);
+
+    var session = device?.StationId is Guid stationId
+        ? await database.Sessions
+            .Where(item => item.CustomerId == customerId
+                && item.StationId == stationId
+                && (item.State == SessionState.Active || item.State == SessionState.Ended))
+            .OrderByDescending(item => item.StartAt)
+            .Select(item => new
+            {
+                id = item.Id,
+                state = item.State.ToString(),
+                startAt = item.StartAt,
+                endAt = item.EndAt,
+                stationName = item.Station.Name
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+        : null;
+
+    return Results.Ok(new
+    {
+        authenticated = true,
+        customerId,
+        loginId,
+        username = customer.Username,
+        fullName = customer.FullName,
+        balance = customer.Balance,
+        freeMoney = customer.FreeMoney,
+        freeTimeMinutes = customer.FreeTimeMinutes,
+        vipTier = customer.VipTier,
+        session
+    });
+})
+.WithName("CustomerAuthState");
 
 app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     Guid customerId,
