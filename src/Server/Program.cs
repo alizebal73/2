@@ -588,7 +588,9 @@ app.MapPost("/api/sessions", async (
         AppUserId = request.AppUserId,
         StartAt = DateTimeOffset.UtcNow,
         State = SessionState.Active,
-        TotalAmount = 0m
+        TotalAmount = 0m,
+        HourlyRateOverride = request.HourlyRateOverride > 0 ? request.HourlyRateOverride : null,
+        Persons = Math.Max(1, request.Persons ?? 1)
     };
 
     database.Sessions.Add(session);
@@ -613,6 +615,100 @@ app.MapPost("/api/sessions", async (
         session.StartAt));
 })
 .WithName("StartSession");
+
+app.MapMethods("/api/sessions/{sessionId:guid}/details", new[] { "PATCH" }, async (
+    Guid sessionId,
+    SessionDetailsRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var session = await database.Sessions
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+
+    if (session is null)
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+
+    if (session.State != SessionState.Active)
+        return Results.Conflict(new { code = "session_not_active", message = "این جلسه فعال نیست." });
+
+    if (request.HourlyRate is <= 0)
+        return Results.BadRequest(new { code = "invalid_hourly_rate", message = "نرخ جلسه باید بیشتر از صفر باشد." });
+
+    var persons = request.Persons ?? session.Persons;
+    var isPc = session.Station.Type.Equals("PC", StringComparison.OrdinalIgnoreCase)
+        || session.Station.Type.Contains("رایانه", StringComparison.OrdinalIgnoreCase);
+    if (isPc)
+        persons = 1;
+
+    if (persons < 1 || persons > 4)
+        return Results.BadRequest(new { code = "invalid_persons", message = "تعداد نفرات باید بین ۱ تا ۴ باشد." });
+
+    if (request.HourlyRate is not null)
+        session.HourlyRateOverride = request.HourlyRate.Value;
+
+    session.Persons = persons;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "SessionDetailsChange",
+        EntityName = "Session",
+        EntityId = session.Id.ToString(),
+        Details = "نرخ " + (session.HourlyRateOverride?.ToString("0.##") ?? "تعرفه") + " · نفرات " + persons,
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { sessionId = session.Id, hourlyRate = session.HourlyRateOverride, persons = session.Persons });
+})
+.WithName("UpdateSessionDetails");
+
+app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
+    Guid sessionId,
+    SessionTransferRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (request.TargetStationId == Guid.Empty)
+        return Results.BadRequest(new { code = "invalid_target_station", message = "ایستگاه مقصد معتبر نیست." });
+
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    var session = await database.Sessions
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+
+    if (session is null)
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+
+    if (session.State != SessionState.Active)
+        return Results.Conflict(new { code = "session_not_active", message = "جلسه فعال نیست." });
+
+    var target = await database.Stations.FirstOrDefaultAsync(item => item.Id == request.TargetStationId, cancellationToken);
+    if (target is null)
+        return Results.NotFound(new { code = "station_not_found", message = "ایستگاه مقصد پیدا نشد." });
+
+    if (target.State != StationState.Available)
+        return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد آزاد نیست." });
+
+    var source = session.Station;
+    source.State = StationState.Available;
+    target.State = StationState.Occupied;
+    session.StationId = target.Id;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "SessionTransfer",
+        EntityName = "Session",
+        EntityId = session.Id.ToString(),
+        Details = "انتقال از " + source.Name + " به " + target.Name,
+        AppUserId = session.AppUserId
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+
+    return Results.Ok(new SessionTransferResultDto(session.Id, target.Id));
+})
+.WithName("TransferSession");
 
 app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
     Guid sessionId,
@@ -732,7 +828,10 @@ public sealed record CloseShiftRequest(
     decimal ExternalCash,
     string? Note);
 
-public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId);
+public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId, decimal? HourlyRateOverride, int? Persons);
+public sealed record SessionDetailsRequest(decimal? HourlyRate, int? Persons);
+public sealed record SessionTransferRequest(Guid TargetStationId);
+public sealed record SessionTransferResultDto(Guid SessionId, Guid StationId);
 public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, DateTimeOffset StartAt);
 
 public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
