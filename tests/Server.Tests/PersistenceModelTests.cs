@@ -15,6 +15,65 @@ public sealed class PersistenceModelTests : IDisposable
     }
 
     [Fact]
+    public async Task WalletRefundIsRecordedAsDebitAndAuditWithoutDeletingHistory()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var customer = new Customer
+        {
+            FullName = "Refund Test",
+            Balance = 200000m
+        };
+        db.Customers.Add(customer);
+        await db.SaveChangesAsync();
+
+        var original = new WalletTransaction
+        {
+            CustomerId = customer.Id,
+            Amount = 200000m,
+            Type = WalletTransactionType.Credit,
+            Description = "شارژ کیف پول"
+        };
+        db.WalletTransactions.Add(original);
+        await db.SaveChangesAsync();
+
+        customer.Balance -= 75000m;
+        var refund = new WalletTransaction
+        {
+            CustomerId = customer.Id,
+            Amount = 75000m,
+            Type = WalletTransactionType.Debit,
+            Description = "بازگشت وجه · لغو شارژ"
+        };
+        db.WalletTransactions.Add(refund);
+        db.AuditLogs.Add(new AuditLog
+        {
+            Action = "WalletRefund",
+            EntityName = "CustomerWallet",
+            EntityId = customer.Id.ToString(),
+            Details = "75000 تومان · لغو شارژ"
+        });
+        await db.SaveChangesAsync();
+
+        var transactions = await db.WalletTransactions
+            .Where(item => item.CustomerId == customer.Id)
+            .OrderBy(item => item.CreatedAt)
+            .ToListAsync();
+
+        var audit = await db.AuditLogs.SingleAsync(item => item.Action == "WalletRefund");
+        Assert.Equal(2, transactions.Count);
+        Assert.Equal(WalletTransactionType.Credit, transactions[0].Type);
+        Assert.Equal(WalletTransactionType.Debit, transactions[1].Type);
+        Assert.Equal(125000m, customer.Balance);
+        Assert.Equal("WalletRefund", audit.Action);
+    }
+
+    [Fact]
     public async Task CanPersistCoreDomainEntitiesAndReadThemBack()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
