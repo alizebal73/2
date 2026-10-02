@@ -334,7 +334,7 @@
 12. ✅ Split Payment — UI + ثبت اتمیک سروری + Invoice + Audit + Dashboard Smoke سبز؛ Permission نهایی طبق مرحله ۷ تکمیل می‌شود
 13. [~] Shift Settlement + Shift Handover — Shift Open/Close سروری + فروش نقدی از InvoicePayment + هزینه + تطبیق نقدی + Audit + Build/Test/Smoke سبز؛ اتصال کامل Users/Permission هنوز باقی
 14. [~] Session Transfer / Change Tariff / Change Persons — Session Center + Server transaction/Audit برای تغییر نرخ/نفر/انتقال + Build/Test/Smoke سبز؛ Permission نهایی مرحله ۷ باقی
-15. [~] Free Time + Free Money کامل — Billing + مصرف Free Money + گزارش مستقل + Build/Test/Smoke سبز؛ Ledger/Server Transaction نهایی باقی
+15. [~] Free Time + Free Money کامل — Ledger مستقل سروری، اعطا/کسر، مصرف در Settlement و Build/Test/Smoke سبز؛ مهاجرت کامل Customer Domain/Permission نهایی باقی
 16. [~] Concurrent Login Limit — قرارداد مشتری + Mock Login Guard + Client UX پیاده شد؛ enforcement سروری/Agent و چنددستگاهی واقعی باقی
 17. [~] Expense / Profit واقعی و قابل ممیزی — Expense/Operating Profit Server + SQLite + Audit + Reports adapter اضافه شد؛ CI/Smoke سبز و اتصال کامل Invoice/COGS/Profit باقی
 
