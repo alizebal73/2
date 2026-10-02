@@ -224,6 +224,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     createdAt: item.createdAt,
   })), [pendingPayments]);
 
+  const isReversibleTimelineEvent = useCallback((event: SessionTimelineEvent) => {
+    return ['charge', 'extend', 'reduce', 'buffet'].includes(event.kind) && !reversedEventIds.includes(event.id);
+  }, [reversedEventIds]);
+
   const sidebarRecentActions = useMemo(() => sessionTimeline.map(item => ({
     id: item.id,
     title: item.title,
@@ -556,10 +560,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
     setModal(null);
   }
-  const isReversibleTimelineEvent = useCallback((event: SessionTimelineEvent) => {
-    return ['charge', 'extend', 'reduce', 'buffet'].includes(event.kind) && !reversedEventIds.includes(event.id);
-  }, [reversedEventIds]);
-
   function reverseTimelineEvent(event: SessionTimelineEvent) {
     const station = stations.find(item => item.id === event.stationId);
     if (!station || event.amount === undefined) {
