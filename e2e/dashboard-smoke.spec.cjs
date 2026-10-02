@@ -59,10 +59,10 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   );
   expect(cardBoxes.every(Boolean)).toBe(true);
   const boxes = cardBoxes.filter((box) => box !== null);
-  const left = Math.max(2, Math.min(...boxes.map(box => box.left)) - 12);
-  const top = Math.max(2, Math.min(...boxes.map(box => box.top)) - 12);
-  const right = Math.max(...boxes.map(box => box.right)) + 12;
-  const bottom = Math.max(...boxes.map(box => box.bottom)) + 12;
+  const left = Math.max(2, Math.min(...boxes.map(box => box.x)) - 12);
+  const top = Math.max(2, Math.min(...boxes.map(box => box.y)) - 12);
+  const right = Math.max(...boxes.map(box => box.x + box.width)) + 12;
+  const bottom = Math.max(...boxes.map(box => box.y + box.height)) + 12;
   await page.mouse.move(left, top);
   await page.mouse.down();
   await page.mouse.move(right, bottom, { steps: 20 });
