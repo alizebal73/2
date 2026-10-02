@@ -502,7 +502,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setMessage('بدهی ' + money(payment.amount) + ' تومان ثبت شد.');
   }
 
-  function finishSession(method: string, bypassApproval = false) {
+  async function finishSession(method: string, bypassApproval = false) {
     if (!activeStation) return;
     if (!bypassApproval && role === 'operator' && discountPercent > 10) {
       setApproval({ title: 'تخفیف بیشتر از حد مجاز اپراتور', detail: 'این تسویه شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.', action: 'settle', method });
@@ -540,10 +540,16 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       type: 'time',
       closedAt
     });
-    if (method === 'wallet' && customer) {
-      setCustomers(current => current.map(item => item.id === customer.id
-        ? { ...item, wallet: item.wallet - finalTotal, transactionHistory: ['تسویه کیف پول · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
-        : item));
+    if (method === 'wallet' && customer && finalTotal > 0) {
+      try {
+        const entry = await recordWalletTransaction(customer.id, { amount: finalTotal, type: 'debit', description: 'تسویه جلسه ' + activeStation.name });
+        setCustomers(current => current.map(item => item.id === customer.id
+          ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['تسویه کیف پول · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
+          : item));
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'تسویه از کیف پول انجام نشد');
+        return;
+      }
     }
     if (method === 'debt' && customer) {
       setCustomers(current => current.map(item => item.id === customer.id
@@ -616,20 +622,22 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setMessage(`${money(minutes)} دقیقه به جلسه ${activeStation.name} اضافه شد`);
   }
 
-  function applyCharge(method: string) {
+  async function applyCharge(method: string) {
     const value = number(amount);
     if (!value || !activeStation) { setMessage('مبلغ معتبر وارد کنید'); return; }
     const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
-    if (method === 'debt') {
-      if (!customer) { setMessage('جلسه مشتری ثبت‌شده ندارد'); return; }
-      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['ثبت بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
-      setMessage('بدهی ' + money(value) + ' تومان ثبت شد');
-    } else if (chargeTarget === 'wallet' || chargeTarget === 'discount') {
-      if (!customer) { setMessage('جلسه به مشتری وصل نیست'); return; }
-      if (method === 'wallet') { setMessage('برای شارژ کیف پول، نقد یا کارت را انتخاب کنید'); return; }
-      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet + value, discountLevel: chargeTarget === 'discount' ? item.discountLevel + 1 : item.discountLevel, transactionHistory: [(chargeTarget === 'discount' ? 'شارژ + تخفیف' : 'شارژ کیف پول') + ' · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
-      setMessage(chargeTarget === 'discount' ? 'شارژ + تخفیف ثبت شد' : 'کیف پول شارژ شد');
-    } else if (activeStation.state === 'busy') {
+    try {
+      if (method === 'debt') {
+        if (!customer) { setMessage('جلسه مشتری ثبت‌شده ندارد'); return; }
+        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['ثبت بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+        setMessage('بدهی ' + money(value) + ' تومان ثبت شد');
+      } else if (chargeTarget === 'wallet' || chargeTarget === 'discount') {
+        if (!customer) { setMessage('جلسه به مشتری وصل نیست'); return; }
+        if (method === 'wallet') { setMessage('برای شارژ کیف پول، نقد یا کارت را انتخاب کنید'); return; }
+        const entry = await recordWalletTransaction(customer.id, { amount: value, type: 'credit', description: chargeTarget === 'discount' ? 'شارژ + تخفیف' : 'شارژ کیف پول' });
+        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: entry.balanceAfter, discountLevel: chargeTarget === 'discount' ? item.discountLevel + 1 : item.discountLevel, transactionHistory: [(chargeTarget === 'discount' ? 'شارژ + تخفیف' : 'شارژ کیف پول') + ' · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+        setMessage(chargeTarget === 'discount' ? 'شارژ + تخفیف ثبت شد' : 'کیف پول شارژ شد');
+      } else if (activeStation.state === 'busy') {
       const rate = activeStation.sessionRate ?? activeStation.ratePerHour;
       const extraMinutes = rate > 0 ? value / (rate / 60) : 0;
       const currentEnd = activeStation.prepaidEndsAt ? new Date(activeStation.prepaidEndsAt).getTime() : Date.now();
@@ -644,8 +652,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       setSessionFollowUps(current => [...current, { id: crypto.randomUUID(), stationId: activeStation.id, stationName: activeStation.name, customerCode: activeStation.customerCode ?? customer?.code ?? 'مهمان', amount: value, createdAt: new Date().toISOString(), status: 'watching' }]);
       addSessionTimeline(activeStation.id, 'charge', 'شارژ جلسه', money(value) + ' تومان شارژ شد', value);
       setMessage(money(value) + ' تومان شارژ شد؛ پیگیری آن در «نیازمند توجه» ثبت شد');
-    } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
-    setModal(null);
+      } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
+      setModal(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'ثبت شارژ انجام نشد');
+    }
   }
   function reverseTimelineEvent(event: SessionTimelineEvent) {
     const station = stations.find(item => item.id === event.stationId);
