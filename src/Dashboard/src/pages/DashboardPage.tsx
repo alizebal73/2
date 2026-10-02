@@ -362,7 +362,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     const payment = pendingPayments.find(item => item.id === id);
     if (!payment) return;
     recordReportPayment(payment, payment.amount, 'card');
-    setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId: payment.stationId, createdAt: new Date().toISOString(), kind: 'settle', title: 'تسویه دریافت شد', detail: money(payment.amount) + ' تومان دریافت شد · ' + payment.customerName, amount: payment.amount }, ...current].slice(0, 300));
+    addSessionTimeline(payment.stationId, 'settle', 'تسویه دریافت شد', money(payment.amount) + ' تومان دریافت شد · ' + payment.customerName, payment.amount);
     setPendingPayments(current => current.filter(item => item.id !== id));
     setMessage('تسویه ' + money(payment.amount) + ' تومان ثبت شد.');
   }
@@ -385,7 +385,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     } : item));
     if (walletAmount > 0) recordReportPayment(payment, walletAmount, 'wallet');
     setPendingPayments(current => current.filter(item => item.id !== id));
-    setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId: payment.stationId, createdAt: new Date().toISOString(), kind: 'settle', title: difference > 0 ? 'کیف پول + بدهی' : 'تسویه از کیف پول', detail: money(walletAmount) + ' تومان از کیف پول' + (difference > 0 ? ' و ' + money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد' : ' کسر شد'), amount: payment.amount }, ...current].slice(0, 300));
+    addSessionTimeline(payment.stationId, 'settle', difference > 0 ? 'کیف پول + بدهی' : 'تسویه از کیف پول', money(walletAmount) + ' تومان از کیف پول' + (difference > 0 ? ' و ' + money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد' : ' کسر شد'), payment.amount);
     setMessage(difference > 0 ? money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد.' : 'مبلغ کامل از کیف پول کسر شد.');
   }
 
@@ -400,7 +400,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       transactionHistory: ['ثبت بدهی پایان بازی · ' + money(payment.amount) + ' تومان', ...(item.transactionHistory ?? [])],
     } : item));
     setPendingPayments(current => current.filter(item => item.id !== id));
-    setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId: payment.stationId, createdAt: new Date().toISOString(), kind: 'settle', title: 'بدهی ثبت شد', detail: payment.customerName + ' · ' + money(payment.amount) + ' تومان', amount: payment.amount }, ...current].slice(0, 300));
+    addSessionTimeline(payment.stationId, 'settle', 'بدهی ثبت شد', payment.customerName + ' · ' + money(payment.amount) + ' تومان', payment.amount);
     setMessage('بدهی ' + money(payment.amount) + ' تومان ثبت شد.');
   }
 
