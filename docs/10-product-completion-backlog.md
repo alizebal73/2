@@ -37,6 +37,7 @@
 ## تکمیل‌های سراسری مرحله ۳ — نیازهای جدید اپراتور
 
 ### UX انتخاب و چندانتخاب
+- Regression نهایی داشبورد در Run 295 با Playwright سبز شد: انتخاب تکی، Ctrl، Shift، Drag و بررسی خالی‌بودن متن انتخاب‌شده.
 - رفتار Selection یکسان باید هر جا «چند ایستگاه/کلاینت» معنی دارد قابل استفاده باشد.
 - داشبورد: انتخاب تکی، Ctrl/⌘، Shift، Drag، Ctrl/⌘+Drag.
 - کلاینت‌ها: همان قرارداد انتخاب تکی/چندتایی + Drag.
@@ -298,7 +299,7 @@
 3. ✅ پنل جزئیات جلسه (Session Center) — Build/Test/CI + Smoke Test تعاملی سبز
 4. ✅ Timeline کوتاه ایستگاه — Build/Test/CI + Smoke Test تعاملی سبز
 5. ✅ عملیات اخیر اپراتور — Build/Test/CI + Smoke Test تعاملی سبز
-6. [~] Error UX استاندارد: خطا → معنی → اقدام بعدی — Build/Test/CI سبز؛ تست تعاملی واقعی باقی مانده
+6. ✅ Error UX استاندارد: خطا → معنی → اقدام بعدی — Build/Test/CI + Smoke تعاملی سبز
 7. ✅ Approval Flow برای عملیات حساس — Build/Test/CI + Smoke Test تعاملی سبز
 8. ✅ Undo UX برای عملیات برگشت‌پذیر (Reverse واقعی، بدون حذف رکورد) — Build/Test/CI + Smoke Test تعاملی سبز
 
