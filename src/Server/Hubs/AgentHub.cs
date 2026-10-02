@@ -29,6 +29,10 @@ public sealed class AgentHub(
         device.ConnectedAt = now;
         device.ConnectionId = Context.ConnectionId;
         device.LastIpAddress = Context.GetHttpContext()?.Connection.RemoteIpAddress?.ToString();
+        device.LifecycleState = ClientLifecycleStates.Running;
+        device.LifecycleStateChangedAt = now;
+        device.LastHealthyAt = now;
+        device.LastUpdateError = null;
         await database.SaveChangesAsync(Context.ConnectionAborted);
 
         await Clients.Caller.SendAsync(
