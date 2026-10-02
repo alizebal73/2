@@ -165,6 +165,15 @@ jobs:
               }
 
               Write-Host ("Stage 8 Agent heartbeat smoke passed: deviceId={0}; lastSeen={1}" -f $agentRow.deviceId, $agentRow.lastSeenAt)
+
+              $lifecycleStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
+              if ($lifecycleStatus.lifecycleState -ne 'Running') {
+                throw "Agent lifecycle state was not Running after healthy connection: $($lifecycleStatus.lifecycleState)"
+              }
+              if (-not $lifecycleStatus.compatibility.compatible) {
+                throw 'Agent release compatibility smoke failed for the current client.'
+              }
+              Write-Host ("Stage 10 lifecycle compatibility smoke passed: state={0}; compatible={1}; recommended={2}" -f $lifecycleStatus.lifecycleState, $lifecycleStatus.compatibility.compatible, $lifecycleStatus.compatibility.updateRecommended)
             }
             finally {
               if (-not $agentProcess.HasExited) {
