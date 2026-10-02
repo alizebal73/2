@@ -194,10 +194,29 @@ jobs:
             } | ConvertTo-Json)
             if ($profile.payType -ne 'monthly' -or [int]$profile.monthlySalary -ne 12000000) { throw 'Payroll profile smoke failed.' }
 
+            $accrualEntry = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/entries" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              kind = 'SalaryAccrual'
+              amount = 50000
+              reason = 'Stage 7 salary accrual smoke'
+            } | ConvertTo-Json)
+            if ($accrualEntry.status -ne 'Approved' -or -not $accrualEntry.entryId) { throw 'Salary accrual should be immediately approved and persisted.' }
+
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/entries" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+                kind = 'SalaryPayment'
+                amount = 20000
+                reason = 'Stage 7 invalid salary payment smoke'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Salary payment without payment method was accepted.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 400) { throw }
+            }
+
             $payrollEntry = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/entries" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
               kind = 'Bonus'
               amount = 10000
-              reason = 'Stage 7 payroll ledger smoke'
+              reason = 'Stage 7 payroll bonus smoke'
               paymentMethod = 'cash'
             } | ConvertTo-Json)
             if ($payrollEntry.status -ne 'Pending' -or -not $payrollEntry.approvalId) { throw 'Payroll approval request smoke failed.' }
@@ -211,12 +230,28 @@ jobs:
             } | ConvertTo-Json)
             if ($payrollDecision.status -ne 'Approved') { throw 'Payroll approval execution smoke failed.' }
 
+            $salaryPayment = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/entries" -Method Post -WebSession $operatorPayrollSession -ContentType 'application/json' -Body (@{
+              kind = 'SalaryPayment'
+              amount = 20000
+              reason = 'Stage 7 salary payment smoke'
+              paymentMethod = 'cash'
+              receiptNumber = "SAL-$userSmokeId"
+            } | ConvertTo-Json)
+            if ($salaryPayment.status -ne 'Pending' -or -not $salaryPayment.approvalId) { throw 'Salary payment approval request smoke failed.' }
+
+            $salaryDecision = Invoke-RestMethod -Uri "$baseUrl/api/approvals/$($salaryPayment.approvalId)/approve" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              note = 'Stage 7 salary payment approved'
+            } | ConvertTo-Json)
+            if ($salaryDecision.status -ne 'Approved') { throw 'Salary payment approval execution smoke failed.' }
+
             $payrollUsers = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users" -Method Get -WebSession $adminSession
             $payrollRow = @($payrollUsers | Where-Object { $_.userId -eq $managedUser.id })[0]
-            if ([int]$payrollRow.bonusTotal -ne 10000 -or [int]$payrollRow.employeePayable -ne 10000) { throw 'Approved payroll entry did not update the server ledger balance.' }
+            if ([int]$payrollRow.bonusTotal -ne 10000 -or [int]$payrollRow.employeePayable -ne 40000 -or [int]$payrollRow.paidThisMonth -ne 20000 -or [int]$payrollRow.accruedThisMonth -ne 50000) { throw 'Approved payroll entries did not update the server ledger balance correctly.' }
 
             $operatorPayrollProfile = Invoke-RestMethod -Uri "$baseUrl/api/payroll/users/$($managedUser.id)/ledger" -Method Get -WebSession $operatorPayrollSession
-            if (-not @($operatorPayrollProfile | Where-Object { $_.id -eq $payrollEntry.entryId -and $_.status -eq 'Approved' })) { throw 'Approved payroll ledger row was not readable by the operator.' }
+            if (-not @($operatorPayrollProfile | Where-Object { $_.id -eq $accrualEntry.entryId -and $_.status -eq 'Approved' })) { throw 'Approved salary accrual was not readable by the operator.' }
+            $savedPayment = @($operatorPayrollProfile | Where-Object { $_.id -eq $salaryPayment.entryId -and $_.status -eq 'Approved' })[0]
+            if (-not $savedPayment -or $savedPayment.paymentMethod -ne 'cash' -or $savedPayment.receiptNumber -ne "SAL-$userSmokeId") { throw 'Salary payment receipt/method was not persisted.' }
 
             Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorPayrollSession | Out-Null
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
@@ -457,6 +492,16 @@ jobs:
               userName = $managedUser.userName
               password = 'Operator123!'
             } | ConvertTo-Json) | Out-Null
+
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                reason = 'Stage 7 direct reverse bypass smoke'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Direct invoice reverse endpoint bypassed the approval path.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
 
             $reverseApproval = Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse/request" -Method Post -WebSession $operatorFinanceSession -ContentType 'application/json' -Body (@{
               reason = 'Stage 7 executable approval reverse smoke'
