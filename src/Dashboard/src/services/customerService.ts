@@ -42,6 +42,7 @@ function mapCustomer(row: {
   vipDailyMinutes?: number;
   vipTotalMinutes?: number;
   vipDiscountPercent?: number;
+  notes?: string;
 }): CustomerRecord {
   const vip = row.vip === 'gold' || row.vip === 'silver' || row.vip === 'bronze' || row.vip === 'custom' ? row.vip : 'none';
   return {
@@ -68,6 +69,7 @@ function mapCustomer(row: {
     lastSeen: row.lastSeen,
     status: row.status,
     concurrentLoginLimit: row.concurrentLoginLimit,
+    notes: row.notes ?? '',
     transactionHistory: [],
   };
 }
