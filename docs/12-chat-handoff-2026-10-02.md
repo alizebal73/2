@@ -614,3 +614,20 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 - Tariff Server-domain replacement for remaining `mockService.getTariffs()` callers remains a tracked cross-stage debt and must not be treated as forgotten work.
 - Installer/Updater/Rollback remains local-only/deferred per release architecture.
 - This checkpoint is intended to force one more full CI verification of the exact post-audit state before any Stage 10 work is started.
+
+
+# Stage 10 — Client Lifecycle — opening checkpoint
+
+- Branch: `stage10-client-lifecycle`
+- Base: final Stage 1–9 audit checkpoint on `main`.
+- First vertical slice in progress:
+  - persisted Client lifecycle state on AgentDevice
+  - Agent heartbeat reports lifecycle/recovery metadata
+  - Server persists LastHealthyAt / PendingUpdateVersion / LastUpdateError
+  - `/api/agent/devices/{id}/lifecycle` returns Server-authoritative compatibility against ProductVersion/MinimumClientVersion/RecommendedClientVersion
+  - App release defaults are explicit in appsettings
+  - CI smoke added for healthy lifecycle state + release compatibility
+- No automatic package download/install/overwrite exists yet.
+- No rollback is marked complete yet.
+- Installer remains local-only.
+- Stage 10 is not Done until migration smoke, Build/Test, Dashboard build/lint and E2E remain green on the exact current head.
