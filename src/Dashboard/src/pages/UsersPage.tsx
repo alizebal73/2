@@ -4,7 +4,7 @@ import { userErrorMessage } from '../utils/userError';
 import { closeServerShift, getCurrentShift, getShiftHistory, startServerShift } from '../services/shiftService';
 import type { UserRecord } from '../types';
 
-const permissionRows = ['شروع/پایان جلسه','شارژ مستقیم','ثبت بدهی/هدیه','بوفه','مشتریان','گزارش کامل','تعرفه‌ها','کاربران','تنظیمات','کنترل کلاینت','Account Pool','تخفیف','بستن شیفت','مدیریت بازی‌ها'];
+const permissionRows = ['شروع/پایان جلسه','شارژ مستقیم','ثبت بدهی/هدیه','بوفه','مشتریان','گزارش مالی','گزارش کامل','تعرفه‌ها','کاربران','تنظیمات','کنترل کلاینت','Account Pool','تخفیف','بستن شیفت','مدیریت بازی‌ها','پرداخت حقوق','پاداش/کسری','ثبت خسارت'];
 const defaultPermissions: Record<string, boolean[]> = Object.fromEntries(permissionRows.map((name, index) => [name, index < 4 ? [true, true, true] : [true, true, index !== 7 && index !== 8]]));
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(value); }
@@ -19,6 +19,7 @@ export function UsersPage() {
   const [payUserId, setPayUserId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState('');
   const [payReason, setPayReason] = useState('');
+  const [payMode, setPayMode] = useState<'salary' | 'bonus' | 'deduction' | 'damage' | 'advance'>('salary');
   const [manualCash, setManualCash] = useState('');
   const [shiftNote, setShiftNote] = useState('');
   const [shiftOperator, setShiftOperator] = useState('');
@@ -102,6 +103,21 @@ export function UsersPage() {
     }
   }
 
+  function applyPayAction() {
+    const value = Number(payAmount.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,'')) || 0;
+    if (!payUserId || !value || !payReason.trim()) { setNotice('مبلغ و دلیل را وارد کنید'); return; }
+    setUsers(current => current.map(user => {
+      if (user.id !== payUserId) return user;
+      if (payMode === 'salary') return { ...user, paidSalaryTotal: (user.paidSalaryTotal ?? 0) + value, employeePayable: Math.max(0, (user.employeePayable ?? 0) - value), lastPaymentAt: new Date().toISOString() };
+      if (payMode === 'bonus') return { ...user, bonusTotal: (user.bonusTotal ?? 0) + value, employeePayable: (user.employeePayable ?? 0) + value };
+      if (payMode === 'advance') return { ...user, advanceTotal: (user.advanceTotal ?? 0) + value, ownerReceivable: (user.ownerReceivable ?? 0) + value };
+      if (payMode === 'damage') return { ...user, damageTotal: (user.damageTotal ?? 0) + value, ownerReceivable: (user.ownerReceivable ?? 0) + value };
+      return { ...user, deductionTotal: (user.deductionTotal ?? 0) + value, employeePayable: Math.max(0, (user.employeePayable ?? 0) - value) };
+    }));
+    setPayUserId(null);
+    setNotice(payMode === 'salary' ? 'پرداخت حقوق در نمای آزمایشی ثبت شد.' : 'رویداد حقوقی در نمای آزمایشی ثبت شد.');
+  }
+
   async function savePermissions() {
     const flattened: Record<string, boolean> = {};
     Object.entries(permissions).forEach(([name, values]) => values.forEach((value, index) => { flattened[name + ':' + index] = value; }));
@@ -127,11 +143,13 @@ export function UsersPage() {
       <div className="summary-card"><div className="label">کاربران</div><div className="value blue">{users.length}</div></div>
       <div className="summary-card"><div className="label">شیفت فعلی</div><div className="value green">{currentShift ? 'باز' : 'بسته'}</div></div>
       <div className="summary-card"><div className="label">بیشترین فروش ثبت‌شده</div><div className="value orange">{money(users.reduce((s,u) => Math.max(s,u.sales),0))} ت</div></div>
+      <div className="summary-card"><div className="label">طلب پرسنل</div><div className="value red">{money(users.reduce((s,u) => s + (u.employeePayable ?? 0), 0))} ت</div></div>
+      <div className="summary-card"><div className="label">طلب مالک</div><div className="value purple">{money(users.reduce((s,u) => s + (u.ownerReceivable ?? 0), 0))} ت</div></div>
     </div>
     <div className="customer-layout">
       <section className="card-panel" style={{ padding: 14 }}>
         <h3>کاربران سیستم</h3>
-        <div className="bullet-grid">{users.map(user => <div className="user-card" key={user.id}><b>{user.name}</b><div className="meta">نقش: {user.role === 'owner' ? 'صاحب' : user.role === 'admin' ? 'مدیر' : 'اپراتور'}</div><div className="meta">شیفت: {user.shift}</div><div className="meta">فروش: {money(user.sales)} تومان</div><div className="user-pay-summary"><span>{user.payType === 'monthly' ? 'حقوق ماهانه' : 'ساعتی'} · {money(user.payType === 'monthly' ? (user.monthlySalary ?? 0) : (user.hourlyRate ?? 0))} تومان</span><span>پاداش {money(user.bonusTotal ?? 0)} · کسری حقوق {money(user.deductionTotal ?? 0)}</span></div><div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{user.permissions.map(permission => <span className="status-pill free" key={permission}>{permission}</span>)}</div><button type="button" className="btn sm" onClick={() => { setDraft({ ...user }); }}>ویرایش / حقوق</button><button type="button" className="btn sm" onClick={() => { setPayUserId(user.id); setPayAmount(''); setPayReason(''); }}>پاداش/کسری</button></div>)}</div>
+        <div className="bullet-grid">{users.map(user => <div className="user-card" key={user.id}><b>{user.name}</b><div className="meta">نقش: {user.role === 'owner' ? 'صاحب' : user.role === 'admin' ? 'مدیر' : 'اپراتور'}</div><div className="meta">شیفت: {user.shift}</div><div className="meta">فروش: {money(user.sales)} تومان</div><div className="user-pay-summary"><span>{user.payType === 'monthly' ? 'حقوق ماهانه' : 'ساعتی'} · {money(user.payType === 'monthly' ? (user.monthlySalary ?? 0) : (user.hourlyRate ?? 0))} تومان</span><span>پرداخت‌شده {money(user.paidSalaryTotal ?? 0)} · مانده حقوق {money(user.employeePayable ?? 0)}</span><span>طلب مالک {money(user.ownerReceivable ?? 0)} · خسارت {money(user.damageTotal ?? 0)}</span></div><div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{user.permissions.map(permission => <span className="status-pill free" key={permission}>{permission}</span>)}</div><button type="button" className="btn sm" onClick={() => { setDraft({ ...user }); }}>ویرایش / حقوق</button><button type="button" className="btn sm" onClick={() => { setPayUserId(user.id); setPayAmount(''); setPayReason(''); setPayMode('salary'); }}>حقوق/حساب</button></div>)}</div>
       </section>
       <section className="card-panel" style={{ padding: 14, overflow: 'auto' }}>
         <h3>🔐 ماتریس دسترسی‌ها</h3>
@@ -173,7 +191,7 @@ export function UsersPage() {
         </section>
       </div>;
     })()}
-    {payUserId && <div className="modal-backdrop"><section className="operation-modal"><button className="modal-close" onClick={() => setPayUserId(null)}>×</button><h2>تغییر حقوقی · {users.find(item => item.id === payUserId)?.name}</h2><label>مبلغ (تومان)<input autoFocus inputMode="numeric" value={payAmount} onChange={event => setPayAmount(event.target.value)} /></label><label>دلیل<input value={payReason} onChange={event => setPayReason(event.target.value)} placeholder="پاداش، جریمه، اصلاح محاسبه…" /></label><div className="modal-actions"><button className="btn primary" onClick={() => { const value = Number(payAmount.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0; if(!value || !payReason.trim()){ setNotice('مبلغ و دلیل را وارد کنید'); return; } setUsers(current => current.map(user => user.id === payUserId ? { ...user, bonusTotal: (user.bonusTotal ?? 0) + value } : user)); setPayUserId(null); setNotice('پاداش ثبت شد؛ کسری‌ها باید با عملیات جداگانه و تأیید ثبت شوند.'); }}>ثبت پاداش</button><button className="btn danger" onClick={() => { const value = Number(payAmount.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0; if(!value || !payReason.trim()){ setNotice('مبلغ و دلیل را وارد کنید'); return; } setUsers(current => current.map(user => user.id === payUserId ? { ...user, deductionTotal: (user.deductionTotal ?? 0) + value } : user)); setPayUserId(null); setNotice('کسری حقوق ثبت شد؛ در مرحله مالی باید به تأیید مجاز برسد.'); }}>ثبت کسری حقوق</button><button className="btn" onClick={() => setPayUserId(null)}>انصراف</button></div></section></div>}
+    {payUserId && <div className="modal-backdrop"><section className="operation-modal"><button className="modal-close" onClick={() => setPayUserId(null)}>×</button><h2>حساب پرسنل · {users.find(item => item.id === payUserId)?.name}</h2><label>عملیات<select value={payMode} onChange={event => setPayMode(event.target.value as typeof payMode)}><option value="salary">پرداخت حقوق</option><option value="bonus">پاداش</option><option value="deduction">کسری مصوب</option><option value="advance">مساعده</option><option value="damage">ثبت خسارت</option></select></label><label>مبلغ (تومان)<input autoFocus inputMode="numeric" value={payAmount} onChange={event => setPayAmount(event.target.value)} /></label><label>دلیل<input value={payReason} onChange={event => setPayReason(event.target.value)} placeholder="دلیل و توضیح عملیات…" /></label><div className="modal-actions"><button className="btn primary" onClick={applyPayAction}>ثبت عملیات</button><button className="btn" onClick={() => setPayUserId(null)}>انصراف</button></div><small className="security-footnote">نمایش حقوق فعلاً در Preview است؛ اتصال Ledger حقوقی سرور در مرحله Users/Permissions تکمیل خواهد شد.</small></section></div>}
     {draft && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setDraft(null)}><section className="operation-modal"><button className="modal-close" onClick={() => setDraft(null)}>×</button><h2>{users.some(user => user.id === draft.id) ? 'ویرایش کاربر و حقوق' : 'کاربر جدید'}</h2><label>نام<input value={draft.name} onChange={event => setDraft({...draft,name:event.target.value})} /></label><label>نقش<select value={draft.role} onChange={event => setDraft({...draft,role:event.target.value as UserRecord['role']})}><option value="owner">صاحب</option><option value="admin">مدیر</option><option value="operator">اپراتور</option></select></label><label>شیفت<input value={draft.shift} onChange={event => setDraft({...draft,shift:event.target.value})} /></label><div className="modal-grid-2"><label>نوع حقوق<select value={draft.payType ?? 'hourly'} onChange={event => setDraft({...draft,payType:event.target.value as UserRecord['payType']})}><option value="hourly">ساعتی</option><option value="monthly">ماهانه</option></select></label><label>نرخ ساعتی<input inputMode="numeric" value={draft.hourlyRate ?? 0} onChange={event => setDraft({...draft,hourlyRate:Number(event.target.value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0})} /></label></div><label>حقوق ماهانه<input inputMode="numeric" value={draft.monthlySalary ?? 0} onChange={event => setDraft({...draft,monthlySalary:Number(event.target.value.replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g,''))||0})} /></label><div className="modal-grid-2"><label>شروع کار<input type="time" value={draft.workStart ?? ''} onChange={event => setDraft({...draft,workStart:event.target.value})} /></label><label>پایان کار<input type="time" value={draft.workEnd ?? ''} onChange={event => setDraft({...draft,workEnd:event.target.value})} /></label></div><div className="modal-actions"><button className="btn primary" onClick={() => void saveUser()}>ذخیره</button><button className="btn" onClick={() => setDraft(null)}>انصراف</button></div></section></div>}
     {notice && <div className="operation-toast">{notice}<button onClick={() => setNotice('')}>×</button></div>}
   </>;
