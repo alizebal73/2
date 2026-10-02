@@ -20,12 +20,13 @@ export type SidebarPaymentItem = {
 type Props = {
   payments: SidebarPaymentItem[];
   attentions: SidebarAttentionItem[];
-  recentActions: Array<{ id: string; title: string; station: string; detail: string; createdAt: string; kind: string }>;
+  recentActions: Array<{ id: string; title: string; station: string; detail: string; createdAt: string; kind: string; canReverse?: boolean }>;
   money: (value: number) => string;
   onCardPaid: (id: string) => void;
   onWallet: (id: string) => void;
   onDebt: (id: string) => void;
   onAttention: (id: string) => void;
+  onReverse: (id: string) => void;
   children?: ReactNode;
 };
 
@@ -38,6 +39,7 @@ export function DashboardAttentionSidebar({
   onWallet,
   onDebt,
   onAttention,
+  onReverse,
 }: Props) {
   return (
     <aside className="dashboard-attention-sidebar" aria-label="مرکز پیگیری">
@@ -120,7 +122,10 @@ export function DashboardAttentionSidebar({
                   <strong>{item.title}</strong>
                   <small>{item.station} · {item.detail}</small>
                 </div>
-                <time>{new Date(item.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</time>
+                <div className="sidebar-recent-side">
+                  <time>{new Date(item.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</time>
+                  {item.canReverse && <button type="button" className="sidebar-reverse-button" aria-label="برگشت این عملیات" onClick={() => onReverse(item.id)}>↩</button>}
+                </div>
               </div>
             ))}
           </div>
