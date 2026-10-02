@@ -102,6 +102,19 @@ export async function createServerCustomer(input: CustomerWriteInput): Promise<C
   return mapCustomer(await response.json() as Parameters<typeof mapCustomer>[0]);
 }
 
+export async function createServerCustomerDebt(customerId: string, amount: number, description: string) {
+  const response = await fetch('/api/customers/' + customerId + '/debt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount, description }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'ثبت بدهی مشتری انجام نشد');
+  }
+  return response.json() as Promise<{ invoiceId: string; customerId: string; amount: number; description: string }>;
+}
+
 export async function updateServerCustomer(customerId: string, input: CustomerWriteInput): Promise<CustomerRecord> {
   const response = await fetch('/api/customers/' + customerId, {
     method: 'PUT',
