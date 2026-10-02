@@ -60,6 +60,7 @@ jobs:
           $env:ASPNETCORE_ENVIRONMENT = 'Development'
           $env:ASPNETCORE_URLS = $baseUrl
           $env:Database__FileName = $db
+          $env:Agent__RegistrationToken = 'Stage8CiRegistrationToken!'
 
           $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
             'run','--no-build','--configuration','Release',
@@ -85,6 +86,72 @@ jobs:
               throw 'Server did not reach /api/health on port 5080.'
             }
             Write-Host 'Server startup, EF migrations and /api/health passed.'
+
+            # Stage 8: prove a real Client Agent can register, connect to the dedicated SignalR hub,
+            # persist a heartbeat, and become offline again after disconnect.
+            $agentData = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent'
+            $agentStdout = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent.stdout.log'
+            $agentStderr = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent.stderr.log'
+            Remove-Item $agentData,$agentStdout,$agentStderr -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $agentData -Force | Out-Null
+
+            $env:GAMENET_SERVER_URL = $baseUrl
+            $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
+            $env:GAMENET_AGENT_NAME = 'CI Agent Stage 8'
+            $env:GAMENET_AGENT_DATA_DIR = $agentData
+
+            $agentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+              'run','--no-build','--configuration','Release',
+              '--project','srcClientGameNetManager.Client.csproj',
+              '--no-launch-profile'
+            ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $agentStdout -RedirectStandardError $agentStderr
+
+            try {
+              $agentOnline = $false
+              $agentRow = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                if ($agentProcess.HasExited) { break }
+                try {
+                  $agentRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $agentRow = @($agentRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+                  if ($agentRow -and $agentRow.isOnline -and $agentRow.lastSeenAt) {
+                    $agentOnline = $true
+                    break
+                  }
+                } catch {}
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $agentOnline) {
+                Write-Host '--- Agent stdout ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                throw 'Stage 8 Agent did not register/connect and publish an online heartbeat.'
+              }
+
+              Write-Host ("Stage 8 Agent heartbeat smoke passed: deviceId={0}; lastSeen={1}" -f $agentRow.deviceId, $agentRow.lastSeenAt)
+            }
+            finally {
+              if (-not $agentProcess.HasExited) {
+                Stop-Process -Id $agentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+              Start-Sleep -Seconds 2
+            }
+
+            $offlineRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+            $offlineRow = @($offlineRows | Where-Object { $_.name -eq 'CI Agent Stage 8' })[0]
+            if (-not $offlineRow -or $offlineRow.isOnline) {
+              Write-Host '--- Agent stdout ---'
+              if (Test-Path $agentStdout) { Get-Content $agentStdout }
+              Write-Host '--- Agent stderr ---'
+              if (Test-Path $agentStderr) { Get-Content $agentStderr }
+              throw 'Stage 8 Agent did not transition to offline after disconnect.'
+            }
+
+            Write-Host 'Stage 8 Agent registration, SignalR connection, heartbeat and offline transition smoke passed.'
+
+
 
             $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
             $adminLogin = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
