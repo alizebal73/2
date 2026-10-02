@@ -431,7 +431,9 @@ Stage 8:
 - PR #2: **merged**
 - Stage 8 branch: `stage8-pc-agent-foundation`
 - Stage 7: **Done و merge شده**؛ CI نهایی سبز است.
-- Stage 8: هنوز کد جدیدی در این branch ثبت نشده و قدم اول باید contract/device foundation باشد.
+- Stage 8 Foundation: **Done و با Run #676 سبز تأیید شده**
+- Stage 8 verified head: `4ef20a3facf2aaa613e1d20f52bf977f2570fde5`
+- مرحلهٔ بعدی: **Stage 9 — Real Client Commands & Kiosk**
 
 ## Continuation Update — current Stage 7 head
 
@@ -521,14 +523,10 @@ Release Manifest، version contracts و migration safety در معماری ثب�
 Installer هنوز local-only است و نباید وارد GitHub شود.
 Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می‌ماند.
 
-## Gate برای ورود به Stage 9
+## Gate برای ورود به Stage 9 — Current
 
-تا وقتی این موارد سبز نشوند، Stage 9 شروع نمی‌شود:
-- Run #647 سبز
-- Lock/Unlock واقعی با Command persistence + acknowledgement + permission
-- Session Start/End از Agent واقعی
-- Server-truth live timer
-- Safe Offline/Recovery تست‌شده
-- validation روی حداقل 2–3 PC واقعی
-- سپس یک CI/E2E نهایی Stage 8 که کل برش عمودی را پوشش دهد.
+- ✅ Run #676 سبز و Stage 8 Foundation بسته شده است.
+- ✅ Command Transport پایه، persistence و acknowledgement آماده و تست شده‌اند.
+- ⏩ Stage 9 اکنون باز است: Lock/Unlock واقعی، Kiosk/Shell و سپس Agent-driven Session Start/End روی همین transport ساخته می‌شوند.
+- ⬜ validation فیزیکی 2–3 PC و rollout 40+ همچنان Gate استقرار واقعی است و قبل از rollout گسترده باید انجام شود.
 
