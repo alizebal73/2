@@ -85,7 +85,10 @@ app.MapGet("/api/customers", async (
             mobile = item.Phone,
             vip = item.VipTier,
             wallet = item.Balance,
-            debt = 0m,
+            debt = database.Invoices
+                .Where(invoice => invoice.CustomerId == item.Id && invoice.Status == InvoiceStatus.Draft)
+                .Select(invoice => (decimal?)invoice.TotalAmount)
+                .Sum() ?? 0m,
             giftCredit = item.FreeMoney,
             freeTimeMinutes = item.FreeTimeMinutes,
             discountLevel = 0,
@@ -98,7 +101,8 @@ app.MapGet("/api/customers", async (
             vipExpiresAt = item.VipExpiresAt,
             vipDailyMinutes = item.VipPackage != null ? item.VipPackage.DailyMinutes : 0,
             vipTotalMinutes = item.VipPackage != null ? item.VipPackage.TotalMinutes : 0,
-            vipDiscountPercent = item.VipPackage != null ? item.VipPackage.DiscountPercent : 0
+            vipDiscountPercent = item.VipPackage != null ? item.VipPackage.DiscountPercent : 0,
+            notes = item.Notes
         })
         .ToListAsync(cancellationToken);
 
@@ -438,6 +442,57 @@ app.MapPost("/api/customers/{customerId:guid}/login-release", async (
     return Results.Ok(new { released = true, activeCount });
 })
 .WithName("ReleaseCustomerLogin");
+
+app.MapPost("/api/customers/{customerId:guid}/debt", async (
+    Guid customerId,
+    CustomerDebtRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (request.Amount <= 0)
+        return Results.BadRequest(new { code = "invalid_debt_amount", message = "مبلغ بدهی باید بیشتر از صفر باشد." });
+
+    var description = request.Description?.Trim();
+    if (string.IsNullOrWhiteSpace(description))
+        description = "ثبت بدهی مشتری";
+
+    var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    var invoice = new Invoice
+    {
+        CustomerId = customer.Id,
+        AppUserId = request.AppUserId,
+        TotalAmount = request.Amount,
+        Status = InvoiceStatus.Draft,
+        IssuedAt = DateTimeOffset.UtcNow,
+        Items =
+        {
+            new InvoiceItem
+            {
+                Description = description,
+                Quantity = 1,
+                UnitPrice = request.Amount,
+                Amount = request.Amount
+            }
+        }
+    };
+
+    database.Invoices.Add(invoice);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "CustomerDebtCreated",
+        EntityName = "Invoice",
+        EntityId = invoice.Id.ToString(),
+        Details = request.Amount.ToString("0.##") + " تومان · " + description,
+        AppUserId = request.AppUserId
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { invoiceId = invoice.Id, customerId = customer.Id, amount = request.Amount, description });
+})
+.WithName("CreateCustomerDebt");
 
 app.MapGet("/api/customers/{customerId:guid}/free-benefits", async (
     Guid customerId,
@@ -1441,6 +1496,7 @@ public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, d
 public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, decimal Revenue, decimal Expense, decimal OperatingProfit);
 public sealed record FinanceTransactionDto(Guid Id, DateTimeOffset ClosedAt, string Description, decimal Amount, string Method, string Status);
 
+public sealed record CustomerDebtRequest(decimal Amount, string? Description, Guid? AppUserId);
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
 public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
 public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);
