@@ -65,6 +65,37 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
 .WithName("GetDashboardSnapshot");
 
 
+app.MapGet("/api/customers", async (
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var customers = await database.Customers
+        .AsNoTracking()
+        .OrderBy(item => item.Code)
+        .ThenBy(item => item.FullName)
+        .Select(item => new
+        {
+            id = item.Id,
+            code = item.Code,
+            username = item.Username,
+            name = item.FullName,
+            mobile = item.Phone,
+            vip = item.IsVip ? "gold" : "none",
+            wallet = item.Balance,
+            debt = 0m,
+            giftCredit = item.FreeMoney,
+            freeTimeMinutes = item.FreeTimeMinutes,
+            discountLevel = 0,
+            lastSeen = "نامشخص",
+            status = "active",
+            concurrentLoginLimit = item.ConcurrentLoginLimit
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(customers);
+})
+.WithName("GetCustomers");
+
 app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     Guid customerId,
     CustomerLoginRequest request,
