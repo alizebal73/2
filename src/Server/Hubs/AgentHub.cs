@@ -233,35 +233,94 @@ public sealed class AgentHub(
             .FirstOrDefaultAsync(
                 item => item.Id == acknowledgement.CommandId
                     && item.AgentDeviceId == device.Id
-                    && item.Status == "Sent"
-                    && item.AgentConnectionId == Context.ConnectionId,
+                    && (
+                        (!acknowledgement.Final
+                            && item.Status == "Sent"
+                            && item.AgentConnectionId == Context.ConnectionId
+                            && (item.CommandType == AgentCommandTypes.Update
+                                || item.CommandType == AgentCommandTypes.Rollback))
+                        || (acknowledgement.Final
+                            && (
+                                ((item.CommandType == AgentCommandTypes.Update
+                                    || item.CommandType == AgentCommandTypes.Rollback)
+                                    && (item.Status == "Accepted" || item.Status == "AwaitingHealth"))
+                                || (item.CommandType != AgentCommandTypes.Update
+                                    && item.CommandType != AgentCommandTypes.Rollback
+                                    && item.Status == "Sent"
+                                    && item.AgentConnectionId == Context.ConnectionId)
+                            ))
+                    ),
                 Context.ConnectionAborted);
 
         if (command is null)
-            throw new HubException("فرمان معتبر پیدا نشد.");
+            throw new HubException("فرمان معتبر یا در انتظار نتیجه پیدا نشد.");
 
-        command.Status = acknowledgement.Success ? "Succeeded" : "Failed";
-        command.Succeeded = acknowledgement.Success;
-        command.CompletedAt = acknowledgement.CompletedAt == default
+        var now = acknowledgement.CompletedAt == default
             ? DateTimeOffset.UtcNow
             : acknowledgement.CompletedAt;
-        command.ResultMessage = string.IsNullOrWhiteSpace(acknowledgement.Message)
-            ? null
-            : acknowledgement.Message.Trim();
 
-        if (acknowledgement.Success && command.CommandType is AgentCommandTypes.Lock or AgentCommandTypes.Unlock or AgentCommandTypes.LogoutLock)
+        command.AgentConnectionId = Context.ConnectionId;
+
+        if (!acknowledgement.Final)
+        {
+            command.Status = "AwaitingHealth";
+            command.Succeeded = null;
+            command.CompletedAt = null;
+            command.ResultMessage = string.IsNullOrWhiteSpace(acknowledgement.Message)
+                ? "فرمان دریافت شد و در انتظار تأیید سلامت پس از راه‌اندازی مجدد است."
+                : acknowledgement.Message.Trim();
+
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "AgentCommandAccepted",
+                EntityName = "AgentCommand",
+                EntityId = command.Id.ToString(),
+                Details = $"Agent {device.DeviceId} پذیرش اولیه فرمان {command.CommandType} را ثبت کرد."
+            });
+        }
+        else
+        {
+            var requestedStatus = acknowledgement.FinalStatus?.Trim();
+            var finalStatus = command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback
+                && string.Equals(requestedStatus, "RolledBack", StringComparison.OrdinalIgnoreCase)
+                ? "RolledBack"
+                : acknowledgement.Success ? "Succeeded" : "Failed";
+
+            command.Status = finalStatus;
+            command.Succeeded = acknowledgement.Success;
+            command.CompletedAt = now;
+            command.ResultMessage = string.IsNullOrWhiteSpace(acknowledgement.Message)
+                ? null
+                : acknowledgement.Message.Trim();
+
+            if (command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback)
+            {
+                device.PendingUpdateVersion = null;
+                device.LastUpdateError = acknowledgement.Success ? null : command.ResultMessage;
+                device.LifecycleState = acknowledgement.Success || finalStatus == "RolledBack"
+                    ? ClientLifecycleStates.Running
+                    : ClientLifecycleStates.Failed;
+                device.LifecycleStateChangedAt = now;
+            }
+
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = acknowledgement.Success ? "AgentCommandSucceeded" : "AgentCommandFailed",
+                EntityName = "AgentCommand",
+                EntityId = command.Id.ToString(),
+                Details = finalStatus == "RolledBack"
+                    ? $"Agent {device.DeviceId} فرمان {command.CommandType} را پس از شکست Update و Rollback موفق، به وضعیت RolledBack نهایی کرد."
+                    : $"Agent {device.DeviceId} نتیجه نهایی فرمان {command.CommandType} را ثبت کرد."
+            });
+        }
+
+        if (acknowledgement.Final
+            && acknowledgement.Success
+            && command.CommandType is AgentCommandTypes.Lock or AgentCommandTypes.Unlock or AgentCommandTypes.LogoutLock)
         {
             device.IsLocked = command.CommandType != AgentCommandTypes.Unlock;
             device.LockedAt = device.IsLocked ? command.CompletedAt : null;
         }
-
-        database.AuditLogs.Add(new AuditLog
-        {
-            Action = acknowledgement.Success ? "AgentCommandSucceeded" : "AgentCommandFailed",
-            EntityName = "AgentCommand",
-            EntityId = command.Id.ToString(),
-            Details = $"Agent {device.DeviceId} پاسخ فرمان {command.CommandType} را ثبت کرد."
-        });
 
         await database.SaveChangesAsync(Context.ConnectionAborted);
 

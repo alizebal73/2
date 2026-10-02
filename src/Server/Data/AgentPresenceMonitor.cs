@@ -52,7 +52,7 @@ public sealed class AgentPresenceMonitor(
                     .ToList();
 
                 var pendingCommands = await database.AgentCommands
-                    .Where(command => command.Status == "Pending" || command.Status == "Sent")
+                    .Where(command => command.Status is "Pending" or "Sent" or "AwaitingHealth")
                     .ToListAsync(stoppingToken);
 
                 var timedOutCommands = pendingCommands
@@ -149,7 +149,7 @@ public sealed class AgentPresenceMonitor(
 
                 foreach (var command in timedOutCommands)
                 {
-                    if (command.Status is not ("Pending" or "Sent"))
+                    if (command.Status is not ("Pending" or "Sent" or "AwaitingHealth"))
                         continue;
 
                     command.Status = "Failed";

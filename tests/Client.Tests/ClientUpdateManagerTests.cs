@@ -49,13 +49,53 @@ public sealed class ClientUpdateManagerTests
             await manager.RollbackAsync(CancellationToken.None);
             var rolledBack = await manager.GetStateAsync(CancellationToken.None);
             Assert.Equal("1.0.0", rolledBack!.ActiveVersion);
-            Assert.Null(rolledBack.PreviousVersion);
+            Assert.Equal("2.0.0", rolledBack.PreviousVersion);
+            Assert.Equal("1.0.0", rolledBack.PendingRollbackVersion);
             Assert.Equal("2.0.0", rolledBack.HealthyVersion);
 
             await manager.MarkHealthyAsync("1.0.0", CancellationToken.None);
+            await manager.CommitHealthyAsync("1.0.0", CancellationToken.None);
             var rollbackHealthy = await manager.GetStateAsync(CancellationToken.None);
             Assert.Equal("1.0.0", rollbackHealthy!.ActiveVersion);
             Assert.Equal("1.0.0", rollbackHealthy.HealthyVersion);
+            Assert.Null(rollbackHealthy.PreviousVersion);
+            Assert.Null(rollbackHealthy.PendingRollbackVersion);
+        }
+        finally
+        {
+            TryDelete(root);
+        }
+    }
+
+    [Fact]
+    public async Task Rollback_preserves_fallback_until_commit()
+    {
+        var root = CreateTempDirectory();
+        try
+        {
+            var statePath = Path.Combine(root, "agent-state.json");
+            var manager = new ClientUpdateManager(new HttpClient(), root, statePath);
+
+            Directory.CreateDirectory(Path.Combine(root, "versions", "1.0.0"));
+            Directory.CreateDirectory(Path.Combine(root, "versions", "2.0.0"));
+            await manager.ActivateAsync("2.0.0", "1.0.0", CancellationToken.None);
+            await manager.MarkHealthyAsync("2.0.0", CancellationToken.None);
+
+            var rollbackTarget = await manager.RollbackAsync(CancellationToken.None);
+            Assert.Equal("1.0.0", rollbackTarget);
+
+            var pending = await manager.GetStateAsync(CancellationToken.None);
+            Assert.Equal("1.0.0", pending!.ActiveVersion);
+            Assert.Equal("2.0.0", pending.PreviousVersion);
+            Assert.Equal("1.0.0", pending.PendingRollbackVersion);
+
+            await manager.CommitHealthyAsync("1.0.0", CancellationToken.None);
+
+            var committed = await manager.GetStateAsync(CancellationToken.None);
+            Assert.Equal("1.0.0", committed!.ActiveVersion);
+            Assert.Equal("1.0.0", committed.HealthyVersion);
+            Assert.Null(committed.PreviousVersion);
+            Assert.Null(committed.PendingRollbackVersion);
         }
         finally
         {
