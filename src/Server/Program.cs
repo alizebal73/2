@@ -379,7 +379,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
     }
-    catch (Exception exception)
+    catch
     {
         command.Status = "Failed";
         command.Succeeded = false;
