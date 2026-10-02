@@ -68,7 +68,7 @@ jobs:
         shell: pwsh
         run: |
           $env:NODE_PATH = Join-Path $env:GITHUB_WORKSPACE 'src\Dashboard\node_modules'
-          npx --prefix src/Dashboard playwright test "$env:GITHUB_WORKSPACE\e2e\dashboard-smoke.cjs" --config "$env:GITHUB_WORKSPACE\e2e\playwright.config.cjs" --workers=1
+          npx --prefix src/Dashboard playwright test "$env:GITHUB_WORKSPACE\e2e\dashboard-smoke.spec.cjs" --config "$env:GITHUB_WORKSPACE\e2e\playwright.config.cjs" --workers=1
 
       - name: Stop Dashboard preview
         if: always()
