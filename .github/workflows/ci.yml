@@ -50,8 +50,15 @@ jobs:
           $stderr = Join-Path $env:RUNNER_TEMP 'gamenet-server-smoke.stderr.log'
           Remove-Item $db,$stdout,$stderr -Force -ErrorAction SilentlyContinue
 
+          $port = 15080
+          while (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
+            $port++
+            if ($port -gt 15980) { throw 'No free Server smoke port is available.' }
+          }
+          $baseUrl = "http://127.0.0.1:$port"
+
           $env:ASPNETCORE_ENVIRONMENT = 'Development'
-          $env:ASPNETCORE_URLS = 'http://127.0.0.1:5080'
+          $env:ASPNETCORE_URLS = $baseUrl
           $env:Database__FileName = $db
 
           $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
@@ -65,7 +72,7 @@ jobs:
             for ($i = 0; $i -lt 30; $i++) {
               if ($process.HasExited) { break }
               try {
-                $response = Invoke-WebRequest -Uri 'http://127.0.0.1:5080/api/health' -UseBasicParsing -TimeoutSec 2
+                $response = Invoke-WebRequest -Uri "$baseUrl/api/health" -UseBasicParsing -TimeoutSec 2
                 if ($response.StatusCode -eq 200) { $ready = $true; break }
               } catch {}
               Start-Sleep -Seconds 1
@@ -79,14 +86,14 @@ jobs:
             }
             Write-Host 'Server startup, EF migrations and /api/health passed.'
 
-            $customers = Invoke-RestMethod -Uri 'http://127.0.0.1:5080/api/customers' -Method Get
+            $customers = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Get
             if (@($customers).Count -lt 1) { throw 'Customer API returned no seeded customers.' }
 
-            $packages = Invoke-RestMethod -Uri 'http://127.0.0.1:5080/api/vip-packages' -Method Get
+            $packages = Invoke-RestMethod -Uri "$baseUrl/api/vip-packages" -Method Get
             if (@($packages).Count -lt 1) { throw 'VIP package API returned no active packages.' }
 
             $smokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
-            $newCustomer = Invoke-RestMethod -Uri 'http://127.0.0.1:5080/api/customers' -Method Post -ContentType 'application/json' -Body (@{
+            $newCustomer = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Post -ContentType 'application/json' -Body (@{
               fullName = "Stage 5 Smoke $smokeId"
               username = "smoke_$smokeId"
               vipTier = 'none'
@@ -96,7 +103,7 @@ jobs:
             $customerId = $newCustomer.id
             if (-not $customerId) { throw 'Customer create smoke did not return an id.' }
 
-            $updatedCustomer = Invoke-RestMethod -Uri ("http://127.0.0.1:5080/api/customers/$customerId") -Method Put -ContentType 'application/json' -Body (@{
+            $updatedCustomer = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId") -Method Put -ContentType 'application/json' -Body (@{
               fullName = "Stage 5 Smoke Updated $smokeId"
               code = $newCustomer.code
               username = $newCustomer.username
@@ -109,10 +116,12 @@ jobs:
             }
 
             $packageId = @($packages)[0].id
-            $assignment = Invoke-RestMethod -Uri ("http://127.0.0.1:5080/api/customers/$customerId/vip-package") -Method Post -ContentType 'application/json' -Body (@{
+            $assignment = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-package") -Method Post -ContentType 'application/json' -Body (@{
               vipPackageId = $packageId
             } | ConvertTo-Json)
 
+            Write-Host ("VIP assignment response: packageId={0}; dailyMinutes={1}; totalMinutes={2}; discountPercent={3}" -f $assignment.packageId, $assignment.dailyMinutes, $assignment.totalMinutes, $assignment.discountPercent)
+            Write-Host ("Selected package: packageId={0}; dailyMinutes={1}; totalMinutes={2}" -f $packageId, @($packages)[0].dailyMinutes, @($packages)[0].totalMinutes)
             if ($assignment.packageId -ne $packageId -or [int]$assignment.dailyMinutes -le 0 -or [int]$assignment.totalMinutes -le 0) {
               throw 'VIP package assignment smoke returned incomplete data.'
             }
