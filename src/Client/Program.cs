@@ -216,6 +216,13 @@ try
             await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
             await SaveStateAsync(statePath, state);
 
+            state = await FinalizePendingLifecycleCommandAsync(
+                connection,
+                state,
+                agentVersion,
+                shutdown.Token);
+            await SaveStateAsync(statePath, state);
+
             Console.WriteLine(
                 $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}; Kiosk={kioskEnabled}; LockOnDisconnect={lockOnDisconnect}");
 
