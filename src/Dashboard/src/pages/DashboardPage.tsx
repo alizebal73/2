@@ -779,18 +779,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt }, ...items]);
     addSessionTimeline(activeStation.id, 'settle', 'تسویه جلسه', 'مبلغ نهایی ' + money(finalTotal) + ' تومان · روش پرداخت ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : method === 'wallet' ? 'کیف پول' : 'بدهی') + (change > 0 ? ' · برگشتی ' + money(change) + ' تومان' : ''), finalTotal);
     setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: method === 'debt' ? 'unpaid' : 'paid' } : item));
-    void mockService.addReportRow({
-      id: crypto.randomUUID(),
-      station: activeStation.name,
-      timeAmount: Math.round(timeCost),
-      buffet: activeStation.buffetTotal ?? 0,
-      packageAmount: 0,
-      amount: finalTotal,
-      method: method === 'cash' ? 'cash' : method === 'card' ? 'card' : method === 'gift' ? 'gift' : 'wallet',
-      operator: 'علی محمدی',
-      type: 'time',
-      closedAt
-    });
+
     if (method === 'gift' && customer && finalTotal > 0) {
       setCustomers(current => current.map(item => item.id === customer.id
         ? { ...item, giftCredit: item.giftCredit - finalTotal, transactionHistory: ['مصرف اعتبار رایگان · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
