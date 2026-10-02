@@ -34,7 +34,8 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const [editPassword, setEditPassword] = useState('');
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([]);
   const [serverFreeBenefits, setServerFreeBenefits] = useState<{ freeMoney: number; freeTimeMinutes: number } | null>(null);
-  const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string } | null>(null);
+  const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string; sourceTransactionId?: string } | null>(null);
+  const [refundSourceId, setRefundSourceId] = useState('');
 
   useEffect(() => { void mockService.getCustomers().then(setCustomers); }, []);
   const visible = useMemo(() => customers.filter(customer => {
@@ -84,6 +85,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       return;
     }
     setAmount('');
+    setRefundSourceId('');
     setEditName(selected.name);
     setEditPassword('');
     setAction(nextAction);
@@ -101,15 +103,16 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       .replace(/[٬,s]/g, '')) || 0;
   }
 
-  async function executeRefund(refundAmount: number, reason: string) {
+  async function executeRefund(refundAmount: number, reason: string, sourceTransactionId?: string) {
     if (!selected) return;
     try {
-      const entry = await refundWalletTransaction(selected.id, { amount: refundAmount, reason });
+      const entry = await refundWalletTransaction(selected.id, { amount: refundAmount, reason, sourceTransactionId });
       updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'بازگشت وجه · ' + money(refundAmount) + ' تومان');
       setWalletLedger(current => [entry, ...current]);
       setAction('');
       setActionNote('');
       setRefundApproval(null);
+      setRefundSourceId('');
       setAmount('');
       setNotice('بازگشت وجه ثبت شد و در دفتر کیف پول باقی ماند');
     } catch (error) {
@@ -171,11 +174,12 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       if (value <= 0) { setNotice('مبلغ معتبر وارد کنید'); return; }
       if (value > selected.wallet) { setNotice('مبلغ بازگشت بیشتر از موجودی کیف پول مشتری است'); return; }
       if (!actionNote.trim()) { setNotice('دلیل بازگشت وجه را وارد کنید'); return; }
+      if (!refundSourceId) { setNotice('تراکنش مبدأ بازگشت وجه را انتخاب کنید'); return; }
       if (role === 'operator' && value > 100000) {
-        setRefundApproval({ amount: value, reason: actionNote.trim() });
+        setRefundApproval({ amount: value, reason: actionNote.trim(), sourceTransactionId: refundSourceId });
         return;
       }
-      await executeRefund(value, actionNote.trim());
+      await executeRefund(value, actionNote.trim(), refundSourceId);
       return;
     }
     if (action === 'password') {
@@ -326,6 +330,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <button className="btn sm" onClick={() => openAction('debt')}>ثبت بدهی</button>
           <button className="btn sm" onClick={() => openAction('gift')}>اعتبار رایگان</button><button className="btn sm" onClick={() => openAction('freeTime')}>زمان رایگان</button>
           <button className="btn sm" onClick={() => openAction('package')}>فعال‌سازی/تغییر VIP</button>
+          <button className="btn sm" onClick={() => openAction('refund')}>بازگشت وجه</button>
           <button className="btn sm" onClick={() => openAction('password')}>تغییر رمز ورود</button>
         </div>
       </section>}
@@ -364,6 +369,23 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <div className="modal-actions"><button className="btn primary" onClick={submitAction}>ثبت عملیات</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
         </>}
 
+        {action === 'refund' && <>
+          <h2>بازگشت وجه · {selected?.name}</h2>
+          <label>تراکنش مبدأ
+            <select value={refundSourceId} onChange={event => setRefundSourceId(event.target.value)}>
+              <option value="">انتخاب کنید</option>
+              {walletLedger.filter(entry => entry.direction === 'credit' && entry.type !== 'refund').map(entry => (
+                <option key={entry.id} value={entry.id}>
+                  {money(entry.amount)} تومان · {entry.description}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>مبلغ بازگشت (تومان)<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label>
+          <label>دلیل بازگشت<textarea value={actionNote} onChange={event => setActionNote(event.target.value)} placeholder="مثلاً لغو شارژ به درخواست مشتری" /></label>
+          <div className="modal-actions"><button className="btn danger" onClick={() => void submitAction()}>ثبت بازگشت وجه</button><button className="btn" onClick={() => setAction('')}>انصراف</button></div>
+        </>}
+
         {action === 'freeTime' && <>
           <h2>زمان رایگان · {selected?.name}</h2>
           <div className="info-row"><span>زمان رایگان فعلی</span><strong>{money(serverFreeBenefits?.freeTimeMinutes ?? selected?.freeTimeMinutes ?? 0)} دقیقه</strong></div>
@@ -396,7 +418,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
         detail={'بازگشت ' + money(refundApproval.amount) + ' تومان برای «' + (selected?.name ?? 'مشتری') + '» به تأیید مدیر نیاز دارد. دلیل: ' + refundApproval.reason}
         requestLabel="تأیید و ثبت بازگشت وجه"
         onReject={() => setRefundApproval(null)}
-        onApprove={() => executeRefund(refundApproval.amount, refundApproval.reason)}
+        onApprove={() => executeRefund(refundApproval.amount, refundApproval.reason, refundApproval.sourceTransactionId)}
       />
     )}
 
