@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { mockService } from '../services/mockService';
+import { userErrorMessage } from '../utils/userError';
 import { getWalletLedger, recordWalletTransaction } from '../services/walletLedgerService';
 import type { CustomerRecord, WalletLedgerEntry } from '../types';
 
@@ -140,7 +141,7 @@ export function CustomersPage() {
         const entry = await recordWalletTransaction(selected.id, { amount: value, type: 'debit', description: 'بازگشت وجه · ' + actionNote.trim() });
         updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'بازگشت وجه · ' + money(value) + ' تومان');
         setAction(''); setActionNote(''); setNotice('مبلغ از کیف پول کسر و بازگشت وجه ثبت شد');
-      } catch (error) { setNotice(error instanceof Error ? error.message : 'ثبت بازگشت وجه انجام نشد'); }
+      } catch (error) { setNotice(userErrorMessage(error, 'ثبت بازگشت وجه انجام نشد')); }
       return;
     }
     if (action === 'password') {
@@ -161,7 +162,7 @@ export function CustomersPage() {
         updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'شارژ کیف پول · ' + money(value) + ' تومان');
         setWalletLedger(current => [entry, ...current]);
       } catch (error) {
-        setNotice(error instanceof Error ? error.message : 'ثبت شارژ کیف پول انجام نشد');
+        setNotice(userErrorMessage(error, 'ثبت شارژ کیف پول انجام نشد'));
         return;
       }
     }
