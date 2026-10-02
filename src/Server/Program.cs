@@ -968,7 +968,9 @@ app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
         remainingTotalMinutes = Math.Max(0, customer.VipPackage.TotalMinutes - totalUsed)
     });
 })
-.WithName("GetCustomerVipUsage");apGet("/api/customers/{customerId:guid}/history", async (
+.WithName("GetCustomerVipUsage");
+
+app.MapGet("/api/customers/{customerId:guid}/history", async (
     Guid customerId,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
