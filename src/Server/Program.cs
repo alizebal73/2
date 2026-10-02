@@ -9,6 +9,7 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
+builder.Services.AddScoped<SessionSettlementService>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
 var databasePath = Path.IsPathRooted(databaseFile)
@@ -380,6 +381,34 @@ app.MapGet("/api/finance/summary", async (
         revenue - expense));
 })
 .WithName("GetFinanceSummary");
+
+
+
+app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
+    Guid sessionId,
+    SessionSettlementRequest request,
+    SessionSettlementService settlement,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await settlement.SettleAsync(sessionId, request, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "settlement_conflict", message = exception.Message });
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_settlement", message = exception.Message });
+    }
+})
+.WithName("SettleSession");
 
 app.MapHub<DashboardHub>("/hubs/dashboard");
 
