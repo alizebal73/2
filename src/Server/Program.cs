@@ -2758,13 +2758,6 @@ static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
         shift.Notes);
 }
 
-public sealed record LoginRequest(string UserName, string Password);
-public sealed record AppUserDto(Guid Id, string FullName, string UserName, string Email, string Role, bool IsActive, DateTimeOffset? LastLoginAt, IReadOnlyList<string> Permissions);
-public sealed record AppUserWriteRequest(string FullName, string UserName, string Email, string Password, string Role, bool IsActive = true);
-public sealed record PermissionAssignmentRequest(IReadOnlyList<string> PermissionNames);
-public sealed record ApprovalCreateRequest(string Action, string EntityName, string? EntityId, string Reason);
-public sealed record ApprovalDecisionRequest(string? Note);
-
 static AppUserDto ToAppUserDto(AppUser user)
     => new(
         user.Id,
@@ -2775,6 +2768,13 @@ static AppUserDto ToAppUserDto(AppUser user)
         user.IsActive,
         user.LastLoginAt,
         user.Permissions.Select(item => item.Permission.Name).OrderBy(name => name).ToArray());
+
+public sealed record LoginRequest(string UserName, string Password);
+public sealed record AppUserDto(Guid Id, string FullName, string UserName, string Email, string Role, bool IsActive, DateTimeOffset? LastLoginAt, IReadOnlyList<string> Permissions);
+public sealed record AppUserWriteRequest(string FullName, string UserName, string Email, string Password, string Role, bool IsActive = true);
+public sealed record PermissionAssignmentRequest(IReadOnlyList<string> PermissionNames);
+public sealed record ApprovalCreateRequest(string Action, string EntityName, string? EntityId, string Reason);
+public sealed record ApprovalDecisionRequest(string? Note);
 
 public sealed record StartShiftRequest(
     string? OperatorName,
