@@ -8,6 +8,7 @@ public static class DatabaseSeeder
     {
         if (await database.Stations.AnyAsync(cancellationToken))
         {
+            await EnsureCustomerProfilesAsync(database, cancellationToken);
             return;
         }
 
@@ -61,16 +62,19 @@ public static class DatabaseSeeder
 
         var customer = new Customer
         {
-            FullName = "Ali Rezaei",
-            Phone = "09120000000",
-            Email = "ali@gamenet.local",
+            Code = "1050",
+            Username = "reza_hs",
+            FullName = "رضا محمدی",
+            Phone = "09123456789",
+            Email = "reza@gamenet.local",
             IsVip = true,
-            Balance = 250000m,
-            Notes = "VIP customer"
+            Balance = 450000m,
+            Notes = "Gold VIP"
         };
         database.Customers.Add(customer);
 
         await database.SaveChangesAsync(cancellationToken);
+        await EnsureCustomerProfilesAsync(database, cancellationToken);
 
         CreateStations(database, consoleType, hourlyTariff, "PS5", 10, "Zone A", "Console");
         CreateStations(database, consoleType, hourlyTariff, "PS4", 6, "Zone A", "Console");
@@ -107,3 +111,42 @@ public static class DatabaseSeeder
         }
     }
 }
+
+    private static async Task EnsureCustomerProfilesAsync(GameNetDbContext database, CancellationToken cancellationToken)
+    {
+        var profiles = new[]
+        {
+            new { Code = "1050", Username = "reza_hs", FullName = "رضا محمدی", Phone = "09123456789", Email = "reza@gamenet.local", IsVip = true, Balance = 450000m },
+            new { Code = "2020", Username = "soroush.n", FullName = "سروش نیک‌پور", Phone = "09120000002", Email = "soroush@gamenet.local", IsVip = true, Balance = 120000m },
+            new { Code = "2021", Username = "parsa.r", FullName = "پارسا رضایی", Phone = "09120000003", Email = "parsa@gamenet.local", IsVip = false, Balance = 0m },
+            new { Code = "1051", Username = "mehdi.j", FullName = "مهدی جهان", Phone = "09120000004", Email = "mehdi@gamenet.local", IsVip = true, Balance = 470000m },
+        };
+
+        foreach (var profile in profiles)
+        {
+            var customer = await database.Customers.FirstOrDefaultAsync(item => item.Code == profile.Code || item.Phone == profile.Phone, cancellationToken);
+            if (customer is null)
+            {
+                database.Customers.Add(new Customer
+                {
+                    Code = profile.Code,
+                    Username = profile.Username,
+                    FullName = profile.FullName,
+                    Phone = profile.Phone,
+                    Email = profile.Email,
+                    IsVip = profile.IsVip,
+                    Balance = profile.Balance,
+                    Notes = profile.IsVip ? "VIP" : null,
+                });
+                continue;
+            }
+
+            customer.Code ??= profile.Code;
+            customer.Username ??= profile.Username;
+            if (string.IsNullOrWhiteSpace(customer.FullName)) customer.FullName = profile.FullName;
+            customer.Phone ??= profile.Phone;
+            customer.Email ??= profile.Email;
+        }
+
+        await database.SaveChangesAsync(cancellationToken);
+    }
