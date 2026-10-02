@@ -17,7 +17,7 @@ import { GlobalCommandCenter } from './features/search/GlobalCommandCenter';
 import { OperationsPage } from './pages/OperationsPage';
 import { UserErrorBanner } from './components/UserErrorBanner';
 import { LoginPage } from './pages/LoginPage';
-import { getCurrentUser, logout } from './services/authService';
+import { getCurrentUser, logout, hasPermission } from './services/authService';
 import type { AppUserRecord } from './types';
 import { SectionLockDialog } from './components/SectionLockDialog';
 import { readPageLocks } from './services/securityService';
@@ -42,6 +42,24 @@ function formatTime(dateString: string) {
 
 function formatPersianDate(date = new Date()) {
   return new Intl.DateTimeFormat('fa-IR-u-ca-persian', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+}
+
+const pagePermissions: Partial<Record<PageKey, string[]>> = {
+  customers: ['customer.manage'],
+  buffet: ['buffet.sell', 'buffet.inventory'],
+  tariffs: ['tariff.manage'],
+  games: ['game.manage'],
+  'client-shell': ['client.control'],
+  accounts: ['account.manage'],
+  reports: ['finance.view'],
+  users: ['user.manage', 'shift.manage'],
+  settings: ['user.manage'],
+};
+
+function canOpenPage(user: AppUserRecord, page: PageKey): boolean {
+  if (page === 'dashboard' || page === 'operations') return true;
+  const required = pagePermissions[page];
+  return !required || required.some(permission => hasPermission(user, permission));
 }
 
 function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () => void }) {
@@ -80,6 +98,10 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
   }, []);
 
   function requestNavigation(page: PageKey) {
+    if (!canOpenPage(user, page)) {
+      setError('برای مشاهده این بخش دسترسی لازم را ندارید.');
+      return;
+    }
     const rule = pageLocks[page];
     if (rule?.enabled && !unlockedPages.includes(page)) { setLockedPage(page); return; }
     setActivePage(page);
@@ -198,7 +220,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
           <span>داشبورد مدیریت</span>
         </div>
 
-        <TopNavigation activePage={activePage} onChange={requestNavigation} />
+        <TopNavigation activePage={activePage} onChange={requestNavigation} user={user} />
 
         <div className="connection-list" aria-live="polite">
           <span className="header-clock">🗓 {formatPersianDate()} · 🕒 {clock}</span>
@@ -242,7 +264,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
         <div hidden={activePage !== 'accounts'}><AccountsPage /></div>
         <div hidden={activePage !== 'buffet'}><BuffetPage /></div>
         <div hidden={activePage !== 'reports'}><ReportsPage /></div>
-        <div hidden={activePage !== 'users'}><UsersPage /></div>
+        <div hidden={activePage !== 'users'}><UsersPage permissions={user.permissions} userId={user.id} /></div>
         <div hidden={activePage !== 'settings'}><SettingsPage /></div>
         <div hidden={activePage !== 'operations'}><OperationsPage /></div>
       </div>
