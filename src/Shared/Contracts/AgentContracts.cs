@@ -93,7 +93,9 @@ public sealed record AgentCommandAcknowledgement(
     Guid CommandId,
     bool Success,
     string? Message,
-    DateTimeOffset CompletedAt);
+    DateTimeOffset CompletedAt,
+    bool Final = true,
+    string? FinalStatus = null);
 
 public sealed record AgentPolicyRequest(
     bool KioskEnabled,
