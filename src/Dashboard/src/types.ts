@@ -41,6 +41,7 @@ export type StationDto = {
   customerFullName?: string;
   customerDebt?: number;
   customerNote?: string;
+  agentId?: string | null;
   agentOnline?: boolean;
   agentLocked?: boolean;
   agentLastSeenAt?: string | null;
