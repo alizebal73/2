@@ -131,8 +131,28 @@ jobs:
             } | ConvertTo-Json)
             if ($approvalDecision.status -ne 'Approved') { throw 'Approval decision smoke failed.' }
 
-            $adminLogout = Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $adminSession
-            if (-not $adminLogout.success) { throw 'Server operator logout smoke failed.' }
+            # Prove a non-admin operator cannot start a session without the permission.
+            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              permissionNames = @('buffet.sell')
+            } | ConvertTo-Json) | Out-Null
+
+            $operatorSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
+              userName = $managedUser.userName
+              password = 'Operator123!'
+            } | ConvertTo-Json) | Out-Null
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/sessions" -Method Post -WebSession $operatorSession -ContentType 'application/json' -Body (@{
+                customerId = [Guid]::Empty
+                stationId = [Guid]::Empty
+              } | ConvertTo-Json) | Out-Null
+              throw 'Limited operator was allowed to start a session without permission.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 403) { throw }
+            }
+            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorSession | Out-Null
+
 
             $customers = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Get
             if (@($customers).Count -lt 1) { throw 'Customer API returned no seeded customers.' }
@@ -184,7 +204,7 @@ jobs:
             $availableStation = @($dashboard.stations | Where-Object { $_.state -eq 'Available' }) | Select-Object -First 1
             if (-not $availableStation) { throw 'No available station was found for VIP usage smoke.' }
 
-            $startedSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions" -Method Post -ContentType 'application/json' -Body (@{
+            $startedSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               customerId = $customerId
               stationId = $availableStation.id
               persons = 1
@@ -259,7 +279,7 @@ jobs:
               throw 'Buffet product creation smoke failed.'
             }
 
-            $purchase = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -ContentType 'application/json' -Body (@{
+            $purchase = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)/stock") -Method Post -WebSession $adminSession -WebSession $adminSession -WebSession $adminSession -ContentType 'application/json' -Body (@{
               quantity = 1
               direction = 'In'
               kind = 'Purchase'
@@ -284,7 +304,7 @@ jobs:
             } | ConvertTo-Json)
             if ([int]$returned.stock -ne 6 -or $returned.kind -ne 'Return') { throw 'Inventory return smoke failed.' }
 
-            $sale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
+            $sale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -WebSession $adminSession -WebSession $adminSession -ContentType 'application/json' -Body (@{
               items = @(@{ productId = $inventoryProduct.id; quantity = 4 })
               target = 'standalone'
             } | ConvertTo-Json)
@@ -347,7 +367,7 @@ jobs:
               throw 'Buffet session sale did not create a draft invoice correctly.'
             }
 
-            $sessionSettlement = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$($startedSession.sessionId)/settle" -Method Post -ContentType 'application/json' -Body (@{
+            $sessionSettlement = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$($startedSession.sessionId)/settle" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               totalAmount = 60000
               parts = @(@{ method = 'cash'; amount = 60000 })
               timeAmount = 30000
@@ -359,7 +379,7 @@ jobs:
               throw 'Session settlement did not finalize the buffet draft invoice.'
             }
 
-            $reversed = Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse" -Method Post -ContentType 'application/json' -Body (@{
+            $reversed = Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               reason = 'Stage 6 buffet reverse smoke'
             } | ConvertTo-Json)
 
@@ -375,6 +395,9 @@ jobs:
             $inventoryAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
             $reversedProduct = @($inventoryAfterReverse | Where-Object { $_.id -eq $inventoryProduct.id })[0]
             if ([int]$reversedProduct.stock -ne 2) { throw 'Buffet invoice reverse did not restore stock.' }
+
+            $adminLogout = Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $adminSession
+            if (-not $adminLogout.success) { throw 'Server operator logout smoke failed.' }
 
             Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
 
