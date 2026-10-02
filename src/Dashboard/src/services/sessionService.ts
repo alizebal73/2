@@ -169,26 +169,4 @@ export async function requestServerInvoiceReverseApproval(
   }
 
   return await response.json() as { id: string; status: string };
-}> {
-  const response = await fetch('/api/invoices/' + invoiceId + '/reverse', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ appUserId: null, reason }),
-  });
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(payload?.message || 'برگشت فاکتور روی سرور انجام نشد');
-  }
-
-  return await response.json() as {
-    invoiceId: string;
-    invoiceStatus: string;
-    walletRestored: number;
-    freeMoneyRestored: number;
-    freeTimeRestored: number;
-    inventoryRestored: number;
-    externalRefundRequired: boolean;
-    reversalId: string;
-  };
 }
