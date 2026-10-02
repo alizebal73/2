@@ -659,7 +659,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       setApproval({ title: 'تخفیف بیشتر از حد مجاز اپراتور', detail: 'این تسویه شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.', action: 'settle', method });
       return;
     }
-    if (activeStation.serverSessiveStation);
+    const elapsed = duration(activeStation);
     const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
     const tariff = tariffs.find(item => item.stationType === activeStation.type);
     const billing = calculateBilling({
@@ -674,6 +674,36 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     const timeCost = billing.timeAmount;
     const prepaidUsed = Math.min(billing.finalAmount, activeStation.sessionCredit ?? 0);
     const finalTotal = Math.max(0, billing.finalAmount - prepaidUsed);
+    if (activeStation.serverSessionId && customer && isServerGuid(activeStation.serverSessionId) && ['cash', 'card', 'wallet'].includes(method)) {
+      try {
+        const serverResult = await settleServerSession(
+          activeStation.serverSessionId,
+          finalTotal,
+          [{ method: method as 'cash' | 'card' | 'wallet', amount: finalTotal }],
+        );
+        if (method === 'wallet') {
+          setCustomers(current => current.map(item => item.id === customer.id
+            ? { ...item, wallet: serverResult.walletBalanceAfter, transactionHistory: ['تسویه سرور از کیف پول · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
+            : item));
+        }
+        addSessionTimeline(activeStation.id, 'settle', 'تسویه سروری', money(finalTotal) + ' تومان · ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : 'کیف پول'), finalTotal);
+        setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt: new Date().toISOString() }, ...items]);
+        setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: 'paid' } : item));
+        updateStation(activeStation.id, {
+          state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined,
+          customerCode: undefined, persons: undefined, buffetTotal: undefined, sessionCredit: undefined,
+          prepaidEndsAt: undefined, pausedAt: undefined, pausedMinutes: undefined, serverSessionId: undefined,
+        });
+        setModal(null);
+        setSessionCenterStation(null);
+        setMessage('تسویه سروری با موفقیت ثبت شد.');
+        return;
+      } catch (error) {
+        setMessage(userErrorMessage(error, 'تسویه سروری انجام نشد'));
+        return;
+      }
+    }
+
     const received = method === 'cash' ? (number(receivedAmount) || finalTotal) : finalTotal;
     const change = method === 'cash' ? received - finalTotal : 0;
     if (method === 'cash' && received < finalTotal) { setMessage('مبلغ دریافتی نقدی کمتر از مبلغ قابل دریافت است.'); return; }
