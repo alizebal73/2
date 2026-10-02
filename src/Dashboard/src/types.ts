@@ -100,6 +100,11 @@ export type AgentStatusDto = {
   cpuUsagePercent?: number | null;
   memoryAvailableBytes?: number | null;
   uptimeSeconds?: number | null;
+  lifecycleState: string;
+  pendingUpdateVersion?: string | null;
+  lastUpdateError?: string | null;
+  lastHealthyAt?: string | null;
+  lifecycleStateChangedAt?: string | null;
 };
 
 export type AgentCommandStatusDto = {
