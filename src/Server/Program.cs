@@ -598,8 +598,13 @@ app.MapGet("/api/approvals", async (
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "approval.decide", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var approvals = await database.ApprovalRequests
+    var storedApprovals = await database.ApprovalRequests
         .AsNoTracking()
+        .Include(item => item.RequestedByUser)
+        .Include(item => item.DecidedByUser)
+        .ToListAsync(cancellationToken);
+
+    var approvals = storedApprovals
         .OrderByDescending(item => item.CreatedAt)
         .Take(100)
         .Select(item => new
@@ -2377,12 +2382,13 @@ app.MapGet("/api/customers/{customerId:guid}/wallet-ledger", async (HttpContext 
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
     }
 
-    var transactions = await database.WalletTransactions
+    var transactions = (await database.WalletTransactions
         .AsNoTracking()
         .Where(item => item.CustomerId == customerId)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.CreatedAt)
         .ThenByDescending(item => item.Id)
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     var running = customer.Balance;
     var result = new List<WalletLedgerEntryDto>(transactions.Count);
@@ -2598,9 +2604,10 @@ app.MapGet("/api/shifts/{shiftId:guid}/expenses", async (HttpContext context,
         return Results.NotFound(new { code = "shift_not_found", message = "شیفت پیدا نشد." });
     }
 
-    var rows = await database.Expenses
+    var rows = (await database.Expenses
         .AsNoTracking()
         .Where(item => item.ShiftId == shiftId)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.CreatedAt)
         .Select(item => new FinanceExpenseDto(
             item.Id,
@@ -2609,7 +2616,7 @@ app.MapGet("/api/shifts/{shiftId:guid}/expenses", async (HttpContext context,
             item.Amount,
             item.Description,
             item.CreatedAt))
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     return Results.Ok(rows);
 })
