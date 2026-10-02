@@ -118,3 +118,10 @@ partial class AgentDeviceFoundation
 partial class AgentCommandFoundation
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002210000_SessionServerTiming")]
+partial class SessionServerTiming
+{
+}
