@@ -31,7 +31,10 @@ public sealed record AgentHeartbeatRequest(
     double? CpuUsagePercent,
     long? MemoryAvailableBytes,
     long? UptimeSeconds,
-    bool IsLocked);
+    bool IsLocked,
+    string? LifecycleState = null,
+    string? PendingUpdateVersion = null,
+    string? LastUpdateError = null);
 
 public sealed record AgentHeartbeatResponse(
     Guid AgentId,
@@ -55,7 +58,12 @@ public sealed record AgentStatusDto(
     string? OsVersion,
     double? CpuUsagePercent,
     long? MemoryAvailableBytes,
-    long? UptimeSeconds);
+    long? UptimeSeconds,
+    string LifecycleState,
+    string? PendingUpdateVersion,
+    string? LastUpdateError,
+    DateTimeOffset? LastHealthyAt,
+    DateTimeOffset? LifecycleStateChangedAt);
 
 
 public static class AgentCommandTypes
