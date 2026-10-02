@@ -32,6 +32,7 @@ export function GamesPage() {
   const [query, setQuery] = useState('');
   const [draft, setDraft] = useState<GameRecord | null>(null);
   const [notice, setNotice] = useState('');
+  const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
 
   useEffect(() => {
     void mockService.getGames().then(setGames);
@@ -43,6 +44,7 @@ export function GamesPage() {
     return matchesFilter && matchesQuery;
   }), [games, filter, query]);
   const categories = new Set(games.map(game => game.category)).size;
+  const selectedGame = games.find(game => game.id === selectedGameId) ?? visibleGames[0] ?? null;
 
   function patchDraft(update: Partial<GameRecord>) {
     setDraft(current => current ? { ...current, ...update } : current);
@@ -93,23 +95,33 @@ export function GamesPage() {
         <button type="button" className="btn primary" onClick={() => setDraft(emptyGame())}>+ بازی جدید</button>
       </div>
 
-      <div className="games-grid">
-        {visibleGames.map((game) => (
-          <div key={game.id} className="game-card">
-            <div className="game-cover">{game.cover || '🎮'}<span className={`status-pill ${game.status === 'online' ? 'online' : game.status === 'offline' ? 'offline' : 'free'}`}>{game.status === 'program' ? 'برنامه' : game.status === 'online' ? 'آنلاین' : 'آفلاین'}</span></div>
-            <b>{game.name}</b>
-            <div className="meta">دسته: {game.category} · نسخه {game.version}</div>
-            <div className="meta ltr">{game.path}</div>
-            <div className="meta ltr">{game.executable}</div>
-            <div className="meta">کاربران فعال: {game.activeUsers}</div>
-            <div className="meta">هدف: {game.targetSystem === 'vip' ? 'VIP' : game.targetSystem === 'standard' ? 'عادی' : 'همه'} · {game.active ? 'فعال' : 'مخفی'}</div>
-            <div className="game-card-actions">
-              <button className="btn sm" onClick={() => setDraft({ ...game })}>ویرایش</button>
-              <button className="btn sm" onClick={() => void applyGames([game.id])}>اعمال</button>
-              <button className="btn sm danger" onClick={() => void deleteGame(game)}>حذف</button>
-            </div>
+      <div className="games-master-detail">
+        <section className="games-list-panel">
+          <div className="games-list-head"><strong>فهرست بازی‌ها</strong><span>{visibleGames.length.toLocaleString('fa-IR')} مورد</span></div>
+          <div className="games-list">
+            {visibleGames.map(game => (
+              <button type="button" key={game.id} className={'game-list-row ' + (selectedGame?.id === game.id ? 'active' : '')} onClick={() => setSelectedGameId(game.id)}>
+                <span className="game-list-cover">{game.cover || '🎮'}</span>
+                <span><strong>{game.name}</strong><small>{game.category} · {game.activeUsers.toLocaleString('fa-IR')} کاربر فعال</small></span>
+                <em>{game.active ? 'فعال' : 'مخفی'}</em>
+              </button>
+            ))}
           </div>
-        ))}
+        </section>
+        <section className="game-detail-panel">
+          {selectedGame ? <>
+            <div className="game-detail-hero"><div className="game-detail-cover">{selectedGame.cover || '🎮'}</div><div><span className="game-detail-kicker">{selectedGame.category}</span><h2>{selectedGame.name}</h2><p>{selectedGame.version || 'بدون نسخه ثبت‌شده'} · {selectedGame.status === 'online' ? 'آنلاین' : selectedGame.status === 'offline' ? 'آفلاین' : 'برنامه'}</p></div></div>
+            <div className="game-detail-grid">
+              <div className="info-row"><span>مسیر نصب</span><strong className="ltr">{selectedGame.path || '—'}</strong></div>
+              <div className="info-row"><span>فایل اجرایی</span><strong className="ltr">{selectedGame.executable || '—'}</strong></div>
+              <div className="info-row"><span>پارامتر اجرا</span><strong className="ltr">{selectedGame.launchArgs || '—'}</strong></div>
+              <div className="info-row"><span>نوع سیستم</span><strong>{selectedGame.targetSystem === 'vip' ? 'VIP' : selectedGame.targetSystem === 'standard' ? 'عادی' : 'همه'}</strong></div>
+              <div className="info-row"><span>اعمال به</span><strong>{selectedGame.target === 'all' ? 'همه رایانه‌ها' : selectedGame.target === 'zone' ? selectedGame.targetZone : selectedGame.targetStations || 'ایستگاه‌های منتخب'}</strong></div>
+              <div className="info-row"><span>کاربران فعال</span><strong>{selectedGame.activeUsers.toLocaleString('fa-IR')}</strong></div>
+            </div>
+            <div className="game-detail-actions"><button className="btn primary" onClick={() => setDraft({ ...selectedGame })}>ویرایش تنظیمات</button><button className="btn" onClick={() => void applyGames([selectedGame.id])}>اعمال به کلاینت‌ها</button><button className="btn danger" onClick={() => void deleteGame(selectedGame)}>حذف بازی</button></div>
+          </> : <div className="games-empty">بازی‌ای برای نمایش انتخاب نشده است.</div>}
+        </section>
       </div>
 
       {draft && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setDraft(null)}><section className="operation-modal wide" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setDraft(null)}>×</button><h2>{games.some(game => game.id === draft.id) ? 'ویرایش بازی' : 'بازی جدید'}</h2>
