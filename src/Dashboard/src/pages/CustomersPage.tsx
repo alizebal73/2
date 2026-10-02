@@ -329,8 +329,8 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
         <div className="profile-section"><h4>پکیج و محدودیت روزانه</h4>
           <div className="package-box">
             <div className="title"><span>{selected.packageName ?? 'بدون پکیج فعال'}</span><span className={`vip-tag ${selected.vip}`}>{selected.vip}</span></div>
-            <div className="description">قیمت نمونه پکیج · مدت ۳۰ روز · سقف روزانه {selected.dailyHourCap ?? 0} ساعت · تخفیف بوفه ۱۰٪ · مازاد نیم‌بها</div>
-            <div className="info-row"><span>مصرف امروز / باقی‌مانده</span><strong>{selected.hoursUsedToday ?? 0} / {Math.max(0, (selected.dailyHourCap ?? 0) - (selected.hoursUsedToday ?? 0))} ساعت</strong></div>
+            <div className="description">سقف روزانه {Math.floor((selected.vipDailyMinutes ?? ((selected.dailyHourCap ?? 0) * 60)) / 60)} ساعت · کل زمان {money(selected.vipTotalMinutes ?? 0)} دقیقه · تخفیف {money(selected.vipDiscountPercent ?? 0)}٪ · انقضا {selected.vipExpiresAt ? new Date(selected.vipExpiresAt).toLocaleDateString('fa-IR') : 'نامشخص'}</div>
+            <div className="info-row"><span>مصرف امروز / باقی‌مانده</span><strong>{selected.hoursUsedToday ?? 0} / {Math.max(0, Math.floor((selected.vipDailyMinutes ?? ((selected.dailyHourCap ?? 0) * 60)) / 60) - (selected.hoursUsedToday ?? 0))} ساعت</strong></div>
             {(selected.hoursUsedToday ?? 0) >= (selected.dailyHourCap ?? Infinity) && <strong className="limit-warning">لیمیت خورده · زمان مازاد نیم‌بها محاسبه می‌شود</strong>}
           </div>
         </div>
