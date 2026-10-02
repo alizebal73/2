@@ -90,7 +90,9 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         foreach (var entityType in modelBuilder.Model.GetEntityTypes()
                      .Where(type => typeof(BaseEntity).IsAssignableFrom(type.ClrType)))
         {
-            entityType.FindProperty(nameof(BaseEntity.UpdatedAt))?.IsConcurrencyToken = true;
+            var updatedAt = entityType.FindProperty(nameof(BaseEntity.UpdatedAt));
+            if (updatedAt is not null)
+                updatedAt.IsConcurrencyToken = true;
         }
     }
 
