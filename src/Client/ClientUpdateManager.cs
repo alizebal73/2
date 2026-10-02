@@ -198,6 +198,24 @@ public sealed class ClientUpdateManager
 
         var next = new ClientUpdateState(
             current.ActiveVersion ?? version,
+            current.PreviousVersion,
+            version,
+            current.ActivatedAt);
+
+        await SaveStateAsync(next, cancellationToken);
+    }
+
+    public async Task CommitHealthyAsync(string version, CancellationToken cancellationToken)
+    {
+        ValidateVersion(version);
+        var current = await LoadStateAsync(cancellationToken)
+            ?? throw new InvalidOperationException("وضعیت Update برای تثبیت سلامت وجود ندارد.");
+
+        if (!string.Equals(current.ActiveVersion, version, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("نسخهٔ فعال با نسخهٔ سلامت همخوانی ندارد.");
+
+        var next = new ClientUpdateState(
+            current.ActiveVersion,
             null,
             version,
             current.ActivatedAt);
