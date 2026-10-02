@@ -79,7 +79,7 @@ export type CustomerRecord = {
   name: string;
   alias: string;
   mobile: string;
-  vip: 'gold' | 'silver' | 'none';
+  vip: 'gold' | 'silver' | 'bronze' | 'custom' | 'none';
   wallet: number;
   debt: number;
   giftCredit: number;
