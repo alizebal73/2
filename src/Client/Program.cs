@@ -298,8 +298,6 @@ static async Task SaveStateAsync(string path, AgentState state)
         throw;
     }
 }
-
-record AgentState(string DeviceId, string Name, string AgentToken, Guid? StationId);
 static async Task HandleAgentCommandAsync(
     HubConnection connection,
     AgentCommandEnvelope command,
@@ -330,3 +328,6 @@ static async Task HandleAgentCommandAsync(
         Console.WriteLine($"پاسخ فرمان Agent ارسال نشد: {exception.Message}");
     }
 }
+
+
+record AgentState(string DeviceId, string Name, string AgentToken, Guid? StationId);
