@@ -60,6 +60,7 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
         .Where(session => session.State == SessionState.Active)
         .Select(session => new
         {
+            session.Id,
             session.StationId,
             CustomerUsername = session.Customer.Username,
             CustomerFullName = session.Customer.FullName,
@@ -71,6 +72,24 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
             session.EndAt
         })
         .ToListAsync(cancellationToken);
+
+    var activeSessionIds = activeSessions.Select(item => item.Id).ToList();
+    var buffetTotals = new Dictionary<Guid, decimal>();
+    if (activeSessionIds.Count > 0)
+    {
+        var buffetRows = await database.InvoiceItems
+            .AsNoTracking()
+            .Where(item => item.Invoice.SessionId.HasValue
+                && activeSessionIds.Contains(item.Invoice.SessionId.Value)
+                && item.Invoice.Status == InvoiceStatus.Draft
+                && item.ProductId.HasValue)
+            .Select(item => new { SessionId = item.Invoice.SessionId!.Value, item.Amount })
+            .ToListAsync(cancellationToken);
+
+        buffetTotals = buffetRows
+            .GroupBy(item => item.SessionId)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
+    }
 
     var activeByStation = activeSessions
         .GroupBy(item => item.StationId)
@@ -96,7 +115,9 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
             active?.CustomerDebt ?? 0m,
             active?.CustomerNote,
             remaining,
-            null);
+            null,
+            active?.Id,
+            active is not null && buffetTotals.TryGetValue(active.Id, out var dashboardBuffetTotal) ? dashboardBuffetTotal : 0m);
     }).ToList();
 
     return Results.Ok(new DashboardSnapshotDto(dtos.Count, dtos, now));
@@ -825,7 +846,44 @@ app.MapPost("/api/buffet/sales", async (
     if (request.Items is null || request.Items.Count == 0)
         return Results.BadRequest(new { code = "empty_sale", message = "سبد فروش خالی است." });
 
+    var target = request.Target?.Trim().ToLowerInvariant();
+    if (target is not ("session" or "standalone"))
+        return Results.BadRequest(new { code = "invalid_sale_target", message = "نوع مقصد فروش معتبر نیست." });
+
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    Session? session = null;
+    Invoice? invoice = null;
+
+    if (target == "session")
+    {
+        if (!request.SessionId.HasValue || request.SessionId.Value == Guid.Empty)
+            return Results.BadRequest(new { code = "missing_session", message = "برای فروش جلسه، جلسه فعال را انتخاب کنید." });
+
+        session = await database.Sessions
+            .FirstOrDefaultAsync(item => item.Id == request.SessionId.Value && item.State == SessionState.Active, cancellationToken);
+
+        if (session is null)
+            return Results.Conflict(new { code = "session_not_active", message = "جلسه انتخاب‌شده فعال نیست." });
+
+        invoice = await database.Invoices
+            .Include(item => item.Items)
+            .FirstOrDefaultAsync(item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft, cancellationToken);
+
+        if (invoice is null)
+        {
+            invoice = new Invoice
+            {
+                CustomerId = session.CustomerId,
+                SessionId = session.Id,
+                AppUserId = request.AppUserId,
+                TotalAmount = 0m,
+                Status = InvoiceStatus.Draft,
+                IssuedAt = DateTimeOffset.UtcNow
+            };
+            database.Invoices.Add(invoice);
+        }
+    }
+
     var ids = request.Items.Select(item => item.ProductId).Distinct().ToList();
     var products = await database.Products.Where(item => ids.Contains(item.Id) && item.IsActive).ToListAsync(cancellationToken);
     var byId = products.ToDictionary(item => item.Id);
@@ -851,21 +909,40 @@ app.MapPost("/api/buffet/sales", async (
             Direction = TransactionDirection.Out,
             Kind = "Sale",
             AppUserId = request.AppUserId,
-            Notes = request.Target == "session" ? "فروش به جلسه" : "فروش مستقل"
+            Notes = target == "session" ? "فروش به جلسه" : "فروش مستقل"
         });
+
+        if (invoice is not null)
+        {
+            database.InvoiceItems.Add(new InvoiceItem
+            {
+                Invoice = invoice,
+                ProductId = product.Id,
+                Description = product.Name,
+                Quantity = item.Quantity,
+                UnitPrice = product.UnitPrice,
+                Amount = product.UnitPrice * item.Quantity
+            });
+        }
     }
+
+    if (invoice is not null)
+        invoice.TotalAmount += total;
 
     database.AuditLogs.Add(new AuditLog
     {
         Action = "BuffetSale",
-        EntityName = "Buffet",
-        EntityId = Guid.NewGuid().ToString(),
-        Details = request.Target + " · " + total.ToString("0.##") + " تومان",
+        EntityName = target == "session" ? "Invoice" : "Buffet",
+        EntityId = invoice?.Id.ToString() ?? Guid.NewGuid().ToString(),
+        Details = target + " · " + total.ToString("0.##") + " تومان",
         AppUserId = request.AppUserId
     });
+
     await database.SaveChangesAsync(cancellationToken);
     await transaction.CommitAsync(cancellationToken);
-    return Results.Ok(new { total, target = request.Target });
+
+    var buffetTotal = invoice?.Items.Where(item => item.ProductId.HasValue).Sum(item => item.Amount) ?? 0m;
+    return Results.Ok(new { total, target, sessionId = session?.Id, invoiceId = invoice?.Id, buffetTotal });
 })
 .WithName("CreateBuffetSale");
 
@@ -1895,6 +1972,58 @@ app.MapMethods("/api/sessions/{sessionId:guid}/details", new[] { "PATCH" }, asyn
 })
 .WithName("UpdateSessionDetails");
 
+app.MapGet("/api/sessions/active", async (
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var sessions = await database.Sessions
+        .AsNoTracking()
+        .Where(session => session.State == SessionState.Active)
+        .OrderBy(session => session.StartAt)
+        .Select(session => new
+        {
+            id = session.Id,
+            stationName = session.Station.Name,
+            customerId = session.CustomerId,
+            customerName = session.Customer.FullName,
+            customerCode = session.Customer.Code,
+            username = session.Customer.Username,
+            startedAt = session.StartAt
+        })
+        .ToListAsync(cancellationToken);
+
+    var sessionIds = sessions.Select(item => item.id).ToList();
+    var buffetRows = sessionIds.Count == 0
+        ? new List<(Guid SessionId, decimal Amount)>()
+        : (await database.InvoiceItems
+            .AsNoTracking()
+            .Where(item => item.Invoice.SessionId.HasValue
+                && sessionIds.Contains(item.Invoice.SessionId.Value)
+                && item.Invoice.Status == InvoiceStatus.Draft
+                && item.ProductId.HasValue)
+            .Select(item => new { SessionId = item.Invoice.SessionId!.Value, item.Amount })
+            .ToListAsync(cancellationToken))
+            .Select(item => (item.SessionId, item.Amount))
+            .ToList();
+
+    var buffetTotals = buffetRows
+        .GroupBy(item => item.SessionId)
+        .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
+
+    return Results.Ok(sessions.Select(session => new
+    {
+        session.id,
+        session.stationName,
+        session.customerId,
+        session.customerName,
+        session.customerCode,
+        session.username,
+        session.startedAt,
+        buffetTotal = buffetTotals.TryGetValue(session.id, out var total) ? total : 0m
+    }));
+})
+.WithName("GetActiveSessions");
+
 app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
     Guid sessionId,
     SessionTransferRequest request,
@@ -2155,7 +2284,7 @@ public sealed record CreateBuffetProductRequest(string Name, string Category, de
 public sealed record UpdateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int MinimumStock = 0, string? Unit = null, bool IsActive = true, Guid? AppUserId = null);
 public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment");
 public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
-public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId);
+public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId, Guid? SessionId = null);
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
 public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
 public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);
