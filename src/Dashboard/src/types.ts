@@ -403,3 +403,45 @@ export type BuffetProfitReport = {
     grossProfit: number;
   }>;
 };
+
+
+export type PayrollUserRecord = {
+  userId: string;
+  fullName: string;
+  payType: 'hourly' | 'monthly' | string;
+  phone?: string;
+  hourlyRate: number;
+  monthlySalary: number;
+  overtimeRate: number;
+  employmentStartDate?: string | null;
+  workSchedule?: string | null;
+  notes?: string | null;
+  isActive: boolean;
+  employeePayable: number;
+  ownerReceivable: number;
+  accruedThisMonth: number;
+  paidThisMonth: number;
+  bonusTotal: number;
+  deductionTotal: number;
+  damageTotal: number;
+  advanceTotal: number;
+  lastPaymentAt?: string | null;
+};
+
+export type PayrollLedgerEntry = {
+  id: string;
+  userId: string;
+  userName: string;
+  kind: string;
+  amount: number;
+  employeePayableDelta: number;
+  ownerReceivableDelta: number;
+  reason: string;
+  status: string;
+  createdByUserId: string;
+  createdAt: string;
+  approvedByUserId?: string | null;
+  approvedAt?: string | null;
+  paymentMethod?: string | null;
+  receiptNumber?: string | null;
+};
