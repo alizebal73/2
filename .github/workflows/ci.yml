@@ -3,6 +3,7 @@ name: GameNet Manager CI
 on:
   push:
     branches: [main]
+  pull_request:
 
 concurrency:
   group: gamenet-ci-main
@@ -77,6 +78,46 @@ jobs:
               throw 'Server did not reach /api/health on port 5080.'
             }
             Write-Host 'Server startup, EF migrations and /api/health passed.'
+
+            $customers = Invoke-RestMethod -Uri 'http://127.0.0.1:5080/api/customers' -Method Get
+            if (@($customers).Count -lt 1) { throw 'Customer API returned no seeded customers.' }
+
+            $packages = Invoke-RestMethod -Uri 'http://127.0.0.1:5080/api/vip-packages' -Method Get
+            if (@($packages).Count -lt 1) { throw 'VIP package API returned no active packages.' }
+
+            $smokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            $newCustomer = Invoke-RestMethod -Uri 'http://127.0.0.1:5080/api/customers' -Method Post -ContentType 'application/json' -Body (@{
+              fullName = "Stage 5 Smoke $smokeId"
+              username = "smoke_$smokeId"
+              vipTier = 'none'
+              concurrentLoginLimit = 2
+            } | ConvertTo-Json)
+
+            $customerId = $newCustomer.id
+            if (-not $customerId) { throw 'Customer create smoke did not return an id.' }
+
+            $updatedCustomer = Invoke-RestMethod -Uri ("http://127.0.0.1:5080/api/customers/$customerId") -Method Put -ContentType 'application/json' -Body (@{
+              fullName = "Stage 5 Smoke Updated $smokeId"
+              code = $newCustomer.code
+              username = $newCustomer.username
+              vipTier = 'none'
+              concurrentLoginLimit = 3
+            } | ConvertTo-Json)
+
+            if ($updatedCustomer.fullName -ne "Stage 5 Smoke Updated $smokeId") {
+              throw 'Customer update smoke returned the wrong name.'
+            }
+
+            $packageId = @($packages)[0].id
+            $assignment = Invoke-RestMethod -Uri ("http://127.0.0.1:5080/api/customers/$customerId/vip-package") -Method Post -ContentType 'application/json' -Body (@{
+              vipPackageId = $packageId
+            } | ConvertTo-Json)
+
+            if ($assignment.packageId -ne $packageId -or [int]$assignment.dailyMinutes -le 0 -or [int]$assignment.totalMinutes -le 0) {
+              throw 'VIP package assignment smoke returned incomplete data.'
+            }
+
+            Write-Host 'Stage 5 Customer CRUD + VIP package API smoke passed.'
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
           }
