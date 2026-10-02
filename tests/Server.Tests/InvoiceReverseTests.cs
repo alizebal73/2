@@ -92,5 +92,100 @@ public sealed class InvoiceReverseTests : IDisposable
         Assert.Empty(await db.WalletTransactions.ToListAsync());
     }
 
+    [Fact]
+    public async Task ReverseRestoresBuffetStockAndFreeTime()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var stationType = new StationType { Name = "Reverse-PC" };
+        var tariff = new Tariff { Name = "Reverse-Tariff", HourlyRate = 95000m, DailyRate = 550000m };
+        var customer = new Customer { FullName = "Reverse Buffet Test", FreeTimeMinutes = 0 };
+        var station = new Station
+        {
+            Name = "PC-REVERSE-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 95000m,
+            StationType = stationType,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+            State = SessionState.Completed
+        };
+        var product = new Product
+        {
+            Name = "نوشابه",
+            Category = "نوشیدنی",
+            UnitPrice = 30000m,
+            CostPrice = 12000m,
+            StockQuantity = 0
+        };
+        var invoice = new Invoice
+        {
+            Customer = customer,
+            Session = session,
+            TotalAmount = 60000m,
+            Status = InvoiceStatus.Paid,
+            Items =
+            {
+                new InvoiceItem
+                {
+                    Product = product,
+                    Description = "نوشابه",
+                    Quantity = 2,
+                    UnitPrice = 30000m,
+                    Amount = 60000m
+                }
+            }
+        };
+
+        db.AddRange(stationType, tariff, customer, station, session, product, invoice);
+        await db.SaveChangesAsync();
+
+        db.BenefitTransactions.Add(new BenefitTransaction
+        {
+            CustomerId = customer.Id,
+            Type = BenefitTransactionType.FreeTimeDebit,
+            Minutes = 30,
+            MoneyAmount = 0m,
+            ReferenceInvoiceId = invoice.Id,
+            Description = "مصرف اعتبار زمانی آزمایشی"
+        });
+        db.InventoryTransactions.Add(new InventoryTransaction
+        {
+            ProductId = product.Id,
+            Quantity = 2,
+            Direction = TransactionDirection.Out,
+            Kind = "Sale",
+            Notes = "فروش آزمایشی"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new InvoiceReverseService(db);
+        var result = await service.ReverseAsync(invoice.Id, new InvoiceReverseRequest(null, "برگشت بوفه"), CancellationToken.None);
+
+        var savedProduct = await db.Products.SingleAsync(item => item.Id == product.Id);
+        var savedCustomer = await db.Customers.SingleAsync(item => item.Id == customer.Id);
+        var returnMovement = await db.InventoryTransactions.SingleAsync(item => item.ProductId == product.Id && item.Kind == "Return");
+
+        Assert.Equal(2, result.InventoryRestored);
+        Assert.Equal(30, result.FreeTimeRestored);
+        Assert.Equal(2, savedProduct.StockQuantity);
+        Assert.Equal(30, savedCustomer.FreeTimeMinutes);
+        Assert.Equal(TransactionDirection.In, returnMovement.Direction);
+    }
+
     public void Dispose() => _connection.Dispose();
 }
