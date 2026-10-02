@@ -63,6 +63,8 @@ jobs:
           $env:Agent__HeartbeatIntervalSeconds = '3'
           $env:Agent__OfflineAfterSeconds = '6'
           $env:Agent__CommandTimeoutSeconds = '5'
+          $env:Agent__UpdateCommandTimeoutSeconds = '120'
+          $env:Agent__RollbackCommandTimeoutSeconds = '60'
 
           $releaseRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage10-release'
           $releaseClient = Join-Path $releaseRoot 'client'
@@ -203,7 +205,7 @@ jobs:
               $updateCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body $updatePayload
               $updateCompleted = $false
               $updateStatus = $null
-              for ($i = 0; $i -lt 20; $i++) {
+              for ($i = 0; $i -lt 240; $i++) {
                 $updateStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($updateCommand.commandId)" -Method Get -WebSession $adminSession
                 if ($updateStatus.status -in @('Succeeded','Failed')) { $updateCompleted = $true; break }
                 Start-Sleep -Milliseconds 500
@@ -248,7 +250,7 @@ jobs:
               $rollbackCommand = $rollbackCommand | ConvertFrom-Json
               $rollbackCompleted = $false
               $rollbackStatus = $null
-              for ($i = 0; $i -lt 20; $i++) {
+              for ($i = 0; $i -lt 120; $i++) {
                 $rollbackStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($rollbackCommand.commandId)" -Method Get -WebSession $adminSession
                 if ($rollbackStatus.status -in @('Succeeded','Failed')) { $rollbackCompleted = $true; break }
                 Start-Sleep -Milliseconds 500
