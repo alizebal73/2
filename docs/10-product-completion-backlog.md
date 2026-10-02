@@ -693,3 +693,29 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - چرخهٔ انتشار آینده: Build → Test → Smoke/E2E → Release Manifest → Canary → Health Check → Rollback/Publish.
 - Clientهای قدیمی نباید بی‌دلیل با Release ناسازگار از کار بیفتند؛ Minimum/Recommended Client Version برای کنترل سازگاری است.
 - کانال‌های stable و canary در معماری حفظ می‌شوند و Canary عملیاتی بعد از Agent واقعی فعال می‌شود.
+
+## Audit Checkpoint — Stages 1–9 — 2026-10-02
+
+- ✅ Stage 1 — Foundation
+- ✅ Stage 2 — Prototype & Behavior Transfer
+- ✅ Stage 3 — Operational Completion
+- ✅ Stage 4 — Finance & Session Core
+- ✅ Stage 5 — Customer & VIP Domain
+- ✅ Stage 6 — Buffet & Inventory Domain
+- ✅ Stage 7 — Users & Permissions
+- ✅ Stage 8 — PC Agent Foundation
+- ✅ Stage 9 — Real Client Commands & Kiosk: Lock/Unlock + Agent-driven Session Start/End verified in CI.
+
+### Stage 9 verification
+- Lock/Unlock مسیر واقعی Client ↔ SignalR ↔ Server ↔ Dashboard با Run #690 سبز شد.
+- Agent Session Start/End همراه Customer Auth و settlement موجود با Run #697 سبز شد.
+- CI نهایی Stage 9 branch: Build/Test + Migration/Server Smoke + Dashboard Lint/Build + Browser Interaction Smoke همگی سبز.
+- Stage 9 software completion قبل از ورود به Stage 10 ثبت شد.
+- تست فیزیکی روی 2–3 PC واقعی و rollout 40+ هنوز Gate استقرار است و تا انجام آن، انتشار گسترده انجام نمی‌شود.
+
+### Cross-stage debt retained
+- `mockService.getTariffs()` در برخی مسیرهای Dashboard هنوز باقی است؛ Tariff واقعی باید در مرحلهٔ مربوط خودش جایگزین شود.
+- Accounts/Games/Tariffs/ClientShell Mock تا آماده‌شدن dependency واقعی فعال نشوند.
+- Installer/Updater/Rollback همچنان وارد Stage 10 و مراحل انتشار بعدی می‌شوند و فعلاً اجرا/انتشار نمی‌شوند.
+
+**قانون ادامه:** Stage 10 تا وقتی Stage 1–9 از نظر نرم‌افزاری، مستندات و Gateهای واقعی تثبیت نشده‌اند شروع نمی‌شود.
