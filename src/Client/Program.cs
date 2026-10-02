@@ -11,7 +11,11 @@ var serverUrl = Environment.GetEnvironmentVariable("GAMENET_SERVER_URL") ?? defa
 var registrationToken = Environment.GetEnvironmentVariable("GAMENET_AGENT_REGISTRATION_TOKEN");
 var stationText = Environment.GetEnvironmentVariable("GAMENET_STATION_ID");
 var configuredName = Environment.GetEnvironmentVariable("GAMENET_AGENT_NAME");
+var configuredDeviceId = Environment.GetEnvironmentVariable("GAMENET_AGENT_DEVICE_ID");
 var dataDirectory = Environment.GetEnvironmentVariable("GAMENET_AGENT_DATA_DIR");
+var testSessionFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_SESSION_FLOW"), "1", StringComparison.Ordinal);
+var testSessionCustomerId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_CUSTOMER_ID");
+var testSessionLoginId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_LOGIN_ID");
 
 if (string.IsNullOrWhiteSpace(dataDirectory))
     dataDirectory = Path.Combine(
@@ -22,6 +26,7 @@ if (string.IsNullOrWhiteSpace(dataDirectory))
 Directory.CreateDirectory(dataDirectory);
 var statePath = Path.Combine(dataDirectory, "agent-state.json");
 var state = await LoadStateAsync(statePath);
+var testSessionFlowCompleted = false;
 
 var name = string.IsNullOrWhiteSpace(configuredName)
     ? Environment.MachineName
@@ -53,7 +58,7 @@ using var httpClient = new HttpClient
 try
 {
     if (string.IsNullOrWhiteSpace(state.DeviceId))
-        state = state with { DeviceId = Guid.NewGuid().ToString("N") };
+        state = state with { DeviceId = string.IsNullOrWhiteSpace(configuredDeviceId) ? Guid.NewGuid().ToString("N") : configuredDeviceId.Trim() };
 
     state = state with
     {
@@ -100,6 +105,19 @@ try
 
             Console.WriteLine(
                 $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}");
+
+            if (!testSessionFlowCompleted
+                && testSessionFlow
+                && Guid.TryParse(testSessionCustomerId, out var testCustomerId)
+                && Guid.TryParse(testSessionLoginId, out var testLoginId))
+            {
+                testSessionFlowCompleted = true;
+                _ = RunTestSessionFlowAsync(
+                    connection,
+                    testCustomerId,
+                    testLoginId,
+                    shutdown.Token);
+            }
         });
 
         connection.Reconnecting += error =>
@@ -230,6 +248,44 @@ static async Task<AgentState> RegisterAgentAsync(
         ?? throw new InvalidOperationException("پاسخ ثبت Agent از سرور نامعتبر بود.");
 
     return state with { AgentToken = registration.AgentToken };
+}
+
+static async Task RunTestSessionFlowAsync(
+    HubConnection connection,
+    Guid customerId,
+    Guid customerLoginId,
+    CancellationToken cancellationToken)
+{
+    try
+    {
+        var started = await connection.InvokeAsync<AgentSessionStartResponse>(
+            "StartSession",
+            new AgentSessionStartRequest(
+                customerId,
+                customerLoginId,
+                null,
+                null,
+                1),
+            cancellationToken);
+
+        Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
+
+        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+
+        var ended = await connection.InvokeAsync<AgentSessionEndResponse>(
+            "EndSession",
+            new AgentSessionEndRequest(
+                started.SessionId,
+                customerLoginId),
+            cancellationToken);
+
+        Console.WriteLine($"Agent session end موفق؛ SessionId={ended.SessionId}; EndAt={ended.EndAt:O}.");
+    }
+    catch (Exception exception) when (
+        exception is HubException or HttpRequestException or InvalidOperationException)
+    {
+        Console.WriteLine($"چرخهٔ آزمایشی Session Agent ناموفق بود: {exception.Message}");
+    }
 }
 
 static async Task<int?> SendHeartbeatAsync(
