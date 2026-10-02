@@ -8,6 +8,7 @@ public sealed class AgentLockController : IDisposable
     private readonly object sync = new();
     private GameNetLockForm? form;
     private Thread? uiThread;
+    private TaskCompletionSource<bool>? lockStartCompletion;
     private bool desiredLocked;
     private bool disposed;
 
@@ -33,19 +34,22 @@ public sealed class AgentLockController : IDisposable
             if (form is not null && !form.IsDisposed)
                 return Task.CompletedTask;
 
-            if (uiThread is not null)
-                return Task.CompletedTask;
+            if (lockStartCompletion is not null)
+                return lockStartCompletion.Task;
 
-            uiThread = new Thread(RunLockScreen)
+            lockStartCompletion = new TaskCompletionSource<bool>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+
+            uiThread = new Thread(() => RunLockScreen(lockStartCompletion))
             {
                 IsBackground = true,
                 Name = "GameNet-LockScreen"
             };
             uiThread.SetApartmentState(ApartmentState.STA);
             uiThread.Start();
-        }
 
-        return Task.CompletedTask;
+            return lockStartCompletion.Task;
+        }
     }
 
     public Task UnlockAsync()
@@ -73,7 +77,7 @@ public sealed class AgentLockController : IDisposable
         return Task.CompletedTask;
     }
 
-    private void RunLockScreen()
+    private void RunLockScreen(TaskCompletionSource<bool>? startupCompletion)
     {
         GameNetLockForm? created = null;
         try
@@ -90,20 +94,24 @@ public sealed class AgentLockController : IDisposable
                 form = created;
             }
 
+            startupCompletion?.TrySetResult(true);
+
             if (!IsLocked)
                 created.AllowClose();
             else
                 Application.Run(created);
         }
-        catch
+        catch (Exception exception)
         {
-            // Never terminate the Agent because the local lock UI could not start.
-            // The Server-side lock state remains authoritative.
+            startupCompletion?.TrySetException(exception);
         }
         finally
         {
             lock (sync)
             {
+                if (ReferenceEquals(lockStartCompletion, startupCompletion))
+                    lockStartCompletion = null;
+
                 form = null;
                 uiThread = null;
             }
