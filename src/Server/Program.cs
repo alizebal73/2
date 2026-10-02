@@ -47,6 +47,21 @@ app.MapGet("/api/server-info", (IWebHostEnvironment environment) =>
     Results.Ok(new ServerInfoDto("GameNet Manager", environment.EnvironmentName, DateTimeOffset.UtcNow)))
     .WithName("GetServerInfo");
 
+app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration configuration) =>
+{
+    var schemaVersion = database.Database.GetAppliedMigrations().LastOrDefault() ?? "unknown";
+    return Results.Ok(new
+    {
+        productVersion = configuration["App:ProductVersion"] ?? "0.6.0",
+        schemaVersion,
+        apiContractVersion = configuration["App:ApiContractVersion"] ?? "1",
+        minimumClientVersion = configuration["App:MinimumClientVersion"] ?? "0.1.0",
+        recommendedClientVersion = configuration["App:RecommendedClientVersion"] ?? "0.1.0",
+        updateChannel = configuration["App:UpdateChannel"] ?? "stable"
+    });
+})
+.WithName("GetReleaseManifest");
+
 app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken cancellationToken) =>
 {
     var stations = await database.Stations
@@ -675,6 +690,8 @@ app.MapPost("/api/buffet/products", async (
         {
             Product = product,
             Quantity = request.InitialStock,
+            UnitPrice = product.UnitPrice,
+            UnitCost = product.CostPrice,
             Direction = TransactionDirection.In,
             Kind = "Initial",
             AppUserId = request.AppUserId,
@@ -739,11 +756,29 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
     if (direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
         return Results.Conflict(new { code = "insufficient_stock", message = "موجودی برای این خروج کافی نیست." });
 
+    var unitCost = request.UnitCost ?? product.CostPrice;
+    if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase)
+        && (!request.UnitCost.HasValue || request.UnitCost.Value <= 0))
+        return Results.BadRequest(new { code = "missing_purchase_cost", message = "بهای خرید هر واحد را وارد کنید." });
+
+    var oldStock = product.StockQuantity;
+    var oldCost = product.CostPrice;
     product.StockQuantity += direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
+
+    if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase))
+    {
+        var newStock = product.StockQuantity;
+        product.CostPrice = newStock <= 0
+            ? unitCost
+            : ((oldStock * oldCost) + (request.Quantity * unitCost)) / newStock;
+    }
+
     database.InventoryTransactions.Add(new InventoryTransaction
     {
         ProductId = product.Id,
         Quantity = request.Quantity,
+        UnitPrice = product.UnitPrice,
+        UnitCost = unitCost,
         Direction = direction,
         Kind = kind,
         AppUserId = request.AppUserId,
@@ -823,6 +858,9 @@ app.MapGet("/api/buffet/inventory-transactions", async (
             productId = item.ProductId,
             productName = item.Product.Name,
             quantity = item.Quantity,
+            unitPrice = item.UnitPrice,
+            unitCost = item.UnitCost,
+            referenceInvoiceId = item.ReferenceInvoiceId,
             direction = item.Direction.ToString(),
             kind = item.Kind,
             notes = item.Notes,
@@ -836,6 +874,53 @@ app.MapGet("/api/buffet/inventory-transactions", async (
         .ToList());
 })
 .WithName("GetInventoryTransactions");
+
+
+app.MapGet("/api/buffet/reports/profit", async (
+    DateTimeOffset? from, DateTimeOffset? to, GameNetDbContext database, CancellationToken cancellationToken) =>
+{
+    var start = from ?? DateTimeOffset.UtcNow.Date.AddDays(-30);
+    var end = to ?? DateTimeOffset.UtcNow;
+    var rows = await database.InventoryTransactions.AsNoTracking()
+        .Where(item => item.CreatedAt >= start && item.CreatedAt <= end &&
+            (item.Kind == "Sale" || item.Kind == "Purchase" || item.Kind == "Waste" || item.Kind == "Return"))
+        .Select(item => new { item.ProductId, productName = item.Product.Name, item.Quantity, item.UnitPrice, item.UnitCost, item.Direction, item.Kind, item.ReferenceInvoiceId })
+        .ToListAsync(cancellationToken);
+    var products = rows.GroupBy(item => new { item.ProductId, item.productName }).Select(group =>
+    {
+        var sales = group.Where(item => item.Kind == "Sale");
+        var returns = group.Where(item => item.Kind == "Return" && item.ReferenceInvoiceId.HasValue);
+        var purchases = group.Where(item => item.Kind == "Purchase" && item.Direction == TransactionDirection.In);
+        var waste = group.Where(item => item.Kind == "Waste" && item.Direction == TransactionDirection.Out);
+        var salesRevenue = sales.Sum(item => item.Quantity * item.UnitPrice);
+        var salesCost = sales.Sum(item => item.Quantity * item.UnitCost);
+        var returnRevenue = returns.Sum(item => item.Quantity * item.UnitPrice);
+        var returnCost = returns.Sum(item => item.Quantity * item.UnitCost);
+        return new {
+            productId = group.Key.ProductId, productName = group.Key.productName,
+            salesQuantity = sales.Sum(item => item.Quantity), salesRevenue, salesCost,
+            returnQuantity = returns.Sum(item => item.Quantity), returnRevenue, returnCost,
+            purchaseQuantity = purchases.Sum(item => item.Quantity),
+            purchaseCost = purchases.Sum(item => item.Quantity * item.UnitCost),
+            wasteQuantity = waste.Sum(item => item.Quantity),
+            wasteCost = waste.Sum(item => item.Quantity * item.UnitCost),
+            grossProfit = salesRevenue - salesCost - returnRevenue + returnCost
+        };
+    }).OrderByDescending(item => item.grossProfit).ToList();
+    return Results.Ok(new {
+        from = start, to = end,
+        totals = new {
+            salesRevenue = products.Sum(item => item.salesRevenue),
+            salesCost = products.Sum(item => item.salesCost),
+            returnRevenue = products.Sum(item => item.returnRevenue),
+            returnCost = products.Sum(item => item.returnCost),
+            purchaseCost = products.Sum(item => item.purchaseCost),
+            wasteCost = products.Sum(item => item.wasteCost),
+            grossProfit = products.Sum(item => item.grossProfit)
+        }, products
+    });
+})
+.WithName("GetBuffetProfitReport");
 
 
 app.MapPost("/api/buffet/sales", async (
@@ -906,6 +991,9 @@ app.MapPost("/api/buffet/sales", async (
         {
             ProductId = product.Id,
             Quantity = item.Quantity,
+            UnitPrice = product.UnitPrice,
+            UnitCost = product.CostPrice,
+            ReferenceInvoiceId = invoice?.Id,
             Direction = TransactionDirection.Out,
             Kind = "Sale",
             AppUserId = request.AppUserId,
@@ -2285,7 +2373,7 @@ public sealed record CustomerDebtRequest(decimal Amount, string? Description, Gu
 public sealed record CustomerHistoryItemDto(Guid Id, string Type, string Description, decimal Amount, DateTimeOffset CreatedAt, Guid? ReferenceId);
 public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, int MinimumStock = 0, string? Unit = null, Guid? AppUserId = null);
 public sealed record UpdateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int MinimumStock = 0, string? Unit = null, bool IsActive = true, Guid? AppUserId = null);
-public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment");
+public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment", decimal? UnitCost = null);
 public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
 public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId, Guid? SessionId = null);
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
