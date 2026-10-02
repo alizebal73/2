@@ -28,6 +28,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<InvoiceReversal> InvoiceReversals => Set<InvoiceReversal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +53,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureInvoiceItem(modelBuilder);
         ConfigureWalletTransaction(modelBuilder);
         ConfigureBenefitTransaction(modelBuilder);
+        ConfigureInvoiceReversal(modelBuilder);
         ConfigureInventoryTransaction(modelBuilder);
         ConfigureShift(modelBuilder);
         ConfigureExpense(modelBuilder);
@@ -281,6 +283,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         invoice.HasKey(item => item.Id);
         invoice.Property(item => item.TotalAmount).HasColumnType("decimal(18,2)");
         invoice.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
+        invoice.HasIndex(item => item.SessionId).IsUnique();
         invoice.HasOne(item => item.Customer)
             .WithMany(item => item.Invoices)
             .HasForeignKey(item => item.CustomerId)
@@ -331,6 +334,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany(item => item.WalletTransactions)
             .HasForeignKey(item => item.CustomerId)
             .OnDelete(DeleteBehavior.Cascade);
+        transaction.HasIndex(item => item.ReferenceInvoiceId);
     }
 
     private static void ConfigureBenefitTransaction(ModelBuilder modelBuilder)
@@ -344,6 +348,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany()
             .HasForeignKey(item => item.CustomerId)
             .OnDelete(DeleteBehavior.Cascade);
+        transaction.HasIndex(item => item.ReferenceInvoiceId);
     }
 
     private static void ConfigureInventoryTransaction(ModelBuilder modelBuilder)
