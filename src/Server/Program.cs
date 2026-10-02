@@ -180,6 +180,7 @@ app.MapGet("/api/agent/devices", async (
         device.IsActive
             && device.LastSeenAt.HasValue
             && now - device.LastSeenAt.Value <= TimeSpan.FromSeconds(offlineAfter),
+        device.IsLocked,
         device.LastSeenAt,
         device.ConnectedAt,
         device.AgentVersion,
