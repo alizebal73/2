@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
 import { mockService } from '../services/mockService';
-import { getServerCustomers } from '../services/customerService';
+import { createServerCustomerDebt, getServerCustomers } from '../services/customerService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { isServerGuid, reverseServerInvoice, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
@@ -13,7 +13,7 @@ import { ApprovalDialog } from '../components/ApprovalDialog';
 import { ReverseDialog } from '../components/ReverseDialog';
 
 const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه‌ها (۴۰)', console: 'کنسول‌ها (۱۶)', table: 'میزها (۵)' };
-const stateLabels: Record<StationState, string> = { free: 'آزاد', busy: 'در حال بازی', paused: 'متوقف', reserved: 'رزرو', off: 'خارج از سرویس' };
+const stateLabels: Record<StationState, string> = { free: 'آماده استفاده', busy: 'در حال استفاده', paused: 'متوقف', reserved: 'رزرو', off: 'خاموش / خارج از سرویس' };
 const emptyStations: StationDto[] = [];
 type ViewMode = 'v-card' | 'v-compact' | 'v-list';
 type PcGroupBy = 'state' | 'vip' | 'network' | 'remaining';
@@ -111,7 +111,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['شارژ مستقیم · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
         setMessage('شارژ مستقیم ' + money(value) + ' تومان ثبت شد');
       } else if (action === 'F6') {
-        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['ثبت بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+        await createServerCustomerDebt(customer.id, value, 'ثبت بدهی توسط اپراتور');
+        const refreshed = await getServerCustomers();
+        setCustomers(refreshed);
         setMessage('بدهی ' + money(value) + ' تومان ثبت شد');
       } else if (action === 'F7') {
         const entry = await recordWalletTransaction(customer.id, { amount: value, type: 'debit', description: 'کسر مستقیم توسط اپراتور' });
@@ -1086,7 +1088,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
 
   function renderStation(station: StationDto) {
     const minutes = duration(station);
-    const elapsedCost = station.state === 'busy' ? (station.sessionRate ?? station.ratePerHour) * minutes / 60 : 0;
     const style = { '--zoom': zoom / 100 } as CSSProperties;
     const selected = selectedStationIds.includes(station.id);
     return <article
@@ -1154,7 +1155,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           : station.remainingMinutes;
         return <div className="station-customer-summary">
           <div className="station-customer-line"><strong>{station.customerCode || 'مهمان'}</strong><span>{customer?.name ?? 'بدون مشتری ثبت‌شده'}</span></div>
-          {customer && <div className="station-customer-line secondary"><span>بدهی: {money(customer.debt)} تومان</span><span>{customer.alias || customer.transactionHistory?.[0] || '—'}</span></div>}
+          {customer && <div className="station-customer-line secondary"><span>بدهی: {money(customer.debt)} تومان</span><span>{(customer.notes || customer.alias || '—').split(/s+/).slice(0, 3).join(' ')}</span></div>}
           {station.state === 'busy' && <div className="station-remaining">{remaining == null ? 'جلسه باز' : remaining <= 0 ? 'زمان تمام‌شده' : 'باقی‌مانده: ' + money(remaining) + ' دقیقه'}</div>}
         </div>;
       })()}
