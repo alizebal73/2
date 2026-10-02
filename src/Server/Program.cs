@@ -332,6 +332,252 @@ app.MapPut("/api/users/{userId:guid}/permissions", async (
 })
 .WithName("SetAppUserPermissions");
 
+app.MapGet("/api/payroll/users", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "payroll.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var users = await database.AppUsers.AsNoTracking()
+        .OrderBy(item => item.FullName)
+        .Select(item => new { item.Id, item.FullName, item.IsActive })
+        .ToListAsync(cancellationToken);
+
+    var profiles = await database.EmployeeProfiles.AsNoTracking().ToListAsync(cancellationToken);
+    var entries = await database.PayrollLedgerEntries.AsNoTracking()
+        .Where(item => item.Status == ApprovalStatus.Approved)
+        .Include(item => item.EmployeeProfile)
+        .ToListAsync(cancellationToken);
+
+    var now = DateTimeOffset.UtcNow;
+    var monthStart = new DateTimeOffset(now.Year, now.Month, 1, 0, 0, 0, TimeSpan.Zero);
+    var profileByUser = profiles.ToDictionary(item => item.AppUserId);
+    var entryGroups = entries.GroupBy(item => item.EmployeeProfile.AppUserId)
+        .ToDictionary(group => group.Key, group => group.ToList());
+
+    return Results.Ok(users.Select(user =>
+    {
+        profileByUser.TryGetValue(user.Id, out var profile);
+        entryGroups.TryGetValue(user.Id, out var rows);
+        rows ??= new List<PayrollLedgerEntry>();
+        var monthRows = rows.Where(item => item.CreatedAt >= monthStart).ToList();
+        return new
+        {
+            userId = user.Id,
+            fullName = user.FullName,
+            phone = profile?.Phone ?? "",
+            payType = profile?.PayType ?? "hourly",
+            hourlyRate = profile?.HourlyRate ?? 0m,
+            monthlySalary = profile?.MonthlySalary ?? 0m,
+            overtimeRate = profile?.OvertimeRate ?? 0m,
+            employmentStartDate = profile?.EmploymentStartDate,
+            workSchedule = profile?.WorkSchedule,
+            notes = profile?.Notes,
+            isActive = profile?.IsActive ?? user.IsActive,
+            employeePayable = rows.Sum(item => item.EmployeePayableDelta),
+            ownerReceivable = rows.Sum(item => item.OwnerReceivableDelta),
+            accruedThisMonth = monthRows.Where(item => item.Kind is "SalaryAccrual" or "Overtime").Sum(item => item.Amount),
+            paidThisMonth = monthRows.Where(item => item.Kind == "SalaryPayment").Sum(item => item.Amount),
+            bonusTotal = rows.Where(item => item.Kind == "Bonus").Sum(item => item.Amount),
+            deductionTotal = rows.Where(item => item.Kind == "Deduction").Sum(item => item.Amount),
+            damageTotal = rows.Where(item => item.Kind == "Damage").Sum(item => item.Amount),
+            advanceTotal = rows.Where(item => item.Kind == "Advance").Sum(item => item.Amount),
+            lastPaymentAt = rows.Where(item => item.Kind == "SalaryPayment").OrderByDescending(item => item.CreatedAt).Select(item => (DateTimeOffset?)item.CreatedAt).FirstOrDefault()
+        };
+    }));
+})
+.WithName("GetPayrollUsers");
+
+app.MapGet("/api/payroll/users/{userId:guid}/ledger", async (
+    Guid userId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "payroll.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var rows = await database.PayrollLedgerEntries.AsNoTracking()
+        .Where(item => item.EmployeeProfile.AppUserId == userId)
+        .OrderByDescending(item => item.CreatedAt)
+        .Take(200)
+        .Select(item => new
+        {
+            id = item.Id,
+            userId,
+            userName = item.EmployeeProfile.AppUser.FullName,
+            kind = item.Kind,
+            amount = item.Amount,
+            employeePayableDelta = item.EmployeePayableDelta,
+            ownerReceivableDelta = item.OwnerReceivableDelta,
+            reason = item.Reason,
+            status = item.Status.ToString(),
+            createdByUserId = item.CreatedByUserId,
+            createdAt = item.CreatedAt,
+            approvedByUserId = item.ApprovedByUserId,
+            approvedAt = item.ApprovedAt,
+            paymentMethod = item.PaymentMethod,
+            receiptNumber = item.ReceiptNumber
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(rows);
+})
+.WithName("GetPayrollLedger");
+
+app.MapPut("/api/payroll/users/{userId:guid}", async (
+    Guid userId,
+    PayrollProfileRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "payroll.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var user = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+    if (user is null) return Results.NotFound(new { code = "user_not_found", message = "کاربر پیدا نشد." });
+    if (request.HourlyRate < 0 || request.MonthlySalary < 0 || request.OvertimeRate < 0)
+        return Results.BadRequest(new { code = "invalid_payroll_profile", message = "مقادیر حقوقی نمی‌توانند منفی باشند." });
+
+    var payType = request.PayType?.Trim().ToLowerInvariant();
+    if (payType is not ("hourly" or "monthly"))
+        return Results.BadRequest(new { code = "invalid_pay_type", message = "نوع حقوق معتبر نیست." });
+
+    var profile = await database.EmployeeProfiles.FirstOrDefaultAsync(item => item.AppUserId == userId, cancellationToken);
+    if (profile is null)
+    {
+        profile = new EmployeeProfile { AppUserId = userId };
+        database.EmployeeProfiles.Add(profile);
+    }
+
+    profile.Phone = request.Phone?.Trim() ?? "";
+    profile.PayType = payType;
+    profile.HourlyRate = request.HourlyRate;
+    profile.MonthlySalary = request.MonthlySalary;
+    profile.OvertimeRate = request.OvertimeRate;
+    profile.EmploymentStartDate = request.EmploymentStartDate;
+    profile.WorkSchedule = string.IsNullOrWhiteSpace(request.WorkSchedule) ? null : request.WorkSchedule.Trim();
+    profile.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
+    profile.IsActive = request.IsActive;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "PayrollProfileUpdate",
+        EntityName = "EmployeeProfile",
+        EntityId = profile.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = "ویرایش پروفایل حقوقی · " + user.FullName
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        userId = user.Id,
+        fullName = user.FullName,
+        phone = profile.Phone,
+        payType = profile.PayType,
+        hourlyRate = profile.HourlyRate,
+        monthlySalary = profile.MonthlySalary,
+        overtimeRate = profile.OvertimeRate,
+        employmentStartDate = profile.EmploymentStartDate,
+        workSchedule = profile.WorkSchedule,
+        notes = profile.Notes,
+        isActive = profile.IsActive
+    });
+})
+.WithName("UpdatePayrollProfile");
+
+app.MapPost("/api/payroll/users/{userId:guid}/entries", async (
+    Guid userId,
+    PayrollEntryRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "payroll.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var target = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == userId, cancellationToken);
+    if (target is null) return Results.NotFound(new { code = "user_not_found", message = "کاربر پیدا نشد." });
+    if (request.Amount <= 0 || string.IsNullOrWhiteSpace(request.Reason))
+        return Results.BadRequest(new { code = "invalid_payroll_entry", message = "مبلغ و دلیل عملیات حقوقی الزامی است." });
+
+    var kind = request.Kind?.Trim();
+    if (kind is not ("SalaryAccrual" or "Overtime" or "SalaryPayment" or "Bonus" or "Deduction" or "Advance" or "Damage" or "ReceivablePayment" or "Adjustment"))
+        return Results.BadRequest(new { code = "invalid_payroll_kind", message = "نوع عملیات حقوقی معتبر نیست." });
+
+    var profile = await database.EmployeeProfiles.FirstOrDefaultAsync(item => item.AppUserId == userId, cancellationToken);
+    if (profile is null)
+    {
+        profile = new EmployeeProfile { AppUserId = userId };
+        database.EmployeeProfiles.Add(profile);
+    }
+
+    var employeeDelta = request.EmployeePayableDelta ?? kind switch
+    {
+        "SalaryAccrual" or "Overtime" or "Bonus" => request.Amount,
+        "SalaryPayment" or "Deduction" => -request.Amount,
+        _ => 0m
+    };
+    var ownerDelta = request.OwnerReceivableDelta ?? kind switch
+    {
+        "Advance" or "Damage" => request.Amount,
+        "ReceivablePayment" => -request.Amount,
+        _ => 0m
+    };
+
+    if (kind == "Adjustment" && request.EmployeePayableDelta is null && request.OwnerReceivableDelta is null)
+        return Results.BadRequest(new { code = "missing_adjustment_delta", message = "برای اصلاح دستی حداقل یکی از مانده‌ها را مشخص کنید." });
+
+    var sensitive = kind is "SalaryPayment" or "Bonus" or "Deduction" or "Advance" or "Damage" or "ReceivablePayment" or "Adjustment";
+    var entry = new PayrollLedgerEntry
+    {
+        EmployeeProfile = profile,
+        Kind = kind,
+        Amount = request.Amount,
+        EmployeePayableDelta = employeeDelta,
+        OwnerReceivableDelta = ownerDelta,
+        Reason = request.Reason.Trim(),
+        Status = sensitive ? ApprovalStatus.Pending : ApprovalStatus.Approved,
+        CreatedByUserId = auth.User!.Id,
+        PaymentMethod = request.PaymentMethod?.Trim(),
+        ReceiptNumber = request.ReceiptNumber?.Trim()
+    };
+    database.PayrollLedgerEntries.Add(entry);
+
+    string? approvalId = null;
+    if (sensitive)
+    {
+        var approval = new ApprovalRequest
+        {
+            Action = "payroll.entry",
+            EntityName = "PayrollLedgerEntry",
+            EntityId = entry.Id.ToString(),
+            Reason = entry.Reason,
+            RequestedByUserId = auth.User.Id,
+            Status = ApprovalStatus.Pending
+        };
+        database.ApprovalRequests.Add(approval);
+        approvalId = approval.Id.ToString();
+    }
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = sensitive ? "PayrollEntryRequested" : "PayrollEntryCreate",
+        EntityName = "PayrollLedgerEntry",
+        EntityId = entry.Id.ToString(),
+        AppUserId = auth.User.Id,
+        Details = kind + " · " + request.Amount.ToString("0.##") + " تومان · " + entry.Reason
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { entryId = entry.Id, status = entry.Status.ToString(), approvalId });
+})
+.WithName("CreatePayrollEntry");
+
 app.MapGet("/api/approvals", async (
     HttpContext context,
     GameNetDbContext database,
@@ -3033,6 +3279,26 @@ public sealed record AppUserWriteRequest(string FullName, string UserName, strin
 public sealed record PermissionAssignmentRequest(IReadOnlyList<string> PermissionNames);
 public sealed record ApprovalCreateRequest(string Action, string EntityName, string? EntityId, string Reason);
 public sealed record ApprovalOperationRequest(string Reason);
+public sealed record PayrollProfileRequest(
+    string? Phone,
+    string PayType,
+    decimal HourlyRate,
+    decimal MonthlySalary,
+    decimal OvertimeRate,
+    DateTimeOffset? EmploymentStartDate,
+    string? WorkSchedule,
+    string? Notes,
+    bool IsActive = true);
+
+public sealed record PayrollEntryRequest(
+    string Kind,
+    decimal Amount,
+    string Reason,
+    string? PaymentMethod = null,
+    string? ReceiptNumber = null,
+    decimal? EmployeePayableDelta = null,
+    decimal? OwnerReceivableDelta = null);
+
 public sealed record ApprovalDecisionRequest(string? Note);
 
 public sealed record StartShiftRequest(
