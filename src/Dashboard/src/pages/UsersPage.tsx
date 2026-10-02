@@ -19,10 +19,12 @@ export function UsersPage() {
   const [payReason, setPayReason] = useState('');
   const [manualCash, setManualCash] = useState('');
   const [shiftNote, setShiftNote] = useState('');
+  const [shiftOperator, setShiftOperator] = useState('');
 
   async function refresh() {
     const [userRows, shift, history, saved] = await Promise.all([mockService.getUsers(), mockService.getCurrentShift(), mockService.getShifts(), mockService.getPermissions()]);
     setUsers(userRows);
+    if (!shiftOperator && userRows.length) setShiftOperator(userRows.find(user => user.role === 'operator')?.name ?? userRows[0].name);
     setCurrentShift(shift);
     setShifts(history);
     const next = { ...defaultPermissions };
@@ -46,7 +48,8 @@ export function UsersPage() {
 
   async function openShift() {
     try {
-      const result = await mockService.startShift('علی محمدی');
+      if (!shiftOperator) { setNotice('اپراتور شیفت را انتخاب کنید'); return; }
+      const result = await mockService.startShift(shiftOperator);
       setCurrentShift(result);
       setNotice('شیفت جدید باز شد');
     } catch (error) { setNotice(error instanceof Error ? error.message : 'باز کردن شیفت ناموفق بود'); }
@@ -78,6 +81,7 @@ export function UsersPage() {
   return <>
     <div className="page-header"><div><p>کاربران، دسترسی و شیفت</p><h1>کاربران و شیفت</h1></div></div>
     <div className="toolbar">
+      {!currentShift && <label className="shift-operator-select">اپراتور شیفت<select value={shiftOperator} onChange={event => setShiftOperator(event.target.value)}>{users.filter(user => user.role !== 'owner').map(user => <option key={user.id} value={user.name}>{user.name} · {user.shift}</option>)}</select></label>}
       <button className="btn" onClick={() => void (currentShift ? closeShift() : openShift())}>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>
       <button className="btn danger" onClick={() => void closeShift()} disabled={!currentShift}>بستن شیفت</button>
       <button className="btn primary" onClick={() => setDraft({ id: crypto.randomUUID(), name: '', role: 'operator', shift: 'عصر', sales: 0, permissions: [], payType: 'hourly', hourlyRate: 0, monthlySalary: 0, overtimeRate: 0, workStart: '16:00', workEnd: '00:00', bonusTotal: 0, deductionTotal: 0 })}>+ کاربر جدید</button>
