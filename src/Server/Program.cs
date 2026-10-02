@@ -270,6 +270,117 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (
 })
 .WithName("PostWalletRefund");
 
+
+
+app.MapGet("/api/shifts/{shiftId:guid}/expenses", async (
+    Guid shiftId,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var exists = await database.Shifts.AsNoTracking().AnyAsync(item => item.Id == shiftId, cancellationToken);
+    if (!exists)
+    {
+        return Results.NotFound(new { code = "shift_not_found", message = "شیفت پیدا نشد." });
+    }
+
+    var rows = await database.Expenses
+        .AsNoTracking()
+        .Where(item => item.ShiftId == shiftId)
+        .OrderByDescending(item => item.CreatedAt)
+        .Select(item => new FinanceExpenseDto(
+            item.Id,
+            item.ShiftId,
+            item.Category,
+            item.Amount,
+            item.Description,
+            item.CreatedAt))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(rows);
+})
+.WithName("GetShiftExpenses");
+
+app.MapPost("/api/shifts/{shiftId:guid}/expenses", async (
+    Guid shiftId,
+    FinanceExpenseRequestDto request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (request.Amount <= 0)
+    {
+        return Results.BadRequest(new { code = "invalid_amount", message = "مبلغ هزینه باید بیشتر از صفر باشد." });
+    }
+
+    var category = request.Category?.Trim();
+    if (string.IsNullOrWhiteSpace(category))
+    {
+        return Results.BadRequest(new { code = "missing_category", message = "دسته هزینه را وارد کنید." });
+    }
+
+    var shift = await database.Shifts.FirstOrDefaultAsync(item => item.Id == shiftId, cancellationToken);
+    if (shift is null)
+    {
+        return Results.NotFound(new { code = "shift_not_found", message = "شیفت پیدا نشد." });
+    }
+
+    var expense = new Expense
+    {
+        ShiftId = shiftId,
+        Category = category,
+        Amount = request.Amount,
+        Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim()
+    };
+
+    database.Expenses.Add(expense);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ExpenseCreate",
+        EntityName = "Expense",
+        EntityId = expense.Id.ToString(),
+        Details = request.Amount.ToString("0.##") + " تومان · " + category + " · " + (expense.Description ?? "بدون شرح"),
+        AppUserId = request.AppUserId
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new FinanceExpenseDto(
+        expense.Id,
+        expense.ShiftId,
+        expense.Category,
+        expense.Amount,
+        expense.Description,
+        expense.CreatedAt));
+})
+.WithName("CreateShiftExpense");
+
+app.MapGet("/api/finance/summary", async (
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var start = from ?? DateTimeOffset.UtcNow.Date;
+    var end = to ?? DateTimeOffset.UtcNow;
+
+    var revenue = await database.Invoices
+        .AsNoTracking()
+        .Where(item => item.Status == InvoiceStatus.Paid && item.IssuedAt >= start && item.IssuedAt <= end)
+        .SumAsync(item => (decimal?)item.TotalAmount, cancellationToken) ?? 0m;
+
+    var expense = await database.Expenses
+        .AsNoTracking()
+        .Where(item => item.CreatedAt >= start && item.CreatedAt <= end)
+        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+    return Results.Ok(new FinanceSummaryDto(
+        start,
+        end,
+        revenue,
+        expense,
+        revenue - expense));
+})
+.WithName("GetFinanceSummary");
+
 app.MapHub<DashboardHub>("/hubs/dashboard");
 
 if (!app.Environment.IsDevelopment())
@@ -311,3 +422,8 @@ static bool IsMigrationRecoveryCandidate(Exception exception)
 }
 
 public partial class Program { }
+
+
+public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
+public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
+public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, decimal Revenue, decimal Expense, decimal OperatingProfit);
