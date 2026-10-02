@@ -127,6 +127,37 @@ jobs:
               throw 'VIP package assignment smoke returned incomplete data.'
             }
 
+            $usageBefore = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get
+            if (-not $usageBefore.active -or [int]$usageBefore.usedTodayMinutes -ne 0 -or [int]$usageBefore.usedTotalMinutes -ne 0) {
+              throw 'Initial VIP usage smoke returned unexpected values.'
+            }
+
+            $dashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get
+            $availableStation = @($dashboard.stations | Where-Object { $_.state -eq 'Available' }) | Select-Object -First 1
+            if (-not $availableStation) { throw 'No available station was found for VIP usage smoke.' }
+
+            $startedSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions" -Method Post -ContentType 'application/json' -Body (@{
+              customerId = $customerId
+              stationId = $availableStation.id
+              persons = 1
+            } | ConvertTo-Json)
+            if (-not $startedSession.id) { throw 'VIP usage session smoke did not return a session id.' }
+
+            Start-Sleep -Milliseconds 1200
+
+            $usageAfterSession = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get
+            if ([int]$usageAfterSession.usedTotalMinutes -lt 1 -or [int]$usageAfterSession.usedTodayMinutes -lt 1) {
+              throw 'VIP usage did not account for the active session.'
+            }
+            if ([int]$usageAfterSession.remainingTotalMinutes -ge [int]$assignment.totalMinutes -or [int]$usageAfterSession.remainingTodayMinutes -ge [int]$assignment.dailyMinutes) {
+              throw 'VIP remaining minutes did not decrease after the session started.'
+            }
+
+            $history = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/history") -Method Get
+            if (-not @($history | Where-Object { $_.type -eq 'session' -and $_.referenceId -eq $startedSession.id })) {
+              throw 'Customer history did not include the newly started session.'
+            }
+
             $loginKeys = @('smoke-a', 'smoke-b', 'smoke-c')
             foreach ($clientKey in $loginKeys) {
               $loginResult = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json)
