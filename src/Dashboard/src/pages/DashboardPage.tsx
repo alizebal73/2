@@ -1576,7 +1576,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
       {canControlClient && stationSupportsAgentLock(context.station) && <button onClick={() => contextAction('kiosk-toggle')}>{context.station.agentKioskEnabled ? '🖥️ غیرفعال‌کردن Kiosk' : '🖥️ فعال‌کردن Kiosk'}</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && !['Updating', 'UpdatePending'].includes(context.station.agentLifecycleState ?? '') && <button onClick={() => contextAction('agent-update')}>⬆️ به‌روزرسانی Client</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && <button onClick={() => contextAction('agent-rollback')}>↩️ Rollback Client</button>}
-    </div>
+    </div>}
     {reverseRequest && <ReverseDialog open={Boolean(reverseRequest)} title={reverseRequest.title} detail={reverseRequest.detail} onCancel={() => setReverseRequest(null)} onConfirm={() => reverseTimelineEvent(reverseRequest)} />}
     {approval && <ApprovalDialog
       open={Boolean(approval)}
