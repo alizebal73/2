@@ -445,6 +445,17 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.ToTable("CustomerLogins");
                 });
 
+            modelBuilder.Entity("GameNetManager.Server.Data.EmployeeProfile", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.Expense", b =>
                 {
                     b.Property<Guid>("Id")
