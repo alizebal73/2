@@ -3383,3 +3383,9 @@ button:focus-visible {
 .account-platform-nav button span{min-width:22px;padding:2px 5px;border-radius:99px;background:#1a2540;color:var(--dim);font-size:8.5px;text-align:center}
 .account-detail-status{margin-right:auto;padding:4px 8px;border-radius:99px;background:#0b1324;border:1px solid var(--line);font-size:9px}
 @media(max-width:900px){.games-master-detail,.accounts-master-detail{grid-template-columns:1fr}.game-detail-panel,.account-detail-panel{min-height:280px}}
+
+
+.settings-section-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;border-bottom:1px solid var(--line);padding-bottom:8px}.settings-section-head h3{margin:0}.settings-section-head small{display:block;color:var(--dim);font-size:9px;line-height:1.7;margin-top:4px}
+.section-lock-grid{display:grid;gap:6px;margin-top:9px}.section-lock-row{padding:8px;border:1px solid #19243c;border-radius:9px;background:#0d1526}.section-lock-row .setting-item{margin:0}.section-lock-row small{display:block;color:var(--dim);font-size:8.5px;margin-top:2px}.section-lock-pin{margin-top:7px}
+.security-footnote{display:block;color:#71809f;font-size:8.5px;line-height:1.7;margin-top:8px}.section-lock-dialog{max-width:430px}.user-inline-error{margin:8px 0;color:var(--red);font-size:10px}
+.shift-adjust-panel{display:grid;gap:5px;background:linear-gradient(165deg,#101a2e,#0d1526)}.shift-adjust-panel small{color:var(--dim);font-size:9px;line-height:1.7}.user-pay-summary{display:grid;gap:2px;margin-top:8px;color:var(--dim);font-size:9px}
