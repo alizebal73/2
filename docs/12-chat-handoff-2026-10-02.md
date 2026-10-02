@@ -703,3 +703,38 @@ These are deployment/production gates, not missing Stage 10 software implementat
 ## Next stage
 
 Stage 11 is the next software stage: **Games & Accounts**. Start it only from the current `main` commit above, and re-check the real repository/CI state before coding.
+
+
+## 5) Stage 11 — وضعیت فعلی در 2026-10-03
+
+Stage 11 implementation has now been applied to `main` in the repository `alizebal73/2`:
+
+- `Game` is now server-backed with the fields previously kept only in Dashboard mock data.
+- `GameAccount` old model remains intact and is not reused as the new pool model.
+- New `AccountPoolEntry` and `AccountLease` models were added.
+- Server endpoints exist for:
+  - `GET/POST/PUT/DELETE /api/games`
+  - `GET/POST/PUT /api/account-pool`
+  - `POST /api/account-pool/{id}/unlock`
+  - `POST /api/account-pool/allocate`
+  - `GET /api/account-pool/leases`
+  - `POST /api/account-pool/leases/{leaseId}/release`
+- Allocation is server-authoritative and uses a short transaction plus conditional update so a free pool row can only be claimed once.
+- Dashboard `GamesPage` and `AccountsPage` no longer call `mockService`.
+- Obsolete Game/Account mock data and operations were removed from `mockService.ts`.
+- EF migration: `20261003010000_Stage11GameAccountPool`.
+- Server tests include allocation/release and concurrent allocation coverage.
+- CI now contains a real Stage 11 Game → Account Pool → Allocate → Release → Archive smoke.
+
+**Important:** Stage 11 is **not marked Done yet** until the latest main head has green Build/Test/migration/startup/CI smoke and the dashboard build/E2E gates pass.
+
+## 6) Stage 12 handoff
+
+After Stage 11 CI is green, start Stage 12 from the exact green main head. First audit the implemented Stage 11 against the product roadmap before adding behavior.
+
+Expected Stage 12 dependency review:
+1. Connect AccountLease to the real Session/Agent lifecycle where required.
+2. Decide and implement the secure credential-delivery boundary for Agent use; do not expose Secret/SecretHash through Dashboard APIs.
+3. Ensure release happens automatically on the authoritative lifecycle event where appropriate, not only through manual Dashboard release.
+4. Review Game active-user/status data so it becomes real operational data rather than a placeholder.
+5. Keep `GameAccount` legacy model isolated unless a migration is explicitly designed and tested.
