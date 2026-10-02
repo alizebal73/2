@@ -19,12 +19,18 @@ public sealed class AgentPresenceMonitor(
                 configuration.GetValue("Agent:OfflineAfterSeconds", 30),
                 heartbeatInterval * 2,
                 300);
+            var commandTimeoutSeconds = Math.Clamp(
+                configuration.GetValue("Agent:CommandTimeoutSeconds", 15),
+                5,
+                120);
 
             try
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
-                var cutoff = DateTimeOffset.UtcNow.AddSeconds(-offlineAfter);
+                var now = DateTimeOffset.UtcNow;
+                var cutoff = now.AddSeconds(-offlineAfter);
+                var commandCutoff = now.AddSeconds(-commandTimeoutSeconds);
 
                 var staleDevices = await database.AgentDevices
                     .Where(item => item.IsActive
@@ -33,9 +39,14 @@ public sealed class AgentPresenceMonitor(
                         && item.LastSeenAt.Value < cutoff)
                     .ToListAsync(stoppingToken);
 
+                var timedOutCommands = await database.AgentCommands
+                    .Where(command =>
+                        (command.Status == "Pending" || command.Status == "Sent")
+                        && (command.SentAt ?? command.RequestedAt) < commandCutoff)
+                    .ToListAsync(stoppingToken);
+
                 if (staleDevices.Count > 0)
                 {
-                    var now = DateTimeOffset.UtcNow;
                     foreach (var device in staleDevices)
                     {
                         device.IsOnline = false;
@@ -62,12 +73,43 @@ public sealed class AgentPresenceMonitor(
                             });
                         }
                     }
+                }
 
+                foreach (var command in timedOutCommands)
+                {
+                    command.Status = "Failed";
+                    command.Succeeded = false;
+                    command.CompletedAt = now;
+                    command.ResultMessage = "زمان پاسخ Agent برای فرمان تمام شد.";
+
+                    database.AuditLogs.Add(new AuditLog
+                    {
+                        Action = "AgentCommandFailed",
+                        EntityName = "AgentCommand",
+                        EntityId = command.Id.ToString(),
+                        Details = $"فرمان {command.CommandType} به دلیل timeout پاسخ نگرفت."
+                    });
+                }
+
+                if (staleDevices.Count > 0 || timedOutCommands.Count > 0)
+                {
                     await database.SaveChangesAsync(stoppingToken);
-                    logger.LogWarning(
-                        "Marked {Count} stale Agent device(s) offline. Cutoff={Cutoff}",
-                        staleDevices.Count,
-                        cutoff);
+
+                    if (staleDevices.Count > 0)
+                    {
+                        logger.LogWarning(
+                            "Marked {Count} stale Agent device(s) offline. Cutoff={Cutoff}",
+                            staleDevices.Count,
+                            cutoff);
+                    }
+
+                    if (timedOutCommands.Count > 0)
+                    {
+                        logger.LogWarning(
+                            "Marked {Count} Agent command(s) failed by timeout. Cutoff={Cutoff}",
+                            timedOutCommands.Count,
+                            commandCutoff);
+                    }
                 }
 
                 await Task.Delay(

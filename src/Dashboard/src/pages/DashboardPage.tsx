@@ -5,6 +5,7 @@ import { mockService } from '../services/mockService';
 import { createServerCustomerDebt, getServerCustomers } from '../services/customerService';
 import { hasPermission } from '../services/authService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
+import { getAgentCommand, sendAgentCommand } from '../services/agentService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { adjustServerSessionTime, isServerGuid, pauseServerSession, requestServerInvoiceReverseApproval, resumeServerSession, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
@@ -1162,6 +1163,36 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     event.preventDefault();
     openContextAt(event.clientX, event.clientY, station);
   }
+  async function setAgentLock(station: StationDto, locked: boolean) {
+    if (!canControlClient) { setMessage('دسترسی کنترل کلاینت ندارید'); return; }
+    if (!station.agentId || station.agentOnline !== true) {
+      setMessage('Agent این دستگاه آنلاین نیست؛ فرمان ارسال نشد.');
+      return;
+    }
+
+    try {
+      setMessage(locked ? 'درخواست قفل دستگاه ارسال شد…' : 'درخواست بازگشایی دستگاه ارسال شد…');
+      const command = await sendAgentCommand(station.agentId, locked ? 'lock' : 'unlock');
+
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const status = await getAgentCommand(command.commandId);
+        if (status.status === 'Succeeded') {
+          setMessage(locked ? 'دستگاه قفل شد.' : 'دستگاه باز شد.');
+          return;
+        }
+        if (status.status === 'Failed') {
+          setMessage(status.resultMessage || 'اجرای فرمان Agent ناموفق بود.');
+          return;
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 500));
+      }
+
+      setMessage('Agent به فرمان پاسخ نداد؛ وضعیت دستگاه را بررسی کنید.');
+    } catch (error) {
+      setMessage(userErrorMessage(error, locked ? 'قفل کردن دستگاه انجام نشد' : 'بازگشایی دستگاه انجام نشد'));
+    }
+  }
+
   function contextAction(action: string) {
     const station = context?.station;
     setContext(null);
@@ -1172,13 +1203,19 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     if (action === 'pause') { pauseSession(station); return; }
     if (action === 'resume') { resumeSession(station); return; }
     if (action === 'reduce') { open('reduce', station); return; }
+    if (action === 'lock') { void setAgentLock(station, true); return; }
+    if (action === 'unlock') { void setAgentLock(station, false); return; }
     if (action === 'offline') {
       updateStation(station.id, { state: station.state === 'off' ? 'free' : 'off', outOfServiceReason: station.state === 'off' ? undefined : 'تعمیر و نگهداری' });
       setMessage(station.state === 'off' ? 'ایستگاه فعال شد' : 'ایستگاه خارج از سرویس شد'); return;
     }
     if (action === 'settings') { window.dispatchEvent(new CustomEvent('gamenet-select-client', { detail: station.name })); onNavigate('client-shell'); return; }
     if (action === 'switch-net') { updateStation(station.id, { network: station.network === 1 ? 2 : 1 }); setMessage(`شبکه به اینترنت ${station.network === 1 ? '۲' : '۱'} تغییر کرد`); return; }
-    setMessage(`${action} برای ${station.name} در صف دمو ثبت شد`);
+    setMessage(`${action} فعلاً در Stage 9 پیاده‌سازی نشده است.`);
+  }
+
+  function stationSupportsAgentLock(station: StationDto) {
+    return station.zone === 'pc' && Boolean(station.agentId);
   }
 
   function renderStation(station: StationDto) {
@@ -1265,7 +1302,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
             className={`agent-state ${station.agentOnline ? 'online' : 'offline'}`}
             title={station.agentLastSeenAt ? `آخرین ارتباط Agent: ${new Date(station.agentLastSeenAt).toLocaleTimeString('fa-IR')}` : 'Agent هنوز heartbeat معتبر ندارد'}
           >
-            · Agent {station.agentOnline ? 'متصل' : 'آفلاین'}
+            · Agent {station.agentOnline ? 'متصل' : 'آفلاین'}{station.agentLocked ? ' · قفل' : ''}
           </span>
         )}
       </span>
@@ -1411,7 +1448,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('reduce')}>↘ کاهش زمان</button>}
       {canControlClient && <button onClick={() => contextAction('switch-net')}>🌐 تغییر اینترنت ۱ ↔ ۲</button>}
       {canManageSession && <button onClick={() => contextAction('move-user')}>🔀 جابه‌جایی یوزر</button>}
-      {canControlClient && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && !context.station.agentLocked && <button onClick={() => contextAction('lock')}>🔒 قفل دستگاه</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentLocked && <button onClick={() => contextAction('unlock')}>🔓 باز کردن قفل</button>}
       {canControlClient && <button onClick={() => contextAction('login-id')}>🔑 ورود با شناسه</button>}
       {canControlClient && <button onClick={() => contextAction('message')}>💬 پیام به مشتری</button>}
       {canControlClient && <button onClick={() => contextAction('screenshot')}>📸 اسکرین‌شات</button>}

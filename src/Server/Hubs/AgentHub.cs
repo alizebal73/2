@@ -37,7 +37,8 @@ public sealed class AgentHub(
                 device.Id,
                 device.DeviceId,
                 now,
-                HeartbeatIntervalSeconds()),
+                HeartbeatIntervalSeconds(),
+                device.IsLocked),
             Context.ConnectionAborted);
 
         await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
@@ -98,6 +99,13 @@ public sealed class AgentHub(
                 ? request.UptimeSeconds
                 : null;
             device.ConnectionId = Context.ConnectionId;
+
+            if (request.IsLocked && !device.IsLocked)
+            {
+                device.IsLocked = true;
+                device.LockedAt = now;
+                logger.LogWarning("Agent reported a locked client state after command acknowledgement for {DeviceId}.", device.DeviceId);
+            }
 
             await database.SaveChangesAsync(Context.ConnectionAborted);
             logger.LogInformation(
@@ -166,6 +174,12 @@ public sealed class AgentHub(
         command.ResultMessage = string.IsNullOrWhiteSpace(acknowledgement.Message)
             ? null
             : acknowledgement.Message.Trim();
+
+        if (acknowledgement.Success && command.CommandType is AgentCommandTypes.Lock or AgentCommandTypes.Unlock)
+        {
+            device.IsLocked = command.CommandType == AgentCommandTypes.Lock;
+            device.LockedAt = device.IsLocked ? command.CompletedAt : null;
+        }
 
         database.AuditLogs.Add(new AuditLog
         {
@@ -265,6 +279,7 @@ public sealed class AgentHub(
             device.StationId,
             device.Station?.Name,
             online,
+            device.IsLocked,
             device.LastSeenAt,
             device.ConnectedAt,
             device.AgentVersion,

@@ -26,5 +26,7 @@ public sealed class AgentDevice : BaseEntity
     public string? LastIpAddress { get; set; }
     public string? ConnectionId { get; set; }
     public bool IsOnline { get; set; }
+    public bool IsLocked { get; set; }
+    public DateTimeOffset? LockedAt { get; set; }
     public bool IsActive { get; set; } = true;
 }
