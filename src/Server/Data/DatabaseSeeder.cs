@@ -150,3 +150,4 @@ public static class DatabaseSeeder
 
         await database.SaveChangesAsync(cancellationToken);
     }
+}
