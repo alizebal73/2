@@ -128,7 +128,7 @@ public static class DatabaseSeeder
                 FullName = "مدیر سیستم",
                 UserName = "admin",
                 Email = "admin@gamenet.local",
-                PasswordHash = PasswordSecurity.Hash(Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD") ?? "Admin123!"),
+                PasswordHash = PasswordSecurity.Hash(GetAdminPassword()),
                 Role = "Admin",
                 IsActive = true
             };
