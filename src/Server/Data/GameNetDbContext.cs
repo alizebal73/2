@@ -373,7 +373,19 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         game.HasKey(item => item.Id);
         game.HasIndex(item => item.Name).IsUnique();
         game.Property(item => item.Name).HasMaxLength(120).IsRequired();
+        game.Property(item => item.Version).HasMaxLength(60).IsRequired();
         game.Property(item => item.Genre).HasMaxLength(80);
+        game.Property(item => item.Status).HasMaxLength(20).IsRequired();
+        game.Property(item => item.Path).HasMaxLength(500).IsRequired();
+        game.Property(item => item.Executable).HasMaxLength(260).IsRequired();
+        game.Property(item => item.Cover).HasMaxLength(500).IsRequired();
+        game.Property(item => item.Trailer).HasMaxLength(500).IsRequired();
+        game.Property(item => item.LaunchArgs).HasMaxLength(500).IsRequired();
+        game.Property(item => item.ConnectionType).HasMaxLength(40).IsRequired();
+        game.Property(item => item.TargetSystem).HasMaxLength(30).IsRequired();
+        game.Property(item => item.Target).HasMaxLength(30).IsRequired();
+        game.Property(item => item.TargetZone).HasMaxLength(60).IsRequired();
+        game.Property(item => item.TargetStations).HasMaxLength(2000).IsRequired();
     }
 
     private static void ConfigureGameAccount(ModelBuilder modelBuilder)
