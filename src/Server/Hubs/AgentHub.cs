@@ -51,6 +51,7 @@ public sealed class AgentHub(
         {
             device.IsOnline = false;
             device.ConnectionId = null;
+            device.ConnectedAt = null;
             await database.SaveChangesAsync();
 
             await BroadcastStatusAsync(device, DateTimeOffset.UtcNow, CancellationToken.None);
