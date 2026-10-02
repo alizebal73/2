@@ -17,7 +17,7 @@ import { GlobalCommandCenter } from './features/search/GlobalCommandCenter';
 import { OperationsPage } from './pages/OperationsPage';
 import { UserErrorBanner } from './components/UserErrorBanner';
 import { SectionLockDialog } from './components/SectionLockDialog';
-import { readPageLocks, protectedPageLabels } from './services/securityService';
+import { readPageLocks } from './services/securityService';
 import type { PageLockMap } from './types';
 import type { DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
