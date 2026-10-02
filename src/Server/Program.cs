@@ -1771,19 +1771,21 @@ app.MapGet("/api/client/identity", async (
     if (remoteIp is not null && !local)
     {
         var ipText = remoteIp.ToString();
-        device = await database.AgentDevices
+        var matchingDevices = await database.AgentDevices
+            .AsNoTracking()
             .Include(item => item.Station)
             .Where(item => item.IsActive && item.IsOnline && item.LastIpAddress == ipText)
-            .OrderByDescending(item => item.LastSeenAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        device = matchingDevices.OrderByDescending(item => item.LastSeenAt).FirstOrDefault();
     }
     else
     {
-        device = await database.AgentDevices
+        var loopbackDevices = await database.AgentDevices
+            .AsNoTracking()
             .Include(item => item.Station)
             .Where(item => item.IsActive && item.IsOnline && item.LastSeenAt.HasValue)
-            .OrderByDescending(item => item.LastSeenAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .ToListAsync(cancellationToken);
+        device = loopbackDevices.OrderByDescending(item => item.LastSeenAt).FirstOrDefault();
     }
 
     if (device is null)
