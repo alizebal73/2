@@ -701,6 +701,92 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         awaitingFinalResult);
 }
 
+static async Task<AgentState> FinalizePendingLifecycleCommandAsync(
+    HubConnection connection,
+    AgentState state,
+    string agentVersion,
+    CancellationToken cancellationToken)
+{
+    if (!state.PendingCommandId.HasValue
+        || string.IsNullOrWhiteSpace(state.PendingCommandTargetVersion)
+        || !string.Equals(state.PendingCommandTargetVersion, agentVersion, StringComparison.OrdinalIgnoreCase))
+        return state;
+
+    var outcome = state.PendingCommandOutcome?.Trim();
+    var success = !string.Equals(outcome, "Failed", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(outcome, "RolledBack", StringComparison.OrdinalIgnoreCase);
+    var finalStatus = string.Equals(outcome, "RolledBack", StringComparison.OrdinalIgnoreCase)
+        ? "RolledBack"
+        : success ? "Succeeded" : "Failed";
+
+    var message = finalStatus switch
+    {
+        "Succeeded" => $"نسخه {agentVersion} پس از راه‌اندازی مجدد کنترل‌شده سالم تأیید شد.",
+        "RolledBack" => $"نسخه {agentVersion} پس از شکست Update به نسخه سالم قبلی Rollback شد.",
+        _ => state.LastUpdateError ?? "فرمان چرخه عمر Client پس از راه‌اندازی مجدد ناموفق بود."
+    };
+
+    try
+    {
+        await connection.InvokeAsync(
+            "AcknowledgeCommand",
+            new AgentCommandAcknowledgement(
+                state.PendingCommandId.Value,
+                success,
+                message,
+                DateTimeOffset.UtcNow,
+                Final: true,
+                FinalStatus: finalStatus),
+            cancellationToken);
+    }
+    catch (Exception exception) when (
+        exception is HubException
+            or HttpRequestException
+            or InvalidOperationException
+            or ObjectDisposedException)
+    {
+        Console.WriteLine($"نتیجه نهایی فرمان چرخه عمر ارسال نشد: {exception.Message}");
+        return state;
+    }
+
+    return state with
+    {
+        PendingCommandId = null,
+        PendingCommandType = null,
+        PendingCommandTargetVersion = null,
+        PendingCommandOutcome = null,
+        PendingUpdateVersion = null,
+        LastUpdateError = success ? null : message
+    };
+}
+
+static async Task MarkPendingLifecycleCommandOutcomeAsync(
+    string dataDirectory,
+    string targetVersion,
+    string outcome,
+    string? error,
+    CancellationToken cancellationToken)
+{
+    var state = await ReadAgentStateAsync(dataDirectory, cancellationToken);
+    if (state is null || !state.PendingCommandId.HasValue)
+        return;
+
+    var next = state with
+    {
+        PendingCommandTargetVersion = targetVersion,
+        PendingCommandOutcome = outcome,
+        PendingUpdateVersion = string.Equals(
+            state.PendingCommandType,
+            AgentCommandTypes.Update,
+            StringComparison.OrdinalIgnoreCase)
+            ? targetVersion
+            : null,
+        LastUpdateError = error
+    };
+
+    await SaveStateAsync(Path.Combine(dataDirectory, "agent-state.json"), next);
+}
+
 static async Task LaunchUpdateWatchdogAsync(string dataDirectory, string targetVersion, int parentProcessId)
 {
     var entryPoint = Assembly.GetEntryAssembly()?.Location;
@@ -796,6 +882,13 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
 
         var rollbackBaselineHealthyAt = await ReadAgentLastHealthyAtAsync(dataDirectory, cancellation.Token);
         var rollbackVersion = await manager.RollbackAsync(cancellation.Token);
+        await MarkPendingLifecycleCommandOutcomeAsync(
+            dataDirectory,
+            rollbackVersion,
+            "RolledBack",
+            $"سلامت نسخه {targetVersion} تأیید نشد؛ Rollback به {rollbackVersion} آغاز شد.",
+            cancellation.Token);
+
         var rollbackChild = StartVersionProcess(manager, dataDirectory, rollbackVersion);
 
         var rollbackHealthy = await WaitForFreshHealthyVersionAsync(
@@ -813,8 +906,59 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
         }
 
         TryTerminateProcess(rollbackChild);
-        return 2;
-    }
+
+        var failedRollbackState = await manager.GetStateAsync(cancellation.Token);
+        if (!string.Equals(
+                failedRollbackState?.PendingRollbackVersion,
+                rollbackVersion,
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                failedRollbackState?.HealthyVersion,
+                rollbackVersion,
+                StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(failedRollbackState?.PreviousVersion))
+        {
+            await MarkPendingLifecycleCommandOutcomeAsync(
+                dataDirectory,
+                rollbackVersion,
+                "Failed",
+                $"نسخه {rollbackVersion} نیز سالم نشد و نسخه امن جایگزین قابل اتکا وجود ندارد.",
+                cancellation.Token);
+            return 2;
+        }
+
+        var fallbackBaselineHealthyAt = await ReadAgentLastHealthyAtAsync(dataDirectory, cancellation.Token);
+        var fallbackVersion = await manager.RollbackAsync(cancellation.Token);
+        await MarkPendingLifecycleCommandOutcomeAsync(
+            dataDirectory,
+            fallbackVersion,
+            "Failed",
+            $"Rollback اولیه به {rollbackVersion} سالم نشد؛ بازگشت به نسخه {fallbackVersion} برای بازیابی انجام شد.",
+            cancellation.Token);
+
+        var fallbackChild = StartVersionProcess(manager, dataDirectory, fallbackVersion);
+        var fallbackHealthy = await WaitForFreshHealthyVersionAsync(
+            manager,
+            dataDirectory,
+            fallbackVersion,
+            fallbackBaselineHealthyAt,
+            fallbackChild,
+            cancellation.Token);
+
+        if (fallbackHealthy)
+        {
+            await manager.CommitHealthyAsync(fallbackVersion, cancellation.Token);
+            return 2;
+        }
+
+        TryTerminateProcess(fallbackChild);
+        await MarkPendingLifecycleCommandOutcomeAsync(
+            dataDirectory,
+            fallbackVersion,
+            "Failed",
+            "Rollback و نسخه جایگزین هر دو در تأیید سلامت شکست خوردند.",
+            cancellation.Token);
+        return 3;
     catch
     {
         TryTerminateProcess(child);
@@ -1011,13 +1155,20 @@ record AgentState(
     string LifecycleState = ClientLifecycleStates.Starting,
     string? PendingUpdateVersion = null,
     string? LastUpdateError = null,
-    DateTimeOffset? LastHealthyAt = null);
+    DateTimeOffset? LastHealthyAt = null,
+    Guid? PendingCommandId = null,
+    string? PendingCommandType = null,
+    string? PendingCommandTargetVersion = null,
+    string? PendingCommandOutcome = null);
 
 record AgentCommandExecutionOutcome(
+    Guid CommandId,
+    string CommandType,
     bool Success,
     string Message,
     string? Error,
     string? PendingUpdateVersion,
     string? RollbackVersion,
     string? RestartVersion,
-    bool RequiresRestart);
+    bool RequiresRestart,
+    bool AwaitingFinalResult);
