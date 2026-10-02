@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createShiftExpense } from '../services/financeService';
 import { getCurrentShift } from '../services/shiftService';
+import { getServerBuffetProfit } from '../services/buffetService';
+import type { BuffetProfitReport } from '../types';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
 function parsePersianDate(value: string): Date | null {
@@ -39,6 +41,8 @@ export function ReportsPage() {
   const [notice, setNotice] = useState('');
   const [financeSummary, setFinanceSummary] = useState<{ revenue: number; expense: number; operatingProfit: number; source: 'server' } | null>(null);
   const [financeError, setFinanceError] = useState('');
+  const [buffetProfit, setBuffetProfit] = useState<BuffetProfitReport | null>(null);
+  const [buffetProfitError, setBuffetProfitError] = useState('');
 
   useEffect(() => {
     setFinanceError('');
@@ -65,6 +69,23 @@ export function ReportsPage() {
     window.addEventListener('gamenet-role-change', onRole);
     return () => window.removeEventListener('gamenet-role-change', onRole);
   }, []);
+
+  useEffect(() => {
+    if (reportCategory !== 'buffet') return;
+    const now = Date.now();
+    const start = range
+      ? range.start
+      : period === 'month' ? now - 30 * 86400000
+      : period === 'sixMonths' ? now - 180 * 86400000
+      : period === 'year' ? now - 365 * 86400000
+      : now - 6 * 86400000;
+    const end = range?.end ?? now;
+    setBuffetProfitError('');
+    setBuffetProfit(null);
+    void getServerBuffetProfit(new Date(start).toISOString(), new Date(end).toISOString())
+      .then(setBuffetProfit)
+      .catch(error => setBuffetProfitError(error instanceof Error ? error.message : 'گزارش سود بوفه دریافت نشد'));
+  }, [reportCategory, period, range]);
 
   const visibleRows = useMemo(() => {
     const now = Date.now();
@@ -205,7 +226,31 @@ export function ReportsPage() {
       <div className="summary-grid">{[['درآمد ثبت‌شده',reportRevenue,'blue'],['درآمد زمان',totals.time,'blue'],['فروش بوفه',totals.buffet,'orange'],['پکیج',totals.packageAmount,'purple'],['هزینه ثبت‌شده',reportExpense,'red'],['سود عملیاتی',net,'green'],['نقد',totals.cash,'orange'],['کارت',totals.card,'blue'],['کیف پول',totals.wallet,'purple'],['اعتبار رایگان',totals.gift,'blue']].map(item=><div className="summary-card" key={String(item[0])}><div className="label">{item[0]}</div><div className={'value '+item[2]}>{money(Number(item[1]))} تومان</div></div>)}</div>
       <div className="report-grid"><div className="chart-box"><h3>تفکیک پرداخت</h3><div className="report-kpi-list"><div><span>نقد</span><strong>{money(totals.cash)} تومان</strong></div><div><span>کارت</span><strong>{money(totals.card)} تومان</strong></div><div><span>کیف پول</span><strong>{money(totals.wallet)} تومان</strong></div><div><span>اعتبار رایگان</span><strong>{money(totals.gift)} تومان</strong></div></div></div><div className="chart-box"><h3>ایستگاه‌ها</h3>{visibleRows.slice(0,8).map(row=><div key={row.id} className="info-row"><span>{row.station}</span><strong>{money(row.amount)} ت</strong></div>)}</div></div>
       <div className="table-wrap"><table className="data-table"><thead><tr><th>تاریخ</th><th>شرح</th><th>مبلغ</th><th>روش</th><th>اپراتور</th></tr></thead><tbody>{visibleRows.map(row=><tr key={row.id}><td>{new Date(row.closedAt).toLocaleString('fa-IR')}</td><td>{row.station}</td><td>{money(row.amount)} ت</td><td>{row.method}</td><td>{row.operator}</td></tr>)}{visibleExpenses.map(row=><tr key={row.id}><td>{new Date(row.createdAt).toLocaleString('fa-IR')}</td><td>هزینه: {row.title}</td><td>−{money(row.amount)} ت</td><td>هزینه</td><td>{row.operator}</td></tr>)}</tbody></table></div>
-    </> : <section className="report-placeholder"><strong>{({sessions:'جلسات و ایستگاه‌ها',customers:'مشتری و VIP',buffet:'بوفه و موجودی',users:'کاربران و شیفت',audit:'Audit'} as Record<string,string>)[reportCategory]}</strong><span>ساختار این گزارش آماده شده است؛ اتصال منبع داده این دامنه باید قبل از نمایش عدد انجام شود تا هیچ داده ساختگی وارد گزارش نشود.</span></section>}
+    </> : reportCategory === 'buffet' ? <>
+      {buffetProfitError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>گزارش سود بوفه دریافت نشد</strong><span>{buffetProfitError}</span></div></div>}
+      {buffetProfit && <><div className="summary-grid">
+        {[
+          ['فروش بوفه', buffetProfit.totals.salesRevenue, 'orange'],
+          ['بهای کالای فروخته‌شده', buffetProfit.totals.salesCost, 'red'],
+          ['سود ناخالص', buffetProfit.totals.grossProfit, 'green'],
+          ['خرید ثبت‌شده', buffetProfit.totals.purchaseCost, 'blue'],
+          ['هزینه ضایعات', buffetProfit.totals.wasteCost, 'red'],
+          ['اثر مرجوعی', buffetProfit.totals.returnRevenue - buffetProfit.totals.returnCost, 'purple'],
+        ].map(item => <div className="summary-card" key={String(item[0])}><div className="label">{item[0]}</div><div className={'value ' + item[2]}>{money(Number(item[1]))} تومان</div></div>)}
+      </div>
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>کالا</th><th>فروش</th><th>درآمد</th><th>بهای تمام‌شده</th><th>مرجوعی</th><th>سود ناخالص</th></tr></thead><tbody>
+        {buffetProfit.products.filter(item => item.salesQuantity || item.purchaseQuantity || item.wasteQuantity || item.returnQuantity).map(item =>
+          <tr key={item.productId}>
+            <td>{item.productName}</td>
+            <td>{item.salesQuantity}</td>
+            <td>{money(item.salesRevenue)} ت</td>
+            <td>{money(item.salesCost)} ت</td>
+            <td>{item.returnQuantity}</td>
+            <td>{money(item.grossProfit)} ت</td>
+          </tr>
+        )}
+      </tbody></table></div></>}
+    </> : <section className="report-placeholder"><strong>{({sessions:'جلسات و ایستگاه‌ها',customers:'مشتری و VIP',users:'کاربران و شیفت',audit:'Audit'} as Record<string,string>)[reportCategory]}</strong><span>ساختار این گزارش آماده شده است؛ اتصال منبع داده این دامنه باید قبل از نمایش عدد انجام شود.</span></section>
 
     {notice && <div className="operation-toast">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
   </>;
