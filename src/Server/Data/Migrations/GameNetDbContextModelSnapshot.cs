@@ -1193,6 +1193,15 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<decimal?>("HourlyRateOverride")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<DateTimeOffset?>("PausedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PausedMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("PrepaidAmount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
@@ -1202,6 +1211,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.Property<DateTimeOffset>("StartAt")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("TimeAdjustmentMinutes")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("State")
                         .IsRequired()
