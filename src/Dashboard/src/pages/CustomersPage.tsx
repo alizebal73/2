@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { mockService } from '../services/mockService';
+import { userErrorMessage } from '../utils/userError';
+import { getServerCustomers } from '../services/customerService';
 import { userErrorMessage } from '../utils/userError';
 import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
 import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
@@ -37,7 +38,11 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string; sourceTransactionId?: string } | null>(null);
   const [refundSourceId, setRefundSourceId] = useState('');
 
-  useEffect(() => { void mockService.getCustomers().then(setCustomers); }, []);
+  useEffect(() => {
+    void getServerCustomers()
+      .then(setCustomers)
+      .catch(error => setNotice(userErrorMessage(error, 'دریافت فهرست مشتریان انجام نشد')));
+  }, []);
   const visible = useMemo(() => customers.filter(customer => {
     const matchesFilter = filter === 'all' || (filter === 'vip' ? customer.vip !== 'none' : customer.debt > 0);
     const search = query.trim().toLowerCase();
@@ -263,7 +268,7 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <div className="search-box"><input aria-label="جستجوی مشتری" value={query} onChange={event => setQuery(event.target.value)} placeholder="کد، نام، لقب، موبایل یا کد ملی…" /></div>
           <div className="view-switch">{([['all', 'همه'], ['vip', 'VIP'], ['debt', 'بدهکار']] as [Filter, string][]).map(([key, label]) =>
             <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{label}</button>)}</div>
-          <button className="btn primary sm" onClick={openNewCustomer}>+ مشتری جدید</button>
+          <button className="btn primary sm" onClick={() => setNotice('ثبت مشتری جدید در مرحله «مشتری و VIP» انجام می‌شود و فعلاً فقط مشتریان سروری نمایش داده می‌شوند.')}>+ مشتری جدید</button>
         </div>
         <div className="rows">{visible.map(customer =>
           <button key={customer.id} type="button" className={`customer-row ${customer.id === selected?.id ? 'active' : ''}`} onClick={() => setSelectedId(customer.id)}>
@@ -325,15 +330,12 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <div className="customer-history-item" key={`${item}-${index}`}><span className="customer-history-dot" /><div><strong>{item}</strong><small>{index === 0 ? 'آخرین فعالیت' : 'ثبت‌شده در سابقه مشتری'}</small></div></div>)}</div></div>
 
         <div className="customer-actions">
-          <button className="btn sm" onClick={() => openAction('edit')}>ویرایش</button>
           <button className="btn sm" onClick={() => openAction('wallet')}>شارژ کیف پول</button>
-          <button className="btn sm" onClick={() => openAction('debt')}>ثبت بدهی</button>
-          <button className="btn sm" onClick={() => openAction('gift')}>اعتبار رایگان</button><button className="btn sm" onClick={() => openAction('freeTime')}>زمان رایگان</button>
-          <button className="btn sm" onClick={() => openAction('package')}>فعال‌سازی/تغییر VIP</button>
+          <button className="btn sm" onClick={() => openAction('gift')}>اعتبار رایگان</button>
+          <button className="btn sm" onClick={() => openAction('freeTime')}>زمان رایگان</button>
           <button className="btn sm" onClick={() => openAction('refund')}>بازگشت وجه</button>
-          <button className="btn sm" onClick={() => openAction('password')}>تغییر رمز ورود</button>
-        </div>
-      </section>}
+          <button className="btn sm" onClick={() => setNotice('ویرایش مشخصات، بدهی، VIP و رمز ورود در مرحله «مشتری و VIP» سروری تکمیل می‌شوند.')}>سایر عملیات مشتری</button>
+        </div>     </section>}
     </div>
 
     {action && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setAction('')}>
