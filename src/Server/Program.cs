@@ -80,7 +80,7 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
     var dtos = stations.Select(station =>
     {
         activeByStation.TryGetValue(station.Id, out var active);
-        var remaining = active?.EndAt is null
+        int? remaining = active?.EndAt is null
             ? null
             : Math.Max(0, (int)Math.Ceiling((active.EndAt.Value - now).TotalMinutes));
 
