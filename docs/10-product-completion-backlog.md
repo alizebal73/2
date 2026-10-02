@@ -331,7 +331,7 @@
 9. [~] Wallet Ledger واقعی — API/SQLite/Audit/adapter و نمایش Ledger پیاده شد؛ عملیات کیف پول Dashboard به adapter منتقل شده‌اند؛ مهاجرت کامل Customer/Finance از Mock باقی است
 10. [~] Refund / Reverse واقعی — Refund کیف پول مسیر مستقل Server/API + Audit + UI گرفت و تست سرور سبز شد؛ Permission/Approval و Reverse کامل مالی مرحله بعدی هنوز باقی است
 11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change پیاده شد و CI + Smoke سبز است؛ اتصال Invoice/Server و ثبت مالی نهایی باقی است
-12. Split Payment
+12. [~] Split Payment — تسویه ترکیبی نقد/کارت/کیف پول پیاده‌سازی شد؛ منتظر CI و تست تعاملی
 13. Shift Settlement + Shift Handover
 14. Session Transfer / Change Tariff / Change Persons
 15. Free Time + Free Money کامل
@@ -384,6 +384,15 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 → D27 → D28 → D29 → D30 → D31 → D32
 → E33 → E34 → E35 → E36 → E37 → E38 → E39 → E40 → E41 → E42
 → F43 → F44 → F45 → F46 → F47 → F48
+
+## قرارداد اجرایی B12 — Split Payment
+
+- پرداخت نهایی یک جلسه می‌تواند بین نقدی، کارتخوان و کیف پول تقسیم شود.
+- مبلغ هر روش دستی وارد می‌شود و جمع سه روش باید دقیقاً برابر مبلغ قابل دریافت باشد.
+- سهم کیف پول از Ledger واقعی کم می‌شود و کمبود موجودی مانع ثبت می‌شود.
+- برای هر سهم نقد/کارت گزارش مالی جدا ثبت می‌شود، ولی Invoice جلسه یک تسویه ترکیبی واحد باقی می‌ماند.
+- در Timeline جلسه، روش‌ها و مبلغ هر سهم قابل پیگیری هستند.
+- در نسخه نهایی Server باید تراکنش Split را به‌صورت atomic ثبت کند و Audit/Permission نیز داشته باشد.
 
 ## وضعیت
 مورد ۱ Done است چون Build/Test/CI روی commit نهایی سبز شده است. موارد ۲ تا ۶ از نظر Build/Test/CI سبز شده‌اند، اما تا انجام تست تعاملی واقعی Done نمی‌شوند. مورد ۷ نیز در حال پیاده‌سازی است. سایر موارد باز هستند.
