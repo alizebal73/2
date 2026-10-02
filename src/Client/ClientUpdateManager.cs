@@ -256,8 +256,17 @@ public sealed class ClientUpdateManager
         if (!File.Exists(_activeStatePath))
             return null;
 
-        var json = await File.ReadAllTextAsync(_activeStatePath, cancellationToken);
-        return JsonSerializer.Deserialize<ClientUpdateState>(json);
+        await using var stream = new FileStream(
+            _activeStatePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete,
+            bufferSize: 4096,
+            useAsync: true);
+
+        return await JsonSerializer.DeserializeAsync<ClientUpdateState>(
+            stream,
+            cancellationToken: cancellationToken);
     }
 
     private async Task SaveStateAsync(ClientUpdateState state, CancellationToken cancellationToken)
