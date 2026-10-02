@@ -52,6 +52,20 @@ public sealed class AgentPresenceMonitor(
                         device.IsOnline = false;
                         device.ConnectionId = null;
 
+                        if (device.LockOnDisconnect && !device.IsLocked)
+                        {
+                            device.IsLocked = true;
+                            device.LockedAt = now;
+
+                            database.AuditLogs.Add(new AuditLog
+                            {
+                                Action = "AgentAutoLockOnDisconnect",
+                                EntityName = "AgentDevice",
+                                EntityId = device.Id.ToString(),
+                                Details = $"Agent {device.DeviceId} به دلیل stale شدن heartbeat قفل شد."
+                            });
+                        }
+
                         var unfinishedCommands = await database.AgentCommands
                             .Where(command => command.AgentDeviceId == device.Id
                                 && (command.Status == "Pending" || command.Status == "Sent"))
@@ -77,6 +91,9 @@ public sealed class AgentPresenceMonitor(
 
                 foreach (var command in timedOutCommands)
                 {
+                    if (command.Status is not ("Pending" or "Sent"))
+                        continue;
+
                     command.Status = "Failed";
                     command.Succeeded = false;
                     command.CompletedAt = now;
