@@ -1041,18 +1041,29 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       className={`station-card ${station.state} ${view} ${selected ? 'selected' : ''}`}
       draggable={false}
       onMouseDown={event => {
-        if (event.button !== 0 || event.target instanceof Element && event.target.closest('button, input, select, textarea, a')) return;
+        if (event.button !== 0 || (event.target instanceof Element && event.target.closest('button, input, select, textarea, a'))) return;
+        const ctrlKey = event.ctrlKey || event.metaKey;
+        const shiftKey = event.shiftKey;
         event.preventDefault();
         event.stopPropagation();
+        window.getSelection()?.removeAllRanges();
+
+        if (ctrlKey || shiftKey) {
+          selectStationWithModifiers(station.id, ctrlKey, shiftKey);
+          suppressNextStationClickRef.current = true;
+        } else {
+          suppressNextStationClickRef.current = false;
+        }
+
         selectionDragRef.current = {
           stationId: station.id,
           startX: event.clientX,
           startY: event.clientY,
           dragging: false,
-          ctrlKey: event.ctrlKey || event.metaKey,
-          shiftKey: event.shiftKey,
+          ctrlKey,
+          shiftKey,
         };
-        window.getSelection()?.removeAllRanges();
+        selectionRectRef.current = null;
       }}
       onClick={event => {
         event.stopPropagation();
