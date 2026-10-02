@@ -62,6 +62,7 @@ jobs:
           $env:Agent__RegistrationToken = 'Stage8CiRegistrationToken!'
           $env:Agent__HeartbeatIntervalSeconds = '3'
           $env:Agent__OfflineAfterSeconds = '6'
+          $env:Agent__CommandTimeoutSeconds = '5'
 
           $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
             'run','--no-build','--configuration','Release',
@@ -111,9 +112,10 @@ jobs:
             $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
             $env:GAMENET_AGENT_NAME = 'CI Agent Stage 8'
             $env:GAMENET_AGENT_DATA_DIR = $agentData
+            $env:GAMENET_AGENT_HEADLESS = '1'
 
             $agentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
-              'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+              'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
             ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $agentStdout -RedirectStandardError $agentStderr
 
             try {
@@ -192,7 +194,7 @@ jobs:
             Remove-Item $secondAgentStdout,$secondAgentStderr -Force -ErrorAction SilentlyContinue
 
             $secondAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
-              'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+              'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
             ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $secondAgentStdout -RedirectStandardError $secondAgentStderr
 
             try {
@@ -259,6 +261,50 @@ jobs:
 
               Write-Host ("Stage 8 Agent command transport smoke passed: commandId={0}; result={1}" -f $commandStatus.commandId, $commandStatus.resultMessage)
 
+              $lockCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'lock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($lockCommand.status -ne 'Sent') { throw 'Agent lock command was not accepted for dispatch.' }
+
+              $lockCompleted = $false
+              $lockStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $lockStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($lockCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($lockStatus.status -in @('Succeeded', 'Failed')) { $lockCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $lockCompleted -or $lockStatus.status -ne 'Succeeded') {
+                throw 'Agent lock command did not complete successfully.'
+              }
+
+              $lockedRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $lockedRow = @($lockedRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if (-not $lockedRow.isLocked) { throw 'Agent lock acknowledgement did not persist IsLocked=true.' }
+
+              $unlockCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'unlock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($unlockCommand.status -ne 'Sent') { throw 'Agent unlock command was not accepted for dispatch.' }
+
+              $unlockCompleted = $false
+              $unlockStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $unlockStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($unlockCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($unlockStatus.status -in @('Succeeded', 'Failed')) { $unlockCompleted = $true; break }
+                Start-Sleep -Milliseconds 500
+              }
+              if (-not $unlockCompleted -or $unlockStatus.status -ne 'Succeeded') {
+                throw 'Agent unlock command did not complete successfully.'
+              }
+
+              $unlockedRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $unlockedRow = @($unlockedRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if ($unlockedRow.isLocked) { throw 'Agent unlock acknowledgement did not persist IsLocked=false.' }
+
+              Write-Host ("Stage 9 Agent lock/unlock smoke passed: agentId={0}" -f $secondRow.agentId)
+
               $multiProcesses = @()
               try {
                 $multiAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-multi-agent'
@@ -278,7 +324,7 @@ jobs:
                   $env:GAMENET_AGENT_NAME = $multiName
                   $env:GAMENET_AGENT_DATA_DIR = $dir
                   $multiProcesses += Start-Process -FilePath 'dotnet' -ArgumentList @(
-                  'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
+                  'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
                 ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
                 }
 
