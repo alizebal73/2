@@ -757,8 +757,7 @@ app.MapGet("/api/buffet/inventory-transactions", async (
     var rows = await database.InventoryTransactions
         .AsNoTracking()
         .Include(item => item.Product)
-        .OrderByDescending(item => item.CreatedAt)
-        .Take(200)
+        .Take(300)
         .Select(item => new
         {
             id = item.Id,
@@ -771,7 +770,10 @@ app.MapGet("/api/buffet/inventory-transactions", async (
         })
         .ToListAsync(cancellationToken);
 
-    return Results.Ok(rows);
+    return Results.Ok(rows
+        .OrderByDescending(item => item.createdAt)
+        .Take(200)
+        .ToList());
 })
 .WithName("GetInventoryTransactions");
 
