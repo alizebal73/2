@@ -333,7 +333,7 @@
 11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change پیاده شد و CI + Smoke سبز است؛ اتصال Invoice/Server و ثبت مالی نهایی باقی است
 12. [~] Split Payment — تسویه ترکیبی نقد/کارت/کیف پول پیاده‌سازی شد؛ منتظر CI و تست تعاملی
 13. [~] Shift Settlement + Shift Handover — فرم تسویه، تطبیق نقدی و یادداشت تحویل شیفت پیاده‌سازی شد؛ منتظر CI
-14. Session Transfer / Change Tariff / Change Persons
+14. [~] Session Transfer / Change Tariff / Change Persons — انتقال جلسه، تغییر نرخ همان جلسه و تغییر نفرات به Session Center اضافه شد؛ منتظر CI
 15. Free Time + Free Money کامل
 16. Concurrent Login Limit
 17. Expense / Profit واقعی و قابل ممیزی
@@ -384,6 +384,14 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 → D27 → D28 → D29 → D30 → D31 → D32
 → E33 → E34 → E35 → E36 → E37 → E38 → E39 → E40 → E41 → E42
 → F43 → F44 → F45 → F46 → F47 → F48
+
+## قرارداد اجرایی B14 — Session Transfer / Change Tariff / Change Persons
+
+- نرخ جلسه داخل Session Center قابل تغییر است و فقط روی همان جلسه اثر دارد.
+- نفرات جلسه داخل Session Center قابل تغییر است؛ PC همیشه ۱ نفر باقی می‌ماند.
+- جلسه فعال/متوقف را می‌توان به ایستگاه آزاد منتقل کرد و وضعیت جلسه، مشتری، زمان، شارژ و بوفه همراه آن منتقل می‌شوند.
+- ایستگاه مبدأ آزاد می‌شود و رویداد انتقال در Timeline ثبت می‌شود.
+- نسخه نهایی سروری باید انتقال را به‌صورت Transaction و با Permission/Audit ثبت کند.
 
 ## قرارداد اجرایی B13 — Shift Settlement + Handover
 
