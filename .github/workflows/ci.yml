@@ -1,5 +1,4 @@
 name: GameNet Manager CI
-
 on:
   push:
     branches: [main]
@@ -88,6 +87,16 @@ jobs:
             Write-Host 'Server startup, EF migrations and /api/health passed.'
 
 
+            $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            $adminLogin = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              userName = 'admin'
+              password = 'Admin123!'
+            } | ConvertTo-Json)
+            if (-not $adminLogin.id -or $adminLogin.role -ne 'Admin') { throw 'Server operator authentication smoke failed before Agent smoke.' }
+
+            $meBeforeAgent = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
+            if ($meBeforeAgent.userName -ne 'admin') { throw 'Current operator endpoint failed before Agent smoke.' }
+
             # Stage 8: prove a real Client Agent can register, connect to the dedicated SignalR hub,
             # persist a heartbeat, and become offline again after disconnect.
             $agentData = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent'
@@ -173,13 +182,6 @@ jobs:
             Write-Host 'Stage 8 Agent registration, SignalR connection, heartbeat and offline transition smoke passed.'
 
 
-
-            $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-            $adminLogin = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
-              userName = 'admin'
-              password = 'Admin123!'
-            } | ConvertTo-Json)
-            if (-not $adminLogin.id -or $adminLogin.role -ne 'Admin') { throw 'Server operator authentication smoke failed.' }
 
             $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($me.userName -ne 'admin') { throw 'Current operator endpoint returned the wrong user.' }
