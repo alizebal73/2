@@ -66,7 +66,7 @@ jobs:
 
       - name: Dashboard interaction smoke
         shell: pwsh
-        run: npx --prefix src/Dashboard playwright test ../../e2e/dashboard-smoke.cjs --config ../../e2e/playwright.config.cjs --workers=1
+        run: npx --prefix src/Dashboard playwright test "$env:GITHUB_WORKSPACE\e2e\dashboard-smoke.cjs" --config "$env:GITHUB_WORKSPACE\e2e\playwright.config.cjs" --workers=1
 
       - name: Stop Dashboard preview
         if: always()
