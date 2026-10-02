@@ -3229,22 +3229,25 @@ button:focus-visible {
 
 
 .station-grid {
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-user-drag: none;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-user-drag: none !important;
   touch-action: none;
-}
-
-.station-card {
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-user-drag: none;
   cursor: default;
 }
 
+.station-card {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-user-drag: none !important;
+  cursor: default;
+  -webkit-touch-callout: none;
+}
+
 .station-card * {
-  user-select: none;
-  -webkit-user-select: none;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  -webkit-user-drag: none !important;
 }
 
 .station-card.selected {
