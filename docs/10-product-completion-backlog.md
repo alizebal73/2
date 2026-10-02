@@ -626,4 +626,15 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - در نسخه نهایی Server باید تراکنش Split را به‌صورت atomic ثبت کند و Audit/Permission نیز داشته باشد.
 
 ## وضعیت
-مرحله اصلی ۳ و هستهٔ اصلی مرحلهٔ ۴ بسته شده‌اند. جایگاه فعلی پروژه **مرحلهٔ ۵ — Customer & VIP Domain** است؛ موارد Permission/Approval نهایی عمداً به مرحلهٔ ۷ منتقل شده‌اند و موارد باز Stage 5 در بخش بالاتر همین سند ثبت شده‌اند. CI فعلی شامل Build/Test، مهاجرت/Startup سرور، smoke واقعی Customer/VIP API و smoke تعاملی Dashboard است.
+مرحله اصلی ۳ و هستهٔ اصلی مرحلهٔ ۴ بسته شده‌اند. جایگاه فعلی پروژه **مرحلهٔ ۶ — Buffet & Inventory Domain** است؛ موارد Permission/Approval نهایی عمداً به مرحلهٔ ۷ منتقل شده‌اند و موارد باز Stage 5 در بخش بالاتر همین سند ثبت شده‌اند. CI فعلی شامل Build/Test، مهاجرت/Startup سرور، smoke واقعی Customer/VIP API و smoke تعاملی Dashboard است.
+
+
+## قرارداد سراسری Update / Release — از همین مرحله لازم‌الاجرا
+- Update قابلیت جانبی آخر پروژه نیست؛ هر Feature باید با فرض «قابل انتشار و قابل برگشت» طراحی شود.
+- هر Release چهار شناسهٔ مستقل دارد: ProductVersion، SchemaVersion، ApiContractVersion و MinimumClientVersion؛ RecommendedClientVersion هم برای پیشنهاد ارتقا نگه داشته می‌شود.
+- تغییر API تا وقتی additive و سازگار است نسخهٔ جدید نمی‌خواهد؛ /api/v2 فقط برای Breaking Change واقعی استفاده می‌شود.
+- قبل از Migration دیتابیس واقعی، Backup قابل‌بازیابی باید وجود داشته باشد؛ Migration خطرناک نباید با حذف یا بازسازی خودکار دیتابیس پوشانده شود.
+- Server فعلاً قرارداد Manifest را از /api/release/manifest ارائه می‌کند؛ Updater/Delta/Rollback عملیاتی برای مراحل ۱۰ و ۱۴ است.
+- چرخهٔ انتشار آینده: Build → Test → Smoke/E2E → Release Manifest → Canary → Health Check → Rollback/Publish.
+- Clientهای قدیمی نباید بی‌دلیل با Release ناسازگار از کار بیفتند؛ Minimum/Recommended Client Version برای کنترل سازگاری است.
+- کانال‌های stable و canary در معماری حفظ می‌شوند و Canary عملیاتی بعد از Agent واقعی فعال می‌شود.
