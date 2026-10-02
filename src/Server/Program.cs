@@ -265,7 +265,8 @@ app.MapGet("/api/customers/{customerId:guid}/wallet-ledger", async (
             transaction.Type.ToString(),
             transaction.Description,
             transaction.CreatedAt,
-            running));
+            running,
+            transaction.ReferenceTransactionId));
 
         running = transaction.Type == WalletTransactionType.Credit
             ? running - transaction.Amount
@@ -353,7 +354,8 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (
             ledger.Type.ToString(),
             ledger.Description,
             ledger.CreatedAt,
-            customer.Balance));
+            customer.Balance,
+            ledger.ReferenceTransactionId));
     }
     catch
     {
@@ -394,6 +396,26 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (
         return Results.BadRequest(new { code = "insufficient_balance", message = "موجودی کیف پول برای بازگشت این مبلغ کافی نیست." });
     }
 
+    WalletTransaction? source = null;
+    if (request.SourceTransactionId is Guid sourceId)
+    {
+        source = await database.WalletTransactions
+            .FirstOrDefaultAsync(item => item.Id == sourceId && item.CustomerId == customerId, cancellationToken);
+
+        if (source is null)
+            return Results.NotFound(new { code = "refund_source_not_found", message = "تراکنش مبدأ بازگشت وجه پیدا نشد." });
+
+        if (source.Type != WalletTransactionType.Credit)
+            return Results.BadRequest(new { code = "invalid_refund_source", message = "تراکنش انتخاب‌شده قابل بازگشت نیست." });
+
+        var alreadyRefunded = await database.WalletTransactions
+            .Where(item => item.ReferenceTransactionId == source.Id && item.Type == WalletTransactionType.Debit)
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+        if (alreadyRefunded + request.Amount > source.Amount)
+            return Results.BadRequest(new { code = "refund_exceeds_source", message = "مبلغ بازگشت از مانده قابل بازگشت تراکنش مبدأ بیشتر است." });
+    }
+
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
     try
@@ -405,6 +427,7 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (
             CustomerId = customer.Id,
             Amount = request.Amount,
             Type = WalletTransactionType.Debit,
+            ReferenceTransactionId = source?.Id,
             Description = "بازگشت وجه · " + reason
         };
 
@@ -414,7 +437,8 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-refunds", async (
             Action = "WalletRefund",
             EntityName = "CustomerWallet",
             EntityId = customer.Id.ToString(),
-            Details = request.Amount.ToString("0.##") + " تومان · " + reason,
+            Details = request.Amount.ToString("0.##") + " تومان · " + reason
+                + (source is null ? "" : " · مرجع " + source.Id),
             AppUserId = request.AppUserId
         });
 
