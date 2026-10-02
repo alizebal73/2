@@ -172,7 +172,7 @@
 13. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
 14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
 
-**جایگاه فعلی:** مرحلهٔ اصلی **۸ — PC Agent Foundation**.  
+**جایگاه فعلی:** Stage 10 — **Client Lifecycle** از نظر نرم‌افزاری تکمیل و merge شده است؛ Stage 11 — Games & Accounts مرحلهٔ بعدی توسعه است.  
 مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ با احراز هویت/Permission/Approval، Payroll، Read/Write hardening، Invoice Reverse و Wallet Refund روی head نهایی تأیید و در `main` merge شده است.
 
 این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
@@ -754,7 +754,7 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - Installer همچنان local-only است.
 
 ## Gate
-Stage 9 از نظر برش‌های نرم‌افزاری تأییدشده است، اما **به‌دلیل باقی‌بودن Full Kiosk/Shell و validation فیزیکی، Stage 10 را هنوز باز نمی‌کنیم**. Server همچنان منبع حقیقت است و هر Command باید Permission → Persistence → SignalR → Ack/Result → Audit را حفظ کند.
+Stage 9 از نظر برش‌های نرم‌افزاری تأییدشده بود و سپس Stage 10 اجرا و تکمیل شد. Full Kiosk/Shell، UX کامل مشتری و validation فیزیکی 2–3 PC عمداً از scope Stage 10 خارج مانده‌اند. Server همچنان منبع حقیقت است و هر Command باید Permission → Persistence → SignalR → Ack/Result → Audit را حفظ کند.
 
 
 ## Product Improvement Queue — ثبت در ممیزی Stage 1–9
@@ -791,3 +791,31 @@ Stage 9 از نظر برش‌های نرم‌افزاری تأییدشده اس�
 - این موارد فعلاً ثبت محصول هستند و نباید قبل از مرحلهٔ مناسب وارد کد شوند، مگر مورد ۳ که یک gap روشن در مدیریت کاربران است و با یک اصلاح محدود UI بسته می‌شود.
 - در پایان هر Stage ممیزی، نیازهای جدید UI/عملیاتی به همین صف اضافه می‌شوند و محل اجرای مناسب برایشان تعیین می‌شود.
 - Release/Update نهایی بعد از تثبیت این اصلاحات و قبل از rollout گسترده انجام می‌شود.
+
+
+## وضعیت نهایی Stage 10 — Client Lifecycle — 2026-10-03
+
+- ✅ Current main commit: `5e9453e741552d638989f79f538cbc55aceeae66`
+- ✅ Final CI Run #842: **success**
+- ✅ persisted lifecycle state and server-authoritative compatibility
+- ✅ package manifest/download + SHA256/size verification
+- ✅ version-isolated install + previous healthy version
+- ✅ controlled restart/watchdog + fresh health confirmation
+- ✅ manual rollback + fresh rollback health confirmation
+- ✅ final Update/Rollback result is correlated across restart and is reported only after post-restart health
+- ✅ `AwaitingHealth` survives intentional restart disconnects
+- ✅ rollback fallback is preserved until healthy commit
+- ✅ recommended Client version aligned with `0.7.1`
+- ✅ regression test added for rollback marker preservation through healthy startup
+
+### Gate استقرار Stage 10
+
+- ⬜ validation روی 2–3 PC واقعی GameNet
+- ⬜ rollout کنترل‌شدهٔ 40+ PC
+
+این دو مورد deployment/production gate هستند؛ در CI/مهندسی نرم‌افزار Stage 10 تکمیل شده‌اند و تا انجام سخت‌افزار واقعی نباید به‌عنوان validation فیزیکی Done علامت بخورند.
+
+### بعد از Stage 10
+
+**Stage 11 — Games & Accounts** مرحلهٔ بعدی است:
+Game Library واقعی → Account Pool/Lease → Process Detection، بدون فعال‌کردن Mock به‌عنوان قابلیت واقعی.

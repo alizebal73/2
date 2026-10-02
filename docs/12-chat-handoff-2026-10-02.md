@@ -1,4 +1,4 @@
-# Chat Handoff — GameNet Manager — 2026-10-02
+# Chat Handoff — GameNet Manager — 2026-10-03
 
 این فایل برای انتقال دقیق وضعیت پروژه بین چت‌هاست. در چت جدید، قبل از هر تغییر کد، این فایل و سپس فایل‌های پروژه را در همین ریپو بررسی کن.
 
@@ -8,15 +8,17 @@
 - ریپوهای دیگر را برای این پروژه بررسی/ویرایش نکن.
 - محصول: GameNet Manager / GameNet Pro برای مدیریت یک GameNet واقعی، با هدف اجرای پایدار روی 40+ دستگاه.
 - معماری مرجع: Server منبع حقیقت است؛ Dashboard و Client نباید state مالی/عملیاتی مستقل و authoritative داشته باشند.
-- branch فعال: `stage10-client-lifecycle`
-- base merge commit: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
-- branch Stage 8 از merge موفق Stage 7 ساخته شده است؛ head جدید باید قبل از هر تغییر دوباره از GitHub خوانده شود.
+- branch فعال: `main`
+- آخرین merge commit تأییدشده: `5e9453e741552d638989f79f538cbc55aceeae66`
+- Stage 10 PRهای اصلاحی #10، #11 و #12 همگی merge شده‌اند.
+- Stage 8، Stage 9 و Stage 10 تا این checkpoint باید از commit/CI واقعی GitHub تطبیق داده شوند؛ متن‌های تاریخی پایین‌تر فقط سابقه‌اند.
 - PR #2 — `Stage 7: real operator auth, users, permissions and approvals` — **merged** در `main`.
 - Merge commit: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`.
-- Stage 8 branch: `stage8-pc-agent-foundation`.
+- Stage 8 branch: `stage8-pc-agent-foundation` (historical).
 - CI مبنای بسته‌شدن Stage 7: Run #593 روی head `a7135fe...` → **success**.
 - CI Run #504 که قبلاً در حال اجرا بود مربوط به head قدیمی `6b05f292...` بود؛ مبنای فعلی نیست. مبنای معتبر فعلی Run #555 روی `4c283e...` است.
-- main پس از merge Stage 7: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
+- main پس از Stage 10 hardening: `5e9453e741552d638989f79f538cbc55aceeae66`
+- CI نهایی Stage 10: Run #842 — **success** روی همین merge commit.
 
 ## 1) قوانین غیرقابل شکستن پروژه
 
@@ -55,7 +57,7 @@
 
 ### Client
 - مسیر: `src/Client`
-- فعلاً Client واقعی Windows Agent کامل نشده و هنوز بخشی از قابلیت‌های Stage 8/9 باقی است.
+- Client واقعی Windows Agent برای scopeهای Stage 8–10 پیاده‌سازی و CI-smoke شده است؛ Full Kiosk/Shell، UX کامل مشتری و validation فیزیکی 2–3 PC همچنان خارج از این برش‌اند.
 - Agent واقعی باید از Server فرمان و policy بگیرد، heartbeat/health/telemetry داشته باشد و در قطع ارتباط رفتار امن داشته باشد.
 
 ### Shared
@@ -662,3 +664,42 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 - Watchdog restart now waits for the previous Agent process to exit before starting the new version, and Client update-state writes use unique temp files plus serialized in-process writes.
 - Server Agent disconnect handling now uses an atomic connection-owner compare-and-set, so stale/old SignalR connections cannot demote a newer healthy Agent to `Degraded`.
 - Stage 10 Foundation + Client Lifecycle Update/Rollback + Release Safety/Canary are now verified on the same current head.
+
+
+# Final Current Checkpoint — Stage 10 complete — 2026-10-03
+
+- Repo: `alizebal73/2` only.
+- Current branch: `main`.
+- Current main commit: `5e9453e741552d638989f79f538cbc55aceeae66`.
+- Final Stage 10 CI: Run #842 — **success**.
+- Stage 10 software scope is **complete and merged**.
+
+## Stage 10 final verified scope
+
+- ✅ persisted Client lifecycle state on Server/Agent
+- ✅ server-authoritative release compatibility and release manifest
+- ✅ authenticated Client package download
+- ✅ package SHA256 and size verification on Client
+- ✅ version-isolated installation
+- ✅ controlled restart via watchdog
+- ✅ fresh post-restart health confirmation
+- ✅ manual rollback with fresh post-rollback health confirmation
+- ✅ Update/Rollback command completion is no longer marked successful at initial acceptance; final result waits for post-restart health
+- ✅ lifecycle command correlation survives controlled restart
+- ✅ rollback fallback state is preserved until healthy commit
+- ✅ controlled-restart disconnect does not prematurely fail `AwaitingHealth`
+- ✅ stale/lost initial acknowledgement can still be followed by final lifecycle result
+- ✅ recommended Client release aligned to `0.7.1`
+- ✅ regression coverage for rollback-state preservation
+- ✅ final CI verified .NET Build/Test + Server/Migration/Agent canary + Dashboard Lint/Build + Browser Smoke
+
+## Remaining deployment gate
+
+- ⬜ Physical validation on 2–3 real GameNet PCs
+- ⬜ Controlled 40+ PC rollout
+
+These are deployment/production gates, not missing Stage 10 software implementation. The physical PCs were not available through this GitHub/CI workflow, so they are not claimed as completed.
+
+## Next stage
+
+Stage 11 is the next software stage: **Games & Accounts**. Start it only from the current `main` commit above, and re-check the real repository/CI state before coding.
