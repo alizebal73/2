@@ -934,10 +934,7 @@ app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
 
     var todayStart = now.Date;
     var sessions = await database.Sessions.AsNoTracking()
-        .Where(item =>
-            item.CustomerId == customerId
-            && item.StartAt >= activatedAt
-            && item.StartAt <= now)
+        .Where(item => item.CustomerId == customerId)
         .Select(item => new { item.StartAt, item.EndAt })
         .ToListAsync(cancellationToken);
 
