@@ -33,3 +33,20 @@ public sealed record ClientLifecycleStatusDto(
     DateTimeOffset? LifecycleStateChangedAt,
     bool IsOnline,
     ClientReleaseCompatibilityDto Compatibility);
+
+
+public sealed record ClientUpdatePackageDto(
+    string Version,
+    string PackageUrl,
+    string Sha256,
+    long SizeBytes);
+
+public sealed record ClientUpdateCommandPayload(
+    string Version,
+    string PackageUrl,
+    string Sha256,
+    long SizeBytes,
+    bool Activate = true);
+
+public sealed record ClientRollbackCommandPayload(
+    string? Reason);
