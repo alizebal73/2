@@ -86,6 +86,12 @@ export type CustomerRecord = {
   freeTimeMinutes?: number;
   discountLevel: number;
   packageName?: string;
+  vipPackageId?: string;
+  vipActivatedAt?: string;
+  vipExpiresAt?: string;
+  vipDailyMinutes?: number;
+  vipTotalMinutes?: number;
+  vipDiscountPercent?: number;
   username: string;
   lastSeen: string;
   status: 'active' | 'warning' | 'locked';
