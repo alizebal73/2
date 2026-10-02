@@ -127,3 +127,4 @@ public sealed record SettlementResult(
     decimal WalletBalanceAfter,
     string InvoiceStatus,
     DateTimeOffset PaidAt);
+
