@@ -293,6 +293,17 @@
 7. ✅ Approval Flow برای عملیات حساس — Build/Test/CI + Smoke Test تعاملی سبز
 8. ✅ Undo UX برای عملیات برگشت‌پذیر (Reverse واقعی، بدون حذف رکورد) — Build/Test/CI + Smoke Test تعاملی سبز
 
+## اجرای مرحله اصلی ۴ — B11 Settlement
+
+### وضعیت فعلی
+- Settlement UI از همان Billing Engine استفاده می‌کند و محاسبه جداگانه/قدیمی مودال حذف شد.
+- Breakdown شامل زمان، دقیقه قابل صورتحساب، نرخ، بوفه، اعتبار پیش‌پرداخت، تخفیف و رند است.
+- بخش «چرا این مبلغ؟» مسیر محاسبه را برای اپراتور توضیح می‌دهد.
+- برای پرداخت نقدی مبلغ دریافتی قابل ورود است و مبلغ برگشتی محاسبه می‌شود.
+- Free Time در Breakdown لحاظ می‌شود.
+- Split Payment هنوز جداست و در B12 تکمیل می‌شود.
+- Invoice/Settlement واقعی Server هنوز باید مالک نهایی محاسبه و ثبت شود.
+
 ## اجرای مرحله اصلی ۴ — B10 Refund
 
 ### مسیر فعلی
@@ -319,7 +330,7 @@
 ### B) Finance / Session
 9. [~] Wallet Ledger واقعی — قرارداد مشترک، API پایدار Server/SQLite، Audit، adapter داشبورد و نمایش Ledger مشتری پیاده‌سازی شد؛ اتصال همه عملیات مالی و مهاجرت کامل از Mock باقی مانده
 10. [~] Refund / Reverse واقعی — Refund کیف پول مسیر مستقل Server/API + Audit + UI گرفت؛ Permission/Approval و Reverse کامل مالی مرحله بعدی هنوز باقی است
-11. Settlement کامل + Breakdown + Why this amount?
+11. [~] Settlement کامل + Breakdown + Why this amount? — محاسبه مودال با Billing Engine یکپارچه شد؛ Breakdown/Why/Received/Change اضافه شد؛ اتصال Invoice/Server و تست کامل مالی باقی است
 12. Split Payment
 13. Shift Settlement + Shift Handover
 14. Session Transfer / Change Tariff / Change Persons
