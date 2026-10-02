@@ -209,6 +209,15 @@ jobs:
                 Start-Sleep -Milliseconds 500
               }
               if (-not $updateCompleted -or $updateStatus.status -ne 'Succeeded') {
+                Write-Host ("Stage 10 update command did not complete. Status={0}; Result={1}" -f $updateStatus.status, $updateStatus.resultMessage)
+                Write-Host '--- Agent stdout before update failure ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr before update failure ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                Write-Host '--- Server stdout before update failure ---'
+                if (Test-Path $stdout) { Get-Content $stdout }
+                Write-Host '--- Server stderr before update failure ---'
+                if (Test-Path $stderr) { Get-Content $stderr }
                 throw 'Stage 10 update command did not complete successfully.'
               }
               Write-Host ("Stage 10 update command succeeded: commandId={0}" -f $updateCommand.commandId)
