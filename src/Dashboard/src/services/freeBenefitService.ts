@@ -31,10 +31,8 @@ export async function getFreeBenefits(customerId: string): Promise<FreeBenefitsS
 export async function changeFreeBenefits(
   customerId: string,
   input: { moneyAmount?: number; minutes?: number; mode: 'credit' | 'debit'; description: string },
-): Promise<FreeBenefitsSnapshot> {
-  if (!isGuid(customerId)) {
-    throw new Error('مشتری سروری نیست؛ اعتبار رایگان فقط برای مشتری ثبت‌شده روی سرور قابل ثبت است.');
-  }
+): Promise<FreeBenefitsSnapshot | null> {
+  if (!isGuid(customerId)) return null;
   return await readJson<FreeBenefitsSnapshot>(await fetch('/api/customers/' + customerId + '/free-benefits', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
