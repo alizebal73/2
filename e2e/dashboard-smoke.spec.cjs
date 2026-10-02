@@ -63,6 +63,8 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await page.mouse.move(last.x + last.width / 2, last.y + last.height / 2, { steps: 10 });
   await page.mouse.up();
   await expect(page.locator('.station-selection-tools')).toContainText('۴');
+  const selectedTextAfterDrag = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+  expect(selectedTextAfterDrag).toBe('');
 
   await page.keyboard.press('Escape');
   await page.locator('[data-station-id="pc-03"]').click();
