@@ -3,8 +3,8 @@ import { decideApproval, getApprovals, getPermissions, getUsers, hasPermission, 
 import type { AppUserRecord } from '../types';
 import { userErrorMessage } from '../utils/userError';
 import { closeServerShift, getCurrentShift, getShiftHistory, startServerShift } from '../services/shiftService';
-import type { ApprovalRecord, PayrollUserRecord, UserRecord } from '../types';
-import { createPayrollEntry, getPayrollUsers, updatePayrollProfile } from '../services/payrollService';
+import type { ApprovalRecord, PayrollLedgerEntry, PayrollUserRecord, UserRecord } from '../types';
+import { createPayrollEntry, getPayrollLedger, getPayrollUsers, updatePayrollProfile } from '../services/payrollService';
 
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(value); }
@@ -31,7 +31,11 @@ export function UsersPage({ user }: UsersPageProps) {
   const [payUserId, setPayUserId] = useState<string | null>(null);
   const [payAmount, setPayAmount] = useState('');
   const [payReason, setPayReason] = useState('');
-  const [payMode, setPayMode] = useState<'salary' | 'bonus' | 'deduction' | 'damage' | 'advance'>('salary');
+  const [payMode, setPayMode] = useState<'salary' | 'accrual' | 'overtime' | 'bonus' | 'deduction' | 'damage' | 'advance' | 'receivablePayment'>('salary');
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card' | 'bank'>('cash');
+  const [receiptNumber, setReceiptNumber] = useState('');
+  const [payrollLedger, setPayrollLedger] = useState<PayrollLedgerEntry[]>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
   const [manualCash, setManualCash] = useState('');
   const [shiftNote, setShiftNote] = useState('');
   const [shiftOperator, setShiftOperator] = useState('');
@@ -46,14 +50,33 @@ export function UsersPage({ user }: UsersPageProps) {
         const [serverRows, catalog] = await Promise.all([getUsers(), getPermissions()]);
         setServerUsers(serverRows);
         setPermissionCatalog(catalog);
-        const userRows: UserRecord[] = serverRows.map(serverUser => ({
-          id: serverUser.id,
-          name: serverUser.fullName,
-          role: serverUser.role.toLowerCase() === 'owner' ? 'owner' : serverUser.role.toLowerCase() === 'admin' || serverUser.role.toLowerCase() === 'manager' ? 'admin' : 'operator',
-          shift: 'سرور',
-          sales: 0,
-          permissions: serverUser.permissions,
-        }));
+        const payrollByUser = new Map(payrollUsers.map(row => [row.userId, row]));
+        const userRows: UserRecord[] = serverRows.map(serverUser => {
+          const payroll = payrollByUser.get(serverUser.id);
+          return {
+            id: serverUser.id,
+            name: serverUser.fullName,
+            role: serverUser.role.toLowerCase() === 'owner' ? 'owner' : serverUser.role.toLowerCase() === 'admin' || serverUser.role.toLowerCase() === 'manager' ? 'admin' : 'operator',
+            shift: 'سرور',
+            sales: 0,
+            permissions: serverUser.permissions,
+            payType: payroll?.payType === 'monthly' ? 'monthly' : 'hourly',
+            hourlyRate: payroll?.hourlyRate ?? 0,
+            monthlySalary: payroll?.monthlySalary ?? 0,
+            overtimeRate: payroll?.overtimeRate ?? 0,
+            phone: payroll?.phone ?? '',
+            employmentStartDate: payroll?.employmentStartDate ?? null,
+            workSchedule: payroll?.workSchedule ?? null,
+            notes: payroll?.notes ?? null,
+            paidSalaryTotal: payroll?.paidThisMonth ?? 0,
+            employeePayable: payroll?.employeePayable ?? 0,
+            ownerReceivable: payroll?.ownerReceivable ?? 0,
+            bonusTotal: payroll?.bonusTotal ?? 0,
+            deductionTotal: payroll?.deductionTotal ?? 0,
+            damageTotal: payroll?.damageTotal ?? 0,
+            advanceTotal: payroll?.advanceTotal ?? 0,
+          };
+        });
         setUsers(userRows);
         const nextUserId = selectedUserId && serverRows.some(row => row.id === selectedUserId) ? selectedUserId : (serverRows[0]?.id ?? '');
         setSelectedUserId(nextUserId);
@@ -113,13 +136,16 @@ export function UsersPage({ user }: UsersPageProps) {
   async function saveUser() {
     if (!draft?.id || !canManagePayroll) { setNotice('دسترسی مدیریت حقوق ندارید'); return; }
     try {
-      const schedule = [draft.workStart, draft.workEnd].filter(Boolean).join('-') || null;
+      const schedule = [draft.workStart, draft.workEnd].filter(Boolean).join('-') || draft.workSchedule || null;
       await updatePayrollProfile(draft.id, {
+        phone: draft.phone ?? '',
         payType: draft.payType ?? 'hourly',
         hourlyRate: draft.hourlyRate ?? 0,
         monthlySalary: draft.monthlySalary ?? 0,
         overtimeRate: draft.overtimeRate ?? 0,
+        employmentStartDate: draft.employmentStartDate ?? null,
         workSchedule: schedule,
+        notes: draft.notes ?? null,
         isActive: true,
       });
       await refresh();
@@ -181,29 +207,78 @@ export function UsersPage({ user }: UsersPageProps) {
     }
     const kind = payMode === 'salary'
       ? 'SalaryPayment'
-      : payMode === 'bonus'
-        ? 'Bonus'
-        : payMode === 'deduction'
-          ? 'Deduction'
-          : payMode === 'damage'
-            ? 'Damage'
-            : 'Advance';
+      : payMode === 'accrual'
+        ? 'SalaryAccrual'
+        : payMode === 'overtime'
+          ? 'Overtime'
+          : payMode === 'bonus'
+            ? 'Bonus'
+            : payMode === 'deduction'
+              ? 'Deduction'
+              : payMode === 'damage'
+                ? 'Damage'
+                : payMode === 'receivablePayment'
+                  ? 'ReceivablePayment'
+                  : 'Advance';
     try {
       const result = await createPayrollEntry(payUserId, {
         kind,
         amount: value,
         reason: payReason.trim(),
-        paymentMethod: payMode === 'salary' ? 'cash' : undefined,
+        paymentMethod: payMode === 'salary' ? paymentMethod : undefined,
+        receiptNumber: payMode === 'salary' ? (receiptNumber.trim() || undefined) : undefined,
       });
       await refresh();
       setPayUserId(null);
       setPayAmount('');
       setPayReason('');
+      setReceiptNumber('');
+      setPaymentMethod('cash');
       setNotice(result.status === 'Pending'
         ? 'عملیات ثبت شد و برای تأیید مسئول مجاز ارسال شد.'
         : 'عملیات حقوقی ثبت شد.');
     } catch (error) {
       setNotice(userErrorMessage(error, 'ثبت عملیات حقوقی ناموفق بود'));
+    }
+  }
+
+  async function openPayrollProfile(row: PayrollUserRecord | UserRecord) {
+    if (!canViewPayroll) return;
+    const userId = 'userId' in row ? row.userId : row.id;
+    const source = 'userId' in row ? row : payrollUsers.find(item => item.userId === userId);
+    setDraft({
+      id: userId,
+      name: 'fullName' in row ? row.fullName : row.name,
+      role: users.find(item => item.id === userId)?.role ?? 'operator',
+      shift: users.find(item => item.id === userId)?.shift ?? 'سرور',
+      sales: 0,
+      permissions: users.find(item => item.id === userId)?.permissions ?? [],
+      payType: source?.payType === 'monthly' ? 'monthly' : 'hourly',
+      hourlyRate: source?.hourlyRate ?? 0,
+      monthlySalary: source?.monthlySalary ?? 0,
+      overtimeRate: source?.overtimeRate ?? 0,
+      phone: source?.phone ?? '',
+      employmentStartDate: source?.employmentStartDate ?? null,
+      workSchedule: source?.workSchedule ?? null,
+      notes: source?.notes ?? null,
+      workStart: source?.workSchedule?.split('-')[0] ?? '',
+      workEnd: source?.workSchedule?.split('-')[1] ?? '',
+      employeePayable: source?.employeePayable ?? 0,
+      ownerReceivable: source?.ownerReceivable ?? 0,
+      paidSalaryTotal: source?.paidThisMonth ?? 0,
+      bonusTotal: source?.bonusTotal ?? 0,
+      deductionTotal: source?.deductionTotal ?? 0,
+      damageTotal: source?.damageTotal ?? 0,
+      advanceTotal: source?.advanceTotal ?? 0,
+    });
+    setLedgerLoading(true);
+    try {
+      setPayrollLedger(await getPayrollLedger(userId));
+    } catch (error) {
+      setPayrollLedger([]);
+      setNotice(userErrorMessage(error, 'دفتر حقوق پرسنل از سرور دریافت نشد'));
+    } finally {
+      setLedgerLoading(false);
     }
   }
 
