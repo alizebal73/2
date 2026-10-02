@@ -179,7 +179,7 @@
 
 ## وضعیت اجرایی مرحلهٔ ۷ — Users & Permissions
 
-### برش تأییدشده تا CI #520
+### برش تأییدشده تا CI #527
 - ✅ احراز هویت واقعی اپراتور با Session سروری، Cookie امن و PBKDF2؛ `/api/auth/login`، `/api/auth/me` و `/api/auth/logout`.
 - ✅ مدل AppUser / Permission / AppUserSession / ApprovalRequest و Migration/Seeder واقعی سرور.
 - ✅ کاتالوگ Permissionهای رسمی پروژه و تخصیص دسترسی به کاربر.
@@ -193,8 +193,9 @@
 ### بازمانده‌های مرحلهٔ ۷
 - ✅ Multi-cashier concurrency و conflict handling: `UpdatedAt` به‌عنوان Concurrency Token سروری، به‌روزرسانی خودکار زمان تغییر، تبدیل تعارض EF به HTTP 409 فارسی و تست دو اپراتور روی یک رکورد؛ CI #514 سبز.
 - ✅ Approval اجرایی متصل به Reverse واقعی فاکتور: مسیر درخواست با `finance.manage`، تصمیم با `approval.decide`، اجرای Reverse داخل Transaction تصمیم، Audit، و جلوگیری از تأیید توسط ثبت‌کننده؛ CI #520 سبز.
+- ✅ Hardening اولیهٔ Permission در UI: ناوبری بر اساس Permission واقعی فیلتر می‌شود، Navigation/Command/Hotkey بدون مجوز به صفحه وارد نمی‌شود، و Users & Shift کنترل‌های user.manage و shift.manage را جداگانه رعایت می‌کند؛ نقش‌های Admin/Owner هم مانند Server دسترسی سراسری دارند؛ CI #527 سبز.
 - ⬜ Ledger/Payroll واقعی پرسنل و پرداخت حقوق.
-- ⬜ Hardening بیشتر Permissionهای Read/Write در UI و تفکیک دقیق مشاهده/ویرایش در هر دامنه.
+- ⬜ Hardening کامل Permissionهای Read/Write در همهٔ صفحات دامنه‌ای و تفکیک دقیق مشاهده/ویرایش در هر دامنه.
 
 
 ## تکمیل‌های سراسری مرحله ۳ — نیازهای جدید اپراتور
