@@ -1268,7 +1268,12 @@ app.MapGet("/api/dashboard", async (HttpContext context,
                 .Where(invoice => invoice.CustomerId == session.CustomerId && invoice.Status == InvoiceStatus.Draft)
                 .Select(invoice => (decimal?)invoice.TotalAmount)
                 .Sum() ?? 0m,
-            session.EndAt
+            session.StartAt,
+            session.EndAt,
+            session.PausedAt,
+            session.PausedMinutes,
+            session.TimeAdjustmentMinutes,
+            session.PrepaidAmount
         })
         .ToListAsync(cancellationToken);
 
@@ -1316,7 +1321,14 @@ app.MapGet("/api/dashboard", async (HttpContext context,
             remaining,
             null,
             active?.Id,
-            active is not null && buffetTotals.TryGetValue(active.Id, out var dashboardBuffetTotal) ? dashboardBuffetTotal : 0m);
+            active is not null && buffetTotals.TryGetValue(active.Id, out var dashboardBuffetTotal) ? dashboardBuffetTotal : 0m,
+            null,
+            null,
+            active?.StartAt,
+            active?.PausedAt,
+            active?.PausedMinutes ?? 0,
+            active?.TimeAdjustmentMinutes ?? 0,
+            active?.PrepaidAmount ?? 0m);
     }).ToList();
 
     return Results.Ok(new DashboardSnapshotDto(dtos.Count, dtos, now));
@@ -3348,6 +3360,134 @@ app.MapMethods("/api/sessions/{sessionId:guid}/details", new[] { "PATCH" }, asyn
 })
 .WithName("UpdateSessionDetails");
 
+app.MapPost("/api/sessions/{sessionId:guid}/pause", async (
+    Guid sessionId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var session = await database.Sessions
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+
+    if (session is null)
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+
+    if (session.State != SessionState.Active)
+        return Results.Conflict(new { code = "session_not_active", message = "این جلسه فعال نیست." });
+
+    if (session.PausedAt.HasValue)
+        return Results.Conflict(new { code = "session_already_paused", message = "جلسه از قبل متوقف است." });
+
+    session.PausedAt = DateTimeOffset.UtcNow;
+    session.Station.State = StationState.Occupied;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "SessionPause",
+        EntityName = "Session",
+        EntityId = session.Id.ToString(),
+        Details = "توقف جلسه · ایستگاه " + session.Station.Name,
+        AppUserId = auth.User!.Id
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { sessionId = session.Id, pausedAt = session.PausedAt });
+})
+.WithName("PauseSession");
+
+app.MapPost("/api/sessions/{sessionId:guid}/resume", async (
+    Guid sessionId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var session = await database.Sessions
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+
+    if (session is null)
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+
+    if (session.State != SessionState.Active)
+        return Results.Conflict(new { code = "session_not_active", message = "این جلسه فعال نیست." });
+
+    if (!session.PausedAt.HasValue)
+        return Results.Conflict(new { code = "session_not_paused", message = "جلسه متوقف نیست." });
+
+    var now = DateTimeOffset.UtcNow;
+    session.PausedMinutes += Math.Max(0, (int)Math.Ceiling((now - session.PausedAt.Value).TotalMinutes));
+    session.PausedAt = null;
+    session.Station.State = StationState.Occupied;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "SessionResume",
+        EntityName = "Session",
+        EntityId = session.Id.ToString(),
+        Details = "ادامه جلسه · ایستگاه " + session.Station.Name,
+        AppUserId = auth.User!.Id
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { sessionId = session.Id, pausedMinutes = session.PausedMinutes });
+})
+.WithName("ResumeSession");
+
+app.MapPost("/api/sessions/{sessionId:guid}/time-adjustment", async (
+    Guid sessionId,
+    SessionTimeAdjustmentRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    if (request.Minutes == 0 || Math.Abs(request.Minutes) > 1440)
+        return Results.BadRequest(new { code = "invalid_time_adjustment", message = "تغییر زمان باید بین ۱ تا ۱۴۴۰ دقیقه باشد." });
+
+    var session = await database.Sessions
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
+
+    if (session is null)
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+
+    if (session.State != SessionState.Active)
+        return Results.Conflict(new { code = "session_not_active", message = "این جلسه فعال نیست." });
+
+    var currentMinutes = SessionTiming.GetBillableMinutes(session, DateTimeOffset.UtcNow);
+    if (request.Minutes < 0 && Math.Abs(request.Minutes) >= currentMinutes)
+        return Results.BadRequest(new { code = "invalid_time_reduction", message = "کاهش زمان نمی‌تواند به صفر یا کمتر برسد." });
+
+    session.TimeAdjustmentMinutes += request.Minutes;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = request.Minutes > 0 ? "SessionExtend" : "SessionReduce",
+        EntityName = "Session",
+        EntityId = session.Id.ToString(),
+        Details = (request.Minutes > 0 ? "تمدید " : "کاهش ") + Math.Abs(request.Minutes) + " دقیقه · " + session.Station.Name,
+        AppUserId = auth.User!.Id
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        sessionId = session.Id,
+        timeAdjustmentMinutes = session.TimeAdjustmentMinutes,
+        billableMinutes = SessionTiming.GetBillableMinutes(session, DateTimeOffset.UtcNow)
+    });
+})
+.WithName("AdjustSessionTime");
+
 app.MapGet("/api/sessions/active", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
@@ -3726,6 +3866,7 @@ public sealed record CloseShiftRequest(
 
 public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId, decimal? HourlyRateOverride, int? Persons);
 public sealed record SessionDetailsRequest(decimal? HourlyRate, int? Persons);
+public sealed record SessionTimeAdjustmentRequest(int Minutes);
 public sealed record SessionTransferRequest(Guid TargetStationId);
 public sealed record SessionTransferResultDto(Guid SessionId, Guid StationId);
 public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, DateTimeOffset StartAt);
