@@ -680,18 +680,6 @@ static bool IsMigrationRecoveryCandidate(Exception exception)
         || exception.Message.Contains("SQLite Error 19", StringComparison.OrdinalIgnoreCase);
 }
 
-
-public partial class Program { }
-
-
-public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId);
-public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, DateTimeOffset StartAt);
-
-public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
-public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
-public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, decimal Revenue, decimal Expense, decimal OperatingProfit);
-
-
 static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
     GameNetDbContext database,
     Shift shift,
@@ -744,6 +732,13 @@ public sealed record CloseShiftRequest(
     decimal ExternalCash,
     string? Note);
 
+public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId);
+public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, DateTimeOffset StartAt);
+
+public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
+public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
+public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, decimal Revenue, decimal Expense, decimal OperatingProfit);
+
 public sealed record ShiftSnapshotDto(
     Guid Id,
     Guid AppUserId,
@@ -758,5 +753,7 @@ public sealed record ShiftSnapshotDto(
     decimal ExpectedCash,
     decimal Difference,
     string? Note);
+
+public partial class Program { }
 
 public partial class Program { }
