@@ -60,10 +60,11 @@ public sealed class PersistenceModelTests : IDisposable
         });
         await db.SaveChangesAsync();
 
-        var transactions = await db.WalletTransactions
+        var transactions = (await db.WalletTransactions
             .Where(item => item.CustomerId == customer.Id)
+            .ToListAsync())
             .OrderBy(item => item.CreatedAt)
-            .ToListAsync();
+            .ToList();
 
         var audit = await db.AuditLogs.SingleAsync(item => item.Action == "WalletRefund");
         Assert.Equal(2, transactions.Count);
