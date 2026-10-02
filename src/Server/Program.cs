@@ -990,8 +990,11 @@ app.MapGet("/api/customers", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "customer.manage", "customer.wallet", "customer.debt");
     if (auth.Error is not null) return auth.Error;
+
+    var canReadWallet = AuthorizationService.HasPermission(auth.User!, "customer.wallet");
+    var canReadDebt = AuthorizationService.HasPermission(auth.User!, "customer.debt");
 
     var customers = await database.Customers
         .AsNoTracking()
@@ -1007,13 +1010,15 @@ app.MapGet("/api/customers", async (HttpContext context,
             nationalId = item.NationalId,
             mobile = item.Phone,
             vip = item.VipTier,
-            wallet = item.Balance,
-            debt = database.Invoices
-                .Where(invoice => invoice.CustomerId == item.Id && invoice.Status == InvoiceStatus.Draft)
-                .Select(invoice => (decimal?)invoice.TotalAmount)
-                .Sum() ?? 0m,
-            giftCredit = item.FreeMoney,
-            freeTimeMinutes = item.FreeTimeMinutes,
+            wallet = canReadWallet ? item.Balance : 0m,
+            debt = canReadDebt
+                ? database.Invoices
+                    .Where(invoice => invoice.CustomerId == item.Id && invoice.Status == InvoiceStatus.Draft)
+                    .Select(invoice => (decimal?)invoice.TotalAmount)
+                    .Sum() ?? 0m
+                : 0m,
+            giftCredit = canReadWallet ? item.FreeMoney : 0m,
+            freeTimeMinutes = canReadWallet ? item.FreeTimeMinutes : 0,
             discountLevel = 0,
             lastSeen = "نامشخص",
             status = "active",
