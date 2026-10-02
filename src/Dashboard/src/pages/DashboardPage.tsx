@@ -884,7 +884,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     }
   }
 
-  function completeReduce() {
+  async function completeReduce() {
     if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     if (!activeStation || !['busy', 'paused'].includes(activeStation.state)) { setMessage('فقط جلسه فعال یا متوقف قابل کاهش زمان است'); return; }
     const minutes = reduceMinutes === -1 ? Math.max(1, Number(customReduceMinutes.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit)))) || 0) : reduceMinutes;
@@ -908,7 +908,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     }
   }
 
-  function completeExtend() {
+  async function completeExtend() {
     if (!canManageSession) { setMessage('دسترسی مدیریت جلسه ندارید'); return; }
     if (!activeStation || activeStation.state !== 'busy') {
       setMessage('جلسه فعالی برای تمدید وجود ندارد');
