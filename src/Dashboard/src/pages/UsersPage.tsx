@@ -95,7 +95,7 @@ export function UsersPage() {
     <div className="page-header"><div><p>کاربران، دسترسی و شیفت</p><h1>کاربران و شیفت</h1></div></div>
     <div className="toolbar">
       {!currentShift && <label className="shift-operator-select">اپراتور شیفت<select value={shiftOperator} onChange={event => setShiftOperator(event.target.value)}>{users.filter(user => user.role !== 'owner').map(user => <option key={user.id} value={user.name}>{user.name} · {user.shift}</option>)}</select></label>}
-      <button className="btn" onClick={() => void (currentShift ? openCloseShift() : openShift())>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>
+      <button className="btn" onClick={() => void (currentShift ? openCloseShift() : openShift())}>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>
       <button className="btn danger" onClick={() => openCloseShift()} disabled={!currentShift}>بستن شیفت</button>
       <button className="btn primary" onClick={() => setDraft({ id: crypto.randomUUID(), name: '', role: 'operator', shift: 'عصر', sales: 0, permissions: [], payType: 'hourly', hourlyRate: 0, monthlySalary: 0, overtimeRate: 0, workStart: '16:00', workEnd: '00:00', bonusTotal: 0, deductionTotal: 0 })}>+ کاربر جدید</button>
     </div>
