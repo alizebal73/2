@@ -16,6 +16,9 @@ import { ClientExperience } from './features/client/ClientExperience';
 import { GlobalCommandCenter } from './features/search/GlobalCommandCenter';
 import { OperationsPage } from './pages/OperationsPage';
 import { UserErrorBanner } from './components/UserErrorBanner';
+import { SectionLockDialog } from './components/SectionLockDialog';
+import { readPageLocks, protectedPageLabels } from './services/securityService';
+import type { PageLockMap } from './types';
 import type { DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
 
@@ -45,6 +48,9 @@ function DashboardApp() {
   const [clock, setClock] = useState(() => new Date().toLocaleTimeString('fa-IR'));
   const [commandOpen, setCommandOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [pageLocks, setPageLocks] = useState<PageLockMap>(() => readPageLocks());
+  const [lockedPage, setLockedPage] = useState<PageKey | null>(null);
+  const [unlockedPages, setUnlockedPages] = useState<PageKey[]>(['dashboard']);
   const [notifications, setNotifications] = useState([
     { id: 'n1', title: 'درخواست بوفه', detail: 'PC ۰۴ درخواست فروش بوفه دارد', level: 'info', read: false },
     { id: 'n2', title: 'به‌روزرسانی کلاینت', detail: '۲ ایستگاه به‌روزرسانی معلق دارند', level: 'warning', read: false },
@@ -58,7 +64,7 @@ function DashboardApp() {
   useEffect(() => {
     const onNavigate = (event: Event) => {
       const page = (event as CustomEvent<PageKey>).detail;
-      if (page) setActivePage(page);
+      if (page) requestNavigation(page);
     };
     window.addEventListener('gamenet-navigate', onNavigate);
     return () => window.removeEventListener('gamenet-navigate', onNavigate);
@@ -67,6 +73,18 @@ function DashboardApp() {
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date().toLocaleTimeString('fa-IR')), 500);
     return () => window.clearInterval(timer);
+  }, []);
+
+  function requestNavigation(page: PageKey) {
+    const rule = pageLocks[page];
+    if (rule?.enabled && !unlockedPages.includes(page)) { setLockedPage(page); return; }
+    setActivePage(page);
+  }
+
+  useEffect(() => {
+    const onLocksChanged = (event: Event) => setPageLocks((event as CustomEvent<PageLockMap>).detail || readPageLocks());
+    window.addEventListener('gamenet-page-locks-changed', onLocksChanged);
+    return () => window.removeEventListener('gamenet-page-locks-changed', onLocksChanged);
   }, []);
 
   useEffect(() => {
@@ -82,9 +100,9 @@ function DashboardApp() {
       } else if (event.key === 'Escape') {
         setCommandOpen(false);
         setNotificationsOpen(false);
-      } else if (event.key.toUpperCase() === reportKey) setActivePage('reports');
-      else if (event.key.toUpperCase() === buffetKey) setActivePage('buffet');
-      else if (event.key.toUpperCase() === closeShiftKey) setActivePage('users');
+      } else if (event.key.toUpperCase() === reportKey) requestNavigation('reports');
+      else if (event.key.toUpperCase() === buffetKey) requestNavigation('buffet');
+      else if (event.key.toUpperCase() === closeShiftKey) requestNavigation('users');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -148,7 +166,7 @@ function DashboardApp() {
           <span>داشبورد مدیریت</span>
         </div>
 
-        <TopNavigation activePage={activePage} onChange={setActivePage} />
+        <TopNavigation activePage={activePage} onChange={requestNavigation} />
 
         <div className="connection-list" aria-live="polite">
           <span className="header-clock">🗓 {formatPersianDate()} · 🕒 {clock}</span>
@@ -184,7 +202,7 @@ function DashboardApp() {
       )}
 
       <div className="page-shell">
-        <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={snapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={setActivePage} role={role} /></div>
+        <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={snapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={requestNavigation} role={role} /></div>
         <div hidden={activePage !== 'games'}><GamesPage /></div>
         <div hidden={activePage !== 'client-shell'}><ClientShellPage /></div>
         <div hidden={activePage !== 'customers'}><CustomersPage /></div>
@@ -197,7 +215,9 @@ function DashboardApp() {
         <div hidden={activePage !== 'operations'}><OperationsPage /></div>
       </div>
 
-      <GlobalCommandCenter open={commandOpen} stations={snapshot?.stations ?? []} onNavigate={setActivePage} onClose={() => setCommandOpen(false)} />
+      <GlobalCommandCenter open={commandOpen} stations={snapshot?.stations ?? []} onNavigate={requestNavigation} onClose={() => setCommandOpen(false)} />
+
+      <SectionLockDialog page={lockedPage} onClose={() => setLockedPage(null)} onUnlock={page => { setUnlockedPages(current => current.includes(page) ? current : [...current, page]); setActivePage(page); setLockedPage(null); }} />
 
       <footer className="status-footer">
         {(snapshot && snapshot.generatedAt ? `آخرین به‌روزرسانی ${formatTime(snapshot.generatedAt)}` : 'در انتظار دریافت داده')} · {serverInfo?.environment ?? 'Development'}
