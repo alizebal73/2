@@ -48,14 +48,17 @@ public static class AuthorizationService
             return null;
 
         var tokenHash = PasswordSecurity.HashToken(token);
-        var session = await database.AppUserSessions
+        var sessions = await database.AppUserSessions
             .Include(item => item.AppUser)
             .ThenInclude(item => item.Permissions)
             .ThenInclude(item => item.Permission)
-            .FirstOrDefaultAsync(item => item.TokenHash == tokenHash
-                && item.RevokedAt == null
-                && item.ExpiresAt > DateTimeOffset.UtcNow
-                && item.AppUser.IsActive, cancellationToken);
+            .Where(item => item.TokenHash == tokenHash)
+            .ToListAsync(cancellationToken);
+
+        var session = sessions.FirstOrDefault(item =>
+            item.RevokedAt == null
+            && item.ExpiresAt > DateTimeOffset.UtcNow
+            && item.AppUser.IsActive);
 
         return session?.AppUser;
     }
