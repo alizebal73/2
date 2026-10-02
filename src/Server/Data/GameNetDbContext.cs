@@ -32,6 +32,30 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<InvoiceReversal> InvoiceReversals => Set<InvoiceReversal>();
 
+    private void TouchUpdatedAt()
+    {
+        var now = DateTimeOffset.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+        {
+            if (entry.State == EntityState.Modified)
+                entry.Entity.UpdatedAt = now;
+        }
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        TouchUpdatedAt();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        TouchUpdatedAt();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -62,6 +86,12 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureShift(modelBuilder);
         ConfigureExpense(modelBuilder);
         ConfigureAuditLog(modelBuilder);
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes()
+                     .Where(type => typeof(BaseEntity).IsAssignableFrom(type.ClrType)))
+        {
+            entityType.FindProperty(nameof(BaseEntity.UpdatedAt))?.SetIsConcurrencyToken(true);
+        }
     }
 
     private static void ConfigureStation(ModelBuilder modelBuilder)
