@@ -172,12 +172,12 @@
 13. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
 14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
 
-**جایگاه فعلی:** مرحلهٔ اصلی **۷ — Users & Permissions**.  
-مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ در حال تکمیل است؛ احراز هویت/Permission/Approval پایه روی Server پیاده شده و اکنون بخش Payroll، سخت‌گیری کامل Read/Write در UI و Approvalهای باقی‌مانده در حال تکمیل و تست هستند.
+**جایگاه فعلی:** مرحلهٔ اصلی **۸ — PC Agent Foundation**.  
+مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ با احراز هویت/Permission/Approval، Payroll، Read/Write hardening، Invoice Reverse و Wallet Refund روی head نهایی تأیید و در `main` merge شده است.
 
 این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
 
-## وضعیت اجرایی مرحلهٔ ۷ — Users & Permissions
+## وضعیت نهایی مرحلهٔ ۷ — Users & Permissions
 
 ### برش تأییدشده تا CI #527
 - ✅ احراز هویت واقعی اپراتور با Session سروری، Cookie امن و PBKDF2؛ `/api/auth/login`، `/api/auth/me` و `/api/auth/logout`.
@@ -190,16 +190,32 @@
 - ✅ CI Smoke یک Operator محدود را عمداً با Permission ناقص وارد می‌کند و 403 واقعی برای عملیات بدون مجوز را اثبات می‌کند.
 - ✅ Run #520 (تاریخی): Build/Test .NET، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke سبز؛ Approval اجرایی Reverse فاکتور از درخواست اپراتور تا تأیید مدیر و اجرای واقعی تست شد.
 
-### بازمانده‌های مرحلهٔ ۷
+### موارد تکمیل‌شدهٔ مرحلهٔ ۷
 - ✅ Multi-cashier concurrency و conflict handling: `UpdatedAt` به‌عنوان Concurrency Token سروری، به‌روزرسانی خودکار زمان تغییر، تبدیل تعارض EF به HTTP 409 فارسی و تست دو اپراتور روی یک رکورد؛ CI #514 سبز.
 - ✅ Approval اجرایی متصل به Reverse واقعی فاکتور: مسیر درخواست با `finance.manage`، تصمیم با `approval.decide`، اجرای Reverse داخل Transaction تصمیم، Audit، و جلوگیری از تأیید توسط ثبت‌کننده؛ CI #520 سبز.
 - ✅ Hardening اولیهٔ Permission در UI: ناوبری بر اساس Permission واقعی فیلتر می‌شود، Navigation/Command/Hotkey بدون مجوز به صفحه وارد نمی‌شود، و Users & Shift کنترل‌های user.manage و shift.manage را جداگانه رعایت می‌کند؛ نقش‌های Admin/Owner هم مانند Server دسترسی سراسری دارند؛ CI #527 سبز.
 - ✅ Ledger/Payroll واقعی پرسنل و پرداخت حقوق — Server، Ledger، پروفایل حقوق، روش پرداخت/رسید و Approval اجرایی روی head جاری پیاده و با CI #591 در Build/Test، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke تأیید شد.
 - ✅ Hardening Read/Write برای دامنه‌های فعال Server-backed: Customer، Dashboard/Session، Buffet/Inventory، Users/Shift/Payroll و Reports؛ کنترل‌های UI با Permissionهای واقعی هم‌تراز و endpointهای حساس Server-side محافظت شدند.
-- ⬜ صفحات Mock/آینده مثل Accounts، Games، Tariffs و ClientShell تا زمان ساخته‌شدن dependency واقعی همان Stageها بازطراحی امنیتی کامل نمی‌شوند؛ این‌ها عمداً خارج از Stage 7 فعال‌سازی نشده‌اند.
+- ✅ صفحات Mock/آینده مثل Accounts، Games، Tariffs و ClientShell عمداً به Stageهای بعدی منتقل شدند و تا آماده‌شدن dependency واقعی فعال‌سازی نشده‌اند.
 - ✅ Approvalهای حساس فعال: Invoice Reverse و Wallet Refund دارای مسیر درخواست/تصمیم/اجرای واقعی Server-side، Transaction و Audit هستند؛ Wallet Refund با CI #591 تا اجرای واقعی و Ledger/Reference آن تست شد.
 - ✅ Generic Approval API هم به Actionهای شناخته‌شده و Permission متناظر محدود شد و Action ناشناخته در Smoke با 400 رد می‌شود.
 
+
+## وضعیت اجرایی مرحلهٔ ۸ — PC Agent Foundation
+
+### دروازهٔ اصلی Stage 8: Vertical Slice واقعی PC
+- ⬜ Agent Identity / Device Registration در Shared + Server
+- ⬜ Heartbeat و Last Seen سروری
+- ⬜ Health/Telemetry پایه
+- ⬜ SignalR reconnect و stale connection handling
+- ⬜ Online/Offline state واقعی در Dashboard
+- ⬜ Lock/Unlock واقعی
+- ⬜ Session Start/End از Agent واقعی
+- ⬜ Timer زنده بر مبنای Server truth
+- ⬜ Safe Offline / Recovery
+- ⬜ تست واقعی روی 2–3 PC قبل از گسترش به 40+
+
+قاعدهٔ Stage 8: ابتدا یک برش عمودی کوچک اما واقعی از Agent تا Server و Dashboard کامل می‌شود؛ سپس فرمان‌ها و دامنه‌های بعدی گسترش می‌یابند.
 
 ## تکمیل‌های سراسری مرحله ۳ — نیازهای جدید اپراتور
 
