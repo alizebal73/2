@@ -64,8 +64,22 @@ public sealed class AgentHub(
         CancellationToken cancellationToken = default)
     {
         var device = await ResolveConnectedDeviceAsync(cancellationToken);
-        if (device is null || !device.IsActive)
+        if (device is null)
+        {
+            logger.LogWarning(
+                "Agent heartbeat identity not found. ConnectionId={ConnectionId}",
+                Context.ConnectionId);
             throw new HubException("دستگاه مجاز نیست.");
+        }
+
+        if (!device.IsActive)
+        {
+            logger.LogWarning(
+                "Agent heartbeat rejected because device is inactive. DeviceId={DeviceId}, ConnectionId={ConnectionId}",
+                device.DeviceId,
+                Context.ConnectionId);
+            throw new HubException("دستگاه غیرفعال است.");
+        }
 
         var now = DateTimeOffset.UtcNow;
         device.IsOnline = true;
