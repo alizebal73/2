@@ -383,8 +383,12 @@ jobs:
             New-Item -ItemType Directory -Path $sessionAgentData -Force | Out-Null
 
             $sessionDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
-            $sessionStation = @($sessionDashboard.stations | Where-Object { $_.zone -eq 'pc' -and $_.state -eq 'Available' }) | Select-Object -First 1
-            if (-not $sessionStation) { throw 'No available PC station was found for Agent session smoke.' }
+            $sessionStation = @($sessionDashboard.stations | Where-Object { $_.type -eq 'PC' -and $_.state -eq 'Available' }) | Select-Object -First 1
+            if (-not $sessionStation) {
+              Write-Host '--- Available station snapshot ---'
+              @($sessionDashboard.stations | Where-Object { $_.state -eq 'Available' } | Select-Object -First 10) | ConvertTo-Json -Depth 5
+              throw 'No available PC station was found for Agent session smoke.'
+            }
 
             $env:GAMENET_SERVER_URL = $baseUrl
             $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
