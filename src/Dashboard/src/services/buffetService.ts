@@ -1,4 +1,4 @@
-import type { ProductRecord } from '../types';
+import type { InventoryTransactionRecord, ProductRecord } from '../types';
 
 type ProductDto = {
   id: string;
@@ -77,4 +77,33 @@ export async function recordServerBuffetSale(items: Array<{ productId: string; q
   });
   if (!response.ok) throw new Error(await readError(response, 'ثبت فروش بوفه انجام نشد'));
   return await response.json() as { total: number; target: string };
+}
+
+
+export async function updateServerProduct(productId: string, input: {
+  name: string;
+  category: string;
+  price: number;
+  buyPrice: number;
+  active: boolean;
+}) {
+  const response = await fetch('/api/buffet/products/' + productId, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: input.name,
+      category: input.category,
+      unitPrice: input.price,
+      costPrice: input.buyPrice,
+      isActive: input.active,
+    }),
+  });
+  if (!response.ok) throw new Error(await readError(response, 'ویرایش محصول انجام نشد'));
+  return mapProduct(await response.json() as ProductDto);
+}
+
+export async function getServerInventoryTransactions(): Promise<InventoryTransactionRecord[]> {
+  const response = await fetch('/api/buffet/inventory-transactions');
+  if (!response.ok) throw new Error(await readError(response, 'دریافت گردش موجودی انجام نشد'));
+  return await response.json() as InventoryTransactionRecord[];
 }

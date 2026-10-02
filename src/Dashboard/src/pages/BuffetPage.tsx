@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ProductRecord } from '../types';
-import { adjustServerStock, createServerProduct, getServerProducts, recordServerBuffetSale } from '../services/buffetService';
+import { adjustServerStock, createServerProduct, getServerInventoryTransactions, getServerProducts, recordServerBuffetSale, updateServerProduct } from '../services/buffetService';
 import { userErrorMessage } from '../utils/userError';
 
 function money(value: number) {
@@ -9,6 +9,8 @@ function money(value: number) {
 
 export function BuffetPage() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
+  const [inventoryHistory, setInventoryHistory] = useState<import('../types').InventoryTransactionRecord[]>([]);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [category, setCategory] = useState('همه');
   const [cart, setCart] = useState<Record<string, number>>({});
   const [target, setTarget] = useState<'session' | 'standalone'>('session');
@@ -20,6 +22,7 @@ export function BuffetPage() {
   async function refresh() {
     try {
       setProducts(await getServerProducts());
+      setInventoryHistory(await getServerInventoryTransactions());
     } catch (error) {
       setNotice(userErrorMessage(error, 'دریافت موجودی بوفه انجام نشد'));
     }
@@ -46,6 +49,7 @@ export function BuffetPage() {
     try {
       const result = await adjustServerStock(product.id, 1, direction, direction === 'in' ? 'ورود بوفه' : 'خروج دستی بوفه');
       setProducts(current => current.map(item => item.id === product.id ? { ...item, stock: result.stock, maxStock: Math.max(item.maxStock, result.stock) } : item));
+      await refresh();
       setNotice(direction === 'in' ? 'یک عدد به موجودی اضافه شد' : 'یک عدد از موجودی کم شد');
     } catch (error) {
       setNotice(userErrorMessage(error, 'اصلاح موجودی انجام نشد'));
@@ -54,7 +58,7 @@ export function BuffetPage() {
     }
   }
 
-  async function createProduct() {
+  async function saveProduct() {
     const price = numberValue(draft.price);
     const buyPrice = numberValue(draft.buyPrice);
     const stock = numberValue(draft.stock);
@@ -64,16 +68,48 @@ export function BuffetPage() {
     }
     setBusy(true);
     try {
-      const created = await createServerProduct({ name: draft.name.trim(), category: draft.category, price, buyPrice, initialStock: stock });
-      setProducts(current => [created, ...current]);
+      if (editingProductId) {
+        const updated = await updateServerProduct(editingProductId, {
+          name: draft.name.trim(),
+          category: draft.category,
+          price,
+          buyPrice,
+          active: true,
+        });
+        setProducts(current => current.map(item => item.id === updated.id ? updated : item));
+        setNotice('محصول ویرایش شد');
+      } else {
+        const created = await createServerProduct({
+          name: draft.name.trim(),
+          category: draft.category,
+          price,
+          buyPrice,
+          initialStock: stock,
+        });
+        setProducts(current => [created, ...current]);
+        setNotice('محصول جدید ثبت شد');
+      }
       setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0' });
+      setEditingProductId(null);
       setProductFormOpen(false);
-      setNotice('محصول جدید ثبت شد');
+      await refresh();
     } catch (error) {
-      setNotice(userErrorMessage(error, 'ثبت محصول انجام نشد'));
+      setNotice(userErrorMessage(error, editingProductId ? 'ویرایش محصول انجام نشد' : 'ثبت محصول انجام نشد'));
     } finally {
       setBusy(false);
     }
+  }
+
+  function startEdit(product: ProductRecord) {
+    setEditingProductId(product.id);
+    setDraft({
+      name: product.name,
+      category: product.category,
+      price: String(product.price),
+      buyPrice: String(product.buyPrice),
+      stock: String(product.stock),
+    });
+    setProductFormOpen(true);
   }
 
   async function checkout(destination: 'session' | 'standalone') {
@@ -103,12 +139,12 @@ export function BuffetPage() {
     </div>
 
     <div className="toolbar">
-      <button type="button" className="btn primary" onClick={() => setProductFormOpen(current => !current)}>+ محصول جدید</button>
+      <button type="button" className="btn primary" onClick={() => { setEditingProductId(null); setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0' }); setProductFormOpen(current => !current); }}>+ محصول جدید</button>
       <span className="status-pill free">موجودی از Server</span>
     </div>
 
     {productFormOpen && <section className="card-panel buffet-product-form">
-      <h3>ثبت محصول</h3>
+      <h3>{editingProductId ? 'ویرایش محصول' : 'ثبت محصول'}</h3>
       <div className="modal-grid-2">
         <label>نام محصول<input value={draft.name} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} /></label>
         <label>دسته<select value={draft.category} onChange={event => setDraft(current => ({ ...current, category: event.target.value }))}>{['نوشیدنی','غذا','تنقلات','لوازم جانبی','سایر'].map(item => <option key={item}>{item}</option>)}</select></label>
@@ -116,7 +152,7 @@ export function BuffetPage() {
         <label>قیمت خرید<input inputMode="numeric" value={draft.buyPrice} onChange={event => setDraft(current => ({ ...current, buyPrice: event.target.value }))} /></label>
         <label>موجودی اولیه<input inputMode="numeric" value={draft.stock} onChange={event => setDraft(current => ({ ...current, stock: event.target.value }))} /></label>
       </div>
-      <div className="modal-actions"><button className="btn primary" disabled={busy} onClick={() => void createProduct()}>ثبت محصول</button><button className="btn" onClick={() => setProductFormOpen(false)}>انصراف</button></div>
+      <div className="modal-actions"><button className="btn primary" disabled={busy} onClick={() => void saveProduct()}>{editingProductId ? 'ذخیره تغییرات' : 'ثبت محصول'}</button><button className="btn" onClick={() => { setEditingProductId(null); setProductFormOpen(false); }}>انصراف</button></div>
     </section>}
 
     <div className="summary-grid">
@@ -139,6 +175,7 @@ export function BuffetPage() {
               <div className="progress-bar"><span style={{ width }} /></div>
               {low && <small className="low-stock">هشدار موجودی کم</small>}
               <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
+              <button className="btn sm" disabled={busy} onClick={() => startEdit(product)}>ویرایش</button>
               <div className="product-stock-actions"><button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button><button className="btn sm danger" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out')}>− موجودی</button></div>
             </article>;
           })}
@@ -153,6 +190,22 @@ export function BuffetPage() {
         <div className="modal-actions"><button className="btn primary" disabled={busy} onClick={() => void checkout('session')}>افزودن به فاکتور</button><button className="btn" disabled={busy} onClick={() => void checkout('standalone')}>ثبت فروش مستقل</button></div>
       </section>
     </div>
+
+    <section className="panel-box" style={{ marginTop: 16 }}>
+      <div className="profile-section-head"><h3>گردش موجودی</h3><span>{inventoryHistory.length} رویداد</span></div>
+      <div className="customer-history-list">
+        {inventoryHistory.slice(0, 20).map(item => (
+          <div className="customer-history-item" key={item.id}>
+            <span className="customer-history-dot" />
+            <div>
+              <strong>{item.productName} · {item.direction === 'In' ? 'ورود' : 'خروج'} {item.quantity}</strong>
+              <small>{item.notes || 'بدون توضیح'} · {new Date(item.createdAt).toLocaleString('fa-IR')}</small>
+            </div>
+          </div>
+        ))}
+        {!inventoryHistory.length && <div className="customer-ledger-empty">هنوز گردش موجودی ثبت نشده است.</div>}
+      </div>
+    </section>
 
     {notice && <div className="operation-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
   </>;

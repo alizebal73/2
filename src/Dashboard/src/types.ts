@@ -329,3 +329,14 @@ export type WalletLedgerEntry = {
 
 export type PageLockRule = { enabled: boolean; pinHash: string; label: string };
 export type PageLockMap = Partial<Record<PageKey, PageLockRule>>;
+
+
+export type InventoryTransactionRecord = {
+  id: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  direction: 'In' | 'Out';
+  notes?: string;
+  createdAt: string;
+};
