@@ -173,7 +173,7 @@
 14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
 
 **جایگاه فعلی:** مرحلهٔ اصلی **۷ — Users & Permissions**.  
-مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ در حال تکمیل است؛ برش احراز هویت/Permission/Approval و سخت‌گیری سروری روی endpointهای حساس تا CI #514 با موفقیت پیاده‌سازی و تست شده، و موارد چندصندوقی/تعارض عملیات/حقوق پرسنل همچنان باز هستند.
+مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ در حال تکمیل است؛ احراز هویت/Permission/Approval پایه روی Server پیاده شده و اکنون بخش Payroll، سخت‌گیری کامل Read/Write در UI و Approvalهای باقی‌مانده در حال تکمیل و تست هستند.
 
 این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
 
@@ -188,14 +188,21 @@
 - ✅ Permission Enforcement روی endpointهای حساس موجود: Customer، VIP، Buffet/Inventory، Debt/Wallet/Benefits، Finance، Shift، Session و Invoice Reverse.
 - ✅ Actor identity دیگر از request.AppUserId برای عملیات حساس پذیرفته نمی‌شود؛ در endpointهای محافظت‌شده شناسهٔ کاربر جاری Server منبع Audit/AppUserId است.
 - ✅ CI Smoke یک Operator محدود را عمداً با Permission ناقص وارد می‌کند و 403 واقعی برای عملیات بدون مجوز را اثبات می‌کند.
-- ✅ Run #520: Build/Test .NET، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke همگی سبز؛ Approval اجرایی Reverse فاکتور نیز از درخواست اپراتور تا تأیید مدیر و اجرای واقعی در همین Smoke تست شد.
+- ✅ Run #520 (تاریخی): Build/Test .NET، Migration/Server Smoke، Dashboard Lint/Build و Browser Smoke سبز؛ Approval اجرایی Reverse فاکتور از درخواست اپراتور تا تأیید مدیر و اجرای واقعی تست شد.
 
 ### بازمانده‌های مرحلهٔ ۷
 - ✅ Multi-cashier concurrency و conflict handling: `UpdatedAt` به‌عنوان Concurrency Token سروری، به‌روزرسانی خودکار زمان تغییر، تبدیل تعارض EF به HTTP 409 فارسی و تست دو اپراتور روی یک رکورد؛ CI #514 سبز.
 - ✅ Approval اجرایی متصل به Reverse واقعی فاکتور: مسیر درخواست با `finance.manage`، تصمیم با `approval.decide`، اجرای Reverse داخل Transaction تصمیم، Audit، و جلوگیری از تأیید توسط ثبت‌کننده؛ CI #520 سبز.
 - ✅ Hardening اولیهٔ Permission در UI: ناوبری بر اساس Permission واقعی فیلتر می‌شود، Navigation/Command/Hotkey بدون مجوز به صفحه وارد نمی‌شود، و Users & Shift کنترل‌های user.manage و shift.manage را جداگانه رعایت می‌کند؛ نقش‌های Admin/Owner هم مانند Server دسترسی سراسری دارند؛ CI #527 سبز.
 - ⬜ Ledger/Payroll واقعی پرسنل و پرداخت حقوق.
+  - پیاده‌سازی فعلی روی Server شامل EmployeeProfile، PayrollLedgerEntry، پرداخت حقوق با روش پرداخت/رسید، و Approval اجرایی برای عملیات حساس است.
+  - UI پروفایل حقوق، Ledger و ثبت عملیات به دادهٔ واقعی Server متصل شده است.
+  - تیک فقط پس از سبز شدن Migration/Server Smoke + Dashboard Lint/Build + E2E روی head جاری مجاز است.
 - ⬜ Hardening کامل Permissionهای Read/Write در همهٔ صفحات دامنه‌ای و تفکیک دقیق مشاهده/ویرایش در هر دامنه.
+  - Customer، Dashboard/Session، Users/Shift و سایر صفحات دامنه‌ای در حال هم‌ترازی Read/Write با Permissionهای Server هستند.
+- ⬜ Approvalهای حساس باقی‌مانده.
+  - Invoice Reverse قبلاً به‌صورت واقعی تأیید و اجرا شده است.
+  - Wallet Refund اکنون مسیر درخواست/تأیید/اجرای Server-side دارد و تست واقعی آن هنوز باید روی head جاری سبز شود.
 
 
 ## تکمیل‌های سراسری مرحله ۳ — نیازهای جدید اپراتور
@@ -649,7 +656,7 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - در نسخه نهایی Server باید تراکنش Split را به‌صورت atomic ثبت کند و Audit/Permission نیز داشته باشد.
 
 ## وضعیت
-مرحله اصلی ۳ و هستهٔ اصلی مرحلهٔ ۴ بسته شده‌اند. جایگاه فعلی پروژه **مرحلهٔ ۶ — Buffet & Inventory Domain** است؛ موارد Permission/Approval نهایی عمداً به مرحلهٔ ۷ منتقل شده‌اند و موارد باز Stage 5 در بخش بالاتر همین سند ثبت شده‌اند. CI فعلی شامل Build/Test، مهاجرت/Startup سرور، smoke واقعی Customer/VIP API و smoke تعاملی Dashboard است.
+مرحله اصلی ۳ و هستهٔ اصلی مرحلهٔ ۴ بسته شده‌اند. جایگاه فعلی پروژه **مرحلهٔ ۷ — Users & Permissions** است؛ Stage 5 و Stage 6 بسته شده‌اند و فقط باقی‌مانده‌های صریح Stage 7 باید قبل از ورود به Stage 8 بسته و تست شوند. CI فعلی شامل Build/Test، مهاجرت/Startup سرور، smoke واقعی Customer/VIP API و smoke تعاملی Dashboard است.
 
 
 ## قرارداد سراسری Update / Release — از همین مرحله لازم‌الاجرا
