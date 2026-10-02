@@ -403,6 +403,7 @@ button:focus-visible {
 .station-card {
   user-select: none;
   -webkit-user-select: none;
+  -webkit-user-drag: none;
   touch-action: pan-y;
   cursor: pointer;
   background: linear-gradient(165deg, var(--panel), var(--panel2));
@@ -3685,4 +3686,19 @@ button:focus-visible {
 
 .session-action-strip {
   position: relative;
+}
+
+
+.station-card,
+.station-card * {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+}
+
+.station-card input,
+.station-card select,
+.station-card textarea {
+  user-select: text;
+  -webkit-user-select: text;
 }
