@@ -91,7 +91,19 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   const selectionDragRef = useRef<{ stationId: string; startX: number; startY: number; dragging: boolean; ctrlKey: boolean; shiftKey: boolean } | null>(null);
   const suppressNextStationClickRef = useRef(false);
 
-  const stations = stationOverrides ?? snapshot?.stations ?? emptyStations;
+  const stations = stationOverrides
+    ? stationOverrides.map(station => {
+        const serverStation = snapshot?.stations.find(item => item.id === station.id);
+        return serverStation
+          ? {
+              ...station,
+              agentOnline: serverStation.agentOnline,
+              agentLastSeenAt: serverStation.agentLastSeenAt,
+              agentVersion: serverStation.agentVersion,
+            }
+          : station;
+      })
+    : snapshot?.stations ?? emptyStations;
   const liveSessionCenterStation = sessionCenterStation ? stations.find(item => item.id === sessionCenterStation.id) ?? null : null;
   const updateStation = useCallback((id: string, update: Partial<StationDto>) => {
     setStationOverrides(items => (items ?? snapshot?.stations ?? emptyStations).map(item => item.id === id ? { ...item, ...update } : item));
