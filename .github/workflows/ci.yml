@@ -270,6 +270,45 @@ jobs:
               throw 'Buffet product update smoke failed.'
             }
 
+            $activeSessions = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get
+            if (-not @($activeSessions | Where-Object { $_.id -eq $startedSession.sessionId })) {
+              throw 'Active session endpoint did not return the started session.'
+            }
+
+            $sessionSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -ContentType 'application/json' -Body (@{
+              items = @(@{ productId = $inventoryProduct.id; quantity = 1 })
+              target = 'session'
+              sessionId = $startedSession.sessionId
+            } | ConvertTo-Json)
+
+            if ($sessionSale.target -ne 'session' -or $sessionSale.sessionId -ne $startedSession.sessionId -or -not $sessionSale.invoiceId -or [int]$sessionSale.buffetTotal -ne 30000) {
+              throw 'Buffet session sale did not create a draft invoice correctly.'
+            }
+
+            $sessionSettlement = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$($startedSession.sessionId)/settle" -Method Post -ContentType 'application/json' -Body (@{
+              totalAmount = 60000
+              parts = @(@{ method = 'cash'; amount = 60000 })
+              timeAmount = 30000
+              discountAmount = 0
+              prepaidAmount = 0
+            } | ConvertTo-Json)
+
+            if ($sessionSettlement.invoiceId -ne $sessionSale.invoiceId -or [int]$sessionSettlement.totalAmount -ne 60000 -or $sessionSettlement.invoiceStatus -ne 'Paid') {
+              throw 'Session settlement did not finalize the buffet draft invoice.'
+            }
+
+            $reversed = Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse" -Method Post -ContentType 'application/json' -Body (@{
+              reason = 'Stage 6 buffet reverse smoke'
+            } | ConvertTo-Json)
+
+            if (-not $reversed.externalRefundRequired -or [int]$reversed.inventoryRestored -ne 1) {
+              throw 'Buffet invoice reverse smoke failed.'
+            }
+
+            $inventoryAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
+            $reversedProduct = @($inventoryAfterReverse | Where-Object { $_.id -eq $inventoryProduct.id })[0]
+            if ([int]$reversedProduct.stock -ne 1) { throw 'Buffet invoice reverse did not restore stock.' }
+
             Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
 
           } finally {
