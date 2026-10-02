@@ -33,6 +33,8 @@ if (Guid.TryParse(stationText, out var parsedStationId))
 var agentVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.1.0";
 var osVersion = Environment.OSVersion.VersionString;
 
+Console.WriteLine($"پیکربندی Agent: Server={serverUrl}; DeviceId={state.DeviceId}; Name={state.Name}; StationId={stationId?.ToString() ?? "none"}");
+
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
 {
@@ -72,7 +74,11 @@ try
 
         using var response = await httpClient.SendAsync(request, shutdown.Token);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"ثبت Agent در سرور با کد {(int)response.StatusCode} رد شد.");
+        {
+            var responseBody = await response.Content.ReadAsStringAsync(shutdown.Token);
+            throw new InvalidOperationException(
+                $"ثبت Agent در سرور با کد {(int)response.StatusCode} رد شد. {responseBody}");
+        }
 
         var registration = await response.Content.ReadFromJsonAsync<AgentRegistrationResponse>(
             cancellationToken: shutdown.Token)
@@ -92,7 +98,7 @@ try
         .WithUrl(hubUrl, options =>
         {
             options.Headers["X-GameNet-Device-Id"] = state.DeviceId;
-            options.Headers["Authorization"] = $"Bearer {state.AgentToken}";
+            options.AccessTokenProvider = () => Task.FromResult<string?>(state.AgentToken);
         })
         .WithAutomaticReconnect()
         .Build();
