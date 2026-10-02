@@ -111,3 +111,10 @@ partial class EmployeePayroll
 partial class AgentDeviceFoundation
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002203000_AgentCommandFoundation")]
+partial class AgentCommandFoundation
+{
+}
