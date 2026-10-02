@@ -760,6 +760,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       key={station.id}
       style={style}
       className={`station-card ${station.state} ${view} ${selected ? 'selected' : ''}`}
+      draggable={false}
+      onSelectStart={event => event.preventDefault()}
       onMouseDown={event => {
         if (event.button !== 0) return;
         event.preventDefault();
@@ -778,11 +780,13 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         event.stopPropagation();
         if (suppressNextStationClickRef.current) {
           suppressNextStationClickRef.current = false;
+          window.getSelection()?.removeAllRanges();
           return;
         }
         if (event.ctrlKey || event.metaKey || event.shiftKey) {
           event.preventDefault();
           selectStationWithModifiers(station.id, event.ctrlKey || event.metaKey, event.shiftKey);
+          window.getSelection()?.removeAllRanges();
           return;
         }
         if (station.state === 'free') open('start', station);
@@ -802,7 +806,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       <div className="price">{station.state === 'busy' ? `هزینه ${money(elapsedCost)} تومان` : `از ${money(station.ratePerHour)} تومان / ساعت`}</div>
       {station.state === 'busy' && <><div className="person-dots">{'● '.repeat(station.persons ?? 1)}</div><div className="progress-bar"><span style={{ width: `${Math.min(100, minutes % 60 / 60 * 100)}%` }} /></div><span className="pulse" /></>}
       {station.state === 'off' && <small>{station.outOfServiceReason ?? 'در تعمیر'}</small>}
-      <div className="station-hover-actions" onMouseDown={event => event.stopPropagation()} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
+      <div className="station-hover-actions" draggable={false} onMouseDown={event => { event.stopPropagation(); window.getSelection()?.removeAllRanges(); }} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
         {station.state === 'free' && <button type="button" className="quick primary" onClick={() => open('start', station)}>▶ شروع</button>}
         {station.state === 'busy' && <button type="button" className="quick" onClick={() => { setActiveStation(station); pauseSession(); }}>⏸ مکث</button>}
         {station.state === 'paused' && <button type="button" className="quick primary" onClick={() => { setActiveStation(station); resumeSession(); }}>▶ ادامه</button>}
