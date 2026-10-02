@@ -197,7 +197,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
     </div>
 
     <div className="toolbar">
-      <button type="button" className="btn primary" onClick={() => { setEditingProductId(null); setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0', minimumStock: '0', unit: 'عدد' }); setProductFormOpen(current => !current); }}>+ محصول جدید</button>
+      {canManageInventory && <button type="button" className="btn primary" onClick={() => { setEditingProductId(null); setDraft({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0', minimumStock: '0', unit: 'عدد' }); setProductFormOpen(current => !current); }}>+ محصول جدید</button>}
       <span className="status-pill free">موجودی از Server</span>
     </div>
 
@@ -236,12 +236,12 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
               {low && <small className="low-stock">هشدار موجودی کم</small>}
               <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
               {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => startEdit(product)}>ویرایش</button>}
-              <button className="btn sm" disabled={busy} onClick={() => void purchaseProduct(product)}>ثبت خرید</button>
+              {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void purchaseProduct(product)}>ثبت خرید</button>}
               <div className="product-stock-actions">
                 {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button>}
                 {canManageInventory && <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out')}>− موجودی</button>}
-                <button className="btn sm danger" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out', 'Waste', 'ضایعات بوفه')}>− ضایعات</button>
-                <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in', 'Return', 'مرجوعی بوفه')}>+ مرجوعی</button>
+                {canManageInventory && <button className="btn sm danger" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out', 'Waste', 'ضایعات بوفه')}>− ضایعات</button>}
+                {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in', 'Return', 'مرجوعی بوفه')}>+ مرجوعی</button>}
               </div>
             </article>;
           })}
