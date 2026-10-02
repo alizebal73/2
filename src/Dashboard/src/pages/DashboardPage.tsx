@@ -4,7 +4,7 @@ import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimeli
 import { mockService } from '../services/mockService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
-import { isServerGuid, settleServerSession, startServerSession } from '../services/sessionService';
+import { isServerGuid, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
 import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
@@ -409,6 +409,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           customerId: customer.id,
           stationId: activeStation.id,
           tariffId: tariff?.id,
+          hourlyRateOverride: sessionRate,
+          persons: activeStation.zone === 'pc' ? 1 : persons,
         });
         serverSessionId = result?.sessionId;
       } catch (error) {
@@ -817,57 +819,81 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setMessage(`${money(minutes)} دقیقه به جلسه ${activeStation.name} اضافه شد`);
   }
 
-  function changeSessionRate(station: StationDto, rate: number) {
+  async function changeSessionRate(station: StationDto, rate: number) {
     if (!rate || rate <= 0) { setMessage('نرخ جلسه باید بیشتر از صفر باشد'); return; }
-    updateStation(station.id, { sessionRate: Math.round(rate) });
-    addSessionTimeline(station.id, 'note', 'تغییر نرخ جلسه', 'نرخ این جلسه به ' + money(rate) + ' تومان/ساعت تغییر کرد', rate);
-    setMessage('نرخ جلسه به ' + money(rate) + ' تومان/ساعت تغییر کرد');
+    const nextRate = Math.round(rate);
+    try {
+      if (station.serverSessionId) {
+        await updateServerSessionDetails(station.serverSessionId, { hourlyRate: nextRate });
+      }
+      updateStation(station.id, { sessionRate: nextRate });
+      addSessionTimeline(station.id, 'note', 'تغییر نرخ جلسه', 'نرخ این جلسه به ' + money(nextRate) + ' تومان/ساعت تغییر کرد', nextRate);
+      setMessage(station.serverSessionId ? 'نرخ جلسه روی سرور هم ثبت شد.' : 'نرخ جلسه به ' + money(nextRate) + ' تومان/ساعت تغییر کرد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'تغییر نرخ جلسه ثبت نشد'));
+    }
   }
 
-  function changeSessionPersons(station: StationDto, persons: number) {
+  async function changeSessionPersons(station: StationDto, persons: number) {
     const next = station.zone === 'pc' ? 1 : Math.max(1, Math.min(4, persons));
-    updateStation(station.id, { persons: next });
-    addSessionTimeline(station.id, 'note', 'تغییر نفرات', 'تعداد نفرات به ' + money(next) + ' نفر تغییر کرد', next);
-    setMessage('تعداد نفرات جلسه به ' + money(next) + ' نفر تغییر کرد');
+    try {
+      if (station.serverSessionId) {
+        await updateServerSessionDetails(station.serverSessionId, { persons: next });
+      }
+      updateStation(station.id, { persons: next });
+      addSessionTimeline(station.id, 'note', 'تغییر نفرات', 'تعداد نفرات به ' + money(next) + ' نفر تغییر کرد', next);
+      setMessage(station.serverSessionId ? 'تعداد نفرات روی سرور هم ثبت شد.' : 'تعداد نفرات جلسه به ' + money(next) + ' نفر تغییر کرد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'تغییر تعداد نفرات ثبت نشد'));
+    }
   }
 
-  function transferSession(station: StationDto, targetId: string) {
+  async function transferSession(station: StationDto, targetId: string) {
     const target = stations.find(item => item.id === targetId);
     if (!target || target.state !== 'free') { setMessage('ایستگاه مقصد دیگر آزاد نیست'); return; }
-    updateStation(station.id, {
-      state: 'free',
-      startedAt: undefined,
-      sessionMinutes: undefined,
-      sessionRate: undefined,
-      amountSoFar: undefined,
-      customerCode: undefined,
-      persons: undefined,
-      buffetTotal: undefined,
-      sessionCredit: undefined,
-      prepaidEndsAt: undefined,
-      pausedAt: undefined,
-      pausedMinutes: undefined,
-    });
-    updateStation(target.id, {
-      state: station.state,
-      startedAt: station.startedAt,
-      sessionMinutes: station.sessionMinutes,
-      sessionRate: station.sessionRate,
-      amountSoFar: station.amountSoFar,
-      customerCode: station.customerCode,
-      persons: station.zone === 'pc' ? 1 : (station.persons ?? 1),
-      buffetTotal: station.buffetTotal,
-      sessionCredit: station.sessionCredit,
-      prepaidEndsAt: station.prepaidEndsAt,
-      pausedAt: station.pausedAt,
-      pausedMinutes: station.pausedMinutes,
-      network: target.network,
-    });
-    addSessionTimeline(station.id, 'note', 'انتقال جلسه', 'جلسه از ' + station.name + ' به ' + target.name + ' منتقل شد');
-    addSessionTimeline(target.id, 'note', 'دریافت جلسه', 'جلسه از ' + station.name + ' منتقل شد');
-    setSessionCenterStation(target);
-    setActiveStation(target);
-    setMessage('جلسه به ' + target.name + ' منتقل شد');
+    try {
+      if (station.serverSessionId) {
+        await transferServerSession(station.serverSessionId, target.id);
+      }
+      updateStation(station.id, {
+        state: 'free',
+        startedAt: undefined,
+        sessionMinutes: undefined,
+        sessionRate: undefined,
+        amountSoFar: undefined,
+        customerCode: undefined,
+        persons: undefined,
+        buffetTotal: undefined,
+        sessionCredit: undefined,
+        prepaidEndsAt: undefined,
+        pausedAt: undefined,
+        pausedMinutes: undefined,
+        serverSessionId: undefined,
+      });
+      updateStation(target.id, {
+        state: station.state,
+        startedAt: station.startedAt,
+        sessionMinutes: station.sessionMinutes,
+        sessionRate: station.sessionRate,
+        amountSoFar: station.amountSoFar,
+        customerCode: station.customerCode,
+        persons: target.zone === 'pc' ? 1 : (station.persons ?? 1),
+        buffetTotal: station.buffetTotal,
+        sessionCredit: station.sessionCredit,
+        prepaidEndsAt: station.prepaidEndsAt,
+        pausedAt: station.pausedAt,
+        pausedMinutes: station.pausedMinutes,
+        network: target.network,
+        serverSessionId: station.serverSessionId,
+      });
+      addSessionTimeline(station.id, 'note', 'انتقال جلسه', 'جلسه از ' + station.name + ' به ' + target.name + ' منتقل شد');
+      addSessionTimeline(target.id, 'note', 'دریافت جلسه', 'جلسه از ' + station.name + ' منتقل شد');
+      setSessionCenterStation({ ...target, state: station.state, serverSessionId: station.serverSessionId });
+      setActiveStation({ ...target, state: station.state, serverSessionId: station.serverSessionId });
+      setMessage(station.serverSessionId ? 'جلسه روی سرور به ' + target.name + ' منتقل شد.' : 'جلسه به ' + target.name + ' منتقل شد');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'انتقال جلسه ثبت نشد'));
+    }
   }
 
   async function applyCharge(method: string) {
