@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ProductRecord } from '../types';
 import { adjustServerStock, createServerProduct, getServerInventoryTransactions, getServerProducts, recordServerBuffetSale, updateServerProduct } from '../services/buffetService';
+import { getServerActiveSessions, type ActiveServerSession } from '../services/sessionService';
 import { userErrorMessage } from '../utils/userError';
 
 function money(value: number) {
@@ -10,6 +11,8 @@ function money(value: number) {
 export function BuffetPage() {
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [inventoryHistory, setInventoryHistory] = useState<import('../types').InventoryTransactionRecord[]>([]);
+  const [activeSessions, setActiveSessions] = useState<ActiveServerSession[]>([]);
+  const [sessionTargetId, setSessionTargetId] = useState('');
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [category, setCategory] = useState('همه');
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -21,8 +24,18 @@ export function BuffetPage() {
 
   async function refresh() {
     try {
-      setProducts(await getServerProducts());
-      setInventoryHistory(await getServerInventoryTransactions());
+      const [serverProducts, serverHistory, serverSessions] = await Promise.all([
+        getServerProducts(),
+        getServerInventoryTransactions(),
+        getServerActiveSessions(),
+      ]);
+      setProducts(serverProducts);
+      setInventoryHistory(serverHistory);
+      setActiveSessions(serverSessions);
+      setSessionTargetId(current => {
+        if (current && serverSessions.some(item => item.id === current)) return current;
+        return serverSessions[0]?.id ?? '';
+      });
     } catch (error) {
       setNotice(userErrorMessage(error, 'دریافت موجودی بوفه انجام نشد'));
     }
@@ -34,7 +47,7 @@ export function BuffetPage() {
   const visibleProducts = category === 'همه' ? products : products.filter(item => item.category === categoryValue);
   const cartTotal = products.reduce((total, product) => total + product.price * (cart[product.id] ?? 0), 0);
   const cartItems = products.filter(product => (cart[product.id] ?? 0) > 0);
-  const lowStockCount = useMemo(() => products.filter(item => item.stock <= Math.max(3, Math.floor(item.maxStock * 0.3))).length, [products]);
+  const lowStockCount = useMemo(() => products.filter(item => item.lowStock).length, [products]);
 
   const numberValue = (value: string) => Number(value.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
 
@@ -121,12 +134,25 @@ export function BuffetPage() {
 
   async function checkout(destination: 'session' | 'standalone') {
     if (cartTotal <= 0) { setNotice('سبد فروش خالی است'); return; }
+    if (destination === 'session' && !sessionTargetId) {
+      setNotice('ابتدا جلسه فعال مقصد را انتخاب کنید');
+      return;
+    }
     setBusy(true);
     try {
-      const sale = await recordServerBuffetSale(cartItems.map(item => ({ productId: item.id, quantity: cart[item.id] ?? 0 })), destination);
+      const sale = await recordServerBuffetSale(
+        cartItems.map(item => ({ productId: item.id, quantity: cart[item.id] ?? 0 })),
+        destination,
+        destination === 'session' ? sessionTargetId : undefined,
+      );
       if (destination === 'session') {
         window.dispatchEvent(new CustomEvent('gamenet-buffet-sale', {
-          detail: { total: sale.total, items: cartItems.map(item => ({ name: item.name, quantity: cart[item.id] ?? 0 })) },
+          detail: {
+            total: sale.total,
+            sessionId: sale.sessionId,
+            buffetTotal: sale.buffetTotal,
+            items: cartItems.map(item => ({ name: item.name, quantity: cart[item.id] ?? 0 })),
+          },
         }));
       }
       setCart({});
@@ -198,7 +224,23 @@ export function BuffetPage() {
 
       <section className="panel-box cart-panel">
         <h3>🛒 سبد فروش سریع</h3>
-        <div className="target-switch"><button className={target === 'session' ? 'active' : ''} onClick={() => setTarget('session')}>افزودن به فاکتور جلسه</button><button className={target === 'standalone' ? 'active' : ''} onClick={() => setTarget('standalone')}>فروش مستقل</button></div>
+        <div className="target-switch">
+          <button className={target === 'session' ? 'active' : ''} onClick={() => setTarget('session')}>افزودن به فاکتور جلسه</button>
+          <button className={target === 'standalone' ? 'active' : ''} onClick={() => setTarget('standalone')}>فروش مستقل</button>
+        </div>
+        {target === 'session' && (
+          <label style={{ marginTop: 10 }}>
+            جلسه مقصد
+            <select value={sessionTargetId} onChange={event => setSessionTargetId(event.target.value)} disabled={busy}>
+              {activeSessions.length === 0 && <option value="">جلسه فعال وجود ندارد</option>}
+              {activeSessions.map(session => (
+                <option key={session.id} value={session.id}>
+                  {session.stationName} · {session.customerName} · بوفه {money(session.buffetTotal)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="cart-items">{cartItems.length ? cartItems.map(item => <div className="cart-item" key={item.id}><span>{item.name} · {money(item.price)}</span><div><button onClick={() => changeQuantity(item.id, -1)} aria-label="کاهش تعداد">−</button><b>{cart[item.id]}</b><button onClick={() => changeQuantity(item.id, 1)} aria-label="افزایش تعداد">+</button></div></div>) : <p className="empty-state">از فهرست کالا انتخاب کنید</p>}</div>
         <div className="cart-total"><span>جمع سبد</span><b>{money(cartTotal)} تومان</b></div>
         <div className="modal-actions"><button className="btn primary" disabled={busy} onClick={() => void checkout('session')}>افزودن به فاکتور</button><button className="btn" disabled={busy} onClick={() => void checkout('standalone')}>ثبت فروش مستقل</button></div>
