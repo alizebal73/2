@@ -140,7 +140,6 @@ public sealed class SessionSettlementService(GameNetDbContext database)
 
 
 
-        database.Invoices.Add(invoice);
         foreach (var part in normalizedParts)
         {
             database.InvoicePayments.Add(new InvoicePayment
