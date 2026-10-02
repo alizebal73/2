@@ -79,7 +79,7 @@ jobs:
             dotnet tool restore *>&1 | Tee-Object -FilePath $log -Append
             dotnet build src\Server\GameNetManager.Server.csproj --no-restore --configuration Release *>&1 | Tee-Object -FilePath $log -Append
             if ($LASTEXITCODE -eq 0) {
-              dotnet tool run dotnet-ef migrations add SnapshotRebuildProbe --project src\Server --startup-project src\Server --output-dir Data\Migrations\__SnapshotProbe --no-build *>&1 | Tee-Object -FilePath $log -Append
+              dotnet tool run dotnet-ef migrations add SnapshotRebuildProbe --project src\Server --startup-project src\Server --output-dir Data\Migrations\__SnapshotProbe --configuration Release --no-build *>&1 | Tee-Object -FilePath $log -Append
               if ($LASTEXITCODE -eq 0) {
                 $generated = Get-ChildItem $probe -Filter '*ModelSnapshot.cs' | Select-Object -First 1
                 if ($generated) {
