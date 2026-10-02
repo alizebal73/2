@@ -172,10 +172,9 @@ app.MapGet("/api/users", async (
         .Include(item => item.Permissions)
         .ThenInclude(item => item.Permission)
         .OrderBy(item => item.FullName)
-        .Select(item => ToAppUserDto(item))
         .ToListAsync(cancellationToken);
 
-    return Results.Ok(users);
+    return Results.Ok(users.Select(ToAppUserDto).ToList());
 })
 .WithName("GetAppUsers");
 
