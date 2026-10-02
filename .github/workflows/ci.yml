@@ -115,6 +115,54 @@ jobs:
             $meBeforeAgent = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($meBeforeAgent.userName -ne 'admin') { throw 'Current operator endpoint failed before Agent smoke.' }
 
+            # Stage 11: prove Game and Account Pool are server-backed and allocation is atomic.
+            $stage11Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              name = 'CI Stage11 Game'
+              version = '1.0'
+              genre = 'CI'
+              status = 'online'
+              path = 'C:\\Games\\Stage11'
+              executable = 'Stage11.exe'
+              cover = ''
+              trailer = ''
+              launchArgs = ''
+              connectionType = 'آنلاین'
+              active = $true
+              targetSystem = 'all'
+              target = 'all'
+              targetZone = 'pc'
+              targetStations = ''
+            } | ConvertTo-Json)
+            if (-not $stage11Game.id) { throw 'Stage 11 Game create smoke failed.' }
+
+            $stage11Account = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              title = 'CI Stage11 Account'
+              platform = 'Steam'
+              login = 'ci-stage11'
+              secret = 'Stage11Secret!'
+              owner = 'CI'
+              expiresAt = $null
+              allowedGameIds = @($stage11Game.id)
+              status = 'Free'
+            } | ConvertTo-Json)
+            if (-not $stage11Account.id) { throw 'Stage 11 Account Pool create smoke failed.' }
+
+            $stage11Pool = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+            if (-not ($stage11Pool.id -contains $stage11Account.id)) { throw 'Stage 11 Account Pool list smoke failed.' }
+
+            $stage11Lease = Invoke-RestMethod -Uri "$baseUrl/api/account-pool/allocate" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              gameId = $stage11Game.id
+              agentDeviceId = $null
+              customerId = $null
+              sessionId = $null
+            } | ConvertTo-Json)
+            if (-not $stage11Lease.leaseId) { throw 'Stage 11 Account allocation smoke failed.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/account-pool/leases/$($stage11Lease.leaseId)/release" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ reason = 'CI Stage11 smoke' } | ConvertTo-Json) | Out-Null
+
+            Invoke-RestMethod -Uri "$baseUrl/api/games/$($stage11Game.id)" -Method Delete -WebSession $adminSession | Out-Null
+            Write-Host 'Stage 11 Game/Account Pool create -> allocate -> release -> archive smoke passed.'
+
             # Stage 8: prove a real Client Agent can register, connect to the dedicated SignalR hub,
             # persist a heartbeat, and become offline again after disconnect.
             $agentData = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent'
