@@ -99,6 +99,122 @@ app.MapGet("/api/customers", async (
 })
 .WithName("GetCustomers");
 
+app.MapGet("/api/vip-packages", async (
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var packages = await database.VipPackages.AsNoTracking()
+        .Where(item => item.IsActive)
+        .OrderBy(item => item.Price)
+        .Select(item => new VipPackageDto(
+            item.Id,
+            item.Name,
+            item.Tier,
+            item.Price,
+            item.DurationDays,
+            item.DailyMinutes,
+            item.TotalMinutes,
+            item.DiscountPercent,
+            item.OverflowRule,
+            item.Description,
+            item.IsActive))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(packages);
+})
+.WithName("GetVipPackages");
+
+app.MapPost("/api/vip-packages", async (
+    CreateVipPackageRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var name = request.Name?.Trim();
+    if (string.IsNullOrWhiteSpace(name))
+        return Results.BadRequest(new { code = "missing_vip_package_name", message = "نام پکیج VIP را وارد کنید." });
+
+    if (request.Price < 0 || request.DurationDays <= 0 || request.DailyMinutes <= 0 || request.TotalMinutes <= 0)
+        return Results.BadRequest(new { code = "invalid_vip_package", message = "مقدارهای پکیج VIP معتبر نیستند." });
+
+    var package = new VipPackage
+    {
+        Name = name,
+        Tier = NormalizeVipTier(request.Tier),
+        Price = request.Price,
+        DurationDays = request.DurationDays,
+        DailyMinutes = request.DailyMinutes,
+        TotalMinutes = request.TotalMinutes,
+        DiscountPercent = Math.Clamp(request.DiscountPercent, 0, 100),
+        OverflowRule = string.IsNullOrWhiteSpace(request.OverflowRule) ? "half-hourly" : request.OverflowRule.Trim(),
+        Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+        IsActive = true
+    };
+
+    database.VipPackages.Add(package);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "VipPackageCreate",
+        EntityName = "VipPackage",
+        EntityId = package.Id.ToString(),
+        Details = "ایجاد پکیج VIP · " + package.Name
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new VipPackageDto(
+        package.Id, package.Name, package.Tier, package.Price, package.DurationDays,
+        package.DailyMinutes, package.TotalMinutes, package.DiscountPercent,
+        package.OverflowRule, package.Description, package.IsActive));
+})
+.WithName("CreateVipPackage");
+
+app.MapPost("/api/customers/{customerId:guid}/vip-package", async (
+    Guid customerId,
+    AssignVipPackageRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    var package = await database.VipPackages.FirstOrDefaultAsync(item => item.Id == request.VipPackageId && item.IsActive, cancellationToken);
+    if (package is null)
+        return Results.NotFound(new { code = "vip_package_not_found", message = "پکیج VIP پیدا نشد یا غیرفعال است." });
+
+    var activatedAt = DateTimeOffset.UtcNow;
+    customer.VipPackageId = package.Id;
+    customer.VipPackage = package;
+    customer.VipActivatedAt = activatedAt;
+    customer.VipExpiresAt = activatedAt.AddDays(package.DurationDays);
+    customer.VipTier = package.Tier;
+    customer.IsVip = package.Tier != "none";
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "VipPackageAssign",
+        EntityName = "Customer",
+        EntityId = customer.Id.ToString(),
+        Details = "تخصیص پکیج VIP · " + package.Name + " · تا " + customer.VipExpiresAt.Value.ToString("O")
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        customerId = customer.Id,
+        packageId = package.Id,
+        packageName = package.Name,
+        vipTier = customer.VipTier,
+        activatedAt = customer.VipActivatedAt,
+        expiresAt = customer.VipExpiresAt,
+        dailyMinutes = package.DailyMinutes,
+        totalMinutes = package.TotalMinutes,
+        discountPercent = package.DiscountPercent
+    });
+})
+.WithName("AssignVipPackage");
+
 app.MapPost("/api/customers", async (
     CreateCustomerRequest request,
     GameNetDbContext database,
