@@ -293,13 +293,32 @@
 7. ✅ Approval Flow برای عملیات حساس — Build/Test/CI + Smoke Test تعاملی سبز
 8. ✅ Undo UX برای عملیات برگشت‌پذیر (Reverse واقعی، بدون حذف رکورد) — Build/Test/CI + Smoke Test تعاملی سبز
 
+## اجرای مرحله اصلی ۴ — B10 Refund
+
+### مسیر فعلی
+- endpoint مستقل: POST /api/customers/{customerId}/wallet-refunds
+- دلیل Refund اجباری است.
+- موجودی قبل از ثبت Refund کنترل می‌شود.
+- تراکنش اصلی حذف نمی‌شود؛ یک Ledger debit جدید برای بازگشت وجه ثبت می‌شود.
+- Audit با Action = WalletRefund ثبت می‌شود.
+- Customer Profile از سرویس Refund اختصاصی استفاده می‌کند.
+- تست Server برای حفظ رکورد اصلی + ثبت Debit + Audit اضافه شد.
+
+### مرز باقی‌مانده
+- Permission سروری
+- Approval برای Refundهای حساس
+- Reference صریح به تراکنش/Invoice مبدأ
+- Refund واقعی برای Session/Buffet/Package
+- Reverse کامل و چندمرحله‌ای
+این موارد در B10/B11 و مرحله ۷/مالی تکمیل می‌شوند.
+
 ## وضعیت مرحله اصلی ۳ — Operational Completion
 
 **تکمیل شد.** A1 تا A8 همگی پیاده‌سازی شدند و CI + Dashboard Interaction Smoke روی HEAD نهایی سبز است. مرحله اصلی بعدی: **۴ — Finance & Session Core**.
 
 ### B) Finance / Session
 9. [~] Wallet Ledger واقعی — قرارداد مشترک، API پایدار Server/SQLite، Audit، adapter داشبورد و نمایش Ledger مشتری پیاده‌سازی شد؛ اتصال همه عملیات مالی و مهاجرت کامل از Mock باقی مانده
-10. Refund / Reverse واقعی
+10. [~] Refund / Reverse واقعی — Refund کیف پول مسیر مستقل Server/API + Audit + UI گرفت؛ Permission/Approval و Reverse کامل مالی مرحله بعدی هنوز باقی است
 11. Settlement کامل + Breakdown + Why this amount?
 12. Split Payment
 13. Shift Settlement + Shift Handover
