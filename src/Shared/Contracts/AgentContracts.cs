@@ -43,6 +43,7 @@ public sealed record AgentStatusDto(
     Guid? StationId,
     string? StationName,
     bool IsOnline,
+    bool IsLocked,
     DateTimeOffset? LastSeenAt,
     DateTimeOffset? ConnectedAt,
     string? AgentVersion,
