@@ -78,7 +78,7 @@ const accounts: AccountRecord[] = [
   { id: 'a1', title: 'Steam-01', platform: 'Steam', status: 'in-use', owner: 'مجموعه', expiresAt: '۳ روز دیگر', allowedGames: ['Counter-Strike 2', 'Dota 2'], assignedClient: 'PC ۱۲', guardStatus: '2FA', allowedGameIds: ['g1', 'g2'] },
   { id: 'a2', title: 'Battle-02', platform: 'Battle.net', status: 'free', owner: 'مجموعه', expiresAt: '۱۲ ساعت دیگر', allowedGames: ['Overwatch 2', 'Diablo IV'], assignedClient: '', guardStatus: 'محافظت‌شده', allowedGameIds: [] },
   { id: 'a3', title: 'Riot-03', platform: 'Riot', status: 'locked', owner: 'مجموعه', expiresAt: 'قفل شده', allowedGames: ['Valorant'], assignedClient: '', guardStatus: 'نیازمند بررسی', allowedGameIds: ['g2'] },
-  { id: 'a4', title: 'Epic-04', platform: 'Epic', status: 'free', owner: 'مجموعه', expiresAt: '۱ هفته دیگر', allowedGames: ['Fortnite', 'Rocket League'], assignedClient: '', guardStatus: '2FA' },
+  { id: 'a4', title: 'Epic-04', platform: 'Epic', status: 'free', owner: 'مجموعه', expiresAt: '۱ هفته دیگر', allowedGames: ['Fortnite', 'Rocket League'], assignedClient: '', guardStatus: '2FA', allowedGameIds: [] },
   { id: 'a5', title: 'Steam-05', platform: 'Steam', status: 'free', owner: 'مجموعه', expiresAt: '۲ هفته دیگر', allowedGames: ['EA SPORTS FC 25'], assignedClient: '', guardStatus: 'محافظت‌شده', allowedGameIds: [] },
 ];
 
