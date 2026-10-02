@@ -87,6 +87,7 @@ jobs:
             }
             Write-Host 'Server startup, EF migrations and /api/health passed.'
 
+
             # Stage 8: prove a real Client Agent can register, connect to the dedicated SignalR hub,
             # persist a heartbeat, and become offline again after disconnect.
             $agentData = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-agent'
