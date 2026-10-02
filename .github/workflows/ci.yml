@@ -62,7 +62,7 @@ jobs:
 
       - name: Dashboard interaction smoke
         shell: pwsh
-        run: npm exec --yes --package=@playwright/test@1.63.0 -- node e2e/dashboard-smoke.cjs
+        run: npm exec --yes --package=@playwright/test@1.63.0 -- playwright test e2e/dashboard-smoke.cjs --config=e2e/playwright.config.cjs --workers=1
 
       - name: Stop Dashboard preview
         if: always()
