@@ -3105,3 +3105,88 @@ button:focus-visible {
   font-size: 9px;
   line-height: 1.7;
 }
+
+
+.reverse-dialog {
+  width: min(460px, 100%);
+  text-align: center;
+}
+
+.reverse-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 8px;
+  border-radius: 12px;
+  background: rgba(167, 139, 250, 0.12);
+  border: 1px solid rgba(167, 139, 250, 0.32);
+  color: var(--purple);
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.reverse-kicker {
+  display: block;
+  color: var(--purple);
+  font-size: 9px;
+}
+
+.reverse-dialog h2 {
+  margin: 4px 0;
+  font-size: 16px;
+}
+
+.reverse-dialog > p {
+  margin: 0 auto 11px;
+  max-width: 390px;
+  color: var(--dim);
+  font-size: 10.5px;
+  line-height: 1.8;
+}
+
+.reverse-rule {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 13px;
+  padding: 9px 10px;
+  border: 1px solid rgba(167, 139, 250, 0.24);
+  border-radius: 10px;
+  background: rgba(167, 139, 250, 0.06);
+  text-align: right;
+}
+
+.reverse-rule strong {
+  color: var(--txt);
+  font-size: 10.5px;
+}
+
+.reverse-rule span {
+  color: var(--dim);
+  font-size: 9px;
+  line-height: 1.7;
+}
+
+.recent-action-side {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.recent-action-reverse {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(167, 139, 250, 0.32);
+  border-radius: 7px;
+  background: rgba(167, 139, 250, 0.08);
+  color: var(--purple);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.recent-action-reverse:hover {
+  border-color: rgba(167, 139, 250, 0.6);
+  background: rgba(167, 139, 250, 0.14);
+}
