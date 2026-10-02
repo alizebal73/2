@@ -4,7 +4,14 @@ using Microsoft.EntityFrameworkCore;
 namespace GameNetManager.Server.Data;
 
 public sealed record SettlementPart(string Method, decimal Amount);
-public sealed record SessionSettlementRequest(decimal TotalAmount, IReadOnlyList<SettlementPart> Parts, Guid? AppUserId, int FreeTimeMinutes = 0);
+public sealed record SessionSettlementRequest(
+    decimal TotalAmount,
+    IReadOnlyList<SettlementPart> Parts,
+    Guid? AppUserId,
+    int FreeTimeMinutes = 0,
+    decimal? TimeAmount = null,
+    decimal? DiscountAmount = null,
+    decimal? PrepaidAmount = null);
 
 public sealed class SessionSettlementService(GameNetDbContext database)
 {
@@ -63,28 +70,85 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         var elapsedMinutes = Math.Max(0, (DateTimeOffset.UtcNow - session.StartAt).TotalMinutes);
         if (request.FreeTimeMinutes < 0 || request.FreeTimeMinutes > Math.Ceiling(elapsedMinutes))
             throw new InvalidOperationException("دقیقه اعتبار رایگان مصرف‌شده با زمان جلسه سازگار نیست.");
-        var invoice = new Invoice
-        {
-            CustomerId = session.CustomerId,
-            SessionId = session.Id,
-            AppUserId = request.AppUserId,
-            TotalAmount = request.TotalAmount,
-            Status = InvoiceStatus.Paid,
-            IssuedAt = DateTimeOffset.UtcNow,
-            PaidAt = DateTimeOffset.UtcNow,
-            Items =
-            {
-                new InvoiceItem
-                {
-                    Description = "تسویه جلسه " + session.Station.Name,
-                    Quantity = 1,
-                    UnitPrice = request.TotalAmount,
-                    Amount = request.TotalAmount
-                }
-            }
-        };
+        if (request.TimeAmount is < 0 || request.DiscountAmount is < 0 || request.PrepaidAmount is < 0)
+            throw new ArgumentException("جزئیات مبلغ تسویه معتبر نیست.");
 
-        database.Invoices.Add(invoice);
+        var invoice = await database.Invoices
+            .Include(item => item.Items)
+            .FirstOrDefaultAsync(item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft, cancellationToken);
+
+        if (invoice is null)
+        {
+            invoice = new Invoice
+            {
+                CustomerId = session.CustomerId,
+                SessionId = session.Id,
+                AppUserId = request.AppUserId,
+                TotalAmount = 0m,
+                Status = InvoiceStatus.Draft,
+                IssuedAt = DateTimeOffset.UtcNow
+            };
+            database.Invoices.Add(invoice);
+        }
+        else if (invoice.CustomerId != session.CustomerId)
+        {
+            throw new InvalidOperationException("فاکتور بوفه متعلق به این مشتری نیست.");
+        }
+
+        var existingBuffetTotal = invoice.Items.Where(item => item.ProductId.HasValue).Sum(item => item.Amount);
+        var timeAmount = request.TimeAmount ?? Math.Max(0m, request.TotalAmount - existingBuffetTotal);
+        if (timeAmount > 0)
+        {
+            invoice.Items.Add(new InvoiceItem
+            {
+                Description = "هزینه جلسه " + session.Station.Name,
+                Quantity = 1,
+                UnitPrice = timeAmount,
+                Amount = timeAmount
+            });
+        }
+
+        var discountAmount = Math.Max(0m, request.DiscountAmount ?? 0m);
+        if (discountAmount > 0)
+        {
+            invoice.Items.Add(new InvoiceItem
+            {
+                Description = "تخفیف تسویه جلسه",
+                Quantity = 1,
+                UnitPrice = -discountAmount,
+                Amount = -discountAmount
+            });
+        }
+
+        var prepaidAmount = Math.Max(0m, request.PrepaidAmount ?? 0m);
+        if (prepaidAmount > 0)
+        {
+            invoice.Items.Add(new InvoiceItem
+            {
+                Description = "اعتبار پیش‌پرداخت جلسه",
+                Quantity = 1,
+                UnitPrice = -prepaidAmount,
+                Amount = -prepaidAmount
+            });
+        }
+
+        var itemSubtotal = existingBuffetTotal + timeAmount - discountAmount - prepaidAmount;
+        var roundingAdjustment = request.TotalAmount - itemSubtotal;
+        if (Math.Abs(roundingAdjustment) >= 0.01m)
+        {
+            invoice.Items.Add(new InvoiceItem
+            {
+                Description = "تعدیل نهایی تسویه",
+                Quantity = 1,
+                UnitPrice = roundingAdjustment,
+                Amount = roundingAdjustment
+            });
+        }
+
+        invoice.AppUserId ??= request.AppUserId;
+        invoice.TotalAmount = request.TotalAmount;
+        invoice.Status = InvoiceStatus.Paid;
+        invoice.PaidAt = DateTimeOffset.UtcNow;
 
 
         if (request.FreeTimeMinutes > session.Customer.FreeTimeMinutes)
