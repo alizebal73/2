@@ -681,19 +681,28 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     const timeCost = billing.timeAmount;
     const prepaidUsed = Math.min(billing.finalAmount, activeStation.sessionCredit ?? 0);
     const finalTotal = Math.max(0, billing.finalAmount - prepaidUsed);
-    if (activeStation.serverSessionId && customer && isServerGuid(activeStation.serverSessionId) && ['cash', 'card', 'wallet'].includes(method)) {
+    if (activeStation.serverSessionId && customer && isServerGuid(activeStation.serverSessionId) && ['cash', 'card', 'wallet', 'gift'].includes(method)) {
       try {
         const serverResult = await settleServerSession(
           activeStation.serverSessionId,
           finalTotal,
-          [{ method: method as 'cash' | 'card' | 'wallet', amount: finalTotal }],
+          [{ method: method as 'cash' | 'card' | 'wallet' | 'gift', amount: finalTotal }],
+          undefined,
+          Math.min(customer.freeTimeMinutes ?? 0, Math.ceil(elapsed)),
         );
-        if (method === 'wallet') {
-          setCustomers(current => current.map(item => item.id === customer.id
-            ? { ...item, wallet: serverResult.walletBalanceAfter, transactionHistory: ['تسویه سرور از کیف پول · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
-            : item));
-        }
-        addSessionTimeline(activeStation.id, 'settle', 'تسویه سروری', money(finalTotal) + ' تومان · ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : 'کیف پول'), finalTotal);
+        setCustomers(current => current.map(item => item.id === customer.id
+          ? {
+              ...item,
+              wallet: method === 'wallet' ? serverResult.walletBalanceAfter : item.wallet,
+              giftCredit: serverResult.freeMoneyBalanceAfter,
+              freeTimeMinutes: serverResult.freeTimeMinutesAfter,
+              transactionHistory: [
+                method === 'gift' ? 'مصرف اعتبار رایگان سرور · ' + money(finalTotal) + ' تومان' : method === 'wallet' ? 'تسویه سرور از کیف پول · ' + money(finalTotal) + ' تومان' : 'تسویه سرور · ' + money(finalTotal) + ' تومان',
+                ...(item.transactionHistory ?? []),
+              ],
+            }
+          : item));
+        addSessionTimeline(activeStation.id, 'settle', 'تسویه سروری', money(finalTotal) + ' تومان · ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : method === 'wallet' ? 'کیف پول' : 'اعتبار رایگان'), finalTotal);
         setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt: new Date().toISOString() }, ...items]);
         setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: 'paid' } : item));
         updateStation(activeStation.id, {
