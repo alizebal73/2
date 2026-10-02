@@ -63,3 +63,21 @@ export async function getFinanceExpenses(from?: Date, to?: Date): Promise<Financ
     return created >= start && created <= end;
   });
 }
+
+export type FinanceTransaction = {
+  id: string;
+  closedAt: string;
+  description: string;
+  amount: number;
+  method: string;
+  status: string;
+};
+
+export async function getFinanceTransactions(from?: Date, to?: Date): Promise<FinanceTransaction[]> {
+  const query = new URLSearchParams();
+  if (from) query.set('from', from.toISOString());
+  if (to) query.set('to', to.toISOString());
+  const response = await fetch('/api/finance/transactions?' + query.toString());
+  if (!response.ok) throw new Error('دریافت تراکنش‌های مالی انجام نشد');
+  return await response.json() as FinanceTransaction[];
+}
