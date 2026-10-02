@@ -4,9 +4,13 @@ public static class SessionTiming
 {
     public static double GetBillableMinutes(Session session, DateTimeOffset now)
     {
-        var elapsed = Math.Max(0d, (now - session.StartAt).TotalMinutes);
+        var effectiveNow = session.EndAt.HasValue && session.EndAt.Value < now
+            ? session.EndAt.Value
+            : now;
+
+        var elapsed = Math.Max(0d, (effectiveNow - session.StartAt).TotalMinutes);
         var activePauseMinutes = session.PausedAt.HasValue
-            ? Math.Max(0d, (now - session.PausedAt.Value).TotalMinutes)
+            ? Math.Max(0d, (effectiveNow - session.PausedAt.Value).TotalMinutes)
             : 0d;
 
         return Math.Max(
@@ -16,5 +20,4 @@ public static class SessionTiming
             - activePauseMinutes
             + session.TimeAdjustmentMinutes);
     }
-
 }
