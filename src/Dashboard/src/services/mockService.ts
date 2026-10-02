@@ -46,10 +46,10 @@ const walletLedger: Record<string, WalletLedgerEntry[]> = {
 };
 
 const products: ProductRecord[] = [
-  { id: 'p1', name: 'انرژی درینک', category: 'نوشیدنی', price: 25000, buyPrice: 14000, stock: 42, maxStock: 60 },
-  { id: 'p2', name: 'پیتزا کوچک', category: 'غذا', price: 42000, buyPrice: 22000, stock: 18, maxStock: 30 },
-  { id: 'p3', name: 'چیپس', category: 'تنقلات', price: 18000, buyPrice: 9000, stock: 24, maxStock: 40 },
-  { id: 'p4', name: 'کاپ کیک', category: 'دسر', price: 14000, buyPrice: 7000, stock: 9, maxStock: 20 },
+  { id: 'p1', name: 'انرژی درینک', category: 'نوشیدنی', price: 25000, buyPrice: 14000, stock: 42, minimumStock: 10, unit: 'عدد', lowStock: false, maxStock: 60 },
+  { id: 'p2', name: 'پیتزا کوچک', category: 'غذا', price: 42000, buyPrice: 22000, stock: 18, minimumStock: 5, unit: 'عدد', lowStock: false, maxStock: 30 },
+  { id: 'p3', name: 'چیپس', category: 'تنقلات', price: 18000, buyPrice: 9000, stock: 24, minimumStock: 6, unit: 'عدد', lowStock: false, maxStock: 40 },
+  { id: 'p4', name: 'کاپ کیک', category: 'دسر', price: 14000, buyPrice: 7000, stock: 9, minimumStock: 3, unit: 'عدد', lowStock: false, maxStock: 20 },
 ];
 
 const users: UserRecord[] = [
