@@ -332,7 +332,7 @@
 10. [~] Refund / Reverse واقعی — Refund کیف پول مسیر مستقل Server/API + Audit + UI گرفت و تست سرور سبز شد؛ Permission/Approval و Reverse کامل مالی مرحله بعدی هنوز باقی است
 11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change پیاده شد و CI + Smoke سبز است؛ اتصال Invoice/Server و ثبت مالی نهایی باقی است
 12. [~] Split Payment — تسویه ترکیبی نقد/کارت/کیف پول پیاده‌سازی شد؛ منتظر CI و تست تعاملی
-13. Shift Settlement + Shift Handover
+13. [~] Shift Settlement + Shift Handover — فرم تسویه، تطبیق نقدی و یادداشت تحویل شیفت پیاده‌سازی شد؛ منتظر CI
 14. Session Transfer / Change Tariff / Change Persons
 15. Free Time + Free Money کامل
 16. Concurrent Login Limit
@@ -384,6 +384,14 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 → D27 → D28 → D29 → D30 → D31 → D32
 → E33 → E34 → E35 → E36 → E37 → E38 → E39 → E40 → E41 → E42
 → F43 → F44 → F45 → F46 → F47 → F48
+
+## قرارداد اجرایی B13 — Shift Settlement + Handover
+
+- بستن شیفت دیگر با prompt انجام نمی‌شود.
+- اپراتور در فرم تسویه، وجه مورد انتظار، وجه شمارش‌شده، تطبیق نقدی خارج از سیستم و اختلاف را می‌بیند.
+- یادداشت تحویل شیفت برای مشکلات دستگاه، بدهی، سفارش باز یا هر موضوع منتقل‌شونده ثبت می‌شود.
+- وجه خارج از سیستم جدا از فروش نرم‌افزاری ثبت می‌شود و نباید به‌صورت پنهان از حقوق کم شود.
+- در نسخه سروری نهایی: Shift Close + Handover باید Transaction/Audit/Permission داشته باشد.
 
 ## قرارداد اجرایی B12 — Split Payment
 
