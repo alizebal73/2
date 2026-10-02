@@ -443,6 +443,162 @@ app.MapPost("/api/customers/{customerId:guid}/login-release", async (
 })
 .WithName("ReleaseCustomerLogin");
 
+app.MapGet("/api/buffet/products", async (
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var products = await database.Products
+        .AsNoTracking()
+        .Where(item => item.IsActive)
+        .OrderBy(item => item.Category)
+        .ThenBy(item => item.Name)
+        .Select(item => new
+        {
+            id = item.Id,
+            name = item.Name,
+            category = item.Category,
+            price = item.UnitPrice,
+            buyPrice = item.CostPrice,
+            stock = item.StockQuantity,
+            active = item.IsActive
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(products);
+})
+.WithName("GetBuffetProducts");
+
+app.MapPost("/api/buffet/products", async (
+    CreateBuffetProductRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name) || request.UnitPrice < 0 || request.CostPrice < 0 || request.InitialStock < 0)
+        return Results.BadRequest(new { code = "invalid_product", message = "اطلاعات محصول معتبر نیست." });
+
+    var product = new Product
+    {
+        Name = request.Name.Trim(),
+        Category = string.IsNullOrWhiteSpace(request.Category) ? "سایر" : request.Category.Trim(),
+        UnitPrice = request.UnitPrice,
+        CostPrice = request.CostPrice,
+        StockQuantity = request.InitialStock,
+        IsActive = true
+    };
+    database.Products.Add(product);
+    if (request.InitialStock > 0)
+    {
+        database.InventoryTransactions.Add(new InventoryTransaction
+        {
+            Product = product,
+            Quantity = request.InitialStock,
+            Direction = TransactionDirection.In,
+            AppUserId = request.AppUserId,
+            Notes = "موجودی اولیه"
+        });
+    }
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "BuffetProductCreated",
+        EntityName = "Product",
+        EntityId = product.Id.ToString(),
+        Details = product.Name,
+        AppUserId = request.AppUserId
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = product.Id, name = product.Name, category = product.Category, price = product.UnitPrice, buyPrice = product.CostPrice, stock = product.StockQuantity, active = product.IsActive });
+})
+.WithName("CreateBuffetProduct");
+
+app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
+    Guid productId,
+    StockAdjustmentRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (request.Quantity <= 0)
+        return Results.BadRequest(new { code = "invalid_quantity", message = "تعداد باید بیشتر از صفر باشد." });
+
+    var product = await database.Products.FirstOrDefaultAsync(item => item.Id == productId && item.IsActive, cancellationToken);
+    if (product is null)
+        return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
+
+    if (request.Direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
+        return Results.Conflict(new { code = "insufficient_stock", message = "موجودی برای این خروج کافی نیست." });
+
+    product.StockQuantity += request.Direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
+    database.InventoryTransactions.Add(new InventoryTransaction
+    {
+        ProductId = product.Id,
+        Quantity = request.Quantity,
+        Direction = request.Direction,
+        AppUserId = request.AppUserId,
+        Notes = request.Notes
+    });
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = request.Direction == TransactionDirection.In ? "InventoryIncrease" : "InventoryDecrease",
+        EntityName = "Product",
+        EntityId = product.Id.ToString(),
+        Details = request.Quantity.ToString() + " · " + (request.Notes ?? ""),
+        AppUserId = request.AppUserId
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { id = product.Id, stock = product.StockQuantity });
+})
+.WithName("AdjustBuffetStock");
+
+app.MapPost("/api/buffet/sales", async (
+    BuffetSaleRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (request.Items is null || request.Items.Count == 0)
+        return Results.BadRequest(new { code = "empty_sale", message = "سبد فروش خالی است." });
+
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    var ids = request.Items.Select(item => item.ProductId).Distinct().ToList();
+    var products = await database.Products.Where(item => ids.Contains(item.Id) && item.IsActive).ToListAsync(cancellationToken);
+    var byId = products.ToDictionary(item => item.Id);
+
+    decimal total = 0m;
+    foreach (var item in request.Items)
+    {
+        if (item.Quantity <= 0 || !byId.TryGetValue(item.ProductId, out var product))
+            return Results.BadRequest(new { code = "invalid_sale_item", message = "یکی از اقلام فروش معتبر نیست." });
+        if (product.StockQuantity < item.Quantity)
+            return Results.Conflict(new { code = "insufficient_stock", message = "موجودی «" + product.Name + "» کافی نیست." });
+        total += product.UnitPrice * item.Quantity;
+    }
+
+    foreach (var item in request.Items)
+    {
+        var product = byId[item.ProductId];
+        product.StockQuantity -= item.Quantity;
+        database.InventoryTransactions.Add(new InventoryTransaction
+        {
+            ProductId = product.Id,
+            Quantity = item.Quantity,
+            Direction = TransactionDirection.Out,
+            AppUserId = request.AppUserId,
+            Notes = request.Target == "session" ? "فروش به جلسه" : "فروش مستقل"
+        });
+    }
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "BuffetSale",
+        EntityName = "Buffet",
+        EntityId = Guid.NewGuid().ToString(),
+        Details = request.Target + " · " + total.ToString("0.##") + " تومان",
+        AppUserId = request.AppUserId
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+    return Results.Ok(new { total, target = request.Target });
+})
+.WithName("CreateBuffetSale");
+
 app.MapPost("/api/customers/{customerId:guid}/debt", async (
     Guid customerId,
     CustomerDebtRequest request,
@@ -1497,6 +1653,10 @@ public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, d
 public sealed record FinanceTransactionDto(Guid Id, DateTimeOffset ClosedAt, string Description, decimal Amount, string Method, string Status);
 
 public sealed record CustomerDebtRequest(decimal Amount, string? Description, Guid? AppUserId);
+public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, Guid? AppUserId);
+public sealed record StockAdjustmentRequest(int Quantity, TransactionDirection Direction, string? Notes, Guid? AppUserId);
+public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
+public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId);
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
 public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
 public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);
