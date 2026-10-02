@@ -63,70 +63,82 @@ public sealed class AgentHub(
         AgentHeartbeatRequest request,
         CancellationToken cancellationToken = default)
     {
-        var device = await ResolveConnectedDeviceAsync(cancellationToken);
-        if (device is null)
-        {
-            logger.LogWarning(
-                "Agent heartbeat identity not found. ConnectionId={ConnectionId}",
-                Context.ConnectionId);
-            throw new HubException("دستگاه مجاز نیست.");
-        }
-
-        if (!device.IsActive)
-        {
-            logger.LogWarning(
-                "Agent heartbeat rejected because device is inactive. DeviceId={DeviceId}, ConnectionId={ConnectionId}",
-                device.DeviceId,
-                Context.ConnectionId);
-            throw new HubException("دستگاه غیرفعال است.");
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        device.IsOnline = true;
-        device.LastSeenAt = now;
-        device.AgentVersion = request.AgentVersion?.Trim();
-        device.OsVersion = request.OsVersion?.Trim();
-        device.CpuUsagePercent = request.CpuUsagePercent is >= 0 and <= 100
-            ? request.CpuUsagePercent
-            : null;
-        device.MemoryAvailableBytes = request.MemoryAvailableBytes is > 0
-            ? request.MemoryAvailableBytes
-            : null;
-        device.UptimeSeconds = request.UptimeSeconds is >= 0
-            ? request.UptimeSeconds
-            : null;
-        device.ConnectionId = Context.ConnectionId;
-
         try
         {
+            logger.LogInformation(
+                "Agent heartbeat start. ConnectionId={ConnectionId}, AgentVersion={AgentVersion}",
+                Context.ConnectionId,
+                request.AgentVersion);
+
+            var device = await ResolveConnectedDeviceAsync(cancellationToken);
+
+            logger.LogInformation(
+                "Agent heartbeat identity resolved. ConnectionId={ConnectionId}, DeviceId={DeviceId}, StoredConnectionId={StoredConnectionId}",
+                Context.ConnectionId,
+                device?.DeviceId,
+                device?.ConnectionId);
+
+            if (device is null)
+                throw new HubException("دستگاه مجاز نیست.");
+
+            if (!device.IsActive)
+                throw new HubException("دستگاه غیرفعال است.");
+
+            var now = DateTimeOffset.UtcNow;
+            device.IsOnline = true;
+            device.LastSeenAt = now;
+            device.AgentVersion = request.AgentVersion?.Trim();
+            device.OsVersion = request.OsVersion?.Trim();
+            device.CpuUsagePercent = request.CpuUsagePercent is >= 0 and <= 100
+                ? request.CpuUsagePercent
+                : null;
+            device.MemoryAvailableBytes = request.MemoryAvailableBytes is > 0
+                ? request.MemoryAvailableBytes
+                : null;
+            device.UptimeSeconds = request.UptimeSeconds is >= 0
+                ? request.UptimeSeconds
+                : null;
+            device.ConnectionId = Context.ConnectionId;
+
             await database.SaveChangesAsync(cancellationToken);
+            logger.LogInformation(
+                "Agent heartbeat persisted. DeviceId={DeviceId}, LastSeenAt={LastSeenAt}",
+                device.DeviceId,
+                now);
+
+            try
+            {
+                await BroadcastStatusAsync(device, now, cancellationToken);
+                logger.LogInformation(
+                    "Agent heartbeat dashboard broadcast completed. DeviceId={DeviceId}",
+                    device.DeviceId);
+            }
+            catch (Exception broadcastException)
+            {
+                logger.LogWarning(
+                    broadcastException,
+                    "Agent heartbeat persisted but Dashboard status broadcast failed for {DeviceId}.",
+                    device.DeviceId);
+            }
+
+            return new AgentHeartbeatResponse(
+                device.Id,
+                now,
+                HeartbeatIntervalSeconds(),
+                true);
+        }
+        catch (HubException)
+        {
+            throw;
         }
         catch (Exception exception)
         {
             logger.LogError(
                 exception,
-                "Agent heartbeat persistence failed for {DeviceId}.",
-                device.DeviceId);
-            throw;
+                "Agent heartbeat failed unexpectedly. ConnectionId={ConnectionId}",
+                Context.ConnectionId);
+            throw new HubException("خطا در ثبت وضعیت Agent.");
         }
-
-        try
-        {
-            await BroadcastStatusAsync(device, now, cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(
-                exception,
-                "Agent heartbeat persisted but Dashboard status broadcast failed for {DeviceId}.",
-                device.DeviceId);
-        }
-
-        return new AgentHeartbeatResponse(
-            device.Id,
-            now,
-            HeartbeatIntervalSeconds(),
-            true);
     }
 
     private async Task<AgentDevice?> ResolveDeviceAsync(
