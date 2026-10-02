@@ -101,7 +101,7 @@ export function ClientExperience() {
         setClientIdentityReady(true);
       })
       .catch(() => {
-        if (active) setClientIdentityReady(true);
+        if (active) setClientIdentityReady(false);
       });
     return () => {
       active = false;
