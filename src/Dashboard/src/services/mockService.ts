@@ -122,7 +122,7 @@ const invoices: SessionInvoice[] = [];
 
 
 type ExpenseRecord = TypedExpenseRecord;
-type ReportRow = { id: string; station: string; timeAmount: number; buffet: number; packageAmount: number; amount: number; method: 'cash' | 'card' | 'wallet'; operator: string; type: 'time' | 'buffet' | 'package'; closedAt: string };
+type ReportRow = { id: string; station: string; timeAmount: number; buffet: number; packageAmount: number; amount: number; method: 'cash' | 'card' | 'wallet' | 'gift'; operator: string; type: 'time' | 'buffet' | 'package'; closedAt: string };
 type ShiftRecord = { id: string; operator: string; openedAt: string; closedAt?: string; expectedCash?: number; countedCash?: number; difference?: number; sales?: number };
 
 const expenses: ExpenseRecord[] = [
