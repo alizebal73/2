@@ -1979,7 +1979,6 @@ app.MapGet("/api/sessions/active", async (
     var sessions = await database.Sessions
         .AsNoTracking()
         .Where(session => session.State == SessionState.Active)
-        .OrderBy(session => session.StartAt)
         .Select(session => new
         {
             id = session.Id,
@@ -1991,6 +1990,10 @@ app.MapGet("/api/sessions/active", async (
             startedAt = session.StartAt
         })
         .ToListAsync(cancellationToken);
+
+    sessions = sessions
+        .OrderBy(session => session.startedAt)
+        .ToList();
 
     var sessionIds = sessions.Select(item => item.id).ToList();
     var buffetRows = sessionIds.Count == 0
