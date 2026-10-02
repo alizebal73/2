@@ -120,6 +120,33 @@ export type ProductRecord = {
   maxStock: number;
 };
 
+export type AppUserRecord = {
+  id: string;
+  fullName: string;
+  userName: string;
+  email: string;
+  role: string;
+  isActive: boolean;
+  lastLoginAt?: string | null;
+  permissions: string[];
+};
+
+export type ApprovalRecord = {
+  id: string;
+  action: string;
+  entityName: string;
+  entityId?: string | null;
+  reason: string;
+  status: string;
+  requestedByUserId: string;
+  requestedBy: string;
+  decidedByUserId?: string | null;
+  decidedBy?: string | null;
+  decisionNote?: string | null;
+  createdAt: string;
+  decidedAt?: string | null;
+};
+
 export type UserRecord = {
   id: string;
   name: string;
