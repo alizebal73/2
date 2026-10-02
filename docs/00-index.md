@@ -22,7 +22,7 @@
 
 ## وضعیت فعلی پروژه
 
-- **Product Completion:** آیتم ۱ «مرکز نیازمند توجه» با CI سبز تثبیت شد؛ آیتم ۲ «جست‌وجوی سراسری و مرکز جست‌وجو/فرمان» در حال پیاده‌سازی است. ترتیب ۴۸ آیتم سند `10-product-completion-backlog.md` حفظ می‌شود و هیچ آیتمی بدون تست Done نمی‌شود.
+- **Product Completion:** مرحله اصلی ۳ — Operational Completion — بسته شده است؛ A1 تا A8 Build/Test/Interaction Smoke سبز هستند. پروژه اکنون در مرحله اصلی ۴ — Finance & Session Core — قرار دارد و B9 تا B17 در حال تکمیل نهایی هستند.
 
 - **مرحله ۱A — Foundation:** ✅ پیاده‌سازی شده: Solution .NET 10، Server، Dashboard React/TypeScript، Client SignalR، Shared DTO، SQLite/EF Core و migration اولیه.
 - **مرحله ۱B — UI/Behavior Migration:** ✅ پیاده‌سازی و ممیزی استاتیک انجام شد؛ تمام منوهای اصلی، ۱۰ صفحه، راست‌کلیک Dashboard/Client، مودال‌های اصلی، Flow سرعت F1 و F4-F8، هات‌کی‌های قابل‌تغییر، گزارش/فیلتر/بازه شمسی، شیفت و ماتریس دسترسی، Backup/Restore، تنظیمات، Account Pool، Client Shell و PINهای دمو به React منتقل شده‌اند.
