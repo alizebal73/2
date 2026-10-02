@@ -329,9 +329,9 @@
 
 ### B) Finance / Session
 9. [~] Wallet Ledger واقعی — API/SQLite/Audit/adapter و نمایش Ledger پیاده شد؛ عملیات کیف پول Dashboard به adapter منتقل شده‌اند؛ مهاجرت کامل Customer/Finance از Mock باقی است
-10. [~] Refund / Reverse واقعی — Refund کیف پول مسیر مستقل Server/API + Audit + UI گرفت و تست سرور سبز شد؛ Permission/Approval و Reverse کامل مالی مرحله بعدی هنوز باقی است
+10. [~] Refund / Reverse واقعی — Refund کیف پول Server/API + Audit + UI + Approval/Smoke سبز شد؛ Reference/Reverse کامل مالی و Permission سروری در ادامه باقی است
 11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change + Server Atomic Settlement + Invoice/Wallet/Audit + تست اتمیک و Smoke سبز؛ اتصال مستقیم Dashboard به Session/Invoice سرور و Permission نهایی باقی
-12. [~] Split Payment — UI + Build/Test + Dashboard Smoke سبز؛ ثبت atomic سروری، Invoice و Audit نهایی باقی
+12. ✅ Split Payment — UI + ثبت اتمیک سروری + Invoice + Audit + Dashboard Smoke سبز؛ Permission نهایی طبق مرحله ۷ تکمیل می‌شود
 13. [~] Shift Settlement + Shift Handover — فرم + Mock/محاسبه + Build/Test/Smoke سبز؛ Shift Close سروری و Audit/Handover نهایی باقی
 14. [~] Session Transfer / Change Tariff / Change Persons — Session Center + Build/Test/Smoke سبز؛ Transaction/Audit/Permission سروری باقی
 15. [~] Free Time + Free Money کامل — Billing + مصرف Free Money + گزارش مستقل + Build/Test/Smoke سبز؛ Ledger/Server Transaction نهایی باقی
