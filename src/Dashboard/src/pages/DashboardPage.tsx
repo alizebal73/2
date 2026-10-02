@@ -6,7 +6,7 @@ import { createServerCustomerDebt, getServerCustomers } from '../services/custom
 import { hasPermission } from '../services/authService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
-import { isServerGuid, reverseServerInvoice, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
+import { isServerGuid, requestServerInvoiceReverseApproval, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
 import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
@@ -1000,24 +1000,23 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   }
   async function reverseTimelineEvent(event: SessionTimelineEvent) {
     if (event.serverReferenceId) {
+      if (!hasPermission(user, 'finance.manage')) {
+        setMessage('دسترسی ثبت درخواست برگشت فاکتور را ندارید');
+        return;
+      }
+
       try {
-        const result = await reverseServerInvoice(event.serverReferenceId, 'برگشت عملیات از تایم‌لاین جلسه: ' + event.title);
-        setReversedEventIds(current => [...current, event.id]);
-        addSessionTimeline(
-          event.stationId,
-          'note',
-          'برگشت سروری',
-          result.externalRefundRequired
-            ? 'فاکتور در سرور معکوس شد؛ بازپرداخت نقد/کارت باید خارج از سیستم انجام شود.'
-            : 'فاکتور در سرور معکوس شد و تراکنش‌های مالی مربوطه برگشت خوردند.',
-          event.amount,
-          result.reversalId,
+        const result = await requestServerInvoiceReverseApproval(
+          event.serverReferenceId,
+          'برگشت عملیات از تایم‌لاین جلسه: ' + event.title,
         );
         setReverseRequest(null);
-        setMessage(result.externalRefundRequired ? 'برگشت سروری ثبت شد؛ بازپرداخت نقد/کارت را انجام دهید.' : 'برگشت سروری با موفقیت ثبت شد.');
+        setMessage(result.status === 'Pending'
+          ? 'درخواست برگشت فاکتور ثبت شد و برای تأیید مسئول مجاز ارسال شد.'
+          : 'درخواست برگشت فاکتور روی سرور ثبت شد.');
         return;
       } catch (error) {
-        setMessage(userErrorMessage(error, 'برگشت عملیات روی سرور انجام نشد'));
+        setMessage(userErrorMessage(error, 'درخواست برگشت عملیات روی سرور ثبت نشد'));
         return;
       }
     }
