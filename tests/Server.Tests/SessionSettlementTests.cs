@@ -149,5 +149,92 @@ public sealed class SessionSettlementTests : IDisposable
         Assert.Empty(await db.WalletTransactions.ToListAsync());
     }
 
+    [Fact]
+    public async Task SettlementReusesDraftBuffetInvoiceAndKeepsProductLine()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "PC-Buffet" };
+        var tariff = new Tariff { Name = "Normal-Buffet", HourlyRate = 95000m, DailyRate = 550000m };
+        var customer = new Customer { FullName = "Buffet Settlement Test", Balance = 200000m };
+        var station = new Station
+        {
+            Name = "PC-BUFFET-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 95000m,
+            StationType = type,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var product = new Product
+        {
+            Name = "آب",
+            Category = "نوشیدنی",
+            UnitPrice = 50000m,
+            CostPrice = 20000m,
+            StockQuantity = 2
+        };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+            State = SessionState.Active
+        };
+        var draft = new Invoice
+        {
+            Customer = customer,
+            Session = session,
+            TotalAmount = 50000m,
+            Status = InvoiceStatus.Draft,
+            Items =
+            {
+                new InvoiceItem
+                {
+                    Product = product,
+                    Description = "آب",
+                    Quantity = 1,
+                    UnitPrice = 50000m,
+                    Amount = 50000m
+                }
+            }
+        };
+
+        db.AddRange(type, tariff, customer, station, product, session, draft);
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db);
+        var result = await service.SettleAsync(
+            session.Id,
+            new SessionSettlementRequest(
+                150000m,
+                new[] { new SettlementPart("cash", 150000m) },
+                null,
+                0,
+                100000m,
+                0m,
+                0m),
+            CancellationToken.None);
+
+        var invoice = await db.Invoices
+            .Include(item => item.Items)
+            .SingleAsync(item => item.Id == draft.Id);
+
+        Assert.Equal(draft.Id, result.InvoiceId);
+        Assert.Equal(InvoiceStatus.Paid, invoice.Status);
+        Assert.Equal(150000m, invoice.TotalAmount);
+        Assert.Equal(2, invoice.Items.Count);
+        Assert.Contains(invoice.Items, item => item.ProductId == product.Id && item.Amount == 50000m);
+        Assert.Contains(invoice.Items, item => item.ProductId == null && item.Amount == 100000m);
+    }
+
     public void Dispose() => _connection.Dispose();
 }
