@@ -25,6 +25,8 @@ export type ServerSettlementResult = {
   totalAmount: number;
   parts: SessionPaymentPart[];
   walletBalanceAfter: number;
+  freeMoneyBalanceAfter: number;
+  freeTimeMinutesAfter: number;
   invoiceStatus: string;
   paidAt: string;
 };
