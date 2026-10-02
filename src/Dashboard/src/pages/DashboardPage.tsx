@@ -5,7 +5,7 @@ import { mockService } from '../services/mockService';
 import { createServerCustomerDebt, getServerCustomers } from '../services/customerService';
 import { hasPermission } from '../services/authService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
-import { getAgentCommand, sendAgentCommand } from '../services/agentService';
+import { getAgentCommand, sendAgentCommand, updateAgentPolicy } from '../services/agentService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { adjustServerSessionTime, isServerGuid, pauseServerSession, requestServerInvoiceReverseApproval, resumeServerSession, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
@@ -41,7 +41,7 @@ type SessionFollowUp = { id: string; stationId: string; stationName: string; cus
 type PendingPayment = { id: string; stationId: string; stationName: string; customerId?: string; customerName: string; customerCode: string; amount: number; createdAt: string; };
 type AttentionItem = { id: string; kind: AttentionKind; station: StationDto; title: string; detail: string; actionLabel: string; followUpId?: string; };
 
-export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role = 'operator', user }: Props) {
+export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onNavigate, role = 'operator', user }: Props) {
   const canStartSession = hasPermission(user, 'session.start');
   const canManageSession = hasPermission(user, 'session.manage');
   const canSettleSession = hasPermission(user, 'session.settle');
@@ -109,6 +109,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
               agentOnline: serverStation.agentOnline,
               agentLastSeenAt: serverStation.agentLastSeenAt,
               agentVersion: serverStation.agentVersion,
+              agentLocked: serverStation.agentLocked,
+              agentKioskEnabled: serverStation.agentKioskEnabled,
+              agentLockOnDisconnect: serverStation.agentLockOnDisconnect,
               sessionStartedAt: serverStation.sessionStartedAt,
               sessionPausedAt: serverStation.sessionPausedAt,
               sessionPausedMinutes: serverStation.sessionPausedMinutes,
@@ -1193,6 +1196,54 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     }
   }
 
+  async function setAgentLogoutLock(station: StationDto) {
+    if (!canControlClient || !station.agentId || station.agentOnline !== true) {
+      setMessage('Agent این دستگاه آنلاین نیست؛ فرمان ارسال نشد.');
+      return;
+    }
+
+    try {
+      setMessage('درخواست خروج کاربر و قفل دستگاه ارسال شد…');
+      const command = await sendAgentCommand(station.agentId, 'logout-lock');
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const status = await getAgentCommand(command.commandId);
+        if (status.status === 'Succeeded') {
+          setMessage('کاربر خارج شد و دستگاه قفل شد.');
+          return;
+        }
+        if (status.status === 'Failed') {
+          setMessage(status.resultMessage || 'خروج و قفل دستگاه ناموفق بود.');
+          return;
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 500));
+      }
+      setMessage('Agent به فرمان خروج و قفل پاسخ نداد.');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'خروج کاربر و قفل دستگاه انجام نشد'));
+    }
+  }
+
+  async function setAgentKioskPolicy(station: StationDto, enabled: boolean) {
+    if (!canControlClient || !station.agentId) {
+      setMessage('دسترسی کنترل Agent ندارید.');
+      return;
+    }
+
+    try {
+      const policy = await updateAgentPolicy(station.agentId, {
+        kioskEnabled: enabled,
+        lockOnDisconnect: enabled,
+      });
+      updateStation(station.id, {
+        agentKioskEnabled: policy.kioskEnabled,
+        agentLockOnDisconnect: policy.lockOnDisconnect,
+      });
+      setMessage(enabled ? 'حالت Kiosk برای این Agent فعال شد.' : 'حالت Kiosk برای این Agent غیرفعال شد.');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'تنظیم Policy Kiosk انجام نشد'));
+    }
+  }
+
   function contextAction(action: string) {
     const station = context?.station;
     setContext(null);
@@ -1205,13 +1256,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     if (action === 'reduce') { open('reduce', station); return; }
     if (action === 'lock') { void setAgentLock(station, true); return; }
     if (action === 'unlock') { void setAgentLock(station, false); return; }
-    if (action === 'offline') {
-      updateStation(station.id, { state: station.state === 'off' ? 'free' : 'off', outOfServiceReason: station.state === 'off' ? undefined : 'تعمیر و نگهداری' });
-      setMessage(station.state === 'off' ? 'ایستگاه فعال شد' : 'ایستگاه خارج از سرویس شد'); return;
-    }
-    if (action === 'settings') { window.dispatchEvent(new CustomEvent('gamenet-select-client', { detail: station.name })); onNavigate('client-shell'); return; }
-    if (action === 'switch-net') { updateStation(station.id, { network: station.network === 1 ? 2 : 1 }); setMessage(`شبکه به اینترنت ${station.network === 1 ? '۲' : '۱'} تغییر کرد`); return; }
-    setMessage(`${action} فعلاً در Stage 9 پیاده‌سازی نشده است.`);
+    if (action === 'logout-lock') { void setAgentLogoutLock(station); return; }
+    if (action === 'kiosk-toggle') { void setAgentKioskPolicy(station, !Boolean(station.agentKioskEnabled)); return; }
+    setMessage('فرمان پشتیبانی‌نشده درخواست شد.');
   }
 
   function stationSupportsAgentLock(station: StationDto) {
@@ -1446,18 +1493,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       {canManageSession && context.station.state === 'paused' && <button onClick={() => contextAction('resume')}>▶ ادامه جلسه</button>}
       {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('extend')}>⏱ تمدید وقت</button>}
       {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('reduce')}>↘ کاهش زمان</button>}
-      {canControlClient && <button onClick={() => contextAction('switch-net')}>🌐 تغییر اینترنت ۱ ↔ ۲</button>}
-      {canManageSession && <button onClick={() => contextAction('move-user')}>🔀 جابه‌جایی یوزر</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && !context.station.agentLocked && <button onClick={() => contextAction('lock')}>🔒 قفل دستگاه</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentLocked && <button onClick={() => contextAction('unlock')}>🔓 باز کردن قفل</button>}
-      {canControlClient && <button onClick={() => contextAction('login-id')}>🔑 ورود با شناسه</button>}
-      {canControlClient && <button onClick={() => contextAction('message')}>💬 پیام به مشتری</button>}
-      {canControlClient && <button onClick={() => contextAction('screenshot')}>📸 اسکرین‌شات</button>}
-      {canControlClient && <button onClick={() => contextAction('restart-shell')}>🔄 ری‌استارت Shell</button>}
-      {canControlClient && <button onClick={() => contextAction('restart')}>⏻ ری‌استارت Windows</button>}
-      {canControlClient && <button onClick={() => contextAction('shutdown')}>⛔ خاموش کردن</button>}
-      {canControlClient && <button onClick={() => contextAction('offline')}>🛠 خارج از سرویس / فعال‌سازی</button>}
-      {canControlClient && <button onClick={() => contextAction('settings')}>⚙ تنظیمات کامل کلاینت</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && <button onClick={() => contextAction('kiosk-toggle')}>{context.station.agentKioskEnabled ? '🖥️ غیرفعال‌کردن Kiosk' : '🖥️ فعال‌کردن Kiosk'}</button>}
     </div>}
     {reverseRequest && <ReverseDialog open={Boolean(reverseRequest)} title={reverseRequest.title} detail={reverseRequest.detail} onCancel={() => setReverseRequest(null)} onConfirm={() => reverseTimelineEvent(reverseRequest)} />}
     {approval && <ApprovalDialog

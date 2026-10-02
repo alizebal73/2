@@ -230,6 +230,10 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
       }
     };
 
+    connection.on('AgentSessionChanged', () => {
+      if (active) void loadSnapshot();
+    });
+
     void loadSnapshot();
 
     return () => {
@@ -257,6 +261,8 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
               agentLastSeenAt: agent.lastSeenAt ?? null,
               agentVersion: agent.agentVersion ?? null,
               agentLocked: agent.isLocked,
+              agentKioskEnabled: agent.kioskEnabled,
+              agentLockOnDisconnect: agent.lockOnDisconnect,
             }
           : station;
       }),

@@ -109,7 +109,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         var device = modelBuilder.Entity<AgentDevice>();
         device.HasKey(item => item.Id);
         device.HasIndex(item => item.DeviceId).IsUnique();
-        device.HasIndex(item => item.StationId);
+        device.HasIndex(item => item.StationId).IsUnique().HasFilter("StationId IS NOT NULL");
         device.Property(item => item.DeviceId).HasMaxLength(120).IsRequired();
         device.Property(item => item.Name).HasMaxLength(120).IsRequired();
         device.Property(item => item.AgentTokenHash).HasMaxLength(128).IsRequired();

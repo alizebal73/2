@@ -227,6 +227,13 @@ jobs:
 
               Write-Host ("Stage 8 Agent persisted identity smoke passed: deviceId={0}" -f $secondRow.deviceId)
 
+              $clientIdentity = Invoke-RestMethod -Uri "$baseUrl/api/client/identity" -Method Get
+              if ($clientIdentity.deviceId -ne $secondRow.deviceId -or -not $clientIdentity.isOnline) {
+                $clientIdentity | ConvertTo-Json -Depth 5
+                throw 'Client identity endpoint did not resolve the local Agent device.'
+              }
+              Write-Host ("Stage 9 Client identity discovery smoke passed: deviceId={0}; stationId={1}" -f $clientIdentity.deviceId, $clientIdentity.stationId)
+
               $commandRequestBody = @{
                 commandType = 'ping'
                 payloadJson = $null
@@ -305,6 +312,64 @@ jobs:
 
               Write-Host ("Stage 9 Agent lock/unlock smoke passed: agentId={0}" -f $secondRow.agentId)
 
+              $policy = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/policy" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                kioskEnabled = $true
+                lockOnDisconnect = $true
+              } | ConvertTo-Json)
+              if (-not $policy.kioskEnabled -or -not $policy.lockOnDisconnect) {
+                throw 'Agent kiosk policy did not persist enabled safety settings.'
+              }
+
+              $policyRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $policyRow = @($policyRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if (-not $policyRow.kioskEnabled -or -not $policyRow.lockOnDisconnect) {
+                throw 'Agent status API did not expose persisted kiosk policy.'
+              }
+
+              $logoutLockCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'logout-lock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($logoutLockCommand.status -ne 'Sent') {
+                throw 'Agent logout-lock command was not accepted for dispatch.'
+              }
+
+              $logoutLockStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $logoutLockStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($logoutLockCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($logoutLockStatus.status -in @('Succeeded', 'Failed')) { break }
+                Start-Sleep -Milliseconds 500
+              }
+              if ($logoutLockStatus.status -ne 'Succeeded') {
+                throw 'Agent logout-lock command did not complete successfully.'
+              }
+
+              $logoutLockRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $logoutLockRow = @($logoutLockRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if (-not $logoutLockRow.isLocked) {
+                throw 'Agent logout-lock acknowledgement did not persist IsLocked=true.'
+              }
+
+              $unlockAfterLogoutLock = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'unlock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($unlockAfterLogoutLock.status -ne 'Sent') { throw 'Agent unlock after logout-lock was not accepted.' }
+
+              for ($i = 0; $i -lt 20; $i++) {
+                $unlockAfterLogoutStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($unlockAfterLogoutLock.commandId)" -Method Get -WebSession $adminSession
+                if ($unlockAfterLogoutStatus.status -in @('Succeeded', 'Failed')) { break }
+                Start-Sleep -Milliseconds 500
+              }
+              if ($unlockAfterLogoutStatus.status -ne 'Succeeded') { throw 'Agent unlock after logout-lock did not complete.' }
+
+              Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/policy" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                kioskEnabled = $false
+                lockOnDisconnect = $false
+              } | ConvertTo-Json) | Out-Null
+
+              Write-Host ("Stage 9 Agent kiosk policy and logout-lock smoke passed: agentId={0}" -f $secondRow.agentId)
+
               $multiProcesses = @()
               try {
                 $multiAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-multi-agent'
@@ -372,6 +437,142 @@ jobs:
                 Stop-Process -Id $secondAgentProcess.Id -Force -ErrorAction SilentlyContinue
               }
               Start-Sleep -Seconds 1
+            }
+
+            # Stage 9: real Agent-driven session start/end using customer authentication and the existing settlement domain.
+            $sessionAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage9-session-agent'
+            $sessionAgentData = Join-Path $sessionAgentRoot 'data'
+            $sessionAgentStdout = Join-Path $sessionAgentRoot 'stdout.log'
+            $sessionAgentStderr = Join-Path $sessionAgentRoot 'stderr.log'
+            Remove-Item $sessionAgentRoot -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $sessionAgentData -Force | Out-Null
+
+            $sessionDashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $sessionStation = @($sessionDashboard.stations | Where-Object { $_.type -eq 'PC' -and $_.state -eq 'Available' }) | Select-Object -First 1
+            if (-not $sessionStation) {
+              Write-Host '--- Available station snapshot ---'
+              @($sessionDashboard.stations | Where-Object { $_.state -eq 'Available' } | Select-Object -First 10) | ConvertTo-Json -Depth 5
+              throw 'No available PC station was found for Agent session smoke.'
+            }
+
+            $stage9SmokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
+            $stage9Customer = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              fullName = "Stage 9 Agent Smoke $stage9SmokeId"
+              username = "stage9_agent_$stage9SmokeId"
+              vipTier = 'none'
+              concurrentLoginLimit = 1
+              password = 'Stage9Smoke123!'
+            } | ConvertTo-Json)
+            if (-not $stage9Customer.id -or -not $stage9Customer.username) {
+              throw 'Stage 9 smoke customer creation failed.'
+            }
+
+            $customerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
+              usernameOrCode = $stage9Customer.username
+              password = 'Stage9Smoke123!'
+              clientKey = 'ci-stage9-session-agent'
+            } | ConvertTo-Json)
+            if (-not $customerAuth.authenticated -or -not $customerAuth.loginId -or $customerAuth.balance -ne 0) {
+              throw 'Customer authentication for Agent session smoke failed or returned incomplete financial state.'
+            }
+
+            $env:GAMENET_SERVER_URL = $baseUrl
+            $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
+            $env:GAMENET_AGENT_NAME = 'CI Agent Stage 9 Session'
+            $env:GAMENET_AGENT_DEVICE_ID = 'ci-stage9-session-agent'
+            $env:GAMENET_STATION_ID = $sessionStation.id
+            $env:GAMENET_AGENT_DATA_DIR = $sessionAgentData
+            $env:GAMENET_AGENT_HEADLESS = '1'
+            $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
+            $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $stage9Customer.id
+            $env:GAMENET_AGENT_TEST_LOGIN_ID = $customerAuth.loginId
+
+            $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+              'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
+            ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $sessionAgentStdout -RedirectStandardError $sessionAgentStderr
+
+            try {
+              $sessionFlowCompleted = $false
+              $sessionStartVerified = $false
+              $endedSessionId = $null
+              for ($i = 0; $i -lt 30; $i++) {
+                if ($sessionAgentProcess.HasExited) { break }
+                if (Test-Path $sessionAgentStdout) {
+                  $log = Get-Content $sessionAgentStdout -Raw
+
+                  if (-not $sessionStartVerified -and $log -match 'AGENT_SESSION_START_OK:([0-9a-fA-F-]+)') {
+                    $startedSessionId = $Matches[1]
+                    $activeRows = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+                    if (-not @($activeRows | Where-Object { $_.id -eq $startedSessionId -and $_.stationName -eq $sessionStation.name })) {
+                      throw 'Agent Session Start marker appeared but server active-session state did not contain the same SessionId/station.'
+                    }
+                    $sessionStartVerified = $true
+                    Write-Host ("Stage 9 Agent Session Start persisted server-side: sessionId={0}; station={1}" -f $startedSessionId, $sessionStation.name)
+                  }
+
+                  if ($log -match 'AGENT_SESSION_END_AUTH_GUARD_OK') {
+                    Write-Host 'Stage 9 Agent Session End login ownership guard passed.'
+                  }
+
+                  if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
+                    $endedSessionId = $Matches[1]
+                    $sessionFlowCompleted = $true
+                    break
+                  }
+                }
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $sessionStartVerified -or -not $sessionFlowCompleted) {
+                Write-Host '--- Stage 9 Session Agent stdout ---'
+                if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
+                Write-Host '--- Stage 9 Session Agent stderr ---'
+                if (Test-Path $sessionAgentStderr) { Get-Content $sessionAgentStderr }
+                throw 'Agent-driven Session Start/End smoke did not complete.'
+              }
+
+              $endedSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$endedSessionId/settle" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                totalAmount = 1000
+                parts = @(@{ method = 'cash'; amount = 1000 })
+                timeAmount = 1000
+                discountAmount = 0
+                prepaidAmount = 0
+              } | ConvertTo-Json)
+
+              if (-not $endedSession.invoiceId -or $endedSession.invoiceStatus -ne 'Paid') {
+                throw 'Ended Agent session could not be settled through the existing server settlement path.'
+              }
+
+              Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}" -f $endedSessionId, $sessionStation.id)
+
+              $duplicateDeviceId = "ci-stage9-duplicate-$stage9SmokeId"
+              try {
+                Invoke-RestMethod -Uri "$baseUrl/api/agent/register" -Method Post -ContentType 'application/json' -Headers @{
+                  'X-GameNet-Registration-Token' = 'Stage8CiRegistrationToken!'
+                } -Body (@{
+                  deviceId = $duplicateDeviceId
+                  name = 'CI Agent Stage 9 Duplicate Station'
+                  stationId = $sessionStation.id
+                  agentVersion = '0.1.0'
+                  osVersion = 'CI'
+                } | ConvertTo-Json) | Out-Null
+                throw 'Duplicate active Agent station registration was unexpectedly accepted.'
+              } catch {
+                $status = $_.Exception.Response.StatusCode.value__
+                if ($status -ne 409) { throw }
+                Write-Host 'Stage 9 duplicate Station-to-Agent assignment guard passed.'
+              }
+            }
+            finally {
+              if (-not $sessionAgentProcess.HasExited) {
+                Stop-Process -Id $sessionAgentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+              $env:GAMENET_AGENT_DEVICE_ID = $null
+              $env:GAMENET_STATION_ID = $null
+              $env:GAMENET_AGENT_TEST_SESSION_FLOW = $null
+              $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $null
+              $env:GAMENET_AGENT_TEST_LOGIN_ID = $null
+              $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
             }
 
             $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession

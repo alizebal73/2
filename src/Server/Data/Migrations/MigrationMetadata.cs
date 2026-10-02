@@ -132,3 +132,17 @@ partial class SessionServerTiming
 partial class AgentLockState
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002223000_AgentKioskPolicy")]
+partial class AgentKioskPolicy
+{
+}
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261002224000_AgentStationAssignment")]
+partial class AgentStationAssignment
+{
+}

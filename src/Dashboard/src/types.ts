@@ -46,6 +46,8 @@ export type StationDto = {
   agentLastSeenAt?: string | null;
   agentVersion?: string | null;
   agentLocked?: boolean;
+  agentKioskEnabled?: boolean;
+  agentLockOnDisconnect?: boolean;
   sessionStartedAt?: string | null;
   sessionPausedAt?: string | null;
   sessionPausedMinutes?: number;
@@ -89,6 +91,8 @@ export type AgentStatusDto = {
   stationName?: string | null;
   isOnline: boolean;
   isLocked: boolean;
+  kioskEnabled: boolean;
+  lockOnDisconnect: boolean;
   lastSeenAt?: string | null;
   connectedAt?: string | null;
   agentVersion?: string | null;
@@ -96,6 +100,18 @@ export type AgentStatusDto = {
   cpuUsagePercent?: number | null;
   memoryAvailableBytes?: number | null;
   uptimeSeconds?: number | null;
+};
+
+export type AgentCommandStatusDto = {
+  commandId: string;
+  agentDeviceId: string;
+  commandType: string;
+  status: string;
+  requestedAt: string;
+  sentAt?: string | null;
+  completedAt?: string | null;
+  succeeded?: boolean | null;
+  resultMessage?: string | null;
 };
 
 export type ServerInfoDto = {

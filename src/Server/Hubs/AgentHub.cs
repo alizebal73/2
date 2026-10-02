@@ -38,7 +38,9 @@ public sealed class AgentHub(
                 device.DeviceId,
                 now,
                 HeartbeatIntervalSeconds(),
-                device.IsLocked),
+                device.IsLocked,
+                device.KioskEnabled,
+                device.LockOnDisconnect),
             Context.ConnectionAborted);
 
         await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
@@ -53,6 +55,12 @@ public sealed class AgentHub(
             device.IsOnline = false;
             device.ConnectionId = null;
             device.ConnectedAt = null;
+            if (device.LockOnDisconnect)
+            {
+                device.IsLocked = true;
+                device.LockedAt = DateTimeOffset.UtcNow;
+                logger.LogWarning("Agent {DeviceId} disconnected; LockOnDisconnect policy locked the device.", device.DeviceId);
+            }
             await database.SaveChangesAsync();
 
             await BroadcastStatusAsync(device, DateTimeOffset.UtcNow, CancellationToken.None);
@@ -175,9 +183,9 @@ public sealed class AgentHub(
             ? null
             : acknowledgement.Message.Trim();
 
-        if (acknowledgement.Success && command.CommandType is AgentCommandTypes.Lock or AgentCommandTypes.Unlock)
+        if (acknowledgement.Success && command.CommandType is AgentCommandTypes.Lock or AgentCommandTypes.Unlock or AgentCommandTypes.LogoutLock)
         {
-            device.IsLocked = command.CommandType == AgentCommandTypes.Lock;
+            device.IsLocked = command.CommandType != AgentCommandTypes.Unlock;
             device.LockedAt = device.IsLocked ? command.CompletedAt : null;
         }
 
@@ -204,6 +212,272 @@ public sealed class AgentHub(
                 command.Succeeded,
                 command.ResultMessage),
             Context.ConnectionAborted);
+    }
+
+    public async Task AgentLogoutAndLock()
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        var now = DateTimeOffset.UtcNow;
+        await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
+
+        var activeSession = device.StationId.HasValue
+            ? await database.Sessions
+                .Include(item => item.Station)
+                .FirstOrDefaultAsync(
+                    item => item.StationId == device.StationId.Value && item.State == SessionState.Active,
+                    Context.ConnectionAborted)
+            : null;
+
+        if (activeSession is not null)
+        {
+            activeSession.EndAt = now;
+            activeSession.State = SessionState.Ended;
+            activeSession.Station.State = StationState.Available;
+
+            var logins = await database.CustomerLogins
+                .Where(item => item.IsActive && item.ClientKey == device.DeviceId)
+                .ToListAsync(Context.ConnectionAborted);
+
+            foreach (var login in logins)
+            {
+                login.IsActive = false;
+                login.LoggedOutAt = now;
+            }
+
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "AgentLogoutLockSessionEnd",
+                EntityName = "Session",
+                EntityId = activeSession.Id.ToString(),
+                Details = $"خروج کاربر و قفل دستگاه · Agent {device.DeviceId}"
+            });
+
+            await database.SaveChangesAsync(Context.ConnectionAborted);
+
+            await dashboardHub.Clients.All.SendAsync(
+                "AgentSessionChanged",
+                new
+                {
+                    sessionId = activeSession.Id,
+                    stationId = activeSession.StationId,
+                    customerId = activeSession.CustomerId,
+                    state = "Ended",
+                    changedAt = now
+                },
+                Context.ConnectionAborted);
+        }
+
+        device.IsLocked = true;
+        device.LockedAt = now;
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "AgentLogoutAndLock",
+            EntityName = "AgentDevice",
+            EntityId = device.Id.ToString(),
+            Details = $"قفل دستگاه و خروج مشتری · {device.DeviceId}"
+        });
+
+        await database.SaveChangesAsync(Context.ConnectionAborted);
+        await transaction.CommitAsync(Context.ConnectionAborted);
+        await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
+    }
+
+    public async Task<AgentSessionStartResponse> StartSession(
+        AgentSessionStartRequest request)
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        if (!device.StationId.HasValue)
+            throw new HubException("Agent به ایستگاه متصل نیست.");
+
+        if (device.IsLocked)
+            throw new HubException("دستگاه قفل است و شروع جلسه ممکن نیست.");
+
+        var customer = await database.Customers
+            .FirstOrDefaultAsync(item => item.Id == request.CustomerId, Context.ConnectionAborted);
+        if (customer is null)
+            throw new HubException("مشتری پیدا نشد.");
+
+        var login = await database.CustomerLogins
+            .FirstOrDefaultAsync(
+                item => item.Id == request.CustomerLoginId
+                    && item.CustomerId == customer.Id
+                    && item.IsActive
+                    && item.ClientKey == device.DeviceId,
+                Context.ConnectionAborted);
+        if (login is null)
+            throw new HubException("ورود معتبر مشتری برای این دستگاه پیدا نشد.");
+
+        var station = await database.Stations
+            .Include(item => item.Tariff)
+            .FirstOrDefaultAsync(item => item.Id == device.StationId.Value, Context.ConnectionAborted);
+        if (station is null)
+            throw new HubException("ایستگاه Agent پیدا نشد.");
+
+        if (station.State != StationState.Available)
+            throw new HubException("این ایستگاه دیگر آزاد نیست.");
+
+        if (station.Tariff is null || !station.Tariff.IsActive)
+            throw new HubException("تعرفهٔ فعال برای این ایستگاه تنظیم نشده است.");
+
+        var persons = Math.Max(1, request.Persons ?? 1);
+        if (station.Type.Equals("PC", StringComparison.OrdinalIgnoreCase)
+            || station.Type.Contains("رایانه", StringComparison.OrdinalIgnoreCase))
+            persons = 1;
+        else if (persons > 4)
+            throw new HubException("تعداد نفرات برای این ایستگاه بیش از حد مجاز است.");
+
+        await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
+
+        var session = new Session
+        {
+            CustomerId = customer.Id,
+            StationId = station.Id,
+            TariffId = station.TariffId,
+            AppUserId = null,
+            StartAt = DateTimeOffset.UtcNow,
+            State = SessionState.Active,
+            TotalAmount = 0m,
+            // Customer/Agent cannot override the price. Server tariff is authoritative.
+            HourlyRateOverride = null,
+            Persons = persons
+        };
+
+        database.Sessions.Add(session);
+        station.State = StationState.Occupied;
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "AgentSessionStart",
+            EntityName = "Session",
+            EntityId = session.Id.ToString(),
+            Details = $"شروع جلسه از Agent · دستگاه {device.DeviceId} · مشتری {customer.Id}"
+        });
+
+        await database.SaveChangesAsync(Context.ConnectionAborted);
+        await transaction.CommitAsync(Context.ConnectionAborted);
+
+        await dashboardHub.Clients.All.SendAsync(
+            "AgentSessionChanged",
+            new
+            {
+                sessionId = session.Id,
+                stationId = station.Id,
+                customerId = customer.Id,
+                state = "Active",
+                changedAt = session.StartAt
+            },
+            Context.ConnectionAborted);
+
+        return new AgentSessionStartResponse(
+            session.Id,
+            station.Id,
+            customer.Id,
+            session.StartAt);
+    }
+
+    public async Task<AgentSessionEndResponse> EndSession(
+        AgentSessionEndRequest request)
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        if (!device.StationId.HasValue)
+            throw new HubException("Agent به ایستگاه متصل نیست.");
+
+        var session = await database.Sessions
+            .Include(item => item.Station)
+            .FirstOrDefaultAsync(item => item.Id == request.SessionId, Context.ConnectionAborted);
+
+        if (session is null)
+            throw new HubException("جلسه پیدا نشد.");
+
+        if (session.StationId != device.StationId.Value)
+            throw new HubException("این جلسه متعلق به ایستگاه Agent نیست.");
+
+        if (!request.CustomerLoginId.HasValue)
+            throw new HubException("شناسهٔ ورود مشتری برای پایان جلسه الزامی است.");
+
+        var login = await database.CustomerLogins.FirstOrDefaultAsync(
+            item => item.Id == request.CustomerLoginId.Value
+                && item.CustomerId == session.CustomerId
+                && item.ClientKey == device.DeviceId,
+            Context.ConnectionAborted);
+
+        if (login is null)
+            throw new HubException("ورود مشتری متعلق به این Agent پیدا نشد.");
+
+        var now = DateTimeOffset.UtcNow;
+
+        if (session.State == SessionState.Completed || session.State == SessionState.Cancelled)
+            throw new HubException("این جلسه دیگر قابل پایان‌دادن نیست.");
+
+        if (session.State == SessionState.Active && !login.IsActive)
+            throw new HubException("ورود مشتری برای پایان این جلسه دیگر فعال نیست.");
+
+        if (session.State == SessionState.Ended)
+        {
+            if (login.IsActive)
+            {
+                login.IsActive = false;
+                login.LoggedOutAt = session.EndAt ?? now;
+                await database.SaveChangesAsync(Context.ConnectionAborted);
+            }
+
+            return new AgentSessionEndResponse(
+                session.Id,
+                session.StationId,
+                session.EndAt ?? now,
+                session.State.ToString());
+        }
+
+        await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
+
+        session.EndAt = now;
+        session.State = SessionState.Ended;
+        session.Station.State = StationState.Available;
+
+        if (login.IsActive)
+        {
+            login.IsActive = false;
+            login.LoggedOutAt = now;
+        }
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "AgentSessionEnd",
+            EntityName = "Session",
+            EntityId = session.Id.ToString(),
+            Details = $"پایان جلسه از Agent · دستگاه {device.DeviceId}"
+        });
+
+        await database.SaveChangesAsync(Context.ConnectionAborted);
+        await transaction.CommitAsync(Context.ConnectionAborted);
+
+        await dashboardHub.Clients.All.SendAsync(
+            "AgentSessionChanged",
+            new
+            {
+                sessionId = session.Id,
+                stationId = session.StationId,
+                customerId = session.CustomerId,
+                state = "Ended",
+                changedAt = now
+            },
+            Context.ConnectionAborted);
+
+        return new AgentSessionEndResponse(
+            session.Id,
+            session.StationId,
+            now,
+            session.State.ToString());
     }
 
     private async Task<AgentDevice?> ResolveDeviceAsync(
@@ -280,6 +554,8 @@ public sealed class AgentHub(
             device.Station?.Name,
             online,
             device.IsLocked,
+            device.KioskEnabled,
+            device.LockOnDisconnect,
             device.LastSeenAt,
             device.ConnectedAt,
             device.AgentVersion,

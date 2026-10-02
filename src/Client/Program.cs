@@ -11,7 +11,11 @@ var serverUrl = Environment.GetEnvironmentVariable("GAMENET_SERVER_URL") ?? defa
 var registrationToken = Environment.GetEnvironmentVariable("GAMENET_AGENT_REGISTRATION_TOKEN");
 var stationText = Environment.GetEnvironmentVariable("GAMENET_STATION_ID");
 var configuredName = Environment.GetEnvironmentVariable("GAMENET_AGENT_NAME");
+var configuredDeviceId = Environment.GetEnvironmentVariable("GAMENET_AGENT_DEVICE_ID");
 var dataDirectory = Environment.GetEnvironmentVariable("GAMENET_AGENT_DATA_DIR");
+var testSessionFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_SESSION_FLOW"), "1", StringComparison.Ordinal);
+var testSessionCustomerId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_CUSTOMER_ID");
+var testSessionLoginId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_LOGIN_ID");
 
 if (string.IsNullOrWhiteSpace(dataDirectory))
     dataDirectory = Path.Combine(
@@ -22,6 +26,7 @@ if (string.IsNullOrWhiteSpace(dataDirectory))
 Directory.CreateDirectory(dataDirectory);
 var statePath = Path.Combine(dataDirectory, "agent-state.json");
 var state = await LoadStateAsync(statePath);
+var testSessionFlowCompleted = false;
 
 var name = string.IsNullOrWhiteSpace(configuredName)
     ? Environment.MachineName
@@ -53,7 +58,7 @@ using var httpClient = new HttpClient
 try
 {
     if (string.IsNullOrWhiteSpace(state.DeviceId))
-        state = state with { DeviceId = Guid.NewGuid().ToString("N") };
+        state = state with { DeviceId = string.IsNullOrWhiteSpace(configuredDeviceId) ? Guid.NewGuid().ToString("N") : configuredDeviceId.Trim() };
 
     state = state with
     {
@@ -87,19 +92,45 @@ try
     while (!shutdown.IsCancellationRequested)
     {
         await using var connection = CreateConnection(hubUrl, state);
+        var kioskEnabled = false;
+        var lockOnDisconnect = true;
 
         connection.On<AgentCommandEnvelope>("AgentCommand", command =>
             HandleAgentCommandAsync(connection, command, lockScreen, shutdown.Token));
 
+        connection.On<AgentPolicyDto>("AgentPolicyChanged", policy =>
+        {
+            kioskEnabled = policy.KioskEnabled;
+            lockOnDisconnect = policy.LockOnDisconnect;
+            Console.WriteLine($"Policy Agent تغییر کرد؛ Kiosk={kioskEnabled}; LockOnDisconnect={lockOnDisconnect}.");
+            return Task.CompletedTask;
+        });
+
         connection.On<AgentReadyDto>("AgentReady", async ready =>
         {
+            kioskEnabled = ready.KioskEnabled;
+            lockOnDisconnect = ready.LockOnDisconnect;
+
             if (ready.IsLocked)
                 await lockScreen.LockAsync(shutdown.Token);
             else
                 await lockScreen.UnlockAsync();
 
             Console.WriteLine(
-                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}");
+                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}; Kiosk={kioskEnabled}; LockOnDisconnect={lockOnDisconnect}");
+
+            if (!testSessionFlowCompleted
+                && testSessionFlow
+                && Guid.TryParse(testSessionCustomerId, out var testCustomerId)
+                && Guid.TryParse(testSessionLoginId, out var testLoginId))
+            {
+                testSessionFlowCompleted = true;
+                _ = RunTestSessionFlowAsync(
+                    connection,
+                    testCustomerId,
+                    testLoginId,
+                    shutdown.Token);
+            }
         });
 
         connection.Reconnecting += error =>
@@ -115,12 +146,24 @@ try
             await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, shutdown.Token);
         };
 
-        connection.Closed += error =>
+        connection.Closed += async error =>
         {
+            if (kioskEnabled && lockOnDisconnect && !shutdown.IsCancellationRequested)
+            {
+                try
+                {
+                    await lockScreen.LockAsync(CancellationToken.None);
+                    Console.WriteLine("ارتباط Agent قطع شد؛ طبق Policy صفحه قفل شد.");
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine($"قفل امن هنگام قطع ارتباط انجام نشد: {exception.Message}");
+                }
+            }
+
             if (!shutdown.IsCancellationRequested)
                 Console.WriteLine(
                     $"اتصال Agent بسته شد؛ چرخهٔ اتصال دوباره شروع می‌شود. {error?.Message ?? "علت نامشخص"}".Trim());
-            return Task.CompletedTask;
         };
 
         try
@@ -232,6 +275,59 @@ static async Task<AgentState> RegisterAgentAsync(
     return state with { AgentToken = registration.AgentToken };
 }
 
+static async Task RunTestSessionFlowAsync(
+    HubConnection connection,
+    Guid customerId,
+    Guid customerLoginId,
+    CancellationToken cancellationToken)
+{
+    try
+    {
+        var started = await connection.InvokeAsync<AgentSessionStartResponse>(
+            "StartSession",
+            new AgentSessionStartRequest(
+                customerId,
+                customerLoginId,
+                Guid.NewGuid(),
+                1m,
+                1),
+            cancellationToken);
+
+        Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
+        Console.WriteLine($"AGENT_SESSION_START_OK:{started.SessionId}");
+
+        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+
+        try
+        {
+            await connection.InvokeAsync<AgentSessionEndResponse>(
+                "EndSession",
+                new AgentSessionEndRequest(started.SessionId, null),
+                cancellationToken);
+            throw new InvalidOperationException("Agent session end without CustomerLoginId unexpectedly succeeded.");
+        }
+        catch (HubException)
+        {
+            Console.WriteLine("AGENT_SESSION_END_AUTH_GUARD_OK");
+        }
+
+        var ended = await connection.InvokeAsync<AgentSessionEndResponse>(
+            "EndSession",
+            new AgentSessionEndRequest(
+                started.SessionId,
+                customerLoginId),
+            cancellationToken);
+
+        Console.WriteLine($"Agent session end موفق؛ SessionId={ended.SessionId}; EndAt={ended.EndAt:O}.");
+        Console.WriteLine($"AGENT_SESSION_END_OK:{ended.SessionId}");
+    }
+    catch (Exception exception) when (
+        exception is HubException or HttpRequestException or InvalidOperationException)
+    {
+        Console.WriteLine($"چرخهٔ آزمایشی Session Agent ناموفق بود: {exception.Message}");
+    }
+}
+
 static async Task<int?> SendHeartbeatAsync(
     HubConnection connection,
     string agentVersion,
@@ -340,6 +436,13 @@ static async Task HandleAgentCommandAsync(
                 await lockScreen.UnlockAsync();
                 Console.WriteLine($"فرمان بازگشایی دریافت شد؛ CommandId={command.CommandId}.");
                 message = "صفحه قفل GameNet باز شد.";
+                break;
+
+            case AgentCommandTypes.LogoutLock:
+                await connection.InvokeAsync("AgentLogoutAndLock", cancellationToken);
+                await lockScreen.LockAsync(cancellationToken);
+                Console.WriteLine($"فرمان خروج کاربر و قفل دریافت شد؛ CommandId={command.CommandId}.");
+                message = "کاربر خارج شد و دستگاه قفل شد.";
                 break;
 
             default:

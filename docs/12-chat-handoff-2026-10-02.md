@@ -530,3 +530,59 @@ Updater/Rollback عملیاتی Client در Stageهای بعدی باقی می�
 - ⏩ Stage 9 اکنون باز است: Lock/Unlock واقعی، Kiosk/Shell و سپس Agent-driven Session Start/End روی همین transport ساخته می‌شوند.
 - ⬜ validation فیزیکی 2–3 PC و rollout 40+ همچنان Gate استقرار واقعی است و قبل از rollout گسترده باید انجام شود.
 
+# Audit Checkpoint — Stages 1–9 — 2026-10-02
+
+این بخش حقیقت اجرایی فعلی است؛ بر ادعاهای قدیمی‌تر همین فایل اولویت دارد.
+
+## وضعیت تأییدشده
+- Repo: `alizebal73/2` فقط.
+- Stage 1 تا 7 بسته و Stage 7 در `main` merge شده است.
+- Stage 8 Foundation با Run #676 سبز و merge شده است.
+- Stage 9 Lock/Unlock در `main` با Run #690 سبز merge شده است.
+- Stage 9 Agent-driven Session Start/End روی branch `stage9-session-agent` با **Run #744 سبز** تأیید شده است.
+- آخرین head تأییدشدهٔ این برش: `cbbe511e4689721e4591a1a76e6a7dbe2a6965e0`.
+
+## Stage 9 — چیزهایی که تست واقعی دارند
+- ✅ Agent Command transport با persistence/correlation/ack/result
+- ✅ Permission `client.control` + Audit
+- ✅ Lock/Unlock واقعی و Server-authoritative state
+- ✅ timeout/failure handling و heartbeat reconciliation
+- ✅ Kiosk policy پایه + LockOnDisconnect
+- ✅ Customer Auth وابسته به DeviceId
+- ✅ Agent-driven Session Start/End
+- ✅ Server-assigned Station و Server-authoritative active Tariff
+- ✅ عدم پذیرش HourlyRateOverride/TariffId جعلی از Agent
+- ✅ CustomerLogin ownership برای Session End
+- ✅ EndAt و billing cap روی Server
+- ✅ آزادسازی CustomerLogin بعد از Session End
+- ✅ settlement Session Ended از مسیر موجود
+- ✅ AgentSessionChanged → Dashboard refresh
+- ✅ جلوگیری از دو Agent فعال برای یک Station
+- ✅ stale Agent با LockOnDisconnect روی Server قفل می‌شود
+- ✅ regressionهای CI برای مرزهای بالا
+- ✅ .NET Build/Test + Migration/Server Smoke + Dashboard Lint/Build + Browser Smoke در Run #744
+
+## اصلاحات آخرین دور
+- Session Start Agent دیگر قیمت را از Client قبول نمی‌کند؛ Station/Tariff سرور منبع حقیقت است.
+- Session End بدون CustomerLogin معتبر همان Device رد می‌شود.
+- Station assignment برای Agent فعال unique شده است.
+- Presence monitor در stale disconnect Policy قفل را اعمال می‌کند.
+- timeout command دوباره fail/audit نمی‌شود.
+- خطای کامپایل `DashboardPage` مربوط به destructuring `serverInfo` نیز اصلاح شد.
+
+## هنوز عمداً خارج از برش فعلی
+- ⏩ Full Kiosk/Shell و command catalog گسترده
+- ⏩ Full customer-facing Client UX برای شروع/پایان جلسه
+- ⏩ Safe Offline/Recovery عملیاتی کامل
+- ⬜ validation فیزیکی روی 2–3 PC واقعی
+- ⬜ rollout کنترل‌شدهٔ 40+ PC
+- ⏩ Update/Rollback واقعی و installer publishing در Stageهای بعد
+
+## Debtهای Cross-Stage
+- بعضی مسیرهای Dashboard هنوز `mockService.getTariffs()` دارند.
+- Accounts/Games/Tariffs/ClientShell تا dependency واقعی آماده نشده نباید Mock-فعال شوند.
+- Installer همچنان local-only است.
+
+## تصمیم ادامه
+**Stage 10 هنوز باز نمی‌شود.**
+ابتدا همین برش Stage 9 باید در `main` merge و وضعیت مستندات ثبت شود؛ سپس فقط با رعایت Gateهای فیزیکی و scope باقی‌ماندهٔ Stage 9 به مرحلهٔ انتشار بعدی می‌رویم.

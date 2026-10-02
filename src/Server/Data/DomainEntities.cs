@@ -40,6 +40,7 @@ public enum ReservationStatus
 public enum SessionState
 {
     Active,
+    Ended,
     Completed,
     Cancelled
 }

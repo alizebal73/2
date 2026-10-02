@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import './ClientExperience.css';
-import { mockService } from '../../services/mockService';
+import { authenticateCustomer, readCustomerState, releaseCustomerLogin } from '../../services/customerAuthService';
+import { getClientIdentity } from '../../services/clientIdentityService';
 
 type Game = { id: string; name: string; category: string; icon: string; requiresAccount: boolean; description: string };
 type ContextMenu = { x: number; y: number } | null;
@@ -53,17 +54,23 @@ export function ClientExperience() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [customerName, setCustomerName] = useState('مهمان');
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [loginId, setLoginId] = useState<string | null>(null);
   const [loginLimit, setLoginLimit] = useState(1);
   const [activeLoginCount, setActiveLoginCount] = useState(0);
-  const deviceId = useMemo(() => {
-    const key = 'gamenet-client-device-id';
+  const [sessionEndAt, setSessionEndAt] = useState<string | null>(null);
+  const [sessionState, setSessionState] = useState<string | null>(null);
+  const browserClientKey = useMemo(() => {
+    const key = 'gamenet-client-browser-key';
     const saved = localStorage.getItem(key);
     if (saved) return saved;
     const created = crypto.randomUUID();
     localStorage.setItem(key, created);
     return created;
   }, []);
-  const wallet = 450000;
+  const [deviceId, setDeviceId] = useState(browserClientKey);
+  const [clientIdentityReady, setClientIdentityReady] = useState(false);
+  const [wallet, setWallet] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState(3 * 3600 + 45 * 60 + 12);
   const [now, setNow] = useState(Date.now());
   const [view, setView] = useState<ViewMode>('card');
@@ -78,48 +85,78 @@ export function ClientExperience() {
   const [paletteQuery, setPaletteQuery] = useState('');
   const [notice, setNotice] = useState('');
   const [adVisible, setAdVisible] = useState(true);
-  const [adminDialog, setAdminDialog] = useState<'operator' | 'release' | null>(null);
-  const [pin, setPin] = useState('');
   const [locked, setLocked] = useState(false);
-  const [internet, setInternet] = useState(true);
   const [myGamesOnly, setMyGamesOnly] = useState(false);
-
-  const submitAdminAction = useCallback(() => {
-    if (!pin.trim()) { notify('PIN یا رمز مدیر را وارد کنید'); return; }
-    if (adminDialog === 'operator') {
-      if (pin !== '2468') { notify('PIN اپراتور دمو نادرست است'); return; }
-      setCustomerName('اپراتور'); setLoggedIn(true); setRemainingSeconds(24 * 3600); setLocked(false);
-      notify('ورود اپراتور با زمان نامحدود انجام شد');
-    } else {
-      if (pin !== '2020') { notify('رمز مدیر دمو نادرست است'); return; }
-      setLoggedIn(false); setActiveGame(null); setLocked(false);
-      notify('آزادسازی سیستم تأیید شد؛ Restart/Shutdown برای Agent واقعی باقی است');
-    }
-    setAdminDialog(null); setPin('');
-  }, [adminDialog, pin]);
 
   const visibleCommands = useMemo(() => commands.filter(item => item.title.includes(paletteQuery.trim())), [paletteQuery]);
 
   useEffect(() => {
+    let active = true;
+    void getClientIdentity()
+      .then(identity => {
+        if (!active) return;
+        setDeviceId(identity.deviceId);
+        setClientIdentityReady(true);
+      })
+      .catch(() => {
+        if (active) setClientIdentityReady(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const interval = window.setInterval(() => {
-      setNow(Date.now());
-      if (loggedIn && !locked) setRemainingSeconds(value => Math.max(0, value - 1));
+      const currentNow = Date.now();
+      setNow(currentNow);
+      if (loggedIn && sessionEndAt && !locked) {
+        setRemainingSeconds(Math.max(0, Math.ceil((new Date(sessionEndAt).getTime() - currentNow) / 1000)));
+      }
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [loggedIn, locked]);
+  }, [loggedIn, locked, sessionEndAt]);
+
+  useEffect(() => {
+    if (!loggedIn || !customerId || !loginId) return;
+    let active = true;
+
+    const poll = async () => {
+      try {
+        const state = await readCustomerState(customerId, loginId, deviceId);
+        if (!active) return;
+        if (!state.authenticated) {
+          signOut(true);
+          notify('ورود مشتری توسط Agent پایان یافت.');
+          return;
+        }
+        setCustomerName(state.fullName);
+        setWallet(state.balance);
+        setSessionState(state.session?.state ?? null);
+        setSessionEndAt(state.session?.endAt ?? null);
+        if (state.session?.endAt) {
+          setRemainingSeconds(Math.max(0, Math.ceil((new Date(state.session.endAt).getTime() - Date.now()) / 1000)));
+        }
+      } catch {
+        // UI remains usable; next poll retries.
+      }
+    };
+
+    void poll();
+    const interval = window.setInterval(() => { void poll(); }, 2000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [loggedIn, customerId, loginId, deviceId]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault(); setPaletteOpen(value => !value); setPaletteQuery('');
       } else if (event.key === 'Escape') {
-        setPaletteOpen(false); setContext(null); setPanel(null); setDockHoverPanel(null); setAdminDialog(null); setAccountGame(null);
-      } else if (event.altKey && event.key === 'F6') {
-        event.preventDefault(); setAdminDialog('operator');
-      } else if (event.altKey && event.key === 'F7') {
-        event.preventDefault(); setAdminDialog('release');
-      } else if (event.ctrlKey && event.key.toLowerCase() === 'i') {
-        event.preventDefault(); setInternet(value => !value); notify('وضعیت اینترنت تغییر کرد');
+        setPaletteOpen(false); setContext(null); setPanel(null); setDockHoverPanel(null); setAccountGame(null);
+
       } else if (event.ctrlKey && event.key.toLowerCase() === 'm') {
         event.preventDefault(); notify('درخواست جابه‌جایی برای اپراتور ارسال شد');
       } else if (event.ctrlKey && event.key.toLowerCase() === 'l') {
@@ -130,13 +167,12 @@ export function ClientExperience() {
         event.preventDefault(); notify('درخواست شارژ برای اپراتور ارسال شد');
       } else if (event.ctrlKey && event.key.toLowerCase() === 'p') {
         event.preventDefault(); askMessage();
-      } else if (event.key === 'Enter' && adminDialog) {
-        event.preventDefault(); submitAdminAction();
+
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [adminDialog, loggedIn, submitAdminAction]);
+  }, [loggedIn]);
 
   useEffect(() => {
     if (!notice) return;
@@ -159,36 +195,63 @@ export function ClientExperience() {
     if (guest) {
       if (password.trim()) { setLoginError('برای مهمان رمز را خالی بگذارید'); return; }
       setCustomerName('مهمان');
+      setCustomerId(null);
+      setLoginId(null);
+      setWallet(0);
+      setSessionEndAt(null);
+      setSessionState(null);
     } else {
+      if (!clientIdentityReady) {
+        setLoginError('در حال شناسایی Agent این رایانه هستیم. چند لحظه بعد دوباره تلاش کنید.');
+        return;
+      }
       const id = customerCode.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))).trim();
-      if (id !== '1050' || password.trim() !== '2020') {
-        setLoginError('در نسخه دمو، شناسه ۱۰۵۰ و رمز ۲۰۲۰ است');
+      if (!id || !password.trim()) {
+        setLoginError('شناسه و رمز عبور مشتری را وارد کنید.');
         return;
       }
-      const state = await mockService.getCustomerLoginState('c1', 1);
-      setLoginLimit(state.limit);
-      setActiveLoginCount(state.active);
-      const acquired = await mockService.acquireCustomerLogin('c1', deviceId, 1);
-      if (!acquired) {
-        setLoginError('این مشتری در حال حاضر به سقف ورود هم‌زمان رسیده است. ابتدا از دستگاه دیگر خارج شوید.');
+
+      try {
+        const result = await authenticateCustomer(id, password, deviceId);
+        setCustomerId(result.customerId);
+        setLoginId(result.loginId);
+        setCustomerName(result.fullName);
+        setWallet(result.balance);
+        setLoginLimit(result.limit);
+        setActiveLoginCount(result.activeCount);
+        setSessionEndAt(null);
+        setSessionState(null);
+      } catch (error) {
+        setLoginError(error instanceof Error ? error.message : 'ورود مشتری انجام نشد.');
         return;
       }
-      setCustomerName('رضا محمدی');
-      setActiveLoginCount(state.active + 1);
     }
+
     setLoginError('');
     setLoggedIn(true);
     setLocked(false);
     setPanel(null);
-    setRemainingSeconds(3 * 3600 + 45 * 60 + 12);
-    notify(guest ? 'ورود مهمان انجام شد' : 'ورود موفق بود');
+    setRemainingSeconds(0);
+    notify(guest ? 'ورود مهمان انجام شد' : 'ورود مشتری از سرور تأیید شد');
   }
 
-  function signOut() {
-    void mockService.releaseCustomerLogin('c1', deviceId);
-    setLoggedIn(false); setActiveGame(null); setLocked(false); setPanel(null);
-    setCustomerCode(''); setPassword('');
-    notify('جلسه مشتری بسته شد و حساب‌ها آزاد شدند');
+  function signOut(skipServerRelease = false) {
+    if (!skipServerRelease && customerId) {
+      void releaseCustomerLogin(customerId, deviceId).catch(() => undefined);
+    }
+    setLoggedIn(false);
+    setActiveGame(null);
+    setLocked(false);
+    setPanel(null);
+    setCustomerCode('');
+    setPassword('');
+    setCustomerId(null);
+    setLoginId(null);
+    setCustomerName('مهمان');
+    setWallet(0);
+    setSessionEndAt(null);
+    setSessionState(null);
+    notify('جلسه مشتری بسته شد و ورود سروری آزاد شد');
   }
 
   function askMessage() {
@@ -216,8 +279,7 @@ export function ClientExperience() {
 
   function doContextAction(action: string) {
     setContext(null);
-    if (action === 'internet') { setInternet(value => !value); notify(internet ? 'حالت Offline / LAN فعال شد' : 'حالت Online فعال شد'); }
-    else if (action === 'move') notify('درخواست جابه‌جایی شناسه به اپراتور ارسال شد');
+    if (action === 'move') notify('درخواست جابه‌جایی شناسه به اپراتور ارسال شد');
     else if (action === 'login') {
       if (loggedIn) signOut();
       else document.getElementById('client-login-id')?.focus();
@@ -232,21 +294,23 @@ export function ClientExperience() {
   const hours = Math.floor(remainingSeconds / 3600);
   const minutes = Math.floor(remainingSeconds % 3600 / 60);
   const seconds = remainingSeconds % 60;
-  const timerClass = remainingSeconds < 300 ? 'critical' : remainingSeconds < 900 ? 'warning' : '';
-  const sessionLocked = locked || (loggedIn && remainingSeconds === 0);
+  const timerClass = sessionEndAt
+    ? remainingSeconds < 300 ? 'critical' : remainingSeconds < 900 ? 'warning' : ''
+    : '';
+  const sessionLocked = locked || Boolean(loggedIn && sessionEndAt && remainingSeconds === 0);
   const recentGames = myGamesOnly ? games.filter(game => ['cs2', 'fc25'].includes(game.id)) : games;
   const gameSize = Math.round(190 * zoom / 100);
 
   return <div className="client-app" dir="rtl" onClick={() => { if (context) setContext(null); }} onContextMenu={event => { if ((event.target as HTMLElement).closest('.client-game-card')) { event.preventDefault(); setContext({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 300) }); } }}>
     <header className="client-topbar">
       <div className="client-logo">گ</div><div className="client-system"><b>PC ۱۲</b> — گیم‌نت منیجر</div><div className="client-spacer" />
-      {loggedIn && <><div className="client-pill balance">👛 مانده: <b>{money(wallet)}</b> ت</div><div className="client-pill"><span className={`client-timer ${timerClass}`}>⏱ {String(hours).padStart(2, '۰')}:{String(minutes).padStart(2, '۰')}:{String(seconds).padStart(2, '۰')}</span></div><div className="client-segment" aria-label="نوع نمایش بازی‌ها">{(['card', 'compact', 'list'] as ViewMode[]).map((mode, index) => <button key={mode} className={view === mode ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(mode)}>{['▦', '▤', '☰'][index]}</button>)}</div><div className="client-zoom"><button onClick={() => setZoom(value => Math.max(70, value - 10))}>−</button><span>{money(zoom)}٪</span><button onClick={() => setZoom(value => Math.min(130, value + 10))}>＋</button></div><button className="client-user-pill" onClick={() => setPanel(panel === 'account' ? null : 'account')}><span className="client-avatar">{customerName.slice(0, 1)}</span>{customerName}</button></>}
-      {!loggedIn && <span className="client-offline-pill">● {internet ? 'آنلاین' : 'آفلاین / LAN'}</span>}
+      {loggedIn && <><div className="client-pill balance">👛 مانده: <b>{money(wallet)}</b> ت</div><div className="client-pill"><span className={`client-timer ${timerClass}`}>⏱ {sessionEndAt ? String(hours).padStart(2, '۰') + ':' + String(minutes).padStart(2, '۰') + ':' + String(seconds).padStart(2, '۰') : sessionState === 'Active' ? 'جلسه فعال' : 'در انتظار شروع جلسه'}</span></div><div className="client-segment" aria-label="نوع نمایش بازی‌ها">{(['card', 'compact', 'list'] as ViewMode[]).map((mode, index) => <button key={mode} className={view === mode ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(mode)}>{['▦', '▤', '☰'][index]}</button>)}</div><div className="client-zoom"><button onClick={() => setZoom(value => Math.max(70, value - 10))}>−</button><span>{money(zoom)}٪</span><button onClick={() => setZoom(value => Math.min(130, value + 10))}>＋</button></div><button className="client-user-pill" onClick={() => setPanel(panel === 'account' ? null : 'account')}><span className="client-avatar">{customerName.slice(0, 1)}</span>{customerName}</button></>}
+      {!loggedIn && <span className="client-offline-pill">● متصل به GameNet</span>}
     </header>
 
-    {!loggedIn ? <main className="client-login-stage"><section className="client-login-panel"><div className="client-login-logo">گ</div><h1>گیم‌نت منیجر</h1><p>برای شروع بازی وارد حساب خود شوید</p><form onSubmit={event => { event.preventDefault(); signIn(); }}><input id="client-login-id" autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} placeholder="کد کاربری — مثلاً ۱۰۵۰" /><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="رمز عبور (برای مهمان خالی بگذار)" /><div className="client-login-error">{loginError}</div><button className="client-login-submit">ورود به سیستم</button></form><button className="client-guest" onClick={() => signIn(true)}>ورود مهمان</button><div className="client-login-separator" /><button className="client-operator" onClick={() => setAdminDialog('operator')}>🧑‍💼 ورود اپراتور با زمان نامحدود <kbd>Alt+F6</kbd></button><button className="client-release" onClick={() => setAdminDialog('release')}>🔓 آزادسازی سیستم / ورود به Windows <kbd>Alt+F7</kbd></button></section><span className="client-login-foot">شناسه نمونه: ۱۰۵۰ · دسترسی مهمان بدون حساب</span></main> : <>
+    {!loggedIn ? <main className="client-login-stage"><section className="client-login-panel"><div className="client-login-logo">گ</div><h1>گیم‌نت منیجر</h1><p>برای شروع بازی وارد حساب خود شوید</p><form onSubmit={event => { event.preventDefault(); signIn(); }}><input id="client-login-id" autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} placeholder="کد کاربری — مثلاً ۱۰۵۰" /><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="رمز عبور (برای مهمان خالی بگذار)" /><div className="client-login-error">{loginError}</div><button className="client-login-submit" disabled={!clientIdentityReady}>ورود به سیستم</button></form><button className="client-guest" onClick={() => signIn(true)}>ورود مهمان</button><div className="client-login-separator" /><p className="client-login-footnote">کنترل‌های مدیریتی و آزادسازی سیستم فقط از طریق Agent و Dashboard انجام می‌شوند.</p></section><span className="client-login-foot">ورود با شناسه و رمز واقعی مشتری · دسترسی مهمان بدون حساب</span></main> : <>
       {sessionLocked ? <main className="client-lock-screen"><div className="client-lock-icon">🔒</div><h1>سیستم قفل است</h1><p>برای ادامه، به اپراتور مراجعه کنید.</p><button className="client-button primary" onClick={() => notify('درخواست بازکردن قفل برای اپراتور ارسال شد')}>درخواست بازگشایی</button></main> : <main className="client-desktop">
-        <div className="client-toolbar"><span>{myGamesOnly ? 'بازی‌های من' : 'بازی‌های در دسترس'}</span><div className="client-spacer" /><span className={`client-network ${internet ? '' : 'offline'}`}>● {internet ? 'Online' : 'Offline / LAN'}</span></div>
+        <div className="client-toolbar"><span>{myGamesOnly ? 'بازی‌های من' : 'بازی‌های در دسترس'}</span><div className="client-spacer" /><span className="client-network">● متصل به GameNet</span></div>
         <div className={`client-game-grid ${view}`} style={{ '--game-size': `${gameSize}px`, '--game-zoom': zoom / 100 } as React.CSSProperties}>
           {recentGames.map(game => <button key={game.id} className={`client-game-card ${view} ${activeGame === game.id ? 'running' : ''}`} onClick={() => launchGame(game, game.requiresAccount ? undefined : 'own')} onContextMenu={event => { event.preventDefault(); setContext({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 300) }); }}>
             <span className="client-game-art">{game.icon}</span><span className="client-game-info"><b>{game.name}</b><small>{game.category}</small><small>{game.description}</small></span>{activeGame === game.id && <span className="client-running-badge">در حال اجرا</span>}
@@ -304,20 +368,18 @@ export function ClientExperience() {
         <button onClick={() => notify('مسابقات دمو: جام CS2 · ثبت‌نام از صندوق')}>🏆 مسابقات</button>
         <button onClick={() => { setMyGamesOnly(true); setPanel(null); setDockHoverPanel(null); }}>🎮 بازی‌های من</button>
         <button onClick={() => { setDockHoverPanel(null); setPanel(panel === 'account' ? null : 'account'); }}>👤 حساب من</button>
-        <button className="dock-spacer" onClick={() => { setPanel('operator'); setDockHoverPanel(null); setContext({ x: 14, y: window.innerHeight - 350 }); }}>🛠 ابزار اپراتور <kbd>Alt+F6</kbd></button>
+        <button className="dock-spacer" onClick={() => notify('کنترل‌های اپراتور فقط از Dashboard مدیریت انجام می‌شوند.')}>🛡️ کنترل اپراتور</button>
         <button onClick={() => setAdVisible(value => !value)}>📢 تبلیغات</button>
       </nav>
     </>}
 
-    {panel && panel !== 'operator' && panel !== 'apps' && <section className="client-panel"><header><b>{panel === 'buffet' ? 'منوی بوفه' : 'حساب من'}</b><button onClick={() => setPanel(null)}>×</button></header>{panel === 'buffet' ? <div className="client-buffet-list">{buffetItems.map(item => <div key={item.name}><span>{item.icon} {item.name}</span><b>{money(item.price)} ت</b><button onClick={() => notify(`درخواست ${item.name} برای اپراتور ثبت شد`)}>+</button></div>)}</div> : <div className="client-account-info"><div><span>نام کاربری</span><b>{customerCode || 'مهمان'}</b></div><div><span>کیف پول</span><b>{money(wallet)} تومان</b></div><div><span>اعتبار رایگان</span><b>۱۲۰٬۰۰۰ تومان</b></div><div><span>بدهی</span><b>۰ تومان</b></div><div><span>ورود هم‌زمان</span><b>{activeLoginCount.toLocaleString('fa-IR')} / {loginLimit.toLocaleString('fa-IR')}</b></div><button className="client-button" onClick={signOut}>خروج مشتری</button></div>}</section>}
+    {panel && panel !== 'operator' && panel !== 'apps' && <section className="client-panel"><header><b>{panel === 'buffet' ? 'منوی بوفه' : 'حساب من'}</b><button onClick={() => setPanel(null)}>×</button></header>{panel === 'buffet' ? <div className="client-buffet-list">{buffetItems.map(item => <div key={item.name}><span>{item.icon} {item.name}</span><b>{money(item.price)} ت</b><button onClick={() => notify(`درخواست ${item.name} برای اپراتور ثبت شد`)}>+</button></div>)}</div> : <div className="client-account-info"><div><span>نام کاربری</span><b>{customerCode || 'مهمان'}</b></div><div><span>کیف پول</span><b>{money(wallet)} تومان</b></div><div><span>اعتبار رایگان</span><b>۱۲۰٬۰۰۰ تومان</b></div><div><span>بدهی</span><b>۰ تومان</b></div><div><span>ورود هم‌زمان</span><b>{activeLoginCount.toLocaleString('fa-IR')} / {loginLimit.toLocaleString('fa-IR')}</b></div><button className="client-button" onClick={() => signOut()}>خروج مشتری</button></div>}</section>}
 
-    {context && <section className="client-context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}><strong>{activeGame ? `بازی: ${games.find(game => game.id === activeGame)?.name}` : 'ابزار کلاینت'}</strong><button onClick={() => doContextAction('internet')}>🌐 تغییر اینترنت / Online · Offline <kbd>Ctrl+I</kbd></button><button onClick={() => doContextAction('move')}>🔀 جابه‌جایی شناسه به سیستم دیگر <kbd>Ctrl+M</kbd></button><button onClick={() => doContextAction('login')}>🔄 ورود / خروج با شناسه <kbd>Ctrl+L</kbd></button><button onClick={() => doContextAction('charge')}>💰 درخواست شارژ از اپراتور <kbd>Ctrl+R</kbd></button><button onClick={() => doContextAction('message')}>💬 ارسال پیام به اپراتور <kbd>Ctrl+P</kbd></button>{activeGame && <button onClick={() => doContextAction('stop-game')}>■ توقف بازی</button>}<button onClick={() => doContextAction('lock')}>🔒 قفل کردن سیستم <kbd>Win+L</kbd></button><button onClick={() => doContextAction('logout')}>🚪 خروج مشتری و بستن وقت</button><button onClick={() => { setContext(null); setAdminDialog('operator'); }}>🧑‍💼 ورود اپراتور / زمان نامحدود</button><button onClick={() => { setContext(null); setAdminDialog('release'); }}>🔓 آزادسازی Windows · Restart · Shutdown</button></section>}
+    {context && <section className="client-context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}><strong>{activeGame ? `بازی: ${games.find(game => game.id === activeGame)?.name}` : 'ابزار کلاینت'}</strong><button onClick={() => doContextAction('move')}>🔀 جابه‌جایی شناسه به سیستم دیگر <kbd>Ctrl+M</kbd></button><button onClick={() => doContextAction('login')}>🔄 ورود / خروج با شناسه <kbd>Ctrl+L</kbd></button><button onClick={() => doContextAction('charge')}>💰 درخواست شارژ از اپراتور <kbd>Ctrl+R</kbd></button><button onClick={() => doContextAction('message')}>💬 ارسال پیام به اپراتور <kbd>Ctrl+P</kbd></button>{activeGame && <button onClick={() => doContextAction('stop-game')}>■ توقف بازی</button>}<button onClick={() => doContextAction('lock')}>🔒 قفل کردن سیستم <kbd>Win+L</kbd></button><button onClick={() => doContextAction('logout')}>🚪 خروج مشتری و بستن وقت</button></section>}
 
     {paletteOpen && <div className="client-overlay" onMouseDown={event => event.target === event.currentTarget && setPaletteOpen(false)}><section className="client-palette" role="dialog" aria-modal="true"><input autoFocus value={paletteQuery} onChange={event => setPaletteQuery(event.target.value)} onKeyDown={event => event.key === 'Enter' && visibleCommands[0] && runCommand(visibleCommands[0].key)} placeholder="جست‌وجوی فرمان یا صفحه…" /><div>{visibleCommands.map(item => <button key={item.key} onClick={() => runCommand(item.key)}><span>{item.icon} {item.title}</span><kbd>Enter</kbd></button>)}</div><small>Ctrl+K باز کردن · Esc بستن</small></section></div>}
 
     {accountGame && <div className="client-overlay" onMouseDown={event => event.target === event.currentTarget && setAccountGame(null)}><section className="client-account-picker" role="dialog" aria-modal="true"><header><div><b>{accountGame.icon} {accountGame.name}</b><small>روش ورود به بازی را انتخاب کنید</small></div><button onClick={() => setAccountGame(null)}>×</button></header><button className="account-option" onClick={() => launchGame(accountGame, 'own')}><span>👤</span><div><b>اکانت خودم</b><small>با حساب شخصی خود وارد شوید</small></div></button><button className="account-option pool" onClick={() => launchGame(accountGame, 'pool')}><span>🎮</span><div><b>اکانت GameNet</b><small>از Account Pool سرور تخصیص داده شود</small></div></button><p>اطلاعات ورود اکانت‌های مجموعه به مشتری نمایش داده نمی‌شود.</p></section></div>}
-
-    {adminDialog && <div className="client-overlay"><section className="client-admin-dialog" role="dialog" aria-modal="true"><header><b>{adminDialog === 'operator' ? 'ورود اپراتور با زمان نامحدود' : 'آزادسازی سیستم'}</b><button onClick={() => { setAdminDialog(null); setPin(''); }}>×</button></header><p>{adminDialog === 'operator' ? 'PIN اپراتور را وارد کنید.' : 'رمز مدیر برای آزادسازی Windows، Restart یا Shutdown لازم است.'}</p><input autoFocus type="password" value={pin} onChange={event => setPin(event.target.value)} placeholder={adminDialog === 'operator' ? 'PIN اپراتور' : 'رمز مدیر'} /><div className="client-admin-actions"><button onClick={() => { setAdminDialog(null); setPin(''); }}>لغو</button>{adminDialog === 'operator' ? <button className="primary" onClick={submitAdminAction}>ورود اپراتور</button> : <><button className="primary" onClick={submitAdminAction}>آزادسازی Windows</button><button onClick={() => { submitAdminAction(); notify('Restart ثبت شد'); }}>Restart</button><button className="danger" onClick={() => { submitAdminAction(); notify('Shutdown ثبت شد'); }}>Shutdown</button></>}</div><small>این عملیات دمو است و اجرای واقعی به Agent کلاینت نیاز دارد.</small></section></div>}
 
     {notice && <div className="client-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
     <span className="client-clock" aria-hidden="true">{new Date(now).toLocaleTimeString('fa-IR')}</span>

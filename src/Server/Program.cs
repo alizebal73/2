@@ -86,6 +86,17 @@ app.MapPost("/api/agent/register", async (
         && !await database.Stations.AnyAsync(item => item.Id == request.StationId.Value && item.IsActive, cancellationToken))
         return Results.BadRequest(new { code = "station_not_found", message = "ایستگاه انتخاب‌شده پیدا نشد." });
 
+    if (request.StationId.HasValue)
+    {
+        var stationAlreadyAssigned = await database.AgentDevices.AnyAsync(
+            item => item.DeviceId != deviceId
+                && item.StationId == request.StationId.Value
+                && item.IsActive,
+            cancellationToken);
+        if (stationAlreadyAssigned)
+            return Results.Conflict(new { code = "station_agent_already_assigned", message = "این ایستگاه قبلاً به یک Agent فعال متصل شده است." });
+    }
+
     var device = await database.AgentDevices
         .Include(item => item.Station)
         .FirstOrDefaultAsync(item => item.DeviceId == deviceId, cancellationToken);
@@ -142,6 +153,52 @@ app.MapPost("/api/agent/register", async (
 })
 .WithName("RegisterAgent");
 
+app.MapPut("/api/agent/devices/{deviceId:guid}/policy", async (
+    Guid deviceId,
+    AgentPolicyRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    IHubContext<AgentHub> agentHub,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var device = await database.AgentDevices
+        .FirstOrDefaultAsync(item => item.Id == deviceId && item.IsActive, cancellationToken);
+    if (device is null)
+        return Results.NotFound(new { code = "agent_not_found", message = "Agent پیدا نشد." });
+
+    device.KioskEnabled = request.KioskEnabled;
+    device.LockOnDisconnect = request.LockOnDisconnect;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AgentPolicyUpdated",
+        EntityName = "AgentDevice",
+        EntityId = device.Id.ToString(),
+        AppUserId = auth.User!.Id,
+        Details = $"Kiosk={device.KioskEnabled}; LockOnDisconnect={device.LockOnDisconnect}"
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+
+    if (!string.IsNullOrWhiteSpace(device.ConnectionId))
+    {
+        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+            "AgentPolicyChanged",
+            new AgentPolicyDto(device.Id, device.KioskEnabled, device.LockOnDisconnect),
+            cancellationToken);
+    }
+
+    return Results.Ok(new AgentPolicyDto(device.Id, device.KioskEnabled, device.LockOnDisconnect));
+})
+.WithName("UpdateAgentPolicy");
+
 app.MapGet("/api/agent/devices", async (
     HttpContext context,
     GameNetDbContext database,
@@ -181,6 +238,8 @@ app.MapGet("/api/agent/devices", async (
             && device.LastSeenAt.HasValue
             && now - device.LastSeenAt.Value <= TimeSpan.FromSeconds(offlineAfter),
         device.IsLocked,
+        device.KioskEnabled,
+        device.LockOnDisconnect,
         device.LastSeenAt,
         device.ConnectedAt,
         device.AgentVersion,
@@ -1711,6 +1770,48 @@ app.MapPost("/api/customers/{customerId:guid}/password", async (HttpContext cont
 })
 .WithName("ChangeCustomerPassword");
 
+app.MapGet("/api/client/identity", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var remoteIp = context.Connection.RemoteIpAddress;
+    var local = remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
+
+    AgentDevice? device = null;
+    if (remoteIp is not null && !local)
+    {
+        var ipText = remoteIp.ToString();
+        var matchingDevices = await database.AgentDevices
+            .AsNoTracking()
+            .Include(item => item.Station)
+            .Where(item => item.IsActive && item.IsOnline && item.LastIpAddress == ipText)
+            .ToListAsync(cancellationToken);
+        device = matchingDevices.OrderByDescending(item => item.LastSeenAt).FirstOrDefault();
+    }
+    else
+    {
+        var loopbackDevices = await database.AgentDevices
+            .AsNoTracking()
+            .Include(item => item.Station)
+            .Where(item => item.IsActive && item.IsOnline && item.LastSeenAt.HasValue)
+            .ToListAsync(cancellationToken);
+        device = loopbackDevices.OrderByDescending(item => item.LastSeenAt).FirstOrDefault();
+    }
+
+    if (device is null)
+        return Results.NotFound(new { code = "client_identity_not_found", message = "Agent این رایانه پیدا نشد." });
+
+    return Results.Ok(new
+    {
+        deviceId = device.DeviceId,
+        stationId = device.StationId,
+        stationName = device.Station?.Name,
+        isOnline = device.IsOnline
+    });
+})
+.WithName("GetClientIdentity");
+
 app.MapPost("/api/customer-auth/login", async (
     CustomerLoginAuthRequest request,
     GameNetDbContext database,
@@ -1744,7 +1845,11 @@ app.MapPost("/api/customer-auth/login", async (
             fullName = customer.FullName,
             loginId = existing.Id,
             activeCount = active.Count,
-            limit = customer.ConcurrentLoginLimit
+            limit = customer.ConcurrentLoginLimit,
+            balance = customer.Balance,
+            freeMoney = customer.FreeMoney,
+            freeTimeMinutes = customer.FreeTimeMinutes,
+            vipTier = customer.VipTier
         });
     }
 
@@ -1784,10 +1889,90 @@ app.MapPost("/api/customer-auth/login", async (
         fullName = customer.FullName,
         loginId = login.Id,
         activeCount = active.Count + 1,
-        limit = customer.ConcurrentLoginLimit
+        limit = customer.ConcurrentLoginLimit,
+        balance = customer.Balance,
+        freeMoney = customer.FreeMoney,
+        freeTimeMinutes = customer.FreeTimeMinutes,
+        vipTier = customer.VipTier
     });
 })
 .WithName("CustomerAuthenticate");
+
+app.MapGet("/api/customer-auth/state", async (
+    Guid customerId,
+    Guid loginId,
+    string clientKey,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var normalizedClientKey = clientKey?.Trim();
+    if (string.IsNullOrWhiteSpace(normalizedClientKey))
+        return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
+
+    var customer = await database.Customers
+        .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    var login = await database.CustomerLogins
+        .FirstOrDefaultAsync(
+            item => item.Id == loginId
+                && item.CustomerId == customerId
+                && item.IsActive
+                && item.ClientKey == normalizedClientKey,
+            cancellationToken);
+
+    if (login is null)
+        return Results.Ok(new
+        {
+            authenticated = false,
+            customerId,
+            loginId,
+            username = customer.Username,
+            fullName = customer.FullName,
+            balance = customer.Balance,
+            freeMoney = customer.FreeMoney,
+            freeTimeMinutes = customer.FreeTimeMinutes,
+            vipTier = customer.VipTier,
+            session = (object?)null
+        });
+
+    var device = await database.AgentDevices
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(item => item.DeviceId == normalizedClientKey && item.IsActive, cancellationToken);
+
+    var session = device?.StationId is Guid stationId
+        ? await database.Sessions
+            .Where(item => item.CustomerId == customerId
+                && item.StationId == stationId
+                && (item.State == SessionState.Active || item.State == SessionState.Ended))
+            .OrderByDescending(item => item.StartAt)
+            .Select(item => new
+            {
+                id = item.Id,
+                state = item.State.ToString(),
+                startAt = item.StartAt,
+                endAt = item.EndAt,
+                stationName = item.Station.Name
+            })
+            .FirstOrDefaultAsync(cancellationToken)
+        : null;
+
+    return Results.Ok(new
+    {
+        authenticated = true,
+        customerId,
+        loginId,
+        username = customer.Username,
+        fullName = customer.FullName,
+        balance = customer.Balance,
+        freeMoney = customer.FreeMoney,
+        freeTimeMinutes = customer.FreeTimeMinutes,
+        vipTier = customer.VipTier,
+        session
+    });
+})
+.WithName("CustomerAuthState");
 
 app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     Guid customerId,

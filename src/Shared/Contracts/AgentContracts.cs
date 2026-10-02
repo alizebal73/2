@@ -21,7 +21,9 @@ public sealed record AgentReadyDto(
     string DeviceId,
     DateTimeOffset ServerUtcNow,
     int HeartbeatIntervalSeconds,
-    bool IsLocked);
+    bool IsLocked,
+    bool KioskEnabled,
+    bool LockOnDisconnect);
 
 public sealed record AgentHeartbeatRequest(
     string AgentVersion,
@@ -45,6 +47,8 @@ public sealed record AgentStatusDto(
     string? StationName,
     bool IsOnline,
     bool IsLocked,
+    bool KioskEnabled,
+    bool LockOnDisconnect,
     DateTimeOffset? LastSeenAt,
     DateTimeOffset? ConnectedAt,
     string? AgentVersion,
@@ -59,9 +63,10 @@ public static class AgentCommandTypes
     public const string Ping = "ping";
     public const string Lock = "lock";
     public const string Unlock = "unlock";
+    public const string LogoutLock = "logout-lock";
 
     public static bool IsSupported(string? commandType)
-        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock;
+        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock;
 }
 
 public sealed record AgentCommandRequest(
@@ -80,6 +85,15 @@ public sealed record AgentCommandAcknowledgement(
     string? Message,
     DateTimeOffset CompletedAt);
 
+public sealed record AgentPolicyRequest(
+    bool KioskEnabled,
+    bool LockOnDisconnect);
+
+public sealed record AgentPolicyDto(
+    Guid AgentId,
+    bool KioskEnabled,
+    bool LockOnDisconnect);
+
 public sealed record AgentCommandStatusDto(
     Guid CommandId,
     Guid AgentDeviceId,
@@ -90,3 +104,27 @@ public sealed record AgentCommandStatusDto(
     DateTimeOffset? CompletedAt,
     bool? Succeeded,
     string? ResultMessage);
+
+
+public sealed record AgentSessionStartRequest(
+    Guid CustomerId,
+    Guid CustomerLoginId,
+    Guid? TariffId,
+    decimal? HourlyRateOverride,
+    int? Persons);
+
+public sealed record AgentSessionStartResponse(
+    Guid SessionId,
+    Guid StationId,
+    Guid CustomerId,
+    DateTimeOffset StartAt);
+
+public sealed record AgentSessionEndRequest(
+    Guid SessionId,
+    Guid? CustomerLoginId);
+
+public sealed record AgentSessionEndResponse(
+    Guid SessionId,
+    Guid StationId,
+    DateTimeOffset EndAt,
+    string State);

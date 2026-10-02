@@ -693,3 +693,65 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 - چرخهٔ انتشار آینده: Build → Test → Smoke/E2E → Release Manifest → Canary → Health Check → Rollback/Publish.
 - Clientهای قدیمی نباید بی‌دلیل با Release ناسازگار از کار بیفتند؛ Minimum/Recommended Client Version برای کنترل سازگاری است.
 - کانال‌های stable و canary در معماری حفظ می‌شوند و Canary عملیاتی بعد از Agent واقعی فعال می‌شود.
+
+## Audit Checkpoint — Stages 1–9 — 2026-10-02
+
+این بخش وضعیت تأییدشدهٔ نرم‌افزاری Stageهای 1 تا 9 را ثبت می‌کند و باید از CI/کد واقعی خوانده شود.
+
+## وضعیت Stageها
+- ✅ Stage 1 — Foundation
+- ✅ Stage 2 — Prototype & Behavior Transfer
+- ✅ Stage 3 — Operational Completion
+- ✅ Stage 4 — Finance & Session Core
+- ✅ Stage 5 — Customer & VIP Domain
+- ✅ Stage 6 — Buffet & Inventory Domain
+- ✅ Stage 7 — Users & Permissions — merge شده در `main`
+- ✅ Stage 8 — PC Agent Foundation — Run #676
+- ✅ Stage 9 — دو برش اصلی نرم‌افزاری:
+  - Lock/Unlock واقعی — Run #690
+  - Agent-driven Session Start/End — Run #744
+
+## Stage 9 — مواردی که واقعاً تأیید شدند
+- ✅ Agent Command transport: persistence/correlation/ack/result
+- ✅ `client.control` و Audit برای فرمان‌های Agent
+- ✅ Lock/Unlock واقعی Client با وضعیت authoritative روی Server
+- ✅ heartbeat reconciliation و timeout/failure handling
+- ✅ Kiosk policy پایه و LockOnDisconnect
+- ✅ Customer Authentication مرتبط با DeviceId
+- ✅ Agent-driven Session Start با Station و Tariff منبع‌حقیقت Server
+- ✅ Agent-driven Session End با CustomerLogin مالک همان Agent
+- ✅ پایان Session با `EndAt` و سقف زمان صورتحساب بر اساس زمان Server
+- ✅ آزادسازی CustomerLogin در پایان جلسه
+- ✅ settlement همان Session از مسیر موجود Server
+- ✅ broadcast زنده تغییر Session به Dashboard
+- ✅ جلوگیری از تخصیص یک Station فعال به بیش از یک Agent فعال
+- ✅ regressionهای جدید برای قیمت‌دستکاری‌شده، login ownership و duplicate station assignment
+- ✅ stale Agent با LockOnDisconnect نیز روی Server قفل می‌شود
+- ✅ Dashboard build/lint و Browser Smoke — Run #744
+
+## اصلاحات مهم آخرین ممیزی Stage 9
+در آخرین ممیزی مشخص شد چند نقطه از قرارداد Server-authoritative نیاز به hardening داشت:
+1. Agent دیگر نمی‌تواند `TariffId` یا `HourlyRateOverride` دلخواه خود را به Session تحمیل کند؛ تعرفهٔ فعال Station منبع حقیقت است.
+2. پایان Session بدون CustomerLogin معتبر همان DeviceId رد می‌شود.
+3. هر Station فعال فقط می‌تواند به یک Agent فعال متصل باشد.
+4. stale heartbeat با Policy `LockOnDisconnect` قفل authoritative ایجاد می‌کند.
+5. timeout فرمان‌های Agent دوباره‌پردازش/دوباره Audit نمی‌شوند.
+6. تست CI برای این مرزها اضافه شد.
+7. یک خطای کامپایل Dashboard در `DashboardPage` نیز اصلاح و Run #744 سبز شد.
+
+## مرزهای عمداً باقی‌ماندهٔ Stage 9
+این موارد هنوز «حل‌نشدهٔ پنهان» نیستند و عمداً در برش‌های بعدی باقی مانده‌اند:
+- ⏩ Full Kiosk/Shell policy و command catalog گسترده
+- ⏩ Full customer-facing Client login UX و اتصال UX به Agent Session Start/End
+- ⏩ Safe Offline/Recovery عملیاتی کامل
+- ⬜ Validation فیزیکی روی 2–3 PC واقعی
+- ⬜ rollout کنترل‌شده برای 40+ PC
+
+## Debtهای Cross-Stage
+- `mockService.getTariffs()` هنوز در بعضی مسیرهای Dashboard وجود دارد و باید در Stage واقعی Tariff/Domain جایگزین شود.
+- Accounts/Games/Tariffs/ClientShell نباید قبل از dependency واقعی به‌صورت Mock-فعال وارد محصول شوند.
+- Installer/Updater/Rollback عملیاتی هنوز طبق معماری به Stageهای بعد منتقل شده‌اند.
+- Installer همچنان local-only است.
+
+## Gate
+Stage 9 از نظر برش‌های نرم‌افزاری تأییدشده است، اما **به‌دلیل باقی‌بودن Full Kiosk/Shell و validation فیزیکی، Stage 10 را هنوز باز نمی‌کنیم**. Server همچنان منبع حقیقت است و هر Command باید Permission → Persistence → SignalR → Ack/Result → Audit را حفظ کند.
