@@ -126,7 +126,24 @@ jobs:
               throw 'VIP package assignment smoke returned incomplete data.'
             }
 
-            Write-Host 'Stage 5 Customer CRUD + VIP package API smoke passed.'
+            $loginKeys = @('smoke-a', 'smoke-b', 'smoke-c')
+            foreach ($clientKey in $loginKeys) {
+              $loginResult = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json)
+              if (-not $loginResult.acquired) { throw "Concurrent login acquire failed for $clientKey." }
+            }
+            try {
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'smoke-d' } | ConvertTo-Json) | Out-Null
+              throw 'Concurrent login limit was not enforced.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
+            foreach ($clientKey in $loginKeys) {
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json) | Out-Null
+            }
+
+            Write-Host 'Stage 5 Customer CRUD + VIP package + concurrent login API smoke passed.'
+
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
           }
