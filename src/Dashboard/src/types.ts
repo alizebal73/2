@@ -37,6 +37,10 @@ export type StationDto = {
   network?: 1 | 2;
   outOfServiceReason?: string;
   remainingMinutes?: number;
+  customerUsername?: string;
+  customerFullName?: string;
+  customerDebt?: number;
+  customerNote?: string;
 };
 
 export type StartSessionInput = {
