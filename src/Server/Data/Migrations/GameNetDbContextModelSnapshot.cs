@@ -98,7 +98,7 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("ExpiresAt")
+                    b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("LastSeenAt")
