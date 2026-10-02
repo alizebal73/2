@@ -669,7 +669,19 @@ app.MapPost("/api/buffet/products", async (
         AppUserId = request.AppUserId
     });
     await database.SaveChangesAsync(cancellationToken);
-    return Results.Ok(new { id = product.Id, name = product.Name, category = product.Category, price = product.UnitPrice, buyPrice = product.CostPrice, stock = product.StockQuantity, active = product.IsActive });
+    return Results.Ok(new
+    {
+        id = product.Id,
+        name = product.Name,
+        category = product.Category,
+        price = product.UnitPrice,
+        buyPrice = product.CostPrice,
+        stock = product.StockQuantity,
+        minimumStock = product.MinimumStock,
+        unit = product.Unit,
+        lowStock = product.StockQuantity <= product.MinimumStock,
+        active = product.IsActive
+    });
 })
 .WithName("CreateBuffetProduct");
 
