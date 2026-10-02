@@ -762,7 +762,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       style={style}
       className={`station-card ${station.state} ${view} ${selected ? 'selected' : ''}`}
       draggable={false}
-      onSelectStart={event => event.preventDefault()}
       onMouseDown={event => {
         if (event.button !== 0) return;
         event.preventDefault();
