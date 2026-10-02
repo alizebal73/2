@@ -1815,7 +1815,7 @@ app.MapPost("/api/buffet/sales", async (
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.sell", cancellationToken);
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "buffet.sell", "buffet.inventory");
     if (auth.Error is not null) return auth.Error;
     request = request with { AppUserId = auth.User!.Id };
 
@@ -3013,7 +3013,7 @@ app.MapGet("/api/sessions/active", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "session.start", "session.manage", "session.settle", "buffet.sell");
     if (auth.Error is not null) return auth.Error;
 
     var sessions = await database.Sessions
