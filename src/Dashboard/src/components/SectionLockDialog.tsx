@@ -16,21 +16,23 @@ export function SectionLockDialog({ page, onClose, onUnlock }: Props) {
     setNotice('');
   }, [page]);
 
-  if (!page) return null;
-  const rule = readPageLocks()[page];
+  const protectedPage = page;
+  if (!protectedPage) return null;
+  const rule = readPageLocks()[protectedPage];
   if (!rule?.enabled) return null;
+  const pinHash = rule.pinHash;
 
   async function submit() {
     if (!pin.trim()) {
       setNotice('رمز این بخش را وارد کنید.');
       return;
     }
-    const ok = await verifyPagePin(pin.trim(), rule.pinHash);
+    const ok = await verifyPagePin(pin.trim(), pinHash);
     if (!ok) {
       setNotice('رمز اشتباه است.');
       return;
     }
-    onUnlock(page);
+    onUnlock(protectedPage);
   }
 
   return (
