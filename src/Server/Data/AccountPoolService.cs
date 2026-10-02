@@ -1,0 +1,103 @@
+using Microsoft.EntityFrameworkCore;
+
+namespace GameNetManager.Server.Data;
+
+public sealed class AccountPoolService(GameNetDbContext database)
+{
+    public async Task<(AccountPoolEntry? Account, AccountLease? Lease)> AllocateAsync(
+        Guid gameId,
+        Guid? agentDeviceId,
+        Guid? customerId,
+        Guid? sessionId,
+        CancellationToken cancellationToken)
+    {
+        var game = await database.Games
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == gameId && item.IsActive, cancellationToken);
+
+        if (game is null)
+            return (null, null);
+
+        if (agentDeviceId.HasValue
+            && !await database.AgentDevices.AnyAsync(item => item.Id == agentDeviceId.Value && item.IsActive, cancellationToken))
+            throw new InvalidOperationException("ایستگاه/Agent انتخاب‌شده پیدا نشد.");
+
+        if (customerId.HasValue
+            && !await database.Customers.AnyAsync(item => item.Id == customerId.Value, cancellationToken))
+            throw new InvalidOperationException("مشتری انتخاب‌شده پیدا نشد.");
+
+        if (sessionId.HasValue
+            && !await database.Sessions.AnyAsync(item => item.Id == sessionId.Value, cancellationToken))
+            throw new InvalidOperationException("جلسه انتخاب‌شده پیدا نشد.");
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+        var candidates = await database.AccountPoolEntries
+            .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
+            .OrderBy(item => item.CreatedAt)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+
+        var gameIdText = game.Id.ToString();
+        var candidate = candidates.FirstOrDefault(item =>
+            item.AllowedGameIdsCsv
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
+
+        if (candidate is null)
+            return (null, null);
+
+        var now = DateTimeOffset.UtcNow;
+        var updated = await database.AccountPoolEntries
+            .Where(item => item.Id == candidate.Id && item.Status == AccountPoolStatus.Free && item.IsActive)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Status, AccountPoolStatus.InUse)
+                .SetProperty(item => item.AssignedAgentDeviceId, agentDeviceId)
+                .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+        if (updated != 1)
+            return (null, null);
+
+        var lease = new AccountLease
+        {
+            AccountPoolEntryId = candidate.Id,
+            GameId = game.Id,
+            AgentDeviceId = agentDeviceId,
+            CustomerId = customerId,
+            SessionId = sessionId,
+            LeaseToken = AuthorizationService.CreateToken(),
+            LeasedAt = now,
+            State = AccountLeaseState.Active
+        };
+
+        database.AccountLeases.Add(lease);
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        candidate.Status = AccountPoolStatus.InUse;
+        candidate.AssignedAgentDeviceId = agentDeviceId;
+        return (candidate, lease);
+    }
+
+    public async Task<AccountLease?> ReleaseAsync(Guid leaseId, CancellationToken cancellationToken)
+    {
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+        var lease = await database.AccountLeases
+            .Include(item => item.AccountPoolEntry)
+            .FirstOrDefaultAsync(item => item.Id == leaseId, cancellationToken);
+
+        if (lease is null || lease.State != AccountLeaseState.Active)
+            return null;
+
+        var now = DateTimeOffset.UtcNow;
+        lease.State = AccountLeaseState.Released;
+        lease.ReleasedAt = now;
+        lease.AccountPoolEntry.Status = AccountPoolStatus.Free;
+        lease.AccountPoolEntry.AssignedAgentDeviceId = null;
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return lease;
+    }
+}
