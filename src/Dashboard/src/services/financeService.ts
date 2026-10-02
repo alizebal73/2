@@ -4,7 +4,7 @@ export type FinanceSummary = {
   revenue: number;
   expense: number;
   operatingProfit: number;
-  source: 'server' | 'mock';
+  source: 'server';
 };
 
 export type FinanceExpense = {
@@ -17,15 +17,13 @@ export type FinanceExpense = {
 };
 
 export async function getFinanceSummary(from?: Date, to?: Date): Promise<FinanceSummary> {
-  try {
-    const query = new URLSearchParams();
-    if (from) query.set('from', from.toISOString());
-    if (to) query.set('to', to.toISOString());
-    const response = await fetch('/api/finance/summary?' + query.toString());
-    if (!response.ok) throw new Error('دریافت خلاصه مالی انجام نشد');
-    const row = await response.json() as { from: string; to: string; revenue: number; expense: number; operatingProfit: number; };
-    return { ...row, source: 'server' };
-  }
+  const query = new URLSearchParams();
+  if (from) query.set('from', from.toISOString());
+  if (to) query.set('to', to.toISOString());
+  const response = await fetch('/api/finance/summary?' + query.toString());
+  if (!response.ok) throw new Error('دریافت خلاصه مالی انجام نشد');
+  const row = await response.json() as { from: string; to: string; revenue: number; expense: number; operatingProfit: number; };
+  return { ...row, source: 'server' };
 }
 
 export async function createShiftExpense(
