@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
 import { mockService } from '../services/mockService';
+import { getPermissions, getUsers, setUserPermissions } from '../services/authService';
+import type { AppUserRecord } from '../types';
 import { userErrorMessage } from '../utils/userError';
 import { closeServerShift, getCurrentShift, getShiftHistory, startServerShift } from '../services/shiftService';
 import type { UserRecord } from '../types';
 
-const permissionRows = ['شروع/پایان جلسه','شارژ مستقیم','ثبت بدهی/هدیه','بوفه','مشتریان','گزارش مالی','گزارش کامل','تعرفه‌ها','کاربران','تنظیمات','کنترل کلاینت','Account Pool','تخفیف','بستن شیفت','مدیریت بازی‌ها','پرداخت حقوق','پاداش/کسری','ثبت خسارت'];
-const defaultPermissions: Record<string, boolean[]> = Object.fromEntries(permissionRows.map((name, index) => [name, index < 4 ? [true, true, true] : [true, true, index !== 7 && index !== 8]]));
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(value); }
 
 export function UsersPage() {
   const [users, setUsers] = useState<UserRecord[]>([]);
-  const [permissions, setPermissions] = useState(defaultPermissions);
+  const [serverUsers, setServerUsers] = useState<AppUserRecord[]>([]);
+  const [permissionCatalog, setPermissionCatalog] = useState<Array<{ id: string; name: string; description?: string }>>([]);
+  const [selectedUserId, setSelectedUserId] = useState('');
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [shifts, setShifts] = useState<any[]>([]);
   const [notice, setNotice] = useState('');
@@ -29,9 +32,40 @@ export function UsersPage() {
   const [shiftOpeningCash, setShiftOpeningCash] = useState('0');
 
   async function refresh() {
-    const [userRows, saved] = await Promise.all([mockService.getUsers(), mockService.getPermissions()]);
-    setUsers(userRows);
-    if (!shiftOperator && userRows.length) setShiftOperator(userRows.find(user => user.role === 'operator')?.name ?? userRows[0].name);
+    try {
+      const [serverRows, catalog] = await Promise.all([getUsers(), getPermissions()]);
+      setServerUsers(serverRows);
+      setPermissionCatalog(catalog);
+      const userRows: UserRecord[] = serverRows.map(user => ({
+        id: user.id,
+        name: user.fullName,
+        role: user.role.toLowerCase() === 'owner' ? 'owner' : user.role.toLowerCase() === 'admin' || user.role.toLowerCase() === 'manager' ? 'admin' : 'operator',
+        shift: 'سرور',
+        sales: 0,
+        permissions: user.permissions,
+        payType: 'hourly',
+        hourlyRate: 0,
+        monthlySalary: 0,
+        bonusTotal: 0,
+        deductionTotal: 0,
+        paidSalaryTotal: 0,
+        employeePayable: 0,
+        ownerReceivable: 0,
+        damageTotal: 0,
+        advanceTotal: 0,
+      }));
+      setUsers(userRows);
+      const nextUserId = selectedUserId && serverRows.some(user => user.id === selectedUserId) ? selectedUserId : (serverRows[0]?.id ?? '');
+      setSelectedUserId(nextUserId);
+      const selected = serverRows.find(user => user.id === nextUserId);
+      setSelectedPermissions(selected?.permissions ?? []);
+      if (!shiftOperator && userRows.length) setShiftOperator(userRows.find(user => user.role !== 'owner')?.name ?? userRows[0].name);
+    } catch (error) {
+      setServerUsers([]);
+      setPermissionCatalog([]);
+      setUsers([]);
+      setNotice(userErrorMessage(error, 'کاربران و دسترسی‌ها از سرور دریافت نشدند'));
+    }
 
     try {
       const [serverShift, serverHistory] = await Promise.all([getCurrentShift(), getShiftHistory()]);
@@ -43,14 +77,6 @@ export function UsersPage() {
       setNotice(userErrorMessage(error, 'اطلاعات شیفت از سرور دریافت نشد'));
     }
 
-    const next = { ...defaultPermissions };
-    Object.entries(saved).forEach(([key, value]) => {
-      const split = key.lastIndexOf(':');
-      const name = split >= 0 ? key.slice(0, split) : key;
-      const index = split >= 0 ? Number(key.slice(split + 1)) : -1;
-      if (next[name] && index >= 0) next[name] = next[name].map((item, i) => i === index ? Boolean(value) : item);
-    });
-    setPermissions(next);
   }
   useEffect(() => { void refresh(); }, []);
 
@@ -119,14 +145,25 @@ export function UsersPage() {
   }
 
   async function savePermissions() {
-    const flattened: Record<string, boolean> = {};
-    Object.entries(permissions).forEach(([name, values]) => values.forEach((value, index) => { flattened[name + ':' + index] = value; }));
-    await mockService.savePermissions(flattened);
-    setNotice('ماتریس دسترسی ذخیره شد');
+    if (!selectedUserId) { setNotice('کاربری برای تغییر دسترسی انتخاب نشده است'); return; }
+    try {
+      await setUserPermissions(selectedUserId, selectedPermissions);
+      await refresh();
+      setNotice('دسترسی‌های کاربر روی سرور ذخیره شد');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ذخیره دسترسی‌ها ناموفق بود'));
+    }
   }
 
-  function setPermission(row: string, column: number, checked: boolean) {
-    setPermissions(current => ({ ...current, [row]: current[row].map((value, index) => index === column ? checked : value) }));
+  function selectPermissionUser(id: string) {
+    setSelectedUserId(id);
+    setSelectedPermissions(serverUsers.find(user => user.id === id)?.permissions ?? []);
+  }
+
+  function togglePermission(name: string, checked: boolean) {
+    setSelectedPermissions(current => checked
+      ? Array.from(new Set([...current, name]))
+      : current.filter(item => item !== name));
   }
 
   return <>
@@ -136,7 +173,7 @@ export function UsersPage() {
       {!currentShift && <label className="shift-operator-select">صندوق اولیه<input inputMode="numeric" value={shiftOpeningCash} onChange={event => setShiftOpeningCash(event.target.value)} placeholder="۰" /></label>}
       <button className="btn" onClick={() => void (currentShift ? openCloseShift() : openShift())}>{currentShift ? '🕘 شیفت باز فعلی: ' + currentShift.operator + ' · ' + new Date(currentShift.openedAt).toLocaleTimeString('fa-IR') : '▶ باز کردن شیفت'}</button>
       <button className="btn danger" onClick={() => openCloseShift()} disabled={!currentShift}>بستن شیفت</button>
-      <button className="btn primary" onClick={() => setDraft({ id: crypto.randomUUID(), name: '', role: 'operator', shift: 'عصر', sales: 0, permissions: [], payType: 'hourly', hourlyRate: 0, monthlySalary: 0, overtimeRate: 0, workStart: '16:00', workEnd: '00:00', bonusTotal: 0, deductionTotal: 0 })}>+ کاربر جدید</button>
+      <span className="status-pill free">کاربران و Permission اکنون از Server خوانده می‌شوند</span>
     </div>
     <div className="summary-grid">
       {currentShift && <div className="card-panel shift-adjust-panel" style={{gridColumn:'1 / -1',padding:12}}><strong>تطبیق نقدی خارج از سیستم</strong><small>اگر بخشی از وجه نقد گرفته شده اما در نرم‌افزار ثبت نشده، آن را جدا ثبت کن؛ این مبلغ خودکار از حقوق اپراتور کم نمی‌شود.</small><div className="modal-grid-2"><label>مبلغ نقدی ثبت‌نشده<input inputMode="numeric" value={manualCash} onChange={event => setManualCash(event.target.value)} placeholder="۰" /></label><label>توضیح/شماره رسید<input value={shiftNote} onChange={event => setShiftNote(event.target.value)} placeholder="مثلاً رسید دستی صندوق" /></label></div></div>}
@@ -149,14 +186,21 @@ export function UsersPage() {
     <div className="customer-layout">
       <section className="card-panel" style={{ padding: 14 }}>
         <h3>کاربران سیستم</h3>
-        <div className="bullet-grid">{users.map(user => <div className="user-card" key={user.id}><b>{user.name}</b><div className="meta">نقش: {user.role === 'owner' ? 'صاحب' : user.role === 'admin' ? 'مدیر' : 'اپراتور'}</div><div className="meta">شیفت: {user.shift}</div><div className="meta">فروش: {money(user.sales)} تومان</div><div className="user-pay-summary"><span>{user.payType === 'monthly' ? 'حقوق ماهانه' : 'ساعتی'} · {money(user.payType === 'monthly' ? (user.monthlySalary ?? 0) : (user.hourlyRate ?? 0))} تومان</span><span>پرداخت‌شده {money(user.paidSalaryTotal ?? 0)} · مانده حقوق {money(user.employeePayable ?? 0)}</span><span>طلب مالک {money(user.ownerReceivable ?? 0)} · خسارت {money(user.damageTotal ?? 0)}</span></div><div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{user.permissions.map(permission => <span className="status-pill free" key={permission}>{permission}</span>)}</div><button type="button" className="btn sm" onClick={() => { setDraft({ ...user }); }}>ویرایش / حقوق</button><button type="button" className="btn sm" onClick={() => { setPayUserId(user.id); setPayAmount(''); setPayReason(''); setPayMode('salary'); }}>حقوق/حساب</button></div>)}</div>
+        <div className="bullet-grid">{users.map(user => <div className="user-card" key={user.id}><b>{user.name}</b><div className="meta">نقش: {user.role === 'owner' ? 'صاحب' : user.role === 'admin' ? 'مدیر' : 'اپراتور'}</div><div className="meta">شیفت: {user.shift}</div><div className="meta">فروش: {money(user.sales)} تومان</div><div className="user-pay-summary"><span>{user.payType === 'monthly' ? 'حقوق ماهانه' : 'ساعتی'} · {money(user.payType === 'monthly' ? (user.monthlySalary ?? 0) : (user.hourlyRate ?? 0))} تومان</span><span>پرداخت‌شده {money(user.paidSalaryTotal ?? 0)} · مانده حقوق {money(user.employeePayable ?? 0)}</span><span>طلب مالک {money(user.ownerReceivable ?? 0)} · خسارت {money(user.damageTotal ?? 0)}</span></div><div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{user.permissions.map(permission => <span className="status-pill free" key={permission}>{permission}</span>)}</div><button type="button" className="btn sm" onClick={() => selectPermissionUser(user.id)}>دسترسی‌ها</button><button type="button" className="btn sm" onClick={() => { setPayUserId(user.id); setPayAmount(''); setPayReason(''); setPayMode('salary'); }}>حقوق/حساب</button></div>)}</div>
       </section>
       <section className="card-panel" style={{ padding: 14, overflow: 'auto' }}>
-        <h3>🔐 ماتریس دسترسی‌ها</h3>
-        <table className="data-table"><thead><tr><th>دسترسی</th><th>صاحب</th><th>مدیر</th><th>اپراتور</th></tr></thead><tbody>
-          {permissionRows.map(name => <tr key={name}><td>{name}</td>{[0,1,2].map(column => <td key={column}><input type="checkbox" checked={permissions[name]?.[column] ?? false} disabled={column === 0} onChange={event => setPermission(name,column,event.target.checked)} /></td>)}</tr>)}
-        </tbody></table>
-        <button className="btn primary" onClick={() => void savePermissions()}>💾 ذخیره دسترسی‌ها</button>
+        <h3>🔐 دسترسی سروری کاربر</h3>
+        <label>کاربر<select value={selectedUserId} onChange={event => selectPermissionUser(event.target.value)}>
+          <option value="">انتخاب کاربر</option>
+          {serverUsers.map(user => <option key={user.id} value={user.id}>{user.fullName} · {user.role}</option>)}
+        </select></label>
+        <div className="data-table" style={{display:'grid',gap:8,marginTop:12}}>
+          {permissionCatalog.map(permission => <label key={permission.name} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 10px',borderBottom:'1px solid rgba(255,255,255,.06)'}}>
+            <input type="checkbox" checked={selectedPermissions.includes(permission.name)} disabled={!selectedUserId} onChange={event => togglePermission(permission.name,event.target.checked)} />
+            <span><strong>{permission.name}</strong><small style={{display:'block',opacity:.65}}>{permission.description}</small></span>
+          </label>)}
+        </div>
+        <button className="btn primary" disabled={!selectedUserId} onClick={() => void savePermissions()}>💾 ذخیره دسترسی‌های کاربر</button>
       </section>
     </div>
     <section className="card-panel" style={{ margin:'0 22px 20px', padding:14 }}>
