@@ -270,6 +270,7 @@ public sealed class WalletTransaction : BaseEntity
     public Customer Customer { get; set; } = default!;
     public decimal Amount { get; set; }
     public WalletTransactionType Type { get; set; }
+    public Guid? ReferenceTransactionId { get; set; }
     public string Description { get; set; } = string.Empty;
 }
 
