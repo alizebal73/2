@@ -288,6 +288,7 @@ export type WalletLedgerEntry = {
   description: string;
   createdAt: string;
   balanceAfter: number;
+  referenceTransactionId?: string;
 };
 
 export type PageLockRule = { enabled: boolean; pinHash: string; label: string };
