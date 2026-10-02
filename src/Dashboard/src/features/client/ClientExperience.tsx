@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import './ClientExperience.css';
 import { mockService } from '../../services/mockService';
 import { authenticateCustomer, readCustomerState, releaseCustomerLogin } from '../../services/customerAuthService';
+import { getClientIdentity } from '../../services/clientIdentityService';
 
 type Game = { id: string; name: string; category: string; icon: string; requiresAccount: boolean; description: string };
 type ContextMenu = { x: number; y: number } | null;
@@ -60,14 +61,16 @@ export function ClientExperience() {
   const [activeLoginCount, setActiveLoginCount] = useState(0);
   const [sessionEndAt, setSessionEndAt] = useState<string | null>(null);
   const [sessionState, setSessionState] = useState<string | null>(null);
-  const deviceId = useMemo(() => {
-    const key = 'gamenet-client-device-id';
+  const browserClientKey = useMemo(() => {
+    const key = 'gamenet-client-browser-key';
     const saved = localStorage.getItem(key);
     if (saved) return saved;
     const created = crypto.randomUUID();
     localStorage.setItem(key, created);
     return created;
   }, []);
+  const [deviceId, setDeviceId] = useState(browserClientKey);
+  const [clientIdentityReady, setClientIdentityReady] = useState(false);
   const [wallet, setWallet] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState(3 * 3600 + 45 * 60 + 12);
   const [now, setNow] = useState(Date.now());
@@ -88,6 +91,22 @@ export function ClientExperience() {
   const [myGamesOnly, setMyGamesOnly] = useState(false);
 
   const visibleCommands = useMemo(() => commands.filter(item => item.title.includes(paletteQuery.trim())), [paletteQuery]);
+
+  useEffect(() => {
+    let active = true;
+    void getClientIdentity()
+      .then(identity => {
+        if (!active) return;
+        setDeviceId(identity.deviceId);
+        setClientIdentityReady(true);
+      })
+      .catch(() => {
+        if (active) setClientIdentityReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -186,6 +205,10 @@ export function ClientExperience() {
       setSessionEndAt(null);
       setSessionState(null);
     } else {
+      if (!clientIdentityReady) {
+        setLoginError('در حال شناسایی Agent این رایانه هستیم. چند لحظه بعد دوباره تلاش کنید.');
+        return;
+      }
       const id = customerCode.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))).trim();
       if (!id || !password.trim()) {
         setLoginError('شناسه و رمز عبور مشتری را وارد کنید.');
@@ -288,7 +311,7 @@ export function ClientExperience() {
       {!loggedIn && <span className="client-offline-pill">● {internet ? 'آنلاین' : 'آفلاین / LAN'}</span>}
     </header>
 
-    {!loggedIn ? <main className="client-login-stage"><section className="client-login-panel"><div className="client-login-logo">گ</div><h1>گیم‌نت منیجر</h1><p>برای شروع بازی وارد حساب خود شوید</p><form onSubmit={event => { event.preventDefault(); signIn(); }}><input id="client-login-id" autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} placeholder="کد کاربری — مثلاً ۱۰۵۰" /><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="رمز عبور (برای مهمان خالی بگذار)" /><div className="client-login-error">{loginError}</div><button className="client-login-submit">ورود به سیستم</button></form><button className="client-guest" onClick={() => signIn(true)}>ورود مهمان</button><div className="client-login-separator" /><p className="client-login-footnote">کنترل‌های مدیریتی و آزادسازی سیستم فقط از طریق Agent و Dashboard انجام می‌شوند.</p></section><span className="client-login-foot">شناسه نمونه: ۱۰۵۰ · دسترسی مهمان بدون حساب</span></main> : <>
+    {!loggedIn ? <main className="client-login-stage"><section className="client-login-panel"><div className="client-login-logo">گ</div><h1>گیم‌نت منیجر</h1><p>برای شروع بازی وارد حساب خود شوید</p><form onSubmit={event => { event.preventDefault(); signIn(); }}><input id="client-login-id" autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} placeholder="کد کاربری — مثلاً ۱۰۵۰" /><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="رمز عبور (برای مهمان خالی بگذار)" /><div className="client-login-error">{loginError}</div><button className="client-login-submit" disabled={!clientIdentityReady}>ورود به سیستم</button></form><button className="client-guest" onClick={() => signIn(true)}>ورود مهمان</button><div className="client-login-separator" /><p className="client-login-footnote">کنترل‌های مدیریتی و آزادسازی سیستم فقط از طریق Agent و Dashboard انجام می‌شوند.</p></section><span className="client-login-foot">شناسه نمونه: ۱۰۵۰ · دسترسی مهمان بدون حساب</span></main> : <>
       {sessionLocked ? <main className="client-lock-screen"><div className="client-lock-icon">🔒</div><h1>سیستم قفل است</h1><p>برای ادامه، به اپراتور مراجعه کنید.</p><button className="client-button primary" onClick={() => notify('درخواست بازکردن قفل برای اپراتور ارسال شد')}>درخواست بازگشایی</button></main> : <main className="client-desktop">
         <div className="client-toolbar"><span>{myGamesOnly ? 'بازی‌های من' : 'بازی‌های در دسترس'}</span><div className="client-spacer" /><span className={`client-network ${internet ? '' : 'offline'}`}>● {internet ? 'Online' : 'Offline / LAN'}</span></div>
         <div className={`client-game-grid ${view}`} style={{ '--game-size': `${gameSize}px`, '--game-zoom': zoom / 100 } as React.CSSProperties}>
