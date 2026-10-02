@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { decideApproval, getApprovals, getPermissions, getUsers, hasPermission, setUserPermissions } from '../services/authService';
+import { decideApproval as decideServerApproval, getApprovals, getPermissions, getUsers, hasPermission, setUserPermissions } from '../services/authService';
 import type { AppUserRecord } from '../types';
 import { userErrorMessage } from '../utils/userError';
 import { closeServerShift, getCurrentShift, getShiftHistory, startServerShift } from '../services/shiftService';
@@ -285,9 +285,9 @@ export function UsersPage({ user }: UsersPageProps) {
   async function decideApproval(id: string, approved: boolean) {
     if (!canDecideApproval) return;
     try {
-      await decideApproval(id, approved, approved ? 'تأیید عملیات حقوقی' : 'رد عملیات حقوقی');
+      await decideServerApproval(id, approved, approved ? 'تأیید عملیات' : 'رد عملیات');
       await refresh();
-      setNotice(approved ? 'عملیات حقوقی تأیید و اجرا شد.' : 'عملیات حقوقی رد شد.');
+      setNotice(approved ? 'عملیات تأیید و اجرا شد.' : 'عملیات رد شد.');
     } catch (error) {
       setNotice(userErrorMessage(error, 'تصمیم‌گیری درباره عملیات حقوقی ناموفق بود'));
     }
