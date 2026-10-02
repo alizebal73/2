@@ -260,7 +260,20 @@ jobs:
               if ([int64]$manifestPackage.sizeBytes -ne [int64](Get-Item $env:App__ClientPackagePath).Length) {
                 throw 'Release manifest package size does not match the packaged Client.'
               }
-              if ($manifestPackage.packageUrl -notmatch 'client-package?version=0.7.1
+              if (-not $manifestPackage.packageUrl.EndsWith('client-package?version=0.7.1', [System.StringComparison]::OrdinalIgnoreCase)) {
+                throw "Release manifest package URL is invalid: $($manifestPackage.packageUrl)"
+              }
+
+              $canaryAgents = @(
+                Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession |
+                  Where-Object { $_.name -eq 'CI Agent Stage 8' }
+              )
+              if ($canaryAgents.Count -ne 1) {
+                throw "Canary gate expected exactly one CI Agent target, found $($canaryAgents.Count)."
+              }
+
+              Write-Host ("Stage 10 release manifest + single-agent canary gate passed: package={0}; sha256={1}; size={2}" -f $manifestPackage.version, $manifestPackage.sha256, $manifestPackage.sizeBytes)
+
               $rollbackCommand = $rollbackCommand | ConvertFrom-Json
               $rollbackCompleted = $false
               $rollbackStatus = $null
