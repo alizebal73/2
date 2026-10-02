@@ -123,7 +123,7 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasMaxLength(4000)
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("RequestedAt")
+                    b.Property<DateTimeOffset>("RequestedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid?>("RequestedByAppUserId")
