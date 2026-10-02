@@ -14,6 +14,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<AppUserPermission> AppUserPermissions => Set<AppUserPermission>();
     public DbSet<AppUserSession> AppUserSessions => Set<AppUserSession>();
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
+    public DbSet<EmployeeProfile> EmployeeProfiles => Set<EmployeeProfile>();
+    public DbSet<PayrollLedgerEntry> PayrollLedgerEntries => Set<PayrollLedgerEntry>();
     public DbSet<VipPackage> VipPackages => Set<VipPackage>();
     public DbSet<Game> Games => Set<Game>();
     public DbSet<GameAccount> GameAccounts => Set<GameAccount>();
@@ -71,6 +73,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureAppUserPermission(modelBuilder);
         ConfigureAppUserSession(modelBuilder);
         ConfigureApprovalRequest(modelBuilder);
+        ConfigureEmployeeProfile(modelBuilder);
+        ConfigurePayrollLedgerEntry(modelBuilder);
         ConfigureVipPackage(modelBuilder);
         ConfigureGame(modelBuilder);
         ConfigureGameAccount(modelBuilder);
@@ -258,6 +262,45 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany()
             .HasForeignKey(item => item.DecidedByUserId)
             .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private static void ConfigureEmployeeProfile(ModelBuilder modelBuilder)
+    {
+        var profile = modelBuilder.Entity<EmployeeProfile>();
+        profile.HasKey(item => item.Id);
+        profile.HasIndex(item => item.AppUserId).IsUnique();
+        profile.Property(item => item.Phone).HasMaxLength(20);
+        profile.Property(item => item.PayType).HasMaxLength(20).IsRequired();
+        profile.Property(item => item.HourlyRate).HasColumnType("decimal(18,2)");
+        profile.Property(item => item.MonthlySalary).HasColumnType("decimal(18,2)");
+        profile.Property(item => item.OvertimeRate).HasColumnType("decimal(18,2)");
+        profile.Property(item => item.WorkSchedule).HasMaxLength(120);
+        profile.Property(item => item.Notes).HasMaxLength(500);
+        profile.HasOne(item => item.AppUser)
+            .WithMany()
+            .HasForeignKey(item => item.AppUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigurePayrollLedgerEntry(ModelBuilder modelBuilder)
+    {
+        var entry = modelBuilder.Entity<PayrollLedgerEntry>();
+        entry.HasKey(item => item.Id);
+        entry.HasIndex(item => new { item.EmployeeProfileId, item.Status, item.CreatedAt });
+        entry.HasIndex(item => item.CreatedByUserId);
+        entry.HasIndex(item => item.ApprovedByUserId);
+        entry.Property(item => item.Kind).HasMaxLength(40).IsRequired();
+        entry.Property(item => item.Amount).HasColumnType("decimal(18,2)");
+        entry.Property(item => item.EmployeePayableDelta).HasColumnType("decimal(18,2)");
+        entry.Property(item => item.OwnerReceivableDelta).HasColumnType("decimal(18,2)");
+        entry.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+        entry.Property(item => item.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        entry.Property(item => item.PaymentMethod).HasMaxLength(40);
+        entry.Property(item => item.ReceiptNumber).HasMaxLength(120);
+        entry.HasOne(item => item.EmployeeProfile)
+            .WithMany(item => item.PayrollEntries)
+            .HasForeignKey(item => item.EmployeeProfileId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureVipPackage(ModelBuilder modelBuilder)
