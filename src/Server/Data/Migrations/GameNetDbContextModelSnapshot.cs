@@ -191,6 +191,15 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<bool>("IsVip")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTimeOffset?>("VipActivatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("VipExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("VipPackageId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("NationalId")
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
@@ -231,6 +240,8 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.HasIndex("Username")
                         .IsUnique();
+
+                    b.HasIndex("VipPackageId");
 
                     b.ToTable("Customers");
                 });
@@ -881,8 +892,27 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("DailyMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("Price")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("OverflowRule")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tier")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TotalMinutes")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("TEXT");
