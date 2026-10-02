@@ -4,6 +4,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: gamenet-ci-main
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: [self-hosted, windows, x64]
