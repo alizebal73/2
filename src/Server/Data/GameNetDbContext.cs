@@ -6,6 +6,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
 {
     public DbSet<Station> Stations => Set<Station>();
     public DbSet<AgentDevice> AgentDevices => Set<AgentDevice>();
+    public DbSet<AgentCommand> AgentCommands => Set<AgentCommand>();
     public DbSet<StationType> StationTypes => Set<StationType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
     public DbSet<Customer> Customers => Set<Customer>();
@@ -65,6 +66,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
 
         ConfigureStation(modelBuilder);
         ConfigureAgentDevice(modelBuilder);
+        ConfigureAgentCommand(modelBuilder);
         ConfigureStationType(modelBuilder);
         ConfigureTariff(modelBuilder);
         ConfigureCustomer(modelBuilder);
@@ -122,6 +124,24 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany()
             .HasForeignKey(item => item.StationId)
             .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private static void ConfigureAgentCommand(ModelBuilder modelBuilder)
+    {
+        var command = modelBuilder.Entity<AgentCommand>();
+        command.HasKey(item => item.Id);
+        command.HasIndex(item => item.AgentDeviceId);
+        command.HasIndex(item => item.Status);
+        command.Property(item => item.CommandType).HasMaxLength(80).IsRequired();
+        command.Property(item => item.PayloadJson).HasMaxLength(4000);
+        command.Property(item => item.Status).HasMaxLength(30).IsRequired();
+        command.Property(item => item.ResultMessage).HasMaxLength(500);
+        command.Property(item => item.AgentConnectionId).HasMaxLength(200);
+        command.Property(item => item.RequestedAt).IsRequired();
+        command.HasOne(item => item.AgentDevice)
+            .WithMany()
+            .HasForeignKey(item => item.AgentDeviceId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureStation(ModelBuilder modelBuilder)
