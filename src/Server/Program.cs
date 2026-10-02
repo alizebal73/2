@@ -704,6 +704,74 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
     return Results.Ok(new { id = product.Id, stock = product.StockQuantity });
 })
 .WithName("AdjustBuffetStock");
+ 
+app.MapPut("/api/buffet/products/{productId:guid}", async (
+    Guid productId,
+    UpdateBuffetProductRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var product = await database.Products.FirstOrDefaultAsync(item => item.Id == productId, cancellationToken);
+    if (product is null)
+        return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
+
+    if (string.IsNullOrWhiteSpace(request.Name) || request.UnitPrice < 0 || request.CostPrice < 0)
+        return Results.BadRequest(new { code = "invalid_product", message = "اطلاعات محصول معتبر نیست." });
+
+    product.Name = request.Name.Trim();
+    product.Category = string.IsNullOrWhiteSpace(request.Category) ? "سایر" : request.Category.Trim();
+    product.UnitPrice = request.UnitPrice;
+    product.CostPrice = request.CostPrice;
+    product.IsActive = request.IsActive;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "BuffetProductUpdated",
+        EntityName = "Product",
+        EntityId = product.Id.ToString(),
+        Details = product.Name + " · " + product.UnitPrice.ToString("0.##") + " تومان",
+        AppUserId = request.AppUserId
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new
+    {
+        id = product.Id,
+        name = product.Name,
+        category = product.Category,
+        price = product.UnitPrice,
+        buyPrice = product.CostPrice,
+        stock = product.StockQuantity,
+        active = product.IsActive
+    });
+})
+.WithName("UpdateBuffetProduct");
+
+app.MapGet("/api/buffet/inventory-transactions", async (
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var rows = await database.InventoryTransactions
+        .AsNoTracking()
+        .Include(item => item.Product)
+        .OrderByDescending(item => item.CreatedAt)
+        .Take(200)
+        .Select(item => new
+        {
+            id = item.Id,
+            productId = item.ProductId,
+            productName = item.Product.Name,
+            quantity = item.Quantity,
+            direction = item.Direction.ToString(),
+            notes = item.Notes,
+            createdAt = item.CreatedAt
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(rows);
+})
+.WithName("GetInventoryTransactions");
+
 
 app.MapPost("/api/buffet/sales", async (
     BuffetSaleRequest request,
@@ -2039,6 +2107,7 @@ public sealed record FinanceTransactionDto(Guid Id, DateTimeOffset ClosedAt, str
 public sealed record CustomerDebtRequest(decimal Amount, string? Description, Guid? AppUserId);
 public sealed record CustomerHistoryItemDto(Guid Id, string Type, string Description, decimal Amount, DateTimeOffset CreatedAt, Guid? ReferenceId);
 public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, Guid? AppUserId);
+public sealed record UpdateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, bool IsActive = true, Guid? AppUserId = null);
 public sealed record StockAdjustmentRequest(int Quantity, TransactionDirection Direction, string? Notes, Guid? AppUserId);
 public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
 public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId);
