@@ -60,9 +60,13 @@ jobs:
           }
           if (-not $response) { throw 'Dashboard preview did not start on port 4173.' }
 
+      - name: Install Dashboard browser test dependency
+        shell: pwsh
+        run: npm install --prefix src/Dashboard --no-save --no-package-lock @playwright/test@1.63.0
+
       - name: Dashboard interaction smoke
         shell: pwsh
-        run: npm exec --yes --package=@playwright/test@1.63.0 -- playwright test e2e/dashboard-smoke.cjs --config=e2e/playwright.config.cjs --workers=1
+        run: npx --prefix src/Dashboard playwright test ../../e2e/dashboard-smoke.cjs --config ../../e2e/playwright.config.cjs --workers=1
 
       - name: Stop Dashboard preview
         if: always()
