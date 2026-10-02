@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { mockService } from '../services/mockService';
 import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createShiftExpense } from '../services/financeService';
 import { closeServerShift, getCurrentShift } from '../services/shiftService';
 
