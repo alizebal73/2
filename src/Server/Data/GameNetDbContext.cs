@@ -351,6 +351,23 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         transaction.HasIndex(item => item.ReferenceInvoiceId);
     }
 
+    private static void ConfigureInvoiceReversal(ModelBuilder modelBuilder)
+    {
+        var reversal = modelBuilder.Entity<InvoiceReversal>();
+        reversal.HasKey(item => item.Id);
+        reversal.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+        reversal.Property(item => item.ExternalRefundRequired).IsRequired();
+        reversal.HasIndex(item => item.InvoiceId).IsUnique();
+        reversal.HasOne(item => item.Invoice)
+            .WithMany()
+            .HasForeignKey(item => item.InvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+        reversal.HasOne(item => item.AppUser)
+            .WithMany()
+            .HasForeignKey(item => item.AppUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+
     private static void ConfigureInventoryTransaction(ModelBuilder modelBuilder)
     {
         var transaction = modelBuilder.Entity<InventoryTransaction>();
