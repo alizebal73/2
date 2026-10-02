@@ -608,6 +608,69 @@ app.MapGet("/api/finance/summary", async (
 
 
 
+app.MapGet("/api/finance/transactions", async (
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var start = from ?? DateTimeOffset.UtcNow.Date;
+    var end = to ?? DateTimeOffset.UtcNow;
+
+    var invoices = await database.Invoices
+        .AsNoTracking()
+        .Include(item => item.Items)
+        .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
+        .OrderByDescending(item => item.IssuedAt)
+        .Take(500)
+        .Select(item => new
+        {
+            item.Id,
+            item.IssuedAt,
+            item.TotalAmount,
+            item.Status,
+            Description = item.Items
+                .OrderBy(child => child.Id)
+                .Select(child => child.Description)
+                .FirstOrDefault() ?? "فاکتور"
+        })
+        .ToListAsync(cancellationToken);
+
+    var invoiceIds = invoices.Select(item => item.Id).ToList();
+    var payments = await database.InvoicePayments
+        .AsNoTracking()
+        .Where(item => invoiceIds.Contains(item.InvoiceId))
+        .Select(item => new { item.InvoiceId, item.Method, item.Amount })
+        .ToListAsync(cancellationToken);
+
+    var result = invoices.Select(invoice =>
+    {
+        var parts = payments.Where(item => item.InvoiceId == invoice.Id).ToList();
+        var methods = string.Join(" + ", parts.Select(item => item.Method).Distinct(StringComparer.OrdinalIgnoreCase));
+        var method = methods switch
+        {
+            "" => "unknown",
+            "cash" => "cash",
+            "card" => "card",
+            "wallet" => "wallet",
+            "gift" => "gift",
+            _ => "mixed"
+        };
+
+        return new FinanceTransactionDto(
+            invoice.Id,
+            invoice.IssuedAt,
+            invoice.Description,
+            invoice.TotalAmount,
+            method,
+            invoice.Status.ToString());
+    }).ToList();
+
+    return Results.Ok(result);
+})
+.WithName("GetFinanceTransactions");
+
+
 app.MapGet("/api/shifts/current", async (
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
@@ -1087,6 +1150,7 @@ public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid 
 public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
 public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
 public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, decimal Revenue, decimal Expense, decimal OperatingProfit);
+public sealed record FinanceTransactionDto(Guid Id, DateTimeOffset ClosedAt, string Description, decimal Amount, string Method, string Status);
 
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
 public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
