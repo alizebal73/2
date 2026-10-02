@@ -3965,3 +3965,7 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+.agent-state.locked {
+  font-weight: 700;
+}
