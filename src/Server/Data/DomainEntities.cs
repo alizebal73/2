@@ -89,6 +89,7 @@ public sealed class Customer : BaseEntity
     public int FreeTimeMinutes { get; set; }
     public int ConcurrentLoginLimit { get; set; } = 1;
     public string? Notes { get; set; }
+    public string? PasswordHash { get; set; }
     public ICollection<Session> Sessions { get; set; } = new List<Session>();
     public ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
     public ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
