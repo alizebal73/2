@@ -611,6 +611,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     const change = method === 'cash' ? received - finalTotal : 0;
     if (method === 'cash' && received < finalTotal) { setMessage('مبلغ دریافتی نقدی کمتر از مبلغ قابل دریافت است.'); return; }
     if (method === 'wallet' && (!customer || customer.wallet < finalTotal)) { setMessage('موجودی کیف پول کافی نیست'); return; }
+    if (method === 'gift' && (!customer || customer.giftCredit < finalTotal)) { setMessage('اعتبار رایگان برای این مبلغ کافی نیست'); return; }
     const closedAt = new Date().toISOString();
     setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt }, ...items]);
     addSessionTimeline(activeStation.id, 'settle', 'تسویه جلسه', 'مبلغ نهایی ' + money(finalTotal) + ' تومان · روش پرداخت ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : method === 'wallet' ? 'کیف پول' : 'بدهی') + (change > 0 ? ' · برگشتی ' + money(change) + ' تومان' : ''), finalTotal);
@@ -627,6 +628,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       type: 'time',
       closedAt
     });
+    if (method === 'gift' && customer && finalTotal > 0) {
+      setCustomers(current => current.map(item => item.id === customer.id
+        ? { ...item, giftCredit: item.giftCredit - finalTotal, transactionHistory: ['مصرف اعتبار رایگان · ' + money(finalTotal) + ' تومان', ...(item.transactionHistory ?? [])] }
+        : item));
+    }
     if (method === 'wallet' && customer && finalTotal > 0) {
       try {
         const entry = await recordWalletTransaction(customer.id, { amount: finalTotal, type: 'debit', description: 'تسویه جلسه ' + activeStation.name });
