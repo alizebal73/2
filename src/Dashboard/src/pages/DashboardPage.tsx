@@ -709,6 +709,59 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setMessage(`${money(minutes)} دقیقه به جلسه ${activeStation.name} اضافه شد`);
   }
 
+  function changeSessionRate(station: StationDto, rate: number) {
+    if (!rate || rate <= 0) { setMessage('نرخ جلسه باید بیشتر از صفر باشد'); return; }
+    updateStation(station.id, { sessionRate: Math.round(rate) });
+    addSessionTimeline(station.id, 'note', 'تغییر نرخ جلسه', 'نرخ این جلسه به ' + money(rate) + ' تومان/ساعت تغییر کرد', rate);
+    setMessage('نرخ جلسه به ' + money(rate) + ' تومان/ساعت تغییر کرد');
+  }
+
+  function changeSessionPersons(station: StationDto, persons: number) {
+    const next = station.zone === 'pc' ? 1 : Math.max(1, Math.min(4, persons));
+    updateStation(station.id, { persons: next });
+    addSessionTimeline(station.id, 'note', 'تغییر نفرات', 'تعداد نفرات به ' + money(next) + ' نفر تغییر کرد', next);
+    setMessage('تعداد نفرات جلسه به ' + money(next) + ' نفر تغییر کرد');
+  }
+
+  function transferSession(station: StationDto, targetId: string) {
+    const target = stations.find(item => item.id === targetId);
+    if (!target || target.state !== 'free') { setMessage('ایستگاه مقصد دیگر آزاد نیست'); return; }
+    updateStation(station.id, {
+      state: 'free',
+      startedAt: undefined,
+      sessionMinutes: undefined,
+      sessionRate: undefined,
+      amountSoFar: undefined,
+      customerCode: undefined,
+      persons: undefined,
+      buffetTotal: undefined,
+      sessionCredit: undefined,
+      prepaidEndsAt: undefined,
+      pausedAt: undefined,
+      pausedMinutes: undefined,
+    });
+    updateStation(target.id, {
+      state: station.state,
+      startedAt: station.startedAt,
+      sessionMinutes: station.sessionMinutes,
+      sessionRate: station.sessionRate,
+      amountSoFar: station.amountSoFar,
+      customerCode: station.customerCode,
+      persons: station.zone === 'pc' ? 1 : (station.persons ?? 1),
+      buffetTotal: station.buffetTotal,
+      sessionCredit: station.sessionCredit,
+      prepaidEndsAt: station.prepaidEndsAt,
+      pausedAt: station.pausedAt,
+      pausedMinutes: station.pausedMinutes,
+      network: target.network,
+    });
+    addSessionTimeline(station.id, 'note', 'انتقال جلسه', 'جلسه از ' + station.name + ' به ' + target.name + ' منتقل شد');
+    addSessionTimeline(target.id, 'note', 'دریافت جلسه', 'جلسه از ' + station.name + ' منتقل شد');
+    setSessionCenterStation(target);
+    setActiveStation(target);
+    setMessage('جلسه به ' + target.name + ' منتقل شد');
+  }
+
   async function applyCharge(method: string) {
     const value = number(amount);
     if (!value || !activeStation) { setMessage('مبلغ معتبر وارد کنید'); return; }
