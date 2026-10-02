@@ -114,13 +114,26 @@ public sealed class AgentHub(
             if (!string.IsNullOrWhiteSpace(request.LifecycleState) && ClientLifecycleStates.IsKnown(request.LifecycleState))
             {
                 var lifecycle = request.LifecycleState.Trim();
-                if (!string.Equals(device.LifecycleState, lifecycle, StringComparison.Ordinal))
+                var serverOwnsConnectionState = device.IsOnline;
+
+                if (lifecycle is ClientLifecycleStates.UpdatePending
+                    or ClientLifecycleStates.Updating
+                    or ClientLifecycleStates.Failed)
                 {
-                    device.LifecycleState = lifecycle;
+                    if (!string.Equals(device.LifecycleState, lifecycle, StringComparison.Ordinal))
+                    {
+                        device.LifecycleState = lifecycle;
+                        device.LifecycleStateChangedAt = now;
+                    }
+                }
+                else if (serverOwnsConnectionState
+                    && !string.Equals(device.LifecycleState, ClientLifecycleStates.Running, StringComparison.Ordinal))
+                {
+                    device.LifecycleState = ClientLifecycleStates.Running;
                     device.LifecycleStateChangedAt = now;
                 }
 
-                if (string.Equals(lifecycle, ClientLifecycleStates.Running, StringComparison.Ordinal))
+                if (string.Equals(device.LifecycleState, ClientLifecycleStates.Running, StringComparison.Ordinal))
                     device.LastHealthyAt = now;
             }
 
