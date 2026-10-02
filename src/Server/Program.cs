@@ -2775,17 +2775,8 @@ app.MapPost("/api/shifts/start", async (
     if (openExists)
         return Results.Conflict(new { code = "shift_already_open", message = "یک شیفت دیگر هنوز باز است." });
 
-    AppUser? user = null;
-    if (request.AppUserId is not null && request.AppUserId != Guid.Empty)
-        user = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == request.AppUserId.Value && item.IsActive, cancellationToken);
+    var user = auth.User!;
 
-    if (user is null && !string.IsNullOrWhiteSpace(request.OperatorName))
-        user = await database.AppUsers.FirstOrDefaultAsync(item => item.IsActive && item.FullName == request.OperatorName.Trim(), cancellationToken);
-
-    user ??= await database.AppUsers.FirstOrDefaultAsync(item => item.IsActive, cancellationToken);
-
-    if (user is null)
-        return Results.NotFound(new { code = "operator_not_found", message = "کاربر فعال برای باز کردن شیفت پیدا نشد." });
 
     var shift = new Shift
     {
@@ -3118,7 +3109,7 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
         EntityName = "Session",
         EntityId = session.Id.ToString(),
         Details = "انتقال از " + source.Name + " به " + target.Name,
-        AppUserId = session.AppUserId
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
