@@ -772,8 +772,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       style={style}
       className={`station-card ${station.state} ${view} ${selected ? 'selected' : ''}`}
       draggable={false}
-      onMouseDown={event => {
-        if (event.button !== 0) return;
+      onPointerDown={event => {
+        if (event.button !== 0 || event.target instanceof Element && event.target.closest('button, input, select, textarea, a')) return;
         event.preventDefault();
         event.stopPropagation();
         selectionDragRef.current = {
@@ -804,6 +804,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         else setMessage(station.state === 'reserved' ? 'رزرو ساعت ۱۸:۰۰ — هنوز مشتری وارد نشده' : station.outOfServiceReason ?? 'این دستگاه خارج از سرویس است');
       }}
       onDragStart={event => event.preventDefault()}
+      onSelect={event => event.preventDefault()}
       onDoubleClick={event => {
         event.preventDefault();
         if (station.state === 'busy') open('charge', station);
