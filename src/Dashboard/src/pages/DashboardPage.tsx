@@ -1217,7 +1217,28 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           if (item) setReverseRequest(item);
         }}
       />
-      <main className="dashboard-main" onDragStart={event => event.preventDefault()}>
+      <main
+        className="dashboard-main"
+        onDragStart={event => event.preventDefault()}
+        onMouseDown={event => {
+          if (event.button !== 0) return;
+          if (event.target instanceof Element && event.target.closest('.dashboard-toolbar, [data-station-id], button, input, select, textarea, a')) return;
+          const ctrlKey = event.ctrlKey || event.metaKey;
+          const shiftKey = event.shiftKey;
+          event.preventDefault();
+          window.getSelection()?.removeAllRanges();
+          if (!ctrlKey && !shiftKey) setSelectionAnchorId(null);
+          selectionDragRef.current = {
+            stationId: '',
+            startX: event.clientX,
+            startY: event.clientY,
+            dragging: false,
+            ctrlKey,
+            shiftKey,
+          };
+          selectionRectRef.current = null;
+        }}
+      >
         <div className="toolbar dashboard-toolbar">
           <div className="zone-filter">{Object.entries(zoneLabels).map(([key, label]) => <button key={key} type="button" className={zone === key ? 'active' : ''} onClick={() => setZone(key as ZoneKey)}>{label}</button>)}</div>
           {(zone === 'pc' || zone === 'all') && <label className="pc-group-control">گروه‌بندی PC
