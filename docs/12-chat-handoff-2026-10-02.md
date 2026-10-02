@@ -8,14 +8,15 @@
 - ریپوهای دیگر را برای این پروژه بررسی/ویرایش نکن.
 - محصول: GameNet Manager / GameNet Pro برای مدیریت یک GameNet واقعی، با هدف اجرای پایدار روی 40+ دستگاه.
 - معماری مرجع: Server منبع حقیقت است؛ Dashboard و Client نباید state مالی/عملیاتی مستقل و authoritative داشته باشند.
-- branch فعال: `stage7-users-permissions`
-- head فعلی: `4c283e9698e5cbc6341a4bf527c355b9fb0f0d1b`
-- آخرین commit: `Fix dashboard permission button JSX syntax`
-- PR: #2 — `Stage 7: real operator auth, users, permissions and approvals`
-- PR به `main` باز است و mergeable/clean است.
-- آخرین CI برای head فعلی: Run #555 / workflow id `37025656340` → **success**
+- branch فعال: `stage8-pc-agent-foundation`
+- base merge commit: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
+- branch Stage 8 از merge موفق Stage 7 ساخته شده است؛ head جدید باید قبل از هر تغییر دوباره از GitHub خوانده شود.
+- PR #2 — `Stage 7: real operator auth, users, permissions and approvals` — **merged** در `main`.
+- Merge commit: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`.
+- Stage 8 branch: `stage8-pc-agent-foundation`.
+- CI مبنای بسته‌شدن Stage 7: Run #593 روی head `a7135fe...` → **success**.
 - CI Run #504 که قبلاً در حال اجرا بود مربوط به head قدیمی `6b05f292...` بود؛ مبنای فعلی نیست. مبنای معتبر فعلی Run #555 روی `4c283e...` است.
-- main فعلی قبل از merge Stage 7: `fa68c6e8740f8165789e711e56b2024e76e20921`
+- main پس از merge Stage 7: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
 
 ## 1) قوانین غیرقابل شکستن پروژه
 
@@ -132,7 +133,7 @@
 - Stage 6 merge to main: `fa68c6e8740f8165789e711e56b2024e76e20921`
 
 ### Stage 7 — Users & Permissions
-**مرحله فعلی و هنوز بسته نشده است.**
+**بسته و merge شده است.**
 
 پیاده‌سازی و تست‌شده:
 - AppUser
@@ -168,9 +169,40 @@
   - Admin/Owner retain global server authorization behavior
 - latest head CI #555 is green.
 
-## 4) Stage 7 — موارد باقیمانده که باید اول کامل شوند
+## 4) Stage 7 — وضعیت نهایی
 
-این‌ها نباید بدون تکمیل و تست رها شوند:
+موارد Stage 7 که روی head نهایی پیاده‌سازی و با CI سبز تأیید شدند:
+- Payroll/employee ledger و salary payment/receipt/approval
+- Read/Write Permission hardening در دامنه‌های فعال Server-backed
+- Approval اجرایی Invoice Reverse و Wallet Refund
+- actor identity از Server session
+- generic approval action allowlist
+- multi-cashier stale-write / HTTP 409
+
+Mockهای Accounts/Games/Tariffs/ClientShell عمداً برای Stageهای دارای dependency واقعی نگه داشته شدند.
+
+## 4.5) Stage 8 — PC Agent Foundation
+
+هدف این مرحله ساخت اولین **Vertical Slice واقعی PC** است، نه پرکردن UI با Mock.
+
+ترتیب:
+1. قرارداد هویت Agent و Device Registration در Server/Shared
+2. Heartbeat و Online/Offline state سروری
+3. Health/Telemetry پایه با timestamp و last-seen
+4. اتصال پایدار SignalR با reconnect و تشخیص stale connection
+5. Lock/Unlock و Session Start/End به‌عنوان اولین فرمان‌های واقعی
+6. Timer زنده بر مبنای دادهٔ معتبر Server
+7. قطع/وصل سرور و رفتار امن Offline
+8. تست عملی روی 2–3 PC واقعی، سپس مقیاس‌دادن الگو برای 40+ دستگاه
+
+قواعد Stage 8:
+- Server منبع حقیقت Device/Session state است.
+- Agent اجازه ندارد state مالی/اعتباری را authoritative کند.
+- هر فرمان دارای correlation/idempotency و نتیجهٔ قابل ممیزی باشد.
+- در قطع ارتباط، Agent باید fail-safe باشد و آخرین وضعیت را از live state متمایز کند.
+- هیچ Mock Agent به‌عنوان قابلیت واقعی پذیرفته نمی‌شود.
+
+## 4) Stage 7 — سابقهٔ موارد تکمیل‌شده
 
 1. **Full server-backed payroll/employee ledger and salary payments**
    - پرسنل/حقوق واقعی، نه UI نمایشی.
@@ -315,10 +347,10 @@ Manifest:
 
 ## 10) ترتیب اجرای پیشنهادی از همین نقطه
 
-**اول فقط عقب‌افتادگی Stage 7 را تمام کن.**
+**Stage 7 بسته شده؛ اکنون فقط Stage 8 را اجرا کن.**
 
-گام A:
-- بررسی کد فعلی payroll/employee domain و completion واقعی آن.
+گام A: Stage 8 foundation
+- قرارداد Device/Agent را از Shared تا Server نهایی کن.
 - کامل‌کردن server persistence + APIs + ledger + payments.
 - جایگزینی mock UI مربوط به payroll فقط وقتی backend واقعی حاضر است.
 
@@ -334,7 +366,7 @@ Manifest:
 - CI smoke و E2E جامع Stage 7.
 - فقط پس از Green واقعی، Stage 7 را Done/merge کن.
 
-**بعد از بسته شدن Stage 7 برو Stage 8.**
+**اکنون Stage 8 فعال است.**
 
 Stage 8:
 - PC Agent Foundation
@@ -390,17 +422,16 @@ Stage 8:
 
 در چت جدید این جمله را بده:
 
-«ریپوی فقط `alizebal73/2` را بررسی کن. اول `docs/12-chat-handoff-2026-10-02.md`، `docs/10-product-completion-backlog.md` و `docs/11-update-release-architecture.md` را بخوان، سپس head/PR/CI و فایل‌های واقعی را با آن‌ها تطبیق بده. وضعیت را از فایل‌ها حدس نزن. اول هر عقب‌افتادگی Stage 7 را کامل و تست کن، بعد مسیر Stage 8 را ادامه بده. هیچ موردی را Done حساب نکن مگر واقعاً تست شده باشد.»
+«ریپوی فقط `alizebal73/2` را بررسی کن. اول `docs/12-chat-handoff-2026-10-02.md`، `docs/10-product-completion-backlog.md` و `docs/11-update-release-architecture.md` را بخوان، سپس head/PR/CI و فایل‌های واقعی را با آن‌ها تطبیق بده. وضعیت را از فایل‌ها حدس نزن. Stage 7 را فقط از commit/CI واقعی تطبیق بده؛ سپس مستقیماً Stage 8 را از branch `stage8-pc-agent-foundation` ادامه بده. هیچ موردی را Done حساب نکن مگر واقعاً تست شده باشد.»
 
 ## 14) وضعیت لحظهٔ ثبت این فایل
 
 - تاریخ: 2026-10-02
-- branch: `stage7-users-permissions`
-- head: `4c283e9698e5cbc6341a4bf527c355b9fb0f0d1b`
-- PR #2: open
-- latest head CI: #555 / `37025656340` = success
-- merge to main هنوز انجام نشده است.
-- Stage 7 هنوز کامل/Done اعلام نشده؛ payroll کامل، permission hardening کامل و approvalهای حساس باقی‌مانده باید بررسی/تکمیل/تست شوند.
+- main merge commit بعد از Stage 7: `bc4307f73edb0e535f7a57061aace9dac95e3c1e`
+- PR #2: **merged**
+- Stage 8 branch: `stage8-pc-agent-foundation`
+- Stage 7: **Done و merge شده**؛ CI نهایی سبز است.
+- Stage 8: هنوز کد جدیدی در این branch ثبت نشده و قدم اول باید contract/device foundation باشد.
 
 ## Continuation Update — current Stage 7 head
 
