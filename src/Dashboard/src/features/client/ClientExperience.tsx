@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ClientExperience.css';
+import { mockService } from '../../services/mockService';
 
 type Game = { id: string; name: string; category: string; icon: string; requiresAccount: boolean; description: string };
 type ContextMenu = { x: number; y: number } | null;
