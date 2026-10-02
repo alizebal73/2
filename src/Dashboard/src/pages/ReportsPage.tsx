@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { mockService } from '../services/mockService';
-import { getFinanceSummary } from '../services/financeService';
+import { getFinanceExpenses, getFinanceSummary } from '../services/financeService';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
 function parsePersianDate(value: string): Date | null {
@@ -35,10 +35,19 @@ export function ReportsPage() {
   const [rows, setRows] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [notice, setNotice] = useState('');
-  const [financeSummary, setFinanceSummary] = useState<{ revenue: number; expense: number; operatingProfit: number; source: 'server' | 'mock' } | null>(null);
+  const [financeSummary, setFinanceSummary] = useState<{ revenue: number; expense: number; operatingProfit: number; source: 'server' } | null>(null);
+  const [financeError, setFinanceError] = useState('');
 
   useEffect(() => {
-    void Promise.all([mockService.getReportRows(), mockService.getExpenses(), getFinanceSummary()]).then(([items, costs, finance]) => { setRows(items); setExpenses(costs); setFinanceSummary(finance); });
+    setFinanceError('');
+    void Promise.all([mockService.getReportRows(), getFinanceSummary()])
+      .then(async ([items, finance]) => {
+        setRows(items);
+        setFinanceSummary(finance);
+        const costs = await getFinanceExpenses();
+        setExpenses(costs);
+      })
+      .catch(error => setFinanceError(error instanceof Error ? error.message : 'دریافت اطلاعات مالی انجام نشد'));
     const onRole = (event: Event) => setRole((event as CustomEvent<Role>).detail);
     window.addEventListener('gamenet-role-change', onRole);
     return () => window.removeEventListener('gamenet-role-change', onRole);
