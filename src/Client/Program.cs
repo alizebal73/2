@@ -922,10 +922,6 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
                 failedRollbackState?.PendingRollbackVersion,
                 rollbackVersion,
                 StringComparison.OrdinalIgnoreCase)
-            && string.Equals(
-                failedRollbackState?.PendingCommandType,
-                AgentCommandTypes.Rollback,
-                StringComparison.OrdinalIgnoreCase)
             && !string.Equals(
                 failedRollbackState?.HealthyVersion,
                 rollbackVersion,
