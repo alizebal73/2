@@ -25,6 +25,8 @@ const customers: CustomerRecord[] = [
   { id: 'c4', code: '1051', nationalId: '0076543210', name: 'مهدی جهان', alias: 'Mehdi', mobile: '09120000004', vip: 'gold', wallet: 470000, debt: 0, giftCredit: 25000, discountLevel: 22, packageName: 'Gold VIP', username: 'mehdi.j', lastSeen: 'حال حاضر', status: 'active', hoursUsedToday: 5, dailyHourCap: 4, transactionHistory: ['سقف روزانه تکمیل شد · مازاد نیم‌بها'] },
 ];
 
+const activeCustomerLogins = new Map<string, Set<string>>();
+
 const walletLedger: Record<string, WalletLedgerEntry[]> = {
   c1: [
     { id: 'wl-c1-1', customerId: 'c1', amount: 500000, direction: 'credit', type: 'charge', description: 'شارژ کیف پول', createdAt: new Date(Date.now() - 3 * 86400000).toISOString(), balanceAfter: 500000 },
@@ -165,6 +167,18 @@ const auditLogs: AuditLogRecord[] = [
 ];
 
 export const mockService = {
+  getCustomerLoginState: async (customerId: string, limit = 1) => ({ active: activeCustomerLogins.get(customerId)?.size ?? 0, limit }),
+  acquireCustomerLogin: async (customerId: string, deviceId: string, limit = 1) => {
+    const active = activeCustomerLogins.get(customerId) ?? new Set<string>();
+    if (active.size >= limit && !active.has(deviceId)) return false;
+    active.add(deviceId); activeCustomerLogins.set(customerId, active); return true;
+  },
+  releaseCustomerLogin: async (customerId: string, deviceId: string) => {
+    const active = activeCustomerLogins.get(customerId);
+    if (!active) return;
+    active.delete(deviceId);
+    if (!active.size) activeCustomerLogins.delete(customerId);
+  },
   getStations: async (stations: import('../types').StationDto[]) => stations,
   getManagedStations: async () => [...managedStations],
   saveManagedStation: async (record: StationManagementRecord) => {
