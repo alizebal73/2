@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './ClientExperience.css';
 import { mockService } from '../../services/mockService';
+import { authenticateCustomer, readCustomerState, releaseCustomerLogin } from '../../services/customerAuthService';
 
 type Game = { id: string; name: string; category: string; icon: string; requiresAccount: boolean; description: string };
 type ContextMenu = { x: number; y: number } | null;
@@ -53,8 +54,12 @@ export function ClientExperience() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [customerName, setCustomerName] = useState('مهمان');
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [loginId, setLoginId] = useState<string | null>(null);
   const [loginLimit, setLoginLimit] = useState(1);
   const [activeLoginCount, setActiveLoginCount] = useState(0);
+  const [sessionEndAt, setSessionEndAt] = useState<string | null>(null);
+  const [sessionState, setSessionState] = useState<string | null>(null);
   const deviceId = useMemo(() => {
     const key = 'gamenet-client-device-id';
     const saved = localStorage.getItem(key);
@@ -63,7 +68,7 @@ export function ClientExperience() {
     localStorage.setItem(key, created);
     return created;
   }, []);
-  const wallet = 450000;
+  const [wallet, setWallet] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState(3 * 3600 + 45 * 60 + 12);
   const [now, setNow] = useState(Date.now());
   const [view, setView] = useState<ViewMode>('card');
@@ -102,11 +107,47 @@ export function ClientExperience() {
 
   useEffect(() => {
     const interval = window.setInterval(() => {
-      setNow(Date.now());
-      if (loggedIn && !locked) setRemainingSeconds(value => Math.max(0, value - 1));
+      const currentNow = Date.now();
+      setNow(currentNow);
+      if (loggedIn && sessionEndAt && !locked) {
+        setRemainingSeconds(Math.max(0, Math.ceil((new Date(sessionEndAt).getTime() - currentNow) / 1000)));
+      }
     }, 1000);
     return () => window.clearInterval(interval);
-  }, [loggedIn, locked]);
+  }, [loggedIn, locked, sessionEndAt]);
+
+  useEffect(() => {
+    if (!loggedIn || !customerId || !loginId) return;
+    let active = true;
+
+    const poll = async () => {
+      try {
+        const state = await readCustomerState(customerId, loginId, deviceId);
+        if (!active) return;
+        if (!state.authenticated) {
+          signOut(true);
+          notify('ورود مشتری توسط Agent پایان یافت.');
+          return;
+        }
+        setCustomerName(state.fullName);
+        setWallet(state.balance);
+        setSessionState(state.session?.state ?? null);
+        setSessionEndAt(state.session?.endAt ?? null);
+        if (state.session?.endAt) {
+          setRemainingSeconds(Math.max(0, Math.ceil((new Date(state.session.endAt).getTime() - Date.now()) / 1000)));
+        }
+      } catch {
+        // UI remains usable; next poll retries.
+      }
+    };
+
+    void poll();
+    const interval = window.setInterval(() => { void poll(); }, 2000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [loggedIn, customerId, loginId, deviceId]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -159,36 +200,59 @@ export function ClientExperience() {
     if (guest) {
       if (password.trim()) { setLoginError('برای مهمان رمز را خالی بگذارید'); return; }
       setCustomerName('مهمان');
+      setCustomerId(null);
+      setLoginId(null);
+      setWallet(0);
+      setSessionEndAt(null);
+      setSessionState(null);
     } else {
       const id = customerCode.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))).trim();
-      if (id !== '1050' || password.trim() !== '2020') {
-        setLoginError('در نسخه دمو، شناسه ۱۰۵۰ و رمز ۲۰۲۰ است');
+      if (!id || !password.trim()) {
+        setLoginError('شناسه و رمز عبور مشتری را وارد کنید.');
         return;
       }
-      const state = await mockService.getCustomerLoginState('c1', 1);
-      setLoginLimit(state.limit);
-      setActiveLoginCount(state.active);
-      const acquired = await mockService.acquireCustomerLogin('c1', deviceId, 1);
-      if (!acquired) {
-        setLoginError('این مشتری در حال حاضر به سقف ورود هم‌زمان رسیده است. ابتدا از دستگاه دیگر خارج شوید.');
+
+      try {
+        const result = await authenticateCustomer(id, password, deviceId);
+        setCustomerId(result.customerId);
+        setLoginId(result.loginId);
+        setCustomerName(result.fullName);
+        setWallet(result.balance);
+        setLoginLimit(result.limit);
+        setActiveLoginCount(result.activeCount);
+        setSessionEndAt(null);
+        setSessionState(null);
+      } catch (error) {
+        setLoginError(error instanceof Error ? error.message : 'ورود مشتری انجام نشد.');
         return;
       }
-      setCustomerName('رضا محمدی');
-      setActiveLoginCount(state.active + 1);
     }
+
     setLoginError('');
     setLoggedIn(true);
     setLocked(false);
     setPanel(null);
-    setRemainingSeconds(3 * 3600 + 45 * 60 + 12);
-    notify(guest ? 'ورود مهمان انجام شد' : 'ورود موفق بود');
+    setRemainingSeconds(0);
+    notify(guest ? 'ورود مهمان انجام شد' : 'ورود مشتری از سرور تأیید شد');
   }
 
-  function signOut() {
-    void mockService.releaseCustomerLogin('c1', deviceId);
-    setLoggedIn(false); setActiveGame(null); setLocked(false); setPanel(null);
-    setCustomerCode(''); setPassword('');
-    notify('جلسه مشتری بسته شد و حساب‌ها آزاد شدند');
+  function signOut(skipServerRelease = false) {
+    if (!skipServerRelease && customerId) {
+      void releaseCustomerLogin(customerId, deviceId).catch(() => undefined);
+    }
+    setLoggedIn(false);
+    setActiveGame(null);
+    setLocked(false);
+    setPanel(null);
+    setCustomerCode('');
+    setPassword('');
+    setCustomerId(null);
+    setLoginId(null);
+    setCustomerName('مهمان');
+    setWallet(0);
+    setSessionEndAt(null);
+    setSessionState(null);
+    notify('جلسه مشتری بسته شد و ورود سروری آزاد شد');
   }
 
   function askMessage() {
@@ -240,7 +304,7 @@ export function ClientExperience() {
   return <div className="client-app" dir="rtl" onClick={() => { if (context) setContext(null); }} onContextMenu={event => { if ((event.target as HTMLElement).closest('.client-game-card')) { event.preventDefault(); setContext({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 300) }); } }}>
     <header className="client-topbar">
       <div className="client-logo">گ</div><div className="client-system"><b>PC ۱۲</b> — گیم‌نت منیجر</div><div className="client-spacer" />
-      {loggedIn && <><div className="client-pill balance">👛 مانده: <b>{money(wallet)}</b> ت</div><div className="client-pill"><span className={`client-timer ${timerClass}`}>⏱ {String(hours).padStart(2, '۰')}:{String(minutes).padStart(2, '۰')}:{String(seconds).padStart(2, '۰')}</span></div><div className="client-segment" aria-label="نوع نمایش بازی‌ها">{(['card', 'compact', 'list'] as ViewMode[]).map((mode, index) => <button key={mode} className={view === mode ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(mode)}>{['▦', '▤', '☰'][index]}</button>)}</div><div className="client-zoom"><button onClick={() => setZoom(value => Math.max(70, value - 10))}>−</button><span>{money(zoom)}٪</span><button onClick={() => setZoom(value => Math.min(130, value + 10))}>＋</button></div><button className="client-user-pill" onClick={() => setPanel(panel === 'account' ? null : 'account')}><span className="client-avatar">{customerName.slice(0, 1)}</span>{customerName}</button></>}
+      {loggedIn && <><div className="client-pill balance">👛 مانده: <b>{money(wallet)}</b> ت</div><div className="client-pill"><span className={`client-timer ${timerClass}`}>⏱ {sessionEndAt ? String(hours).padStart(2, '۰') + ':' + String(minutes).padStart(2, '۰') + ':' + String(seconds).padStart(2, '۰') : sessionState === 'Active' ? 'جلسه فعال' : 'در انتظار شروع جلسه'}</span></div><div className="client-segment" aria-label="نوع نمایش بازی‌ها">{(['card', 'compact', 'list'] as ViewMode[]).map((mode, index) => <button key={mode} className={view === mode ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(mode)}>{['▦', '▤', '☰'][index]}</button>)}</div><div className="client-zoom"><button onClick={() => setZoom(value => Math.max(70, value - 10))}>−</button><span>{money(zoom)}٪</span><button onClick={() => setZoom(value => Math.min(130, value + 10))}>＋</button></div><button className="client-user-pill" onClick={() => setPanel(panel === 'account' ? null : 'account')}><span className="client-avatar">{customerName.slice(0, 1)}</span>{customerName}</button></>}
       {!loggedIn && <span className="client-offline-pill">● {internet ? 'آنلاین' : 'آفلاین / LAN'}</span>}
     </header>
 
