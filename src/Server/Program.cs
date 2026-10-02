@@ -334,6 +334,13 @@ app.MapPut("/api/customers/{customerId:guid}", async (
     if (!string.IsNullOrWhiteSpace(nationalId) && await database.Customers.AnyAsync(item => item.Id != customerId && item.NationalId == nationalId, cancellationToken))
         return Results.Conflict(new { code = "duplicate_customer_national_id", message = "این کد ملی قبلاً ثبت شده است." });
 
+    if (vipTier != "none" && customer.VipPackageId is not null)
+    {
+        var assignedPackage = await database.VipPackages.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customer.VipPackageId, cancellationToken);
+        if (assignedPackage is not null && NormalizeVipTier(assignedPackage.Tier) != vipTier)
+            return Results.Conflict(new { code = "vip_tier_package_mismatch", message = "سطح VIP مشتری با پکیج فعال سازگار نیست؛ ابتدا پکیج را اصلاح کنید." });
+    }
+
     customer.FullName = fullName;
     customer.Code = code;
     customer.Username = string.IsNullOrWhiteSpace(username) ? "user" + code : username;
@@ -343,6 +350,12 @@ app.MapPut("/api/customers/{customerId:guid}", async (
     customer.Email = string.IsNullOrWhiteSpace(request.Email) ? null : request.Email.Trim();
     customer.VipTier = vipTier;
     customer.IsVip = vipTier != "none";
+    if (vipTier == "none")
+    {
+        customer.VipPackageId = null;
+        customer.VipActivatedAt = null;
+        customer.VipExpiresAt = null;
+    }
     customer.ConcurrentLoginLimit = Math.Max(1, request.ConcurrentLoginLimit);
     customer.Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim();
 
