@@ -33,6 +33,20 @@ test('dashboard interactions: selection, session center and Persian error UX', a
     ],
   };
 
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-admin',
+      fullName: 'مدیر تست',
+      userName: 'admin',
+      email: 'admin@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['user.manage', 'session.start', 'session.manage', 'session.settle', 'buffet.sell', 'buffet.inventory', 'finance.view', 'shift.manage', 'approval.decide']
+    })
+  }));
   await page.route('**/api/dashboard', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -73,6 +87,19 @@ test('dashboard interactions: selection, session center and Persian error UX', a
 test('dashboard shows actionable Persian error UX', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-admin',
+      fullName: 'مدیر تست',
+      userName: 'admin',
+      email: 'admin@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      permissions: ['user.manage', 'session.start', 'session.manage', 'session.settle', 'buffet.sell', 'buffet.inventory', 'finance.view', 'shift.manage', 'approval.decide']
+    })
+  }));
   await page.route('**/api/dashboard', route => route.fulfill({ status: 500, contentType: 'application/json', body: '{}' }));
   await page.route('**/hubs/**', route => route.abort());
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
