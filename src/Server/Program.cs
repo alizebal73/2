@@ -52,16 +52,53 @@ app.MapGet("/api/dashboard", async (GameNetDbContext database, CancellationToken
         .AsNoTracking()
         .OrderBy(station => station.Zone)
         .ThenBy(station => station.Name)
-        .Select(station => new StationDto(
+        .ToListAsync(cancellationToken);
+
+    var activeSessions = await database.Sessions
+        .AsNoTracking()
+        .Where(session => session.State == SessionState.Active)
+        .Select(session => new
+        {
+            session.StationId,
+            CustomerUsername = session.Customer.Username,
+            CustomerFullName = session.Customer.FullName,
+            CustomerNote = session.Customer.Notes,
+            CustomerDebt = database.Invoices
+                .Where(invoice => invoice.CustomerId == session.CustomerId && invoice.Status == InvoiceStatus.Draft)
+                .Select(invoice => (decimal?)invoice.TotalAmount)
+                .Sum() ?? 0m,
+            session.EndAt
+        })
+        .ToListAsync(cancellationToken);
+
+    var activeByStation = activeSessions
+        .GroupBy(item => item.StationId)
+        .ToDictionary(group => group.Key, group => group.OrderByDescending(item => item.EndAt).First());
+
+    var now = DateTimeOffset.UtcNow;
+    var dtos = stations.Select(station =>
+    {
+        activeByStation.TryGetValue(station.Id, out var active);
+        var remaining = active?.EndAt is null
+            ? null
+            : Math.Max(0, (int)Math.Ceiling((active.EndAt.Value - now).TotalMinutes));
+
+        return new StationDto(
             station.Id,
             station.Name,
             station.Zone,
             station.Type,
             (long)station.RatePerHour,
-            station.State.ToString()))
-        .ToListAsync(cancellationToken);
+            station.State.ToString(),
+            active?.CustomerUsername,
+            active?.CustomerFullName,
+            active?.CustomerDebt ?? 0m,
+            active?.CustomerNote,
+            remaining,
+            null);
+    }).ToList();
 
-    return Results.Ok(new DashboardSnapshotDto(stations.Count, stations, DateTimeOffset.UtcNow));
+    return Results.Ok(new DashboardSnapshotDto(dtos.Count, dtos, now));
 })
 .WithName("GetDashboardSnapshot");
 
