@@ -39,3 +39,30 @@ public sealed record UpdateCustomerRequest(
     string VipTier,
     int ConcurrentLoginLimit,
     string? Notes);
+
+
+public sealed record VipPackageDto(
+    Guid Id,
+    string Name,
+    string Tier,
+    decimal Price,
+    int DurationDays,
+    int DailyMinutes,
+    int TotalMinutes,
+    decimal DiscountPercent,
+    string OverflowRule,
+    string? Description,
+    bool IsActive);
+
+public sealed record CreateVipPackageRequest(
+    string Name,
+    string Tier,
+    decimal Price,
+    int DurationDays,
+    int DailyMinutes,
+    int TotalMinutes,
+    decimal DiscountPercent,
+    string OverflowRule,
+    string? Description);
+
+public sealed record AssignVipPackageRequest(Guid VipPackageId);
