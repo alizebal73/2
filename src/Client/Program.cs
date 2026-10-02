@@ -959,6 +959,7 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
             "Rollback و نسخه جایگزین هر دو در تأیید سلامت شکست خوردند.",
             cancellation.Token);
         return 3;
+    }
     catch
     {
         TryTerminateProcess(child);
