@@ -80,6 +80,10 @@ public sealed class Customer : BaseEntity
     public string? Email { get; set; }
     public bool IsVip { get; set; }
     public string VipTier { get; set; } = "none";
+    public Guid? VipPackageId { get; set; }
+    public VipPackage? VipPackage { get; set; }
+    public DateTimeOffset? VipActivatedAt { get; set; }
+    public DateTimeOffset? VipExpiresAt { get; set; }
     public decimal Balance { get; set; }
     public decimal FreeMoney { get; set; }
     public int FreeTimeMinutes { get; set; }
@@ -168,10 +172,16 @@ public sealed class AppUserPermission
 public sealed class VipPackage : BaseEntity
 {
     public required string Name { get; set; }
+    public string Tier { get; set; } = "custom";
     public decimal Price { get; set; }
     public int DurationDays { get; set; }
+    public int DailyMinutes { get; set; }
+    public int TotalMinutes { get; set; }
+    public decimal DiscountPercent { get; set; }
+    public string OverflowRule { get; set; } = "half-hourly";
     public string? Description { get; set; }
     public bool IsActive { get; set; } = true;
+    public ICollection<Customer> Customers { get; set; } = new List<Customer>();
 }
 
 public sealed class Game : BaseEntity
