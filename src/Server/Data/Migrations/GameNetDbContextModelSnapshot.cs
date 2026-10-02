@@ -26,6 +26,10 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Code")
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(120)
@@ -191,15 +195,25 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Username")
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Code")
+                        .IsUnique();
+
                     b.HasIndex("Email")
                         .IsUnique();
 
                     b.HasIndex("Phone")
+                        .IsUnique();
+
+                    b.HasIndex("Username")
                         .IsUnique();
 
                     b.ToTable("Customers");
