@@ -231,7 +231,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     detail: item.detail,
     createdAt: item.createdAt,
     kind: item.kind,
-  })), [sessionTimeline, stations]);
+    canReverse: isReversibleTimelineEvent(item),
+  })), [sessionTimeline, stations, isReversibleTimelineEvent]);
 
   function focusAttentionItem(item: AttentionItem) {
     setZone(item.station.zone as ZoneKey);
@@ -698,6 +699,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         onAttention={id => {
           const item = attentionItems.find(row => row.id === id);
           if (item) focusAttentionItem(item);
+        }}
+        onReverse={id => {
+          const item = sessionTimeline.find(row => row.id === id);
+          if (item) setReverseRequest(item);
         }}
       />
       <main className="dashboard-main">
