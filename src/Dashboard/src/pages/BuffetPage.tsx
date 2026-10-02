@@ -61,6 +61,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
   }
 
   async function purchaseProduct(product: ProductRecord) {
+    if (!canManageInventory) { setNotice('دسترسی مدیریت موجودی ندارید'); return; }
     const quantity = numberValue(window.prompt('تعداد خرید', '1') ?? '');
     if (quantity <= 0) { setNotice('تعداد خرید معتبر نیست'); return; }
     const unitCost = numberValue(window.prompt('بهای خرید هر واحد (تومان)', String(product.buyPrice)) ?? '');
@@ -78,6 +79,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
   }
 
   async function adjustStock(product: ProductRecord, direction: 'in' | 'out', kind: 'Adjustment' | 'Waste' | 'Return' = 'Adjustment', notesOverride?: string) {
+    if (!canManageInventory) { setNotice('دسترسی مدیریت موجودی ندارید'); return; }
     setBusy(true);
     try {
       const result = await adjustServerStock(product.id, 1, direction, notesOverride ?? (direction === 'in' ? 'ورود بوفه' : 'خروج دستی بوفه'), kind);
