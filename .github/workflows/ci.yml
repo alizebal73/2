@@ -433,7 +433,7 @@ jobs:
                 if ($sessionAgentProcess.HasExited) { break }
                 if (Test-Path $sessionAgentStdout) {
                   $log = Get-Content $sessionAgentStdout -Raw
-                  if ($log -match 'Agent session end موفق؛ SessionId=([0-9a-fA-F-]+)') {
+                  if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
                     $endedSessionId = $Matches[1]
                     $sessionFlowCompleted = $true
                     break
