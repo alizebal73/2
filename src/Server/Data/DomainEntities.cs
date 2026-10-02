@@ -74,9 +74,12 @@ public sealed class Customer : BaseEntity
     public required string FullName { get; set; }
     public string? Code { get; set; }
     public string? Username { get; set; }
+    public string? Alias { get; set; }
+    public string? NationalId { get; set; }
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public bool IsVip { get; set; }
+    public string VipTier { get; set; } = "none";
     public decimal Balance { get; set; }
     public decimal FreeMoney { get; set; }
     public int FreeTimeMinutes { get; set; }
