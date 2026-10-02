@@ -33,18 +33,23 @@ public sealed class AgentPresenceMonitor(
                 var cutoff = now.AddSeconds(-offlineAfter);
                 var commandCutoff = now.AddSeconds(-commandTimeoutSeconds);
 
-                var staleDevices = await database.AgentDevices
+                var onlineDevices = await database.AgentDevices
                     .Where(item => item.IsActive
                         && item.IsOnline
-                        && item.LastSeenAt.HasValue
-                        && item.LastSeenAt.Value < cutoff)
+                        && item.LastSeenAt.HasValue)
                     .ToListAsync(stoppingToken);
 
-                var timedOutCommands = await database.AgentCommands
-                    .Where(command =>
-                        (command.Status == "Pending" || command.Status == "Sent")
-                        && (command.SentAt ?? command.RequestedAt) < commandCutoff)
+                var staleDevices = onlineDevices
+                    .Where(item => item.LastSeenAt!.Value < cutoff)
+                    .ToList();
+
+                var pendingCommands = await database.AgentCommands
+                    .Where(command => command.Status == "Pending" || command.Status == "Sent")
                     .ToListAsync(stoppingToken);
+
+                var timedOutCommands = pendingCommands
+                    .Where(command => (command.SentAt ?? command.RequestedAt) < commandCutoff)
+                    .ToList();
 
                 if (staleDevices.Count > 0)
                 {
