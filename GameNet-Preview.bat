@@ -121,8 +121,8 @@ if not exist "%PREVIEW%\src\Dashboard\node_modules" (
 )
 
 echo [5/5] Starting Server and Dashboard...
-start "GameNet Server" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Server"" && "%DOTNET_EXE%" run --project ""%PREVIEW%\src\Server\GameNetManager.Server.csproj"""
-start "GameNet Dashboard" "%ComSpec%" /k "cd /d ""%PREVIEW%\src\Dashboard"" && "%NPM_EXE%" run dev -- --host 0.0.0.0"
+start "GameNet Server" /D "%PREVIEW%\src\Server" "%DOTNET_EXE%" run --project "%PREVIEW%\src\Server\GameNetManager.Server.csproj"
+start "GameNet Dashboard" /D "%PREVIEW%\src\Dashboard" "%NPM_EXE%" run dev -- --host 0.0.0.0
 
 echo Waiting for Dashboard and Server...
 "%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ok=$false; 1..60 | %% { if (Test-NetConnection 127.0.0.1 -Port 5173 -InformationLevel Quiet) { $ok=$true; break }; Start-Sleep -Milliseconds 500 }; if (-not $ok) { exit 1 }"
