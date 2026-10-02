@@ -7,6 +7,9 @@ type ProductDto = {
   price: number;
   buyPrice: number;
   stock: number;
+  minimumStock: number;
+  unit: string;
+  lowStock: boolean;
   active: boolean;
 };
 
@@ -23,7 +26,10 @@ function mapProduct(row: ProductDto): ProductRecord {
     price: row.price,
     buyPrice: row.buyPrice,
     stock: row.stock,
-    maxStock: Math.max(row.stock, 10),
+    minimumStock: row.minimumStock,
+    unit: row.unit,
+    lowStock: row.lowStock,
+    maxStock: Math.max(row.stock, row.minimumStock * 3, 10),
   };
 }
 
@@ -39,6 +45,8 @@ export async function createServerProduct(input: {
   price: number;
   buyPrice: number;
   initialStock: number;
+  minimumStock: number;
+  unit: string;
 }) {
   const response = await fetch('/api/buffet/products', {
     method: 'POST',
@@ -49,13 +57,15 @@ export async function createServerProduct(input: {
       unitPrice: input.price,
       costPrice: input.buyPrice,
       initialStock: input.initialStock,
+      minimumStock: input.minimumStock,
+      unit: input.unit,
     }),
   });
   if (!response.ok) throw new Error(await readError(response, 'ثبت محصول انجام نشد'));
   return mapProduct(await response.json() as ProductDto);
 }
 
-export async function adjustServerStock(productId: string, quantity: number, direction: 'in' | 'out', notes: string) {
+export async function adjustServerStock(productId: string, quantity: number, direction: 'in' | 'out', notes: string, kind: 'Adjustment' | 'Purchase' | 'Sale' | 'Waste' | 'Return' = 'Adjustment') {
   const response = await fetch('/api/buffet/products/' + productId + '/stock', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -63,10 +73,11 @@ export async function adjustServerStock(productId: string, quantity: number, dir
       quantity,
       direction,
       notes,
+      kind,
     }),
   });
   if (!response.ok) throw new Error(await readError(response, 'اصلاح موجودی انجام نشد'));
-  return await response.json() as { id: string; stock: number };
+  return await response.json() as { id: string; stock: number; lowStock: boolean; kind: string };
 }
 
 export async function recordServerBuffetSale(items: Array<{ productId: string; quantity: number }>, target: 'session' | 'standalone') {
@@ -85,6 +96,8 @@ export async function updateServerProduct(productId: string, input: {
   category: string;
   price: number;
   buyPrice: number;
+  minimumStock: number;
+  unit: string;
   active: boolean;
 }) {
   const response = await fetch('/api/buffet/products/' + productId, {
@@ -95,6 +108,8 @@ export async function updateServerProduct(productId: string, input: {
       category: input.category,
       unitPrice: input.price,
       costPrice: input.buyPrice,
+      minimumStock: input.minimumStock,
+      unit: input.unit,
       isActive: input.active,
     }),
   });
