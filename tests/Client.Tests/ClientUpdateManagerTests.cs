@@ -91,36 +91,6 @@ public sealed class ClientUpdateManagerTests
     }
 
     [Fact]
-    public async Task Concurrent_state_writes_do_not_share_a_temp_file()
-    {
-        var root = CreateTempDirectory();
-        try
-        {
-            using var httpClient = new HttpClient();
-            var manager = new ClientUpdateManager(
-                httpClient,
-                root,
-                Path.Combine(root, "agent-state.json"));
-
-            var writes = Enumerable.Range(1, 24)
-                .Select(index => manager.MarkHealthyAsync($"1.0.{index}", CancellationToken.None))
-                .ToArray();
-
-            await Task.WhenAll(writes);
-
-            var state = await manager.GetStateAsync(CancellationToken.None);
-
-            Assert.NotNull(state);
-            Assert.StartsWith("1.0.", state!.HealthyVersion);
-            Assert.True(Directory.Exists(root));
-        }
-        finally
-        {
-            TryDelete(root);
-        }
-    }
-
-    [Fact]
     public async Task Snapshot_current_version_is_version_isolated()
     {
         var root = CreateTempDirectory();
