@@ -305,6 +305,64 @@ jobs:
 
               Write-Host ("Stage 9 Agent lock/unlock smoke passed: agentId={0}" -f $secondRow.agentId)
 
+              $policy = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/policy" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                kioskEnabled = $true
+                lockOnDisconnect = $true
+              } | ConvertTo-Json)
+              if (-not $policy.kioskEnabled -or -not $policy.lockOnDisconnect) {
+                throw 'Agent kiosk policy did not persist enabled safety settings.'
+              }
+
+              $policyRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $policyRow = @($policyRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if (-not $policyRow.kioskEnabled -or -not $policyRow.lockOnDisconnect) {
+                throw 'Agent status API did not expose persisted kiosk policy.'
+              }
+
+              $logoutLockCommand = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'logout-lock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($logoutLockCommand.status -ne 'Sent') {
+                throw 'Agent logout-lock command was not accepted for dispatch.'
+              }
+
+              $logoutLockStatus = $null
+              for ($i = 0; $i -lt 20; $i++) {
+                $logoutLockStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($logoutLockCommand.commandId)" -Method Get -WebSession $adminSession
+                if ($logoutLockStatus.status -in @('Succeeded', 'Failed')) { break }
+                Start-Sleep -Milliseconds 500
+              }
+              if ($logoutLockStatus.status -ne 'Succeeded') {
+                throw 'Agent logout-lock command did not complete successfully.'
+              }
+
+              $logoutLockRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+              $logoutLockRow = @($logoutLockRows | Where-Object { $_.agentId -eq $secondRow.agentId })[0]
+              if (-not $logoutLockRow.isLocked) {
+                throw 'Agent logout-lock acknowledgement did not persist IsLocked=true.'
+              }
+
+              $unlockAfterLogoutLock = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/commands" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                commandType = 'unlock'
+                payloadJson = $null
+              } | ConvertTo-Json)
+              if ($unlockAfterLogoutLock.status -ne 'Sent') { throw 'Agent unlock after logout-lock was not accepted.' }
+
+              for ($i = 0; $i -lt 20; $i++) {
+                $unlockAfterLogoutStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($unlockAfterLogoutLock.commandId)" -Method Get -WebSession $adminSession
+                if ($unlockAfterLogoutStatus.status -in @('Succeeded', 'Failed')) { break }
+                Start-Sleep -Milliseconds 500
+              }
+              if ($unlockAfterLogoutStatus.status -ne 'Succeeded') { throw 'Agent unlock after logout-lock did not complete.' }
+
+              Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($secondRow.agentId)/policy" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                kioskEnabled = $false
+                lockOnDisconnect = $false
+              } | ConvertTo-Json) | Out-Null
+
+              Write-Host ("Stage 9 Agent kiosk policy and logout-lock smoke passed: agentId={0}" -f $secondRow.agentId)
+
               $multiProcesses = @()
               try {
                 $multiAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-multi-agent'
