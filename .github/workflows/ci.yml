@@ -273,6 +273,18 @@ jobs:
                 Start-Sleep -Seconds 1
               }
               if (-not $rollbackReady) {
+                Write-Host '--- Agent stdout after rollback failure ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr after rollback failure ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                Write-Host '--- Persisted Agent state after rollback failure ---'
+                $agentStatePath = Join-Path $agentData 'agent-state.json'
+                if (Test-Path $agentStatePath) { Get-Content $agentStatePath }
+                Write-Host '--- Update state after rollback failure ---'
+                $updateStatePath = Join-Path $agentData 'update-active.json'
+                if (Test-Path $updateStatePath) { Get-Content $updateStatePath }
+                Write-Host '--- Server Agent row after rollback failure ---'
+                if ($rolledBackAgent) { $rolledBackAgent | ConvertTo-Json -Depth 5 }
                 throw "Stage 10 rollback did not restore the previous healthy version. Current=$($rolledBackAgent | ConvertTo-Json -Depth 5 -Compress)"
               }
 
