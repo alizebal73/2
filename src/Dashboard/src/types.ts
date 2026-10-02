@@ -41,7 +41,9 @@ export type StationDto = {
   customerFullName?: string;
   customerDebt?: number;
   customerNote?: string;
+  agentId?: string | null;
   agentOnline?: boolean;
+  agentLocked?: boolean;
   agentLastSeenAt?: string | null;
   agentVersion?: string | null;
   sessionStartedAt?: string | null;
@@ -86,6 +88,7 @@ export type AgentStatusDto = {
   stationId?: string | null;
   stationName?: string | null;
   isOnline: boolean;
+  isLocked: boolean;
   lastSeenAt?: string | null;
   connectedAt?: string | null;
   agentVersion?: string | null;
@@ -93,6 +96,18 @@ export type AgentStatusDto = {
   cpuUsagePercent?: number | null;
   memoryAvailableBytes?: number | null;
   uptimeSeconds?: number | null;
+};
+
+export type AgentCommandStatusDto = {
+  commandId: string;
+  agentDeviceId: string;
+  commandType: string;
+  status: string;
+  requestedAt: string;
+  sentAt?: string | null;
+  completedAt?: string | null;
+  succeeded?: boolean | null;
+  resultMessage?: string | null;
 };
 
 export type ServerInfoDto = {

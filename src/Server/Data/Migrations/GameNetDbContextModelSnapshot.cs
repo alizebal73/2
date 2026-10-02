@@ -53,6 +53,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsLocked")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsOnline")
                         .HasColumnType("INTEGER");
 

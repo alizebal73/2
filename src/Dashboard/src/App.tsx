@@ -252,7 +252,9 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
         return agent
           ? {
               ...station,
+              agentId: agent.agentId,
               agentOnline: agent.isOnline,
+              agentLocked: agent.isLocked,
               agentLastSeenAt: agent.lastSeenAt ?? null,
               agentVersion: agent.agentVersion ?? null,
             }
