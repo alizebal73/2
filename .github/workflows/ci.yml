@@ -154,14 +154,14 @@ jobs:
             Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorSession | Out-Null
 
 
-            $customers = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Get
+            $customers = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Get -WebSession $adminSession
             if (@($customers).Count -lt 1) { throw 'Customer API returned no seeded customers.' }
 
-            $packages = Invoke-RestMethod -Uri "$baseUrl/api/vip-packages" -Method Get
+            $packages = Invoke-RestMethod -Uri "$baseUrl/api/vip-packages" -Method Get -WebSession $adminSession
             if (@($packages).Count -lt 1) { throw 'VIP package API returned no active packages.' }
 
             $smokeId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
-            $newCustomer = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Post -ContentType 'application/json' -Body (@{
+            $newCustomer = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               fullName = "Stage 5 Smoke $smokeId"
               username = "smoke_$smokeId"
               vipTier = 'none'
@@ -172,7 +172,7 @@ jobs:
             $customerId = $newCustomer.id
             if (-not $customerId) { throw 'Customer create smoke did not return an id.' }
 
-            $updatedCustomer = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId") -Method Put -ContentType 'application/json' -Body (@{
+            $updatedCustomer = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId") -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
               fullName = "Stage 5 Smoke Updated $smokeId"
               code = $newCustomer.code
               username = $newCustomer.username
@@ -185,7 +185,7 @@ jobs:
             }
 
             $packageId = @($packages)[0].id
-            $assignment = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-package") -Method Post -ContentType 'application/json' -Body (@{
+            $assignment = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-package") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               vipPackageId = $packageId
             } | ConvertTo-Json)
 
@@ -195,12 +195,12 @@ jobs:
               throw 'VIP package assignment smoke returned incomplete data.'
             }
 
-            $usageBefore = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get
+            $usageBefore = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get -WebSession $adminSession
             if (-not $usageBefore.active -or [int]$usageBefore.usedTodayMinutes -ne 0 -or [int]$usageBefore.usedTotalMinutes -ne 0) {
               throw 'Initial VIP usage smoke returned unexpected values.'
             }
 
-            $dashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get
+            $dashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
             $availableStation = @($dashboard.stations | Where-Object { $_.state -eq 'Available' }) | Select-Object -First 1
             if (-not $availableStation) { throw 'No available station was found for VIP usage smoke.' }
 
@@ -213,7 +213,7 @@ jobs:
 
             Start-Sleep -Milliseconds 1200
 
-            $usageAfterSession = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get
+            $usageAfterSession = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get -WebSession $adminSession
             if ([int]$usageAfterSession.usedTotalMinutes -lt 1 -or [int]$usageAfterSession.usedTodayMinutes -lt 1) {
               throw 'VIP usage did not account for the active session.'
             }
@@ -221,7 +221,7 @@ jobs:
               throw 'VIP remaining minutes did not decrease after the session started.'
             }
 
-            $history = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/history") -Method Get
+            $history = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/history") -Method Get -WebSession $adminSession
             if (-not @($history | Where-Object { $_.type -eq 'session' -and $_.referenceId -eq $startedSession.sessionId })) {
               throw 'Customer history did not include the newly started session.'
             }
@@ -250,22 +250,22 @@ jobs:
             if (-not $auth.authenticated) { throw 'Customer credential authentication failed.' }
             Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'credential-smoke' } | ConvertTo-Json) | Out-Null
 
-            $debt = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debt") -Method Post -ContentType 'application/json' -Body (@{
+            $debt = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debt") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               amount = 55000
               description = 'Stage 5 debt smoke'
             } | ConvertTo-Json)
-            $debts = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debts") -Method Get
+            $debts = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debts") -Method Get -WebSession $adminSession
             if (@($debts).Count -ne 1 -or [int]@($debts)[0].amount -ne 55000) { throw 'Customer debt listing smoke failed.' }
-            $settled = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debts/$($debt.invoiceId)/settle") -Method Post -ContentType 'application/json' -Body (@{
+            $settled = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debts/$($debt.invoiceId)/settle") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               method = 'cash'
             } | ConvertTo-Json)
             if ([int]$settled.debtRemaining -ne 0) { throw 'Customer debt settlement smoke failed.' }
 
-            $inventoryProducts = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
+            $inventoryProducts = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get -WebSession $adminSession
             if (@($inventoryProducts).Count -lt 1) { throw 'Buffet product API returned no products.' }
 
             $inventoryId = [Guid]::NewGuid().ToString('N').Substring(0, 8)
-            $inventoryProduct = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Post -ContentType 'application/json' -Body (@{
+            $inventoryProduct = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               name = "Stage 6 Smoke $inventoryId"
               category = 'تنقلات'
               unitPrice = 25000
@@ -310,7 +310,7 @@ jobs:
             } | ConvertTo-Json)
             if ([int]$sale.total -ne 100000) { throw 'Buffet sale total smoke failed.' }
 
-            $inventoryAfterSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
+            $inventoryAfterSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get -WebSession $adminSession
             $soldProduct = @($inventoryAfterSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
             if ([int]$soldProduct.stock -ne 2 -or -not $soldProduct.lowStock) { throw 'Buffet sale did not reduce server stock or low-stock state correctly.' }
 
@@ -325,21 +325,21 @@ jobs:
               if ($status -ne 409) { throw }
             }
 
-            $inventoryAfterRejectedSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
+            $inventoryAfterRejectedSale = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get -WebSession $adminSession
             $unchangedProduct = @($inventoryAfterRejectedSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
             if ([int]$unchangedProduct.stock -ne 2 -or -not $unchangedProduct.lowStock) { throw 'Rejected buffet sale changed server stock.' }
 
-            $profit = Invoke-RestMethod -Uri "$baseUrl/api/buffet/reports/profit" -Method Get
+            $profit = Invoke-RestMethod -Uri "$baseUrl/api/buffet/reports/profit" -Method Get -WebSession $adminSession
             if ([int]$profit.totals.salesRevenue -ne 100000 -or [int]$profit.totals.purchaseCost -ne 10000 -or [decimal]$profit.totals.grossProfit -le 50000) {
               throw 'Buffet profit report smoke failed.'
             }
 
-            $inventoryHistory = Invoke-RestMethod -Uri "$baseUrl/api/buffet/inventory-transactions" -Method Get
+            $inventoryHistory = Invoke-RestMethod -Uri "$baseUrl/api/buffet/inventory-transactions" -Method Get -WebSession $adminSession
             if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Waste' })) { throw 'Inventory history did not contain waste movement.' }
             if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Return' })) { throw 'Inventory history did not contain return movement.' }
             if (-not @($inventoryHistory | Where-Object { $_.productId -eq $inventoryProduct.id -and $_.kind -eq 'Sale' })) { throw 'Inventory history did not contain sale movement.' }
 
-            $updatedProduct = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)") -Method Put -ContentType 'application/json' -Body (@{
+            $updatedProduct = Invoke-RestMethod -Uri ("$baseUrl/api/buffet/products/$($inventoryProduct.id)") -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
               name = "Stage 6 Smoke Updated $inventoryId"
               category = 'تنقلات'
               unitPrice = 30000
@@ -352,7 +352,7 @@ jobs:
               throw 'Buffet product update smoke failed.'
             }
 
-            $activeSessions = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get
+            $activeSessions = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
             if (-not @($activeSessions | Where-Object { $_.id -eq $startedSession.sessionId })) {
               throw 'Active session endpoint did not return the started session.'
             }
@@ -387,12 +387,12 @@ jobs:
               throw 'Buffet invoice reverse smoke failed.'
             }
 
-            $profitAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/reports/profit" -Method Get
+            $profitAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/reports/profit" -Method Get -WebSession $adminSession
             if ([decimal]$profitAfterReverse.totals.returnRevenue -lt 30000) {
               throw 'Buffet reverse profit adjustment smoke failed.'
             }
 
-            $inventoryAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get
+            $inventoryAfterReverse = Invoke-RestMethod -Uri "$baseUrl/api/buffet/products" -Method Get -WebSession $adminSession
             $reversedProduct = @($inventoryAfterReverse | Where-Object { $_.id -eq $inventoryProduct.id })[0]
             if ([int]$reversedProduct.stock -ne 2) { throw 'Buffet invoice reverse did not restore stock.' }
 
