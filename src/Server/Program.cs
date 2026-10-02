@@ -904,7 +904,10 @@ app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var customer = await database.Customers.AsNoTracking().Include(item => item.VipPackage).FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    var customer = await database.Customers.AsNoTracking()
+        .Include(item => item.VipPackage)
+        .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
 
@@ -913,9 +916,28 @@ app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
 
     var now = DateTimeOffset.UtcNow;
     var activatedAt = customer.VipActivatedAt.Value;
+    var expiresAt = customer.VipExpiresAt;
+    var usageEnd = expiresAt.HasValue && expiresAt.Value < now ? expiresAt.Value : now;
+    var packageUsable = usageEnd > activatedAt;
+
+    if (!packageUsable)
+    {
+        return Results.Ok(new
+        {
+            active = false,
+            usedTodayMinutes = 0,
+            remainingTodayMinutes = 0,
+            usedTotalMinutes = 0,
+            remainingTotalMinutes = 0
+        });
+    }
+
     var todayStart = now.Date;
     var sessions = await database.Sessions.AsNoTracking()
-        .Where(item => item.CustomerId == customerId && item.StartAt >= activatedAt && item.StartAt <= now)
+        .Where(item =>
+            item.CustomerId == customerId
+            && item.StartAt >= activatedAt
+            && item.StartAt <= usageEnd)
         .Select(item => new { item.StartAt, item.EndAt })
         .ToListAsync(cancellationToken);
 
@@ -923,27 +945,30 @@ app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
     var todayUsed = 0;
     foreach (var session in sessions)
     {
-        var end = session.EndAt ?? now;
+        var rawEnd = session.EndAt ?? usageEnd;
+        var end = rawEnd > usageEnd ? usageEnd : rawEnd;
         var start = session.StartAt < activatedAt ? activatedAt : session.StartAt;
+        if (end <= start)
+            continue;
+
         var minutes = (int)Math.Ceiling(Math.Max(0, (end - start).TotalMinutes));
         totalUsed += minutes;
-        var todayStartAt = session.StartAt < todayStart ? todayStart : session.StartAt;
+
+        var todayStartAt = start < todayStart ? todayStart : start;
         if (end > todayStart && todayStartAt < end)
             todayUsed += (int)Math.Ceiling(Math.Max(0, (end - todayStartAt).TotalMinutes));
     }
 
     return Results.Ok(new
     {
-        active = true,
+        active = expiresAt is null || expiresAt.Value > now,
         usedTodayMinutes = todayUsed,
         remainingTodayMinutes = Math.Max(0, customer.VipPackage.DailyMinutes - todayUsed),
         usedTotalMinutes = totalUsed,
         remainingTotalMinutes = Math.Max(0, customer.VipPackage.TotalMinutes - totalUsed)
     });
 })
-.WithName("GetCustomerVipUsage");
-
-app.MapGet("/api/customers/{customerId:guid}/history", async (
+.WithName("GetCustomerVipUsage");apGet("/api/customers/{customerId:guid}/history", async (
     Guid customerId,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
