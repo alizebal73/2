@@ -123,8 +123,7 @@ export function UsersPage() {
       {shifts.map(shift => <div className="info-row" key={shift.id}><span>{shift.operator} · {new Date(shift.openedAt).toLocaleString('fa-IR')} تا {shift.closedAt ? new Date(shift.closedAt).toLocaleString('fa-IR') : 'باز'}</span><strong>{money(shift.sales ?? 0)} ت · اختلاف {money(shift.difference ?? 0)} ت</strong></div>)}
     </section>
     {closeShiftOpen && currentShift && (() => {
-      const expectedCash = (shifts.find(shift => shift.id === currentShift.id)?.expectedCash ?? 0)
-        || shifts.filter(shift => shift.id === currentShift.id).reduce((sum, shift) => sum + (shift.expectedCash ?? 0), 0);
+      const expectedCash = currentShift.expectedCash ?? 0;
       const adjusted = expectedCash + (Number(manualCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0);
       const counted = Number(countedCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0;
       const difference = counted - adjusted;
