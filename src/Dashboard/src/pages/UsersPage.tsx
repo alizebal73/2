@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { decideApproval as decideServerApproval, getApprovals, getPermissions, getUsers, hasPermission, setUserPermissions } from '../services/authService';
+import { createUser, decideApproval as decideServerApproval, getApprovals, getPermissions, getUsers, hasPermission, setUserPermissions, updateUser } from '../services/authService';
 import type { AppUserRecord } from '../types';
 import { userErrorMessage } from '../utils/userError';
 import { closeServerShift, getCurrentShift, getShiftHistory, startServerShift } from '../services/shiftService';
@@ -24,6 +24,15 @@ export function UsersPage({ user }: UsersPageProps) {
   const [pendingApprovals, setPendingApprovals] = useState<ApprovalRecord[]>([]);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [userEditor, setUserEditor] = useState<{
+    id?: string;
+    fullName: string;
+    userName: string;
+    email: string;
+    password: string;
+    role: 'Operator' | 'Manager' | 'Admin';
+    isActive: boolean;
+  } | null>(null);
   const [currentShift, setCurrentShift] = useState<any>(null);
   const [shifts, setShifts] = useState<any[]>([]);
   const [notice, setNotice] = useState('');
@@ -317,8 +326,50 @@ export function UsersPage({ user }: UsersPageProps) {
       : current.filter(item => item !== name));
   }
 
+  async function saveUserAccount() {
+    if (!canManageUsers || !userEditor) return;
+    if (!userEditor.fullName.trim() || !userEditor.userName.trim() || !userEditor.email.trim()) {
+      setNotice('نام، نام کاربری و ایمیل را کامل کنید');
+      return;
+    }
+    if (!userEditor.id && userEditor.password.length < 8) {
+      setNotice('رمز عبور کاربر جدید باید حداقل ۸ کاراکتر باشد');
+      return;
+    }
+    if (userEditor.password && userEditor.password.length < 8) {
+      setNotice('رمز عبور باید حداقل ۸ کاراکتر باشد');
+      return;
+    }
+
+    try {
+      const payload = {
+        fullName: userEditor.fullName.trim(),
+        userName: userEditor.userName.trim(),
+        email: userEditor.email.trim(),
+        ...(userEditor.password ? { password: userEditor.password } : {}),
+        role: userEditor.role,
+        isActive: userEditor.isActive,
+      };
+
+      const saved = userEditor.id
+        ? await updateUser(userEditor.id, payload)
+        : await createUser({
+            ...payload,
+            password: userEditor.password,
+          });
+
+      await refresh();
+      setSelectedUserId(saved.id);
+      setSelectedPermissions(saved.permissions);
+      setUserEditor(null);
+      setNotice(userEditor.id ? 'اطلاعات کاربر به‌روزرسانی شد' : 'کاربر جدید ساخته شد؛ اکنون دسترسی‌هایش را انتخاب کنید');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ذخیره کاربر ناموفق بود'));
+    }
+  }
+
   return <>
-    <div className="page-header"><div><p>کاربران، دسترسی و شیفت</p><h1>کاربران و شیفت</h1></div></div>
+    <div className="page-header"><div><p>کاربران، دسترسی و شیفت</p><h1>کاربران و شیفت</h1></div><div className="page-header-actions">{canManageUsers && <button type="button" className="btn primary" onClick={() => setUserEditor({ fullName: '', userName: '', email: '', password: '', role: 'Operator', isActive: true })}>➕ اپراتور جدید</button>}</div></div>
     <div className="toolbar">
       {!currentShift && <label className="shift-operator-select">اپراتور شیفت<select value={shiftOperator} onChange={event => setShiftOperator(event.target.value)}>{users.filter(user => user.role !== 'owner').map(user => <option key={user.id} value={user.name}>{user.name} · {user.shift}</option>)}</select></label>}
       {!currentShift && <label className="shift-operator-select">صندوق اولیه<input inputMode="numeric" value={shiftOpeningCash} onChange={event => setShiftOpeningCash(event.target.value)} placeholder="۰" /></label>}
@@ -337,7 +388,7 @@ export function UsersPage({ user }: UsersPageProps) {
     <div className="customer-layout">
       {canManageUsers && <section className="card-panel" style={{ padding: 14 }}>
         <h3>کاربران سیستم</h3>
-        <div className="bullet-grid">{users.map(user => <div className="user-card" key={user.id}><b>{user.name}</b><div className="meta">نقش: {user.role === 'owner' ? 'صاحب' : user.role === 'admin' ? 'مدیر' : 'اپراتور'}</div><div className="meta">شیفت: {user.shift}</div><div className="meta">فروش: {money(user.sales)} تومان</div><div className="user-pay-summary"><span>{user.payType === 'monthly' ? 'حقوق ماهانه' : 'ساعتی'} · {money(user.payType === 'monthly' ? (user.monthlySalary ?? 0) : (user.hourlyRate ?? 0))} تومان</span><span>پرداخت‌شده {money(user.paidSalaryTotal ?? 0)} · مانده حقوق {money(user.employeePayable ?? 0)}</span><span>طلب مالک {money(user.ownerReceivable ?? 0)} · خسارت {money(user.damageTotal ?? 0)}</span></div><div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{user.permissions.map(permission => <span className="status-pill free" key={permission}>{permission}</span>)}</div><div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}><button type="button" className="btn sm" onClick={() => selectPermissionUser(user.id)}>دسترسی‌ها</button>{canViewPayroll && <button type="button" className="btn sm" onClick={() => void openPayrollProfile(user)}>پروفایل حقوق</button>}{canManagePayroll && <button type="button" className="btn sm" onClick={() => { setPayUserId(user.id); setPayAmount(''); setPayReason(''); setPayMode('salary'); setPaymentMethod('cash'); setReceiptNumber(''); }}>ثبت عملیات</button>}</div></div>)}</div>
+        <div className="bullet-grid">{users.map(user => <div className="user-card" key={user.id}><b>{user.name}</b><div className="meta">نقش: {user.role === 'owner' ? 'صاحب' : user.role === 'admin' ? 'مدیر' : 'اپراتور'}</div><div className="meta">شیفت: {user.shift}</div><div className="meta">فروش: {money(user.sales)} تومان</div><div className="user-pay-summary"><span>{user.payType === 'monthly' ? 'حقوق ماهانه' : 'ساعتی'} · {money(user.payType === 'monthly' ? (user.monthlySalary ?? 0) : (user.hourlyRate ?? 0))} تومان</span><span>پرداخت‌شده {money(user.paidSalaryTotal ?? 0)} · مانده حقوق {money(user.employeePayable ?? 0)}</span><span>طلب مالک {money(user.ownerReceivable ?? 0)} · خسارت {money(user.damageTotal ?? 0)}</span></div><div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:10}}>{user.permissions.map(permission => <span className="status-pill free" key={permission}>{permission}</span>)}</div><div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}><button type="button" className="btn sm" onClick={() => selectPermissionUser(user.id)}>دسترسی‌ها</button><button type="button" className="btn sm" onClick={() => { const source = serverUsers.find(row => row.id === user.id); if (source) setUserEditor({ id: source.id, fullName: source.fullName, userName: source.userName, email: source.email, password: '', role: source.role.toLowerCase() === 'admin' ? 'Admin' : source.role.toLowerCase() === 'manager' ? 'Manager' : 'Operator', isActive: source.isActive }); }}>ویرایش حساب</button>{canViewPayroll && <button type="button" className="btn sm" onClick={() => void openPayrollProfile(user)}>پروفایل حقوق</button>}{canManagePayroll && <button type="button" className="btn sm" onClick={() => { setPayUserId(user.id); setPayAmount(''); setPayReason(''); setPayMode('salary'); setPaymentMethod('cash'); setReceiptNumber(''); }}>ثبت عملیات</button>}</div></div>)}</div>
       </section>}
       {canManageUsers && <section className="card-panel" style={{ padding: 14, overflow: 'auto' }}>
         <h3>🔐 دسترسی سروری کاربر</h3>
@@ -382,6 +433,29 @@ export function UsersPage({ user }: UsersPageProps) {
       <h3>🕘 شیفت‌های اخیر</h3>
       {shifts.map(shift => <div className="info-row" key={shift.id}><span>{shift.operator} · {new Date(shift.openedAt).toLocaleString('fa-IR')} تا {shift.closedAt ? new Date(shift.closedAt).toLocaleString('fa-IR') : 'باز'}</span><strong>{money(shift.sales ?? 0)} ت · اختلاف {money(shift.difference ?? 0)} ت</strong></div>)}
     </section>
+    {userEditor && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setUserEditor(null)}>
+      <section className="operation-modal wide" role="dialog" aria-modal="true" aria-labelledby="user-editor-title">
+        <button className="modal-close" onClick={() => setUserEditor(null)} aria-label="بستن">×</button>
+        <h2 id="user-editor-title">{userEditor.id ? 'ویرایش حساب کاربر' : 'تعریف اپراتور جدید'}</h2>
+        <p className="muted">ابتدا حساب کاربری را بساز؛ بعد در پنل «دسترسی سروری کاربر»، مجوزهای دقیق او را انتخاب کن.</p>
+        <div className="modal-grid-2">
+          <label>نام و نام خانوادگی<input autoFocus value={userEditor.fullName} onChange={event => setUserEditor(current => current ? { ...current, fullName: event.target.value } : current)} /></label>
+          <label>نام کاربری<input value={userEditor.userName} onChange={event => setUserEditor(current => current ? { ...current, userName: event.target.value } : current)} /></label>
+          <label>ایمیل<input type="email" value={userEditor.email} onChange={event => setUserEditor(current => current ? { ...current, email: event.target.value } : current)} /></label>
+          <label>{userEditor.id ? 'رمز عبور جدید (اختیاری)' : 'رمز عبور'}<input type="password" value={userEditor.password} onChange={event => setUserEditor(current => current ? { ...current, password: event.target.value } : current)} placeholder={userEditor.id ? 'بدون تغییر خالی بگذار' : 'حداقل ۸ کاراکتر'} /></label>
+          <label>نقش<select value={userEditor.role} onChange={event => setUserEditor(current => current ? { ...current, role: event.target.value as 'Operator' | 'Manager' | 'Admin' } : current)}>
+            <option value="Operator">اپراتور</option>
+            <option value="Manager">مدیر</option>
+            <option value="Admin">مدیر سیستم</option>
+          </select></label>
+          <label className="setting-item"><span>حساب فعال باشد</span><input type="checkbox" checked={userEditor.isActive} onChange={event => setUserEditor(current => current ? { ...current, isActive: event.target.checked } : current)} /></label>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn" onClick={() => setUserEditor(null)}>انصراف</button>
+          <button type="button" className="btn primary" onClick={() => void saveUserAccount()}>💾 ذخیره حساب</button>
+        </div>
+      </section>
+    </div>}
     {closeShiftOpen && currentShift && (() => {
       const expectedCash = currentShift.expectedCash ?? 0;
       const adjusted = expectedCash + (Number(manualCash.replace(/[۰-۹]/g, d => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬,\s]/g, '')) || 0);
