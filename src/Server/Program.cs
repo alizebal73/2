@@ -3,6 +3,7 @@ using GameNetManager.Server.Hubs;
 using GameNetManager.Shared.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -314,7 +315,8 @@ app.MapPost("/api/customers", async (
         VipTier = vipTier,
         IsVip = vipTier != "none",
         ConcurrentLoginLimit = Math.Max(1, request.ConcurrentLoginLimit),
-        Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim()
+        Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+        PasswordHash = string.IsNullOrWhiteSpace(request.Password) ? null : HashPassword(request.Password)
     };
 
     database.Customers.Add(customer);
@@ -416,6 +418,111 @@ app.MapPut("/api/customers/{customerId:guid}", async (
     return Results.Ok(ToCustomerDto(customer));
 })
 .WithName("UpdateCustomer");
+
+app.MapPost("/api/customers/{customerId:guid}/password", async (
+    Guid customerId,
+    ChangeCustomerPasswordRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Password) || request.Password.Length < 6)
+        return Results.BadRequest(new { code = "invalid_password", message = "رمز عبور باید حداقل ۶ نویسه داشته باشد." });
+
+    var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    customer.PasswordHash = HashPassword(request.Password);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "CustomerPasswordChanged",
+        EntityName = "Customer",
+        EntityId = customer.Id.ToString(),
+        Details = "تغییر رمز ورود مشتری"
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { changed = true });
+})
+.WithName("ChangeCustomerPassword");
+
+app.MapPost("/api/customer-auth/login", async (
+    CustomerLoginAuthRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var key = request.UsernameOrCode?.Trim();
+    var clientKey = request.ClientKey?.Trim();
+
+    if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(clientKey))
+        return Results.BadRequest(new { code = "missing_credentials", message = "نام کاربری، رمز و شناسه دستگاه الزامی است." });
+
+    var customer = await database.Customers
+        .FirstOrDefaultAsync(item => item.Username == key || item.Code == key, cancellationToken);
+
+    if (customer is null || string.IsNullOrWhiteSpace(customer.PasswordHash) || !VerifyPassword(request.Password, customer.PasswordHash))
+        return Results.Unauthorized();
+
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    var active = await database.CustomerLogins
+        .Where(item => item.CustomerId == customer.Id && item.IsActive)
+        .ToListAsync(cancellationToken);
+
+    var existing = active.FirstOrDefault(item => item.ClientKey == clientKey);
+    if (existing is not null)
+    {
+        return Results.Ok(new
+        {
+            authenticated = true,
+            customerId = customer.Id,
+            username = customer.Username,
+            fullName = customer.FullName,
+            loginId = existing.Id,
+            activeCount = active.Count,
+            limit = customer.ConcurrentLoginLimit
+        });
+    }
+
+    if (active.Count >= Math.Max(1, customer.ConcurrentLoginLimit))
+        return Results.Conflict(new
+        {
+            code = "concurrent_login_limit",
+            message = "تعداد ورود هم‌زمان این مشتری به سقف مجاز رسیده است.",
+            activeCount = active.Count,
+            limit = customer.ConcurrentLoginLimit
+        });
+
+    var login = new CustomerLogin
+    {
+        CustomerId = customer.Id,
+        ClientKey = clientKey,
+        LoggedInAt = DateTimeOffset.UtcNow,
+        IsActive = true
+    };
+    database.CustomerLogins.Add(login);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "CustomerAuthenticated",
+        EntityName = "CustomerLogin",
+        EntityId = login.Id.ToString(),
+        Details = "ورود با رمز · دستگاه " + clientKey
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        authenticated = true,
+        customerId = customer.Id,
+        username = customer.Username,
+        fullName = customer.FullName,
+        loginId = login.Id,
+        activeCount = active.Count + 1,
+        limit = customer.ConcurrentLoginLimit
+    });
+})
+.WithName("CustomerAuthenticate");
 
 app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     Guid customerId,
@@ -1667,6 +1774,34 @@ if (!app.Environment.IsDevelopment())
 
 app.Run();
 
+
+
+static string HashPassword(string password)
+{
+    var salt = RandomNumberGenerator.GetBytes(16);
+    const int iterations = 120_000;
+    var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, 32);
+    return "PBKDF2-SHA256$" + iterations + "$" + Convert.ToBase64String(salt) + "$" + Convert.ToBase64String(hash);
+}
+
+static bool VerifyPassword(string password, string stored)
+{
+    var parts = stored.Split('$');
+    if (parts.Length != 4 || parts[0] != "PBKDF2-SHA256" || !int.TryParse(parts[1], out var iterations))
+        return false;
+
+    try
+    {
+        var salt = Convert.FromBase64String(parts[2]);
+        var expected = Convert.FromBase64String(parts[3]);
+        var actual = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, expected.Length);
+        return CryptographicOperations.FixedTimeEquals(actual, expected);
+    }
+    catch
+    {
+        return false;
+    }
+}
 
 static string NormalizeVipTier(string? tier)
 {
