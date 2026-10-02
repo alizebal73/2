@@ -493,11 +493,27 @@ jobs:
 
             try {
               $sessionFlowCompleted = $false
+              $sessionStartVerified = $false
               $endedSessionId = $null
               for ($i = 0; $i -lt 30; $i++) {
                 if ($sessionAgentProcess.HasExited) { break }
                 if (Test-Path $sessionAgentStdout) {
                   $log = Get-Content $sessionAgentStdout -Raw
+
+                  if (-not $sessionStartVerified -and $log -match 'AGENT_SESSION_START_OK:([0-9a-fA-F-]+)') {
+                    $startedSessionId = $Matches[1]
+                    $activeRows = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+                    if (-not @($activeRows | Where-Object { $_.id -eq $startedSessionId -and $_.stationName -eq $sessionStation.name })) {
+                      throw 'Agent Session Start marker appeared but server active-session state did not contain the same SessionId/station.'
+                    }
+                    $sessionStartVerified = $true
+                    Write-Host ("Stage 9 Agent Session Start persisted server-side: sessionId={0}; station={1}" -f $startedSessionId, $sessionStation.name)
+                  }
+
+                  if ($log -match 'AGENT_SESSION_END_AUTH_GUARD_OK') {
+                    Write-Host 'Stage 9 Agent Session End login ownership guard passed.'
+                  }
+
                   if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
                     $endedSessionId = $Matches[1]
                     $sessionFlowCompleted = $true
@@ -507,7 +523,7 @@ jobs:
                 Start-Sleep -Seconds 1
               }
 
-              if (-not $sessionFlowCompleted) {
+              if (-not $sessionStartVerified -or -not $sessionFlowCompleted) {
                 Write-Host '--- Stage 9 Session Agent stdout ---'
                 if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
                 Write-Host '--- Stage 9 Session Agent stderr ---'
@@ -528,6 +544,24 @@ jobs:
               }
 
               Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}" -f $endedSessionId, $sessionStation.id)
+
+              $duplicateDeviceId = "ci-stage9-duplicate-$stage9SmokeId"
+              try {
+                Invoke-RestMethod -Uri "$baseUrl/api/agent/register" -Method Post -ContentType 'application/json' -Headers @{
+                  'X-GameNet-Registration-Token' = 'Stage8CiRegistrationToken!'
+                } -Body (@{
+                  deviceId = $duplicateDeviceId
+                  name = 'CI Agent Stage 9 Duplicate Station'
+                  stationId = $sessionStation.id
+                  agentVersion = '0.1.0'
+                  osVersion = 'CI'
+                } | ConvertTo-Json) | Out-Null
+                throw 'Duplicate active Agent station registration was unexpectedly accepted.'
+              } catch {
+                $status = $_.Exception.Response.StatusCode.value__
+                if ($status -ne 409) { throw }
+                Write-Host 'Stage 9 duplicate Station-to-Agent assignment guard passed.'
+              }
             }
             finally {
               if (-not $sessionAgentProcess.HasExited) {
