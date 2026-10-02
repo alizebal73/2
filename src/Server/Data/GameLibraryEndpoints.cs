@@ -306,7 +306,9 @@ public static class GameLibraryEndpointMapping
             var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
             if (auth.Error is not null) return auth.Error;
 
-            var account = await database.GameAccountPoolEntries.Include(item => item.Leases)
+            var account = await database.GameAccountPoolEntries
+                .Include(item => item.AllowedGames).ThenInclude(item => item.Game)
+                .Include(item => item.Leases)
                 .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
             if (account is null) return Results.NotFound(new { code = "account_not_found", message = "اکانت پیدا نشد." });
             if (account.Leases.Any(item => item.ReleasedAt == null && item.Status == GameAccountLeaseStatus.Active))
@@ -380,6 +382,8 @@ public static class GameLibraryEndpointMapping
             if (account is null) return Results.NotFound(new { code = "account_not_found", message = "اکانت پیدا نشد." });
             if (!account.IsActive || account.Status != GameAccountPoolStatus.Free)
                 return Results.Conflict(new { code = "account_not_free", message = "اکانت برای تخصیص آزاد نیست." });
+            if (account.ExpiresAt.HasValue && account.ExpiresAt.Value <= DateTimeOffset.UtcNow)
+                return Results.Conflict(new { code = "account_expired", message = "اعتبار این اکانت تمام شده است." });
             if (!account.AllowedGames.Any(item => item.GameId == request.GameId))
                 return Results.BadRequest(new { code = "game_not_allowed", message = "این بازی برای این اکانت مجاز نیست." });
 

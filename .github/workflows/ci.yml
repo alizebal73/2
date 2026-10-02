@@ -1305,6 +1305,14 @@ jobs:
 
             Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
 
+          } catch {
+            Write-Host '--- Server stdout on smoke failure ---'
+            if (Test-Path $stdout) { Get-Content $stdout }
+            Write-Host '--- Server stderr on smoke failure ---'
+            if (Test-Path $stderr) { Get-Content $stderr }
+            Write-Host ("Server process exited={0}; exitCode={1}" -f $process.HasExited, $process.ExitCode)
+            if (Test-Path $db) { Write-Host ("Smoke database exists: {0}; size={1}" -f $db, (Get-Item $db).Length) }
+            throw
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
           }
