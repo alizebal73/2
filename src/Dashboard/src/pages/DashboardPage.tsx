@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import type { CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
 import { mockService } from '../services/mockService';
+import { recordWalletTransaction } from '../services/walletLedgerService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { SessionCenter } from '../features/session/SessionCenter';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
@@ -87,27 +88,37 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId, createdAt: new Date().toISOString(), kind, title, detail, amount }, ...current].slice(0, 300));
   }
 
-  const applyFlow = useCallback((action: string) => {
+  const applyFlow = useCallback(async (action: string) => {
     const value = number(amount);
     if (!value) { setMessage('مبلغ معتبر وارد کنید'); return; }
     const customer = customers.find(item => item.code === customerCode || item.username === customerCode || item.mobile === customerCode || item.id === customerCode || item.name.includes(customerCode));
     if (!customer) { setMessage('مشتری پیدا نشد'); return; }
-    if (action === 'F5') {
-      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet + value, transactionHistory: ['شارژ مستقیم · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
-      setMessage('شارژ مستقیم ' + money(value) + ' تومان ثبت شد');
-    } else if (action === 'F6') {
-      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['ثبت بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
-      setMessage('بدهی ' + money(value) + ' تومان ثبت شد');
-    } else if (action === 'F7') {
-      if (customer.wallet < value) { setMessage('موجودی کیف پول کافی نیست'); return; }
-      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet - value, transactionHistory: ['کسر از کیف پول · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
-      setMessage(money(value) + ' تومان از کیف پول کسر شد');
-    } else {
-      const deducted = Math.min(customer.wallet, value);
-      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: item.wallet - deducted, debt: item.debt + value - deducted, transactionHistory: ['کسر کیف پول/بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
-      setMessage('تراکنش F8 ثبت شد؛ ' + money(Math.max(0, value - deducted)) + ' تومان مازاد به بدهی رفت');
+    try {
+      if (action === 'F5') {
+        const entry = await recordWalletTransaction(customer.id, { amount: value, type: 'credit', description: 'شارژ مستقیم توسط اپراتور' });
+        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['شارژ مستقیم · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+        setMessage('شارژ مستقیم ' + money(value) + ' تومان ثبت شد');
+      } else if (action === 'F6') {
+        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['ثبت بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+        setMessage('بدهی ' + money(value) + ' تومان ثبت شد');
+      } else if (action === 'F7') {
+        const entry = await recordWalletTransaction(customer.id, { amount: value, type: 'debit', description: 'کسر مستقیم توسط اپراتور' });
+        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['کسر از کیف پول · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+        setMessage(money(value) + ' تومان از کیف پول کسر شد');
+      } else {
+        const deducted = Math.min(customer.wallet, value);
+        if (deducted > 0) {
+          const entry = await recordWalletTransaction(customer.id, { amount: deducted, type: 'debit', description: 'کسر کیف پول و ثبت مابه‌التفاوت' });
+          setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: entry.balanceAfter, debt: item.debt + value - deducted, transactionHistory: ['کسر کیف پول/بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+        } else {
+          setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['کسر کیف پول/بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+        }
+        setMessage('تراکنش F8 ثبت شد؛ ' + money(Math.max(0, value - deducted)) + ' تومان مازاد به بدهی رفت');
+      }
+      setModal(null);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'ثبت تراکنش کیف پول انجام نشد');
     }
-    setModal(null);
   }, [amount, customers, customerCode]);
   useEffect(() => { void Promise.all([mockService.getCustomers(), mockService.getTariffs()]).then(([customerRows, tariffRows]) => { setCustomers(customerRows); setTariffs(tariffRows); }); const onHotkeys = (event: Event) => setHotkeys((event as CustomEvent<Record<string,string>>).detail || {}); window.addEventListener('gamenet-hotkeys-changed', onHotkeys); return () => window.removeEventListener('gamenet-hotkeys-changed', onHotkeys); }, []);
   useEffect(() => {
@@ -447,26 +458,33 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setMessage('تسویه ' + money(payment.amount) + ' تومان ثبت شد.');
   }
 
-  function deductPendingFromWallet(id: string) {
+  async function deductPendingFromWallet(id: string) {
     const payment = pendingPayments.find(item => item.id === id);
     if (!payment) return;
     const customer = payment.customerId ? customers.find(item => item.id === payment.customerId) : customers.find(item => item.code === payment.customerCode || item.username === payment.customerCode);
     if (!customer) { setMessage('این پرداخت مشتری ثبت‌شده ندارد؛ از گزینه «ثبت بدهی» استفاده کنید.'); return; }
     const walletAmount = Math.min(customer.wallet, payment.amount);
     const difference = payment.amount - walletAmount;
-    setCustomers(current => current.map(item => item.id === customer.id ? {
-      ...item,
-      wallet: item.wallet - walletAmount,
-      debt: item.debt + difference,
-      transactionHistory: [
-        (difference > 0 ? 'کسر از کیف پول + ثبت مابه‌التفاوت در بدهی · ' : 'کسر از کیف پول · ') + money(payment.amount) + ' تومان',
-        ...(item.transactionHistory ?? []),
-      ],
-    } : item));
-    if (walletAmount > 0) recordReportPayment(payment, walletAmount, 'wallet');
-    setPendingPayments(current => current.filter(item => item.id !== id));
-    addSessionTimeline(payment.stationId, 'settle', difference > 0 ? 'کیف پول + بدهی' : 'تسویه از کیف پول', money(walletAmount) + ' تومان از کیف پول' + (difference > 0 ? ' و ' + money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد' : ' کسر شد'), payment.amount);
-    setMessage(difference > 0 ? money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد.' : 'مبلغ کامل از کیف پول کسر شد.');
+    try {
+      const entry = walletAmount > 0
+        ? await recordWalletTransaction(customer.id, { amount: walletAmount, type: 'debit', description: 'تسویه معوق از کیف پول' })
+        : null;
+      setCustomers(current => current.map(item => item.id === customer.id ? {
+        ...item,
+        wallet: entry?.balanceAfter ?? item.wallet,
+        debt: item.debt + difference,
+        transactionHistory: [
+          (difference > 0 ? 'کسر از کیف پول + ثبت مابه‌التفاوت در بدهی · ' : 'کسر از کیف پول · ') + money(payment.amount) + ' تومان',
+          ...(item.transactionHistory ?? []),
+        ],
+      } : item));
+      if (walletAmount > 0) recordReportPayment(payment, walletAmount, 'wallet');
+      setPendingPayments(current => current.filter(item => item.id !== id));
+      addSessionTimeline(payment.stationId, 'settle', difference > 0 ? 'کیف پول + بدهی' : 'تسویه از کیف پول', money(walletAmount) + ' تومان از کیف پول' + (difference > 0 ? ' و ' + money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد' : ' کسر شد'), payment.amount);
+      setMessage(difference > 0 ? money(difference) + ' تومان مابه‌التفاوت در بدهی ثبت شد.' : 'مبلغ کامل از کیف پول کسر شد.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'کسر از کیف پول انجام نشد');
+    }
   }
 
   function registerPendingDebt(id: string) {
