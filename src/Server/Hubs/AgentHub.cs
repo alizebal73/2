@@ -315,6 +315,7 @@ public sealed class AgentHub(
             throw new HubException("ورود معتبر مشتری برای این دستگاه پیدا نشد.");
 
         var station = await database.Stations
+            .Include(item => item.Tariff)
             .FirstOrDefaultAsync(item => item.Id == device.StationId.Value, Context.ConnectionAborted);
         if (station is null)
             throw new HubException("ایستگاه Agent پیدا نشد.");
@@ -322,9 +323,15 @@ public sealed class AgentHub(
         if (station.State != StationState.Available)
             throw new HubException("این ایستگاه دیگر آزاد نیست.");
 
-        if (request.TariffId.HasValue
-            && !await database.Tariffs.AnyAsync(item => item.Id == request.TariffId.Value, Context.ConnectionAborted))
-            throw new HubException("تعرفه انتخاب‌شده پیدا نشد.");
+        if (station.Tariff is null || !station.Tariff.IsActive)
+            throw new HubException("تعرفهٔ فعال برای این ایستگاه تنظیم نشده است.");
+
+        var persons = Math.Max(1, request.Persons ?? 1);
+        if (station.Type.Equals("PC", StringComparison.OrdinalIgnoreCase)
+            || station.Type.Contains("رایانه", StringComparison.OrdinalIgnoreCase))
+            persons = 1;
+        else if (persons > 4)
+            throw new HubException("تعداد نفرات برای این ایستگاه بیش از حد مجاز است.");
 
         await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
 
@@ -332,13 +339,14 @@ public sealed class AgentHub(
         {
             CustomerId = customer.Id,
             StationId = station.Id,
-            TariffId = request.TariffId,
+            TariffId = station.TariffId,
             AppUserId = null,
             StartAt = DateTimeOffset.UtcNow,
             State = SessionState.Active,
             TotalAmount = 0m,
-            HourlyRateOverride = request.HourlyRateOverride > 0 ? request.HourlyRateOverride : null,
-            Persons = Math.Max(1, request.Persons ?? 1)
+            // Customer/Agent cannot override the price. Server tariff is authoritative.
+            HourlyRateOverride = null,
+            Persons = persons
         };
 
         database.Sessions.Add(session);
@@ -394,13 +402,17 @@ public sealed class AgentHub(
         if (session.StationId != device.StationId.Value)
             throw new HubException("این جلسه متعلق به ایستگاه Agent نیست.");
 
-        var login = request.CustomerLoginId.HasValue
-            ? await database.CustomerLogins.FirstOrDefaultAsync(
-                item => item.Id == request.CustomerLoginId.Value
-                    && item.CustomerId == session.CustomerId
-                    && item.ClientKey == device.DeviceId,
-                Context.ConnectionAborted)
-            : null;
+        if (!request.CustomerLoginId.HasValue)
+            throw new HubException("شناسهٔ ورود مشتری برای پایان جلسه الزامی است.");
+
+        var login = await database.CustomerLogins.FirstOrDefaultAsync(
+            item => item.Id == request.CustomerLoginId.Value
+                && item.CustomerId == session.CustomerId
+                && item.ClientKey == device.DeviceId,
+            Context.ConnectionAborted);
+
+        if (login is null)
+            throw new HubException("ورود مشتری متعلق به این Agent پیدا نشد.");
 
         var now = DateTimeOffset.UtcNow;
 
