@@ -1,3 +1,4 @@
+using GameNetManager.Shared.Contracts;
 using System.ComponentModel.DataAnnotations;
 
 namespace GameNetManager.Server.Data;
