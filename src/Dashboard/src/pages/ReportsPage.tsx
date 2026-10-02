@@ -250,7 +250,7 @@ export function ReportsPage() {
           </tr>
         )}
       </tbody></table></div></>}
-    </> : <section className="report-placeholder"><strong>{({sessions:'جلسات و ایستگاه‌ها',customers:'مشتری و VIP',users:'کاربران و شیفت',audit:'Audit'} as Record<string,string>)[reportCategory]}</strong><span>ساختار این گزارش آماده شده است؛ اتصال منبع داده این دامنه باید قبل از نمایش عدد انجام شود.</span></section>
+    </> : <section className="report-placeholder"><strong>{({sessions:'جلسات و ایستگاه‌ها',customers:'مشتری و VIP',users:'کاربران و شیفت',audit:'Audit'} as Record<string,string>)[reportCategory]}</strong><span>ساختار این گزارش آماده شده است؛ اتصال منبع داده این دامنه باید قبل از نمایش عدد انجام شود.</span></section>}
 
     {notice && <div className="operation-toast">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
   </>;
