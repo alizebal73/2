@@ -240,7 +240,7 @@ public sealed class ClientUpdateManager
         var next = new ClientUpdateState(
             current.PreviousVersion,
             null,
-            current.PreviousVersion,
+            current.HealthyVersion,
             DateTimeOffset.UtcNow);
 
         await SaveStateAsync(next, cancellationToken);
