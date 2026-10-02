@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createServerCustomer, getServerCustomers, updateServerCustomer } from '../services/customerService';
+import { createServerCustomer, getCustomerHistory, getCustomerVipUsage, getServerCustomers, updateServerCustomer } from '../services/customerService';
 import { userErrorMessage } from '../utils/userError';
 import { getWalletLedger, recordWalletTransaction, refundWalletTransaction } from '../services/walletLedgerService';
 import { changeFreeBenefits, getFreeBenefits } from '../services/freeBenefitService';
@@ -36,6 +36,8 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   const [concurrentLoginLimit, setConcurrentLoginLimit] = useState(1);
   const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([]);
   const [serverFreeBenefits, setServerFreeBenefits] = useState<{ freeMoney: number; freeTimeMinutes: number } | null>(null);
+  const [vipUsage, setVipUsage] = useState<import('../types').CustomerVipUsage | null>(null);
+  const [serverHistory, setServerHistory] = useState<import('../types').CustomerHistoryItem[]>([]);
   const [refundApproval, setRefundApproval] = useState<{ amount: number; reason: string; sourceTransactionId?: string } | null>(null);
   const [refundSourceId, setRefundSourceId] = useState('');
   const [vipPackages, setVipPackages] = useState<import('../types').VipPackageRecord[]>([]);
@@ -64,12 +66,18 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
   useEffect(() => {
     if (!selected?.id) { setWalletLedger([]); return; }
     let active = true;
+    setVipUsage(null);
+    setServerHistory([]);
     void Promise.all([
       getWalletLedger(selected.id),
       getFreeBenefits(selected.id).catch(() => null),
-    ]).then(([rows, benefits]) => {
+      getCustomerVipUsage(selected.id).catch(() => null),
+      getCustomerHistory(selected.id).catch(() => []),
+    ]).then(([rows, benefits, usage, history]) => {
       if (!active) return;
       setWalletLedger(rows);
+      setVipUsage(usage);
+      setServerHistory(history);
       if (benefits) {
         setServerFreeBenefits({ freeMoney: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes });
         setCustomers(current => current.map(item => item.id === selected.id
@@ -330,8 +338,9 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           <div className="package-box">
             <div className="title"><span>{selected.packageName ?? 'بدون پکیج فعال'}</span><span className={`vip-tag ${selected.vip}`}>{selected.vip}</span></div>
             <div className="description">سقف روزانه {Math.floor((selected.vipDailyMinutes ?? ((selected.dailyHourCap ?? 0) * 60)) / 60)} ساعت · کل زمان {money(selected.vipTotalMinutes ?? 0)} دقیقه · تخفیف {money(selected.vipDiscountPercent ?? 0)}٪ · انقضا {selected.vipExpiresAt ? new Date(selected.vipExpiresAt).toLocaleDateString('fa-IR') : 'نامشخص'}</div>
-            <div className="info-row"><span>مصرف امروز / باقی‌مانده</span><strong>{selected.hoursUsedToday ?? 0} / {Math.max(0, Math.floor((selected.vipDailyMinutes ?? ((selected.dailyHourCap ?? 0) * 60)) / 60) - (selected.hoursUsedToday ?? 0))} ساعت</strong></div>
-            {(selected.hoursUsedToday ?? 0) >= (selected.dailyHourCap ?? Infinity) && <strong className="limit-warning">لیمیت خورده · زمان مازاد نیم‌بها محاسبه می‌شود</strong>}
+            <div className="info-row"><span>مصرف امروز / باقی‌مانده</span><strong>{money(vipUsage?.usedTodayMinutes ?? 0)} / {money(vipUsage?.remainingTodayMinutes ?? (selected.vipDailyMinutes ?? 0))} دقیقه</strong></div>
+            <div className="info-row"><span>مصرف کل / باقی‌مانده</span><strong>{money(vipUsage?.usedTotalMinutes ?? 0)} / {money(vipUsage?.remainingTotalMinutes ?? (selected.vipTotalMinutes ?? 0))} دقیقه</strong></div>
+            {(vipUsage?.remainingTodayMinutes ?? 1) <= 0 && <strong className="limit-warning">سقف روزانه مصرف شده است</strong>
           </div>
         </div>
 
@@ -361,8 +370,9 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
           )}
         </div>
 
-        <div className="profile-section"><div className="profile-section-head"><h4>تاریخچه تراکنش‌ها</h4><span>{selected.transactionHistory?.length ?? 0} مورد</span></div><div className="customer-history-list">{(selected.transactionHistory ?? []).map((item, index) =>
-          <div className="customer-history-item" key={`${item}-${index}`}><span className="customer-history-dot" /><div><strong>{item}</strong><small>{index === 0 ? 'آخرین فعالیت' : 'ثبت‌شده در سابقه مشتری'}</small></div></div>)}</div></div>
+        <div className="profile-section"><div className="profile-section-head"><h4>تاریخچه مشتری</h4><span>{serverHistory.length} مورد</span></div><div className="customer-history-list">{serverHistory.length ? serverHistory.map((item, index) => (
+          <div className="customer-history-item" key={item.id + '-' + index}><span className="customer-history-dot" /><div><strong>{item.description}</strong><small>{new Date(item.createdAt).toLocaleString('fa-IR')} · {money(item.amount)} تومان</small></div></div>
+        )) : <div className="customer-ledger-empty">هنوز سابقه سروری برای این مشتری ثبت نشده است.</div>}</div></div>
 
         <div className="customer-actions">
           <button className="btn sm" onClick={() => openAction('wallet')}>شارژ کیف پول</button>
