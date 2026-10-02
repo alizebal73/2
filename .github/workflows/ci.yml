@@ -1,5 +1,8 @@
 name: GameNet Manager CI
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [main, repair/ef-snapshot-and-preview]
@@ -143,6 +146,31 @@ jobs:
           $env:NODE_PATH = Join-Path $env:GITHUB_WORKSPACE 'src\Dashboard\node_modules'
           npx --prefix src/Dashboard playwright test --config "$env:GITHUB_WORKSPACE\e2e\playwright.config.cjs" --workers=1
 
+      - name: Apply regenerated EF snapshot
+        if: always()
+        shell: pwsh
+        run: |
+          $generated = Join-Path $env:GITHUB_WORKSPACE 'ef-snapshot-probe\GameNetDbContextModelSnapshot.cs'
+          $target = Join-Path $env:GITHUB_WORKSPACE 'src\Server\Data\Migrations\GameNetDbContextModelSnapshot.cs'
+          $probeDir = Join-Path $env:GITHUB_WORKSPACE 'ef-snapshot-probe'
+
+          if (-not (Test-Path $generated)) {
+            Write-Host 'No regenerated snapshot artifact was produced; leaving repository unchanged.'
+            exit 0
+          }
+
+          Copy-Item $generated $target -Force
+          if (Test-Path $probeDir) { Remove-Item $probeDir -Recurse -Force }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+          if (git diff --cached --quiet -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs) {
+            Write-Host 'EF snapshot is already synchronized; no commit needed.'
+            exit 0
+          }
+          git commit -m 'Repair EF model snapshot from current model [skip ci]'
+          git push origin HEAD:${env:GITHUB_REF_NAME}
       - name: Stop Dashboard preview
         if: always()
         shell: pwsh
