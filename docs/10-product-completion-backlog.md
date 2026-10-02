@@ -199,6 +199,15 @@
 - Customer Profile اکنون دفتر کیف پول را با مبلغ، جهت، توضیح، زمان و ماندهٔ بعد از تراکنش نشان می‌دهد.
 - تغییرات کیف پول Dashboard شامل Flow مستقیم، کسر، تسویه از کیف پول، پرداخت‌های معوق و شارژ کیف پول به همین Ledger adapter منتقل شد. گام بعدی B9: اتصال Permission/Server Command کامل و همگام‌سازی همهٔ Invoice/Refundها با Ledger.
 
+## تکمیل B10 — Reference در Refund
+
+- Refund کیف پول اکنون می‌تواند `SourceTransactionId` داشته باشد.
+- Server مبدأ را برای همان مشتری و از نوع Credit بررسی می‌کند.
+- مبلغ Refund از مجموع Refundهای قبلی همان مبدأ بیشتر نمی‌تواند باشد.
+- رکورد اصلی حذف نمی‌شود و رکورد Debit جدید با `ReferenceTransactionId` ثبت می‌شود.
+- Migration: `20261002090000_WalletRefundReference`.
+- Customer Profile باید قبل از ثبت Refund یک تراکنش Credit را به‌عنوان مبدأ انتخاب کند.
+
 ## قرارداد اجرایی آیتم ۶ — Error UX استاندارد
 
 - هر خطای کاربر باید سه بخش داشته باشد: چه شد، معنی/علت قابل‌فهم، اقدام بعدی.
@@ -329,7 +338,7 @@
 
 ### B) Finance / Session
 9. [~] Wallet Ledger واقعی — API/SQLite/Audit/adapter و نمایش Ledger پیاده شد؛ عملیات کیف پول Dashboard به adapter منتقل شده‌اند؛ مهاجرت کامل Customer/Finance از Mock باقی است
-10. [~] Refund / Reverse واقعی — Refund کیف پول Server/API + Audit + UI + Approval/Smoke سبز شد؛ Reference/Reverse کامل مالی و Permission سروری در ادامه باقی است
+10. [~] Refund / Reverse واقعی — Refund کیف پول Server/API + Audit + UI + Approval/Smoke سبز شد؛ **Reference تراکنش مبدأ در Ledger + محدودیت مبلغ Refund نسبت به مبدأ** اضافه شد؛ Reverse کامل Session/Buffet/Package و Permission سروری هنوز باقی است
 11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change + Server Atomic Settlement + Invoice/Wallet/Audit + تست اتمیک و Smoke سبز؛ اتصال مستقیم Dashboard به Session/Invoice سرور و Permission نهایی باقی
 12. ✅ Split Payment — UI + ثبت اتمیک سروری + Invoice + Audit + Dashboard Smoke سبز؛ Permission نهایی طبق مرحله ۷ تکمیل می‌شود
 13. [~] Shift Settlement + Shift Handover — Shift Open/Close سروری + فروش نقدی از InvoicePayment + هزینه + تطبیق نقدی + Audit + Build/Test/Smoke سبز؛ اتصال کامل Users/Permission هنوز باقی
