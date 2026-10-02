@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { mockService } from '../services/mockService';
-import { getFinanceExpenses, getFinanceSummary, createShiftExpense } from '../services/financeService';
+import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createShiftExpense } from '../services/financeService';
 import { closeServerShift, getCurrentShift } from '../services/shiftService';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
@@ -41,12 +41,23 @@ export function ReportsPage() {
 
   useEffect(() => {
     setFinanceError('');
-    void Promise.all([mockService.getReportRows(), getFinanceSummary()])
-      .then(async ([items, finance]) => {
+    void Promise.all([getFinanceTransactions(), getFinanceSummary(), getFinanceExpenses()])
+      .then(([transactions, finance, costs]) => {
+        const items = transactions.filter(item => item.status === 'Paid').map(item => ({
+          id: item.id,
+          closedAt: item.closedAt,
+          station: item.description,
+          timeAmount: item.amount,
+          buffet: 0,
+          packageAmount: 0,
+          amount: item.amount,
+          method: item.method,
+          operator: 'سرور',
+          type: 'time',
+        }));
         setRows(items);
         setFinanceSummary(finance);
-        const costs = await getFinanceExpenses();
-        setExpenses(costs);
+        setExpenses(costs.map(item => ({ ...item, title: item.description ?? item.category, operator: 'سرور' })));
       })
       .catch(error => setFinanceError(error instanceof Error ? error.message : 'دریافت اطلاعات مالی انجام نشد'));
     const onRole = (event: Event) => setRole((event as CustomEvent<Role>).detail);
@@ -60,7 +71,7 @@ export function ReportsPage() {
     const end = range?.end ?? now;
     return rows.filter(row => {
       if (new Date(row.closedAt).getTime() < start || new Date(row.closedAt).getTime() > end) return false;
-      if (role === 'operator' && row.operator !== 'علی محمدی') return false;
+      if (role === 'operator' && row.operator !== 'علی محمدی' && row.operator !== 'سرور') return false;
       if (operator !== 'all' && row.operator !== operator) return false;
       if (method !== 'all' && row.method !== method) return false;
       if (type === 'expense') return false;
@@ -80,7 +91,7 @@ export function ReportsPage() {
     const end = range?.end ?? now;
     return expenses.filter(item => {
       if (new Date(item.createdAt).getTime() < start || new Date(item.createdAt).getTime() > end) return false;
-      if (role === 'operator' && item.operator !== 'علی محمدی') return false;
+      if (role === 'operator' && item.operator !== 'علی محمدی' && item.operator !== 'سرور') return false;
       return operator === 'all' || item.operator === operator;
     });
   }, [expenses, range, period, role, operator]);
