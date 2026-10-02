@@ -43,6 +43,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureAppUser(modelBuilder);
         ConfigurePermission(modelBuilder);
         ConfigureAppUserPermission(modelBuilder);
+        ConfigureAppUserSession(modelBuilder);
+        ConfigureApprovalRequest(modelBuilder);
         ConfigureVipPackage(modelBuilder);
         ConfigureGame(modelBuilder);
         ConfigureGameAccount(modelBuilder);
@@ -188,6 +190,40 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany(item => item.AppUsers)
             .HasForeignKey(item => item.PermissionId)
             .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureAppUserSession(ModelBuilder modelBuilder)
+    {
+        var session = modelBuilder.Entity<AppUserSession>();
+        session.HasKey(item => item.Id);
+        session.Property(item => item.TokenHash).HasMaxLength(128).IsRequired();
+        session.HasIndex(item => item.TokenHash).IsUnique();
+        session.Property(item => item.ExpiresAt).IsRequired();
+        session.HasOne(item => item.AppUser)
+            .WithMany()
+            .HasForeignKey(item => item.AppUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureApprovalRequest(ModelBuilder modelBuilder)
+    {
+        var approval = modelBuilder.Entity<ApprovalRequest>();
+        approval.HasKey(item => item.Id);
+        approval.Property(item => item.Action).HasMaxLength(80).IsRequired();
+        approval.Property(item => item.EntityName).HasMaxLength(80).IsRequired();
+        approval.Property(item => item.EntityId).HasMaxLength(120);
+        approval.Property(item => item.Reason).HasMaxLength(500).IsRequired();
+        approval.Property(item => item.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
+        approval.Property(item => item.DecisionNote).HasMaxLength(500);
+        approval.HasIndex(item => new { item.Status, item.CreatedAt });
+        approval.HasOne(item => item.RequestedByUser)
+            .WithMany()
+            .HasForeignKey(item => item.RequestedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+        approval.HasOne(item => item.DecidedByUser)
+            .WithMany()
+            .HasForeignKey(item => item.DecidedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
     private static void ConfigureVipPackage(ModelBuilder modelBuilder)
