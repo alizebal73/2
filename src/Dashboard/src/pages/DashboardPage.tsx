@@ -69,6 +69,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   const [roundingEnabled, setRoundingEnabled] = useState(true);
   const [settlementWhyOpen, setSettlementWhyOpen] = useState(false);
   const [receivedAmount, setReceivedAmount] = useState('');
+  const [splitPaymentEnabled, setSplitPaymentEnabled] = useState(false);
+  const [splitCash, setSplitCash] = useState('');
+  const [splitCard, setSplitCard] = useState('');
+  const [splitWallet, setSplitWallet] = useState('');
   const [hotkeys, setHotkeys] = useState<Record<string,string>>(() => { try { return JSON.parse(localStorage.getItem('gamenet-hotkeys-v1') || '{}'); } catch { return {}; } });
   const [selectedStationIds, setSelectedStationIds] = useState<string[]>([]);
   const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
@@ -349,6 +353,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setRoundingEnabled(true);
     setSettlementWhyOpen(false);
     setReceivedAmount('');
+    setSplitPaymentEnabled(false);
+    setSplitCash('');
+    setSplitCard('');
+    setSplitWallet('');
     setExtendMinutes(30);
     setCustomExtendMinutes('30');
     setReduceMinutes(15);
@@ -512,6 +520,70 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
     setPendingPayments(current => current.filter(item => item.id !== id));
     addSessionTimeline(payment.stationId, 'settle', 'بدهی ثبت شد', payment.customerName + ' · ' + money(payment.amount) + ' تومان', payment.amount);
     setMessage('بدهی ' + money(payment.amount) + ' تومان ثبت شد.');
+  }
+
+  async function finishSplitSession(finalTotal: number, bypassApproval = false) {
+    if (!activeStation) return;
+    if (!bypassApproval && role === 'operator' && discountPercent > 10) {
+      setApproval({ title: 'تخفیف بیشتر از حد مجاز اپراتور', detail: 'تسویه ترکیبی شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.', action: 'settle', method: 'split' });
+      return;
+    }
+    const cash = number(splitCash);
+    const card = number(splitCard);
+    const wallet = number(splitWallet);
+    const total = cash + card + wallet;
+    if (total !== finalTotal) {
+      setMessage('جمع پرداخت‌های ترکیبی باید دقیقاً برابر ' + money(finalTotal) + ' تومان باشد.');
+      return;
+    }
+    const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
+    if (wallet > 0 && (!customer || customer.wallet < wallet)) {
+      setMessage('موجودی کیف پول برای سهم انتخاب‌شده کافی نیست.');
+      return;
+    }
+
+    try {
+      if (wallet > 0 && customer) {
+        const entry = await recordWalletTransaction(customer.id, { amount: wallet, type: 'debit', description: 'تسویه ترکیبی جلسه ' + activeStation.name });
+        setCustomers(current => current.map(item => item.id === customer.id
+          ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['تسویه ترکیبی از کیف پول · ' + money(wallet) + ' تومان', ...(item.transactionHistory ?? [])] }
+          : item));
+      }
+
+      const paymentParts: string[] = [];
+      if (cash > 0) {
+        recordReportPayment({ id: crypto.randomUUID(), stationId: activeStation.id, stationName: activeStation.name, customerId: customer?.id, customerName: customer?.name ?? 'مهمان', customerCode: customer?.code ?? customer?.username ?? activeStation.customerCode ?? 'مهمان', amount: cash, createdAt: new Date().toISOString() }, cash, 'cash');
+        paymentParts.push('نقدی ' + money(cash));
+      }
+      if (card > 0) {
+        recordReportPayment({ id: crypto.randomUUID(), stationId: activeStation.id, stationName: activeStation.name, customerId: customer?.id, customerName: customer?.name ?? 'مهمان', customerCode: customer?.code ?? customer?.username ?? activeStation.customerCode ?? 'مهمان', amount: card, createdAt: new Date().toISOString() }, card, 'card');
+        paymentParts.push('کارت ' + money(card));
+      }
+      if (wallet > 0) paymentParts.push('کیف پول ' + money(wallet));
+
+      const closedAt = new Date().toISOString();
+      setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: 'ترکیبی', closedAt }, ...items]);
+      addSessionTimeline(activeStation.id, 'settle', 'تسویه ترکیبی', paymentParts.join(' · '), finalTotal);
+
+      updateStation(activeStation.id, {
+        state: 'free',
+        startedAt: undefined,
+        sessionMinutes: undefined,
+        sessionRate: undefined,
+        amountSoFar: undefined,
+        customerCode: undefined,
+        persons: undefined,
+        buffetTotal: undefined,
+        sessionCredit: undefined,
+        prepaidEndsAt: undefined,
+        pausedAt: undefined,
+        pausedMinutes: undefined,
+      });
+      setModal(null);
+      setMessage('تسویه ترکیبی ' + money(finalTotal) + ' تومان ثبت شد.');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'تسویه ترکیبی انجام نشد'));
+    }
   }
 
   async function finishSession(method: string, bypassApproval = false) {
