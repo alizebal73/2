@@ -384,6 +384,163 @@ app.MapGet("/api/finance/summary", async (
 
 
 
+app.MapGet("/api/shifts/current", async (
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var shift = await database.Shifts
+        .AsNoTracking()
+        .Include(item => item.AppUser)
+        .OrderByDescending(item => item.OpenAt)
+        .FirstOrDefaultAsync(item => item.CloseAt == null, cancellationToken);
+
+    if (shift is null)
+        return Results.Ok<ShiftSnapshotDto?>(null);
+
+    return Results.Ok(await BuildShiftSnapshotAsync(database, shift, null, cancellationToken));
+})
+.WithName("GetCurrentShift");
+
+app.MapGet("/api/shifts/history", async (
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var shifts = await database.Shifts
+        .AsNoTracking()
+        .Include(item => item.AppUser)
+        .OrderByDescending(item => item.OpenAt)
+        .Take(30)
+        .ToListAsync(cancellationToken);
+
+    var result = new List<ShiftSnapshotDto>(shifts.Count);
+    foreach (var shift in shifts)
+        result.Add(await BuildShiftSnapshotAsync(database, shift, null, cancellationToken));
+
+    return Results.Ok(result);
+})
+.WithName("GetShiftHistory");
+
+app.MapPost("/api/shifts/start", async (
+    StartShiftRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (request.CashOpening < 0)
+        return Results.BadRequest(new { code = "invalid_cash_opening", message = "مبلغ شروع صندوق نمی‌تواند منفی باشد." });
+
+    var openExists = await database.Shifts.AnyAsync(item => item.CloseAt == null, cancellationToken);
+    if (openExists)
+        return Results.Conflict(new { code = "shift_already_open", message = "یک شیفت دیگر هنوز باز است." });
+
+    AppUser? user = null;
+    if (request.AppUserId is not null && request.AppUserId != Guid.Empty)
+        user = await database.AppUsers.FirstOrDefaultAsync(item => item.Id == request.AppUserId.Value && item.IsActive, cancellationToken);
+
+    if (user is null && !string.IsNullOrWhiteSpace(request.OperatorName))
+        user = await database.AppUsers.FirstOrDefaultAsync(item => item.IsActive && item.FullName == request.OperatorName.Trim(), cancellationToken);
+
+    user ??= await database.AppUsers.FirstOrDefaultAsync(item => item.IsActive, cancellationToken);
+
+    if (user is null)
+        return Results.NotFound(new { code = "operator_not_found", message = "کاربر فعال برای باز کردن شیفت پیدا نشد." });
+
+    var shift = new Shift
+    {
+        AppUserId = user.Id,
+        OpenAt = DateTimeOffset.UtcNow,
+        CashOpening = request.CashOpening,
+        Notes = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim()
+    };
+
+    database.Shifts.Add(shift);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ShiftStart",
+        EntityName = "Shift",
+        EntityId = shift.Id.ToString(),
+        Details = "شروع شیفت · " + user.FullName + " · صندوق اولیه " + request.CashOpening.ToString("0.##") + " تومان",
+        AppUserId = user.Id
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(await BuildShiftSnapshotAsync(database, shift, null, cancellationToken));
+})
+.WithName("StartShift");
+
+app.MapPost("/api/shifts/{shiftId:guid}/close", async (
+    Guid shiftId,
+    CloseShiftRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    if (request.CashClosing < 0 || request.ExternalCash < 0)
+        return Results.BadRequest(new { code = "invalid_cash_value", message = "مبالغ صندوق نمی‌توانند منفی باشند." });
+
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    var shift = await database.Shifts
+        .Include(item => item.AppUser)
+        .FirstOrDefaultAsync(item => item.Id == shiftId, cancellationToken);
+
+    if (shift is null)
+        return Results.NotFound(new { code = "shift_not_found", message = "شیفت پیدا نشد." });
+
+    if (shift.CloseAt is not null)
+        return Results.Conflict(new { code = "shift_closed", message = "این شیفت قبلاً بسته شده است." });
+
+    var now = DateTimeOffset.UtcNow;
+    var cashSales = await database.InvoicePayments
+        .Where(item => item.Method == "cash"
+            && item.Invoice.Status == InvoiceStatus.Paid
+            && item.Invoice.PaidAt != null
+            && item.Invoice.PaidAt >= shift.OpenAt
+            && item.Invoice.PaidAt <= now)
+        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+    var expenseTotal = await database.Expenses
+        .Where(item => item.ShiftId == shift.Id)
+        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+    var expectedCash = shift.CashOpening + cashSales + request.ExternalCash - expenseTotal;
+    var difference = request.CashClosing - expectedCash;
+
+    shift.CashClosing = request.CashClosing;
+    shift.CloseAt = now;
+    var noteParts = new List<string>();
+    if (request.ExternalCash > 0)
+        noteParts.Add("تطبیق نقدی خارج از سیستم " + request.ExternalCash.ToString("0.##") + " تومان");
+    if (!string.IsNullOrWhiteSpace(request.Note))
+        noteParts.Add(request.Note.Trim());
+    shift.Notes = string.Join(" · ", noteParts);
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ShiftClose",
+        EntityName = "Shift",
+        EntityId = shift.Id.ToString(),
+        Details = "بستن شیفت · فروش نقدی " + cashSales.ToString("0.##") + " · هزینه " + expenseTotal.ToString("0.##") + " · اختلاف " + difference.ToString("0.##"),
+        AppUserId = shift.AppUserId
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+
+    return Results.Ok(new ShiftSnapshotDto(
+        shift.Id,
+        shift.AppUserId,
+        shift.AppUser?.FullName ?? "کاربر",
+        shift.OpenAt,
+        shift.CloseAt,
+        shift.CashOpening,
+        request.CashClosing,
+        cashSales,
+        expenseTotal,
+        request.ExternalCash,
+        expectedCash,
+        difference,
+        shift.Notes));
+})
+.WithName("CloseShift");
+
 app.MapPost("/api/sessions", async (
     StartSessionRequest request,
     GameNetDbContext database,
@@ -532,3 +689,71 @@ public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid 
 public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
 public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
 public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, decimal Revenue, decimal Expense, decimal OperatingProfit);
+
+
+static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
+    GameNetDbContext database,
+    Shift shift,
+    decimal? countedCashOverride,
+    CancellationToken cancellationToken)
+{
+    var end = shift.CloseAt ?? DateTimeOffset.UtcNow;
+
+    var cashSales = await database.InvoicePayments
+        .Where(item => item.Method == "cash"
+            && item.Invoice.Status == InvoiceStatus.Paid
+            && item.Invoice.PaidAt != null
+            && item.Invoice.PaidAt >= shift.OpenAt
+            && item.Invoice.PaidAt <= end)
+        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+    var expenseTotal = await database.Expenses
+        .Where(item => item.ShiftId == shift.Id)
+        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+    var externalCash = 0m;
+    var expected = shift.CashOpening + cashSales - expenseTotal;
+    var counted = countedCashOverride ?? shift.CashClosing;
+    var difference = counted.HasValue ? counted.Value - expected : 0m;
+
+    return new ShiftSnapshotDto(
+        shift.Id,
+        shift.AppUserId,
+        shift.AppUser?.FullName ?? "کاربر",
+        shift.OpenAt,
+        shift.CloseAt,
+        shift.CashOpening,
+        counted,
+        cashSales,
+        expenseTotal,
+        externalCash,
+        expected,
+        difference,
+        shift.Notes);
+}
+
+public sealed record StartShiftRequest(
+    string? OperatorName,
+    Guid? AppUserId,
+    decimal CashOpening,
+    string? Note);
+
+public sealed record CloseShiftRequest(
+    decimal CashClosing,
+    decimal ExternalCash,
+    string? Note);
+
+public sealed record ShiftSnapshotDto(
+    Guid Id,
+    Guid AppUserId,
+    string Operator,
+    DateTimeOffset OpenedAt,
+    DateTimeOffset? ClosedAt,
+    decimal CashOpening,
+    decimal? CashClosing,
+    decimal CashSales,
+    decimal Expenses,
+    decimal ExternalCash,
+    decimal ExpectedCash,
+    decimal Difference,
+    string? Note);
