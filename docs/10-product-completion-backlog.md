@@ -29,8 +29,8 @@
 13. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
 14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
 
-**جایگاه فعلی:** مرحلهٔ اصلی **۳ — Operational Completion**.  
-آیتم‌های A1 تا A8 زیر همین مرحله هستند. پس از بسته‌شدن واقعی A1 تا A8، وارد مرحلهٔ اصلی **۴ — Finance & Session Core** می‌شویم.
+**جایگاه فعلی:** مرحلهٔ اصلی **۵ — Customer & VIP Domain**.  
+مرحلهٔ ۳ (Operational Completion) و هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core) بسته شده‌اند. موارد Permission/Approval سراسری که عمداً به مرحلهٔ ۷ واگذار شده‌اند، carry-over هستند و مانع ادامهٔ دامنه‌های بعدی نیستند.
 
 این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
 
@@ -291,7 +291,7 @@
 
 ## فهرست اصلی
 
-> مرحله اصلی فعلی: **۴ — Finance & Session Core**؛ ترتیب B9 → B17 حفظ می‌شود.
+> مرحله اصلی فعلی: **۵ — Customer & VIP Domain**؛ هستهٔ B9 → B17 در مرحلهٔ ۴ تکمیل و تست شده است؛ hardening مجوزها در مرحلهٔ ۷ دنبال می‌شود.
 
 ### A) Operational Intelligence / UX
 1. ✅ مرکز «نیازمند توجه» در داشبورد — پیاده‌سازی و CI سبز شد
@@ -333,20 +333,37 @@
 - Reverse کامل و چندمرحله‌ای
 این موارد در B10/B11 و مرحله ۷/مالی تکمیل می‌شوند.
 
+## وضعیت مرحله اصلی ۴ — Finance & Session Core
+
+**هستهٔ مرحله ۴ تکمیل شد.** B9 تا B17 مسیرهای اصلی مالی/جلسه را روی Server/SQLite/Audit و CI/Smoke سبز تثبیت کرده‌اند. موارد مشترک Permission/Approval نهایی عمداً به مرحلهٔ ۷ منتقل شده‌اند و موارد Customer Domain که به مدل مشتری مربوط‌اند، در مرحلهٔ ۵ ادامه پیدا می‌کنند.
+
+## شروع مرحله اصلی ۵ — Customer & VIP Domain
+
+### محدوده
+- Customer منبع حقیقت سرور
+- CRUD مشتری
+- پروفایل مالی/هویتی
+- Wallet / Debt / Free Time / Free Money
+- VIP Package و مصرف روزانه
+- Concurrent Login Limit
+- History / Ledger
+- Password/credential UX
+- آماده‌سازی Client Login برای Agent
+
 ## وضعیت مرحله اصلی ۳ — Operational Completion
 
 **تکمیل شد.** A1 تا A8 همگی پیاده‌سازی شدند و CI + Dashboard Interaction Smoke روی HEAD نهایی سبز است. مرحله اصلی بعدی: **۴ — Finance & Session Core**.
 
 ### B) Finance / Session
-9. [~] Wallet Ledger واقعی — API/SQLite/Audit/adapter + مشتری مالی سروری + حذف Mock fallback انجام شد؛ Permission/Server Command نهایی و تکمیل Customer Domain در مرحله ۵ اصلی باقی است
-10. [~] Refund / Reverse واقعی — Refund کیف پول Server/API + Audit + UI + Approval + Reference تراکنش مبدأ + محدودیت مبلغ نسبت به مبدأ + Persistence Test + CI/Playwright Run 309 سبز شد؛ Reverse کامل Session/Buffet/Package و Permission سروری هنوز باقی است
-11. [~] Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change + Server Atomic Settlement + Invoice/Wallet/Audit + تست اتمیک و Smoke سبز؛ اتصال مستقیم Dashboard به Session/Invoice سرور و Permission نهایی باقی
-12. ✅ Split Payment — UI + ثبت اتمیک سروری + Invoice + Audit + Dashboard Smoke سبز؛ Permission نهایی طبق مرحله ۷ تکمیل می‌شود
-13. [~] Shift Settlement + Shift Handover — Shift Open/Close سروری + فروش نقدی از InvoicePayment + هزینه + تطبیق نقدی + Audit + Build/Test/Smoke سبز؛ اتصال کامل Users/Permission هنوز باقی
-14. [~] Session Transfer / Change Tariff / Change Persons — Session Center + Server transaction/Audit برای تغییر نرخ/نفر/انتقال + Build/Test/Smoke سبز؛ Permission نهایی مرحله ۷ باقی
-15. [~] Free Time + Free Money کامل — Ledger مستقل سروری، اعطا/کسر، مصرف در Settlement و Build/Test/Smoke سبز؛ مهاجرت کامل Customer Domain/Permission نهایی باقی
-16. [~] Concurrent Login Limit — قرارداد مشتری + Mock Login Guard + Client UX پیاده شد؛ enforcement سروری/Agent و چنددستگاهی واقعی باقی
-17. [~] Expense / Profit واقعی و قابل ممیزی — Expense/Operating Profit Server + SQLite + Audit + Reports adapter اضافه شد؛ CI/Smoke سبز و اتصال کامل Invoice/COGS/Profit باقی
+9. ✅ Wallet Ledger واقعی — API/SQLite/Audit/adapter و مسیرهای مالی Dashboard سروری شدند؛ ادامهٔ مدل مشتری و Permissionهای نهایی به مراحل ۵ و ۷ منتقل شد
+10. ✅ Refund / Reverse واقعی — Refund کیف پول + Reference مبدأ + Approval UX + Reverse اتمیک Invoice/Session در سرور + Persistence Test + CI/Smoke سبز
+11. ✅ Settlement کامل + Breakdown + Why this amount? — Billing Engine/Breakdown/Why/Received/Change + Server Atomic Settlement + Invoice/Wallet/Audit + اتصال Dashboard به Session/Invoice سرور + تست اتمیک/Smoke سبز
+12. ✅ Split Payment — UI + ثبت اتمیک سروری + Invoice + Audit + Smoke سبز؛ hardening Permission در مرحله ۷
+13. ✅ Shift Settlement + Shift Handover — Shift Open/Close سروری + فروش نقدی از InvoicePayment + هزینه + تطبیق نقدی + Audit + Build/Test/Smoke سبز؛ hardening Users/Permission در مرحله ۷
+14. ✅ Session Transfer / Change Tariff / Change Persons — Session Center + Server transaction/Audit برای تغییر نرخ/نفر/انتقال + Build/Test/Smoke سبز؛ hardening Permission در مرحله ۷
+15. ✅ Free Time + Free Money کامل — دامنه و Ledger مستقل سروری، اعطا/کسر، مصرف در Settlement و Build/Test/Smoke سبز؛ ادامهٔ Customer Domain در مرحله ۵
+16. ✅ Concurrent Login Limit — Guard و endpointهای acquire/release سروری + migration + client enforcement + CI/Smoke سبز
+17. ✅ Expense / Profit واقعی و قابل ممیزی — Expense/Shift/Operating Profit Server + SQLite + Audit + گزارش تراکنش فاکتور سروری + CI/Smoke سبز
 
 ### C) Client / Agent
 18. Client Health / Heartbeat / Telemetry
