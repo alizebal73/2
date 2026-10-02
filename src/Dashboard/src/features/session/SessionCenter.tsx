@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CustomerRecord, SessionTimelineEvent, StationDto } from '../../types';
 
 type Props = {
@@ -13,6 +13,7 @@ type Props = {
   onExtend: () => void;
   onReduce: () => void;
   onSettle: () => void;
+  onRateChange: (rate: number) => void;
   timeline: SessionTimelineEvent[];
 };
 
@@ -30,8 +31,11 @@ export function SessionCenter({
   onExtend,
   onReduce,
   onSettle,
+  onRateChange,
   timeline,
 }: Props) {
+  const [rateInput, setRateInput] = useState(String(Math.round(station.sessionRate ?? station.ratePerHour)));
+  useEffect(() => setRateInput(String(Math.round(station.sessionRate ?? station.ratePerHour))), [station.sessionRate, station.ratePerHour]);
   const duration = Math.max(0, durationMinutes);
   const timeAmount = Math.max(0, Math.round((station.sessionRate ?? station.ratePerHour) * duration / 60));
   const buffetAmount = station.buffetTotal ?? 0;
@@ -76,7 +80,17 @@ export function SessionCenter({
               </span>
             </div>
             <div className="session-facts">
-              <div><span>نرخ جلسه</span><strong>{money(station.sessionRate ?? station.ratePerHour)} تومان / ساعت</strong></div>
+              <div className="session-rate-editor">
+                <span>نرخ جلسه</span>
+                <div>
+                  <input inputMode="numeric" value={rateInput} onChange={event => setRateInput(event.target.value)} aria-label="نرخ ساعتی جلسه" />
+                  <button type="button" className="btn sm" onClick={() => {
+                    const normalized = Number(rateInput.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))).replace(/[٬,\s]/g, ''));
+                    if (normalized > 0) onRateChange(normalized);
+                  }}>اعمال</button>
+                </div>
+                <small>این عدد فقط روی همین جلسه اثر دارد.</small>
+              </div>
               <div><span>نفرات</span><strong>{station.persons ?? 1} نفر</strong></div>
               <div><span>هزینه زمان</span><strong>{money(timeAmount)} تومان</strong></div>
               <div><span>بوفه</span><strong>{money(buffetAmount)} تومان</strong></div>
