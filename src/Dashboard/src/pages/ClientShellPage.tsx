@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ClientRecord } from '../types';
 import { mockService } from '../services/mockService';
+import { acquireCustomerLogin, releaseCustomerLogin } from '../services/customerLoginService';
+import { userErrorMessage } from '../utils/userError';
 
 type ContextMenu = { x: number; y: number; client: ClientRecord } | null;
 type ClientSettings = Pick<ClientRecord, 'ip' | 'dns1' | 'dns2' | 'systemNumber' | 'serverAddress' | 'shell' | 'network' | 'bootMode'>;
@@ -116,10 +118,29 @@ export function ClientShellPage() {
     } else if (kind === 'toggle-internet') {
       setClients(current => current.map(client => ids.includes(client.id) ? { ...client, internetEnabled: !client.internetEnabled, network: client.internetEnabled ? 'lan' : 'internet1' } : client));
     } else if (kind === 'logout') {
+      const released = clients.filter(client => ids.includes(client.id) && client.user);
       updateClients(ids, { user: '', game: '', locked: true });
+      void Promise.all(released.map(async client => {
+        try {
+          const customer = clients.find(row => row.id === client.id)?.user;
+          if (customer) await releaseCustomerLogin(customer, client.id);
+        } catch (error) {
+          setNotice(userErrorMessage(error, 'خروج مشتری روی سرور ثبت نشد'));
+        }
+      }));
     } else if (kind === 'login') {
       const code = window.prompt('شناسه مشتری را وارد کنید');
-      if (code) updateClients(ids, { user: code, locked: false });
+      if (code) {
+        void Promise.all(ids.map(async id => {
+          try {
+            const result = await acquireCustomerLogin(code, id);
+            updateClients([id], { user: code, locked: false });
+            if (result) setNotice('ورود مشتری ثبت شد · ' + result.activeCount + ' از ' + result.limit + ' ورود فعال');
+          } catch (error) {
+            setNotice(userErrorMessage(error, 'ورود مشتری انجام نشد'));
+          }
+        }));
+      }
     } else if (kind === 'message') {
       const text = window.prompt('پیام برای مشتری');
       if (text) setNotice(`پیام برای ${clientNames} ثبت شد: ${text}`);
