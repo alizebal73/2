@@ -59,38 +59,27 @@ export async function recordWalletTransaction(
 }
 
 
-export async function refundWalletTransaction(
+export async function requestWalletRefundApproval(
   customerId: string,
   input: { amount: number; reason: string; sourceTransactionId?: string },
-): Promise<WalletLedgerEntry> {
+): Promise<{ id: string; status: string }> {
   if (!isGuid(customerId)) throw new Error('شناسه مشتری سروری معتبر نیست.');
 
-  const response = await fetch('/api/customers/' + customerId + '/wallet-refunds', {
+  const response = await fetch('/api/customers/' + customerId + '/wallet-refunds/request', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: input.amount, reason: input.reason, sourceTransactionId: input.sourceTransactionId ?? null }),
+    credentials: 'include',
+    body: JSON.stringify({
+      amount: input.amount,
+      reason: input.reason,
+      sourceTransactionId: input.sourceTransactionId ?? null,
+    }),
   });
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { message?: string } | null;
-    throw new Error(payload?.message || 'ثبت بازگشت وجه انجام نشد');
+    throw new Error(payload?.message || 'درخواست بازگشت وجه ثبت نشد');
   }
 
-  const row = await response.json() as {
-    id: string;
-    customerId: string;
-    amount: number;
-    type: string;
-    description: string;
-    createdAt: string;
-    balanceAfter: number;
-    referenceTransactionId?: string | null;
-  };
-
-  return {
-    ...row,
-    direction: 'debit',
-    type: 'refund',
-    referenceTransactionId: row.referenceTransactionId ?? input.sourceTransactionId,
-  };
+  return await response.json() as { id: string; status: string };
 }
