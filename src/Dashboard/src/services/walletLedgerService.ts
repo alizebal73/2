@@ -17,11 +17,13 @@ export async function getWalletLedger(customerId: string): Promise<WalletLedgerE
     description: string;
     createdAt: string;
     balanceAfter: number;
+    referenceTransactionId?: string | null;
   }>;
   return rows.map(row => ({
     ...row,
     direction: row.type.toLowerCase() === 'credit' ? 'credit' : 'debit',
     type: row.type.toLowerCase() === 'credit' ? 'charge' : row.type.toLowerCase() === 'refund' ? 'refund' : 'debit',
+    referenceTransactionId: row.referenceTransactionId ?? undefined,
   }));
 }
 
@@ -58,7 +60,7 @@ export async function recordWalletTransaction(
 
 export async function refundWalletTransaction(
   customerId: string,
-  input: { amount: number; reason: string },
+  input: { amount: number; reason: string; sourceTransactionId?: string },
 ): Promise<WalletLedgerEntry> {
   if (!isGuid(customerId)) {
     return mockService.recordWalletTransaction(customerId, {
@@ -71,7 +73,7 @@ export async function refundWalletTransaction(
   const response = await fetch('/api/customers/' + customerId + '/wallet-refunds', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: input.amount, reason: input.reason }),
+    body: JSON.stringify({ amount: input.amount, reason: input.reason, sourceTransactionId: input.sourceTransactionId ?? null }),
   });
 
   if (!response.ok) {
