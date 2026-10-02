@@ -5,6 +5,7 @@ import { mockService } from '../services/mockService';
 import { calculateBilling, resolvePricingRate } from '../services/billingEngine';
 import { SessionCenter } from '../features/session/SessionCenter';
 import { DashboardAttentionSidebar, type SidebarAttentionItem, type SidebarPaymentItem } from '../features/attention/DashboardAttentionSidebar';
+import { ApprovalDialog } from '../components/ApprovalDialog';
 
 const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه‌ها (۴۰)', console: 'کنسول‌ها (۱۶)', table: 'میزها (۵)' };
 const stateLabels: Record<StationState, string> = { free: 'آزاد', busy: 'در حال بازی', paused: 'متوقف', reserved: 'رزرو', off: 'خارج از سرویس' };
@@ -22,6 +23,7 @@ type Props = {
   serverInfo: ServerInfoDto | null;
   error: string;
   onNavigate: (page: 'client-shell') => void;
+  role?: 'operator' | 'manager' | 'owner';
 };
 
 type ContextMenu = { x: number; y: number; station: StationDto } | null;
@@ -30,7 +32,7 @@ type SessionFollowUp = { id: string; stationId: string; stationName: string; cus
 type PendingPayment = { id: string; stationId: string; stationName: string; customerId?: string; customerName: string; customerCode: string; amount: number; createdAt: string; };
 type AttentionItem = { id: string; kind: AttentionKind; station: StationDto; title: string; detail: string; actionLabel: string; followUpId?: string; };
 
-export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Props) {
+export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role = 'operator' }: Props) {
   const [stationOverrides, setStationOverrides] = useState<StationDto[] | null>(null);
   const [zone, setZone] = useState<ZoneKey>('all');
   const [query, setQuery] = useState('');
@@ -51,6 +53,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
   const [pendingPayments, setPendingPayments] = useState<PendingPayment[]>([]);
   const [sessionTimeline, setSessionTimeline] = useState<SessionTimelineEvent[]>([]);
   const [message, setMessage] = useState('');
+  const [approval, setApproval] = useState<{ title: string; detail: string; action: 'settle'; method: string } | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
   const [extendMinutes, setExtendMinutes] = useState(30);
@@ -404,8 +407,12 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
     setMessage('بدهی ' + money(payment.amount) + ' تومان ثبت شد.');
   }
 
-  function finishSession(method: string) {
+  function finishSession(method: string, bypassApproval = false) {
     if (!activeStation) return;
+    if (!bypassApproval && role === 'operator' && discountPercent > 10) {
+      setApproval({ title: 'تخفیف بیشتر از حد مجاز اپراتور', detail: 'این تسویه شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.', action: 'settle', method });
+      return;
+    }
     const elapsed = duration(activeStation);
     const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
     const tariff = tariffs.find(item => item.stationType === activeStation.type);
@@ -690,6 +697,18 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate }: Pr
       <button onClick={() => contextAction('offline')}>🛠 خارج از سرویس / فعال‌سازی</button>
       <button onClick={() => contextAction('settings')}>⚙ تنظیمات کامل کلاینت</button>
     </div>}
+    {approval && <ApprovalDialog
+      open={Boolean(approval)}
+      title={approval.title}
+      detail={approval.detail}
+      requestLabel="تأیید و ادامه تسویه"
+      onReject={() => setApproval(null)}
+      onApprove={() => {
+        const request = approval;
+        setApproval(null);
+        finishSession(request.method, true);
+      }}
+    />}
     {modal && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setModal(null)}><section className="operation-modal" role="dialog" aria-modal="true">
       <button className="modal-close" onClick={() => setModal(null)} aria-label="بستن">×</button>
       {modal === 'start' && <><h2>ورود یوزر · {activeStation?.name ?? 'انتخاب ایستگاه آزاد'}</h2>
