@@ -117,7 +117,7 @@ export function GamesPage() {
               <div className="info-row"><span>اعمال به</span><strong>{selectedGame.target === 'all' ? 'همه رایانه‌ها' : selectedGame.target === 'zone' ? selectedGame.targetZone : selectedGame.targetStations || 'ایستگاه‌های منتخب'}</strong></div>
               <div className="info-row"><span>کاربران فعال</span><strong>{selectedGame.activeUsers.toLocaleString('fa-IR')}</strong></div>
             </div>
-            <div className="game-detail-actions"><button className="btn primary" onClick={() => setDraft({ ...selectedGame })}>ویرایش تنظیمات</button><button className="btn" onClick={() => void applyGames([selectedGame.id])}>اعمال به کلاینت‌ها</button><button className="btn danger" onClick={() => void deleteGame(selectedGame)}>حذف بازی</button></div>
+            <div className="game-detail-actions"><button className="btn primary" onClick={() => setDraft({ ...selectedGame })}>ویرایش تنظیمات</button><button className="btn danger" onClick={() => void deleteGame(selectedGame)}>حذف بازی</button></div>
           </> : <div className="games-empty">بازی‌ای برای نمایش انتخاب نشده است.</div>}
         </section>
       </div>
