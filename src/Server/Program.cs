@@ -10,6 +10,7 @@ builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddScoped<SessionSettlementService>();
+builder.Services.AddScoped<InvoiceReverseService>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
 var databasePath = Path.IsPathRooted(databaseFile)
@@ -958,6 +959,32 @@ app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
     }
 })
 .WithName("SettleSession");
+
+app.MapPost("/api/invoices/{invoiceId:guid}/reverse", async (
+    Guid invoiceId,
+    InvoiceReverseRequest request,
+    InvoiceReverseService reverseService,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var result = await reverseService.ReverseAsync(invoiceId, request, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { code = "invoice_not_found", message = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "reverse_conflict", message = exception.Message });
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_reverse", message = exception.Message });
+    }
+})
+.WithName("ReverseInvoice");
 
 app.MapHub<DashboardHub>("/hubs/dashboard");
 
