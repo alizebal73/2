@@ -73,6 +73,9 @@ export async function settleServerSession(
   parts: SessionPaymentPart[],
   appUserId?: string,
   freeTimeMinutes = 0,
+  timeAmount?: number,
+  discountAmount?: number,
+  prepaidAmount?: number,
 ): Promise<ServerSettlementResult> {
   const response = await fetch('/api/sessions/' + sessionId + '/settle', {
     method: 'POST',
@@ -82,6 +85,9 @@ export async function settleServerSession(
       parts,
       appUserId: appUserId && isGuid(appUserId) ? appUserId : null,
       freeTimeMinutes,
+      timeAmount,
+      discountAmount,
+      prepaidAmount,
     }),
   });
 
@@ -126,6 +132,26 @@ export async function transferServerSession(
 }
 
 
+export type ActiveServerSession = {
+  id: string;
+  stationName: string;
+  customerId: string;
+  customerName: string;
+  customerCode?: string;
+  username?: string;
+  startedAt: string;
+  buffetTotal: number;
+};
+
+export async function getServerActiveSessions(): Promise<ActiveServerSession[]> {
+  const response = await fetch('/api/sessions/active');
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'جلسه‌های فعال از سرور دریافت نشد');
+  }
+  return await response.json() as ActiveServerSession[];
+}
+
 export async function reverseServerInvoice(
   invoiceId: string,
   reason: string,
@@ -134,6 +160,8 @@ export async function reverseServerInvoice(
   invoiceStatus: string;
   walletRestored: number;
   freeMoneyRestored: number;
+  freeTimeRestored: number;
+  inventoryRestored: number;
   externalRefundRequired: boolean;
   reversalId: string;
 }> {
