@@ -217,11 +217,17 @@ public sealed class ClientUpdateManager
         if (!string.Equals(current.ActiveVersion, version, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("نسخهٔ فعال با نسخهٔ سلامت همخوانی ندارد.");
 
+        var completingRollback = string.Equals(
+            current.PendingRollbackVersion,
+            version,
+            StringComparison.OrdinalIgnoreCase);
+
         var next = new ClientUpdateState(
             current.ActiveVersion,
-            current.PreviousVersion,
+            completingRollback ? null : current.PreviousVersion,
             version,
-            current.ActivatedAt);
+            current.ActivatedAt,
+            completingRollback ? null : current.PendingRollbackVersion);
 
         await SaveStateAsync(next, cancellationToken);
     }
