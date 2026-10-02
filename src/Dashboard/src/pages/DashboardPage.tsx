@@ -16,6 +16,7 @@ const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه�
 const stateLabels: Record<StationState, string> = { free: 'آزاد', busy: 'در حال بازی', paused: 'متوقف', reserved: 'رزرو', off: 'خارج از سرویس' };
 const emptyStations: StationDto[] = [];
 type ViewMode = 'v-card' | 'v-compact' | 'v-list';
+type PcGroupBy = 'state' | 'vip' | 'network' | 'remaining';
 type ModalKind = 'start' | 'flow' | 'charge' | 'settle' | 'extend' | 'reduce' | null;
 type Invoice = { station: string; total: number; payment: string; closedAt: string };
 
@@ -41,6 +42,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
   const [stationOverrides, setStationOverrides] = useState<StationDto[] | null>(null);
   const [zone, setZone] = useState<ZoneKey>('all');
   const [query, setQuery] = useState('');
+  const [pcGroupBy, setPcGroupBy] = useState<PcGroupBy>('state');
   const [view, setView] = useState<ViewMode>('v-card');
   const [zoom, setZoom] = useState(100);
   const [now, setNow] = useState(Date.now());
@@ -199,6 +201,36 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
 
   const visibleStations = useMemo(() => stations.filter(station =>
     (zone === 'all' || station.zone === zone) && station.name.toLowerCase().includes(query.trim().toLowerCase())), [stations, zone, query]);
+
+  const pcGroupLabel = (station: StationDto) => {
+    const customer = customers.find(item => item.username === station.customerCode || item.code === station.customerCode);
+    if (pcGroupBy === 'vip') return customer && customer.vip !== 'none' ? 'VIP' : 'عادی';
+    if (pcGroupBy === 'network') return 'اینترنت ' + (station.network ?? 1);
+    if (pcGroupBy === 'remaining') {
+      if (station.prepaidEndsAt) {
+        const remaining = Math.max(0, Math.ceil((new Date(station.prepaidEndsAt).getTime() - now) / 60000));
+        if (remaining === 0) return 'زمان تمام‌شده';
+        if (remaining < 15) return 'کمتر از ۱۵ دقیقه';
+        if (remaining <= 30) return '۱۵ تا ۳۰ دقیقه';
+        if (remaining <= 60) return '۳۰ تا ۶۰ دقیقه';
+        return 'بیشتر از ۶۰ دقیقه';
+      }
+      return 'بدون زمان پایان';
+    }
+    return stateLabels[station.state as StationState] ?? station.state;
+  };
+
+  const pcGroupedStations = useMemo(() => {
+    const pcStations = visibleStations.filter(item => item.zone === 'pc');
+    const groups = new Map<string, StationDto[]>();
+    for (const station of pcStations) {
+      const key = pcGroupLabel(station);
+      const bucket = groups.get(key) ?? [];
+      bucket.push(station);
+      groups.set(key, bucket);
+    }
+    return Array.from(groups.entries());
+  }, [visibleStations, customers, pcGroupBy, now]);
   const selectStationWithModifiers = useCallback((stationId: string, ctrlKey: boolean, shiftKey: boolean) => {
     if (shiftKey && selectionAnchorId) {
       const anchorIndex = visibleStations.findIndex(item => item.id === selectionAnchorId);
@@ -1115,9 +1147,19 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       onContextMenu={event => showContext(event, station)}
     >
       <div className="top"><div className="name">{station.name}</div><span className={`status-badge ${station.state}`}>{stateLabels[station.state as StationState] ?? station.state}</span></div>
-      <span className="type">{station.type} · شبکه {station.network ?? 1}</span>
-      <div className="time">{station.state === 'busy' ? `${money(Math.floor(minutes / 60)).padStart(2, '۰')}:${money(Math.floor(minutes % 60)).padStart(2, '۰')}` : station.state === 'reserved' ? 'رزرو ۱۸:۰۰' : station.state === 'off' ? '⛔' : '--:--'}</div>
-      <div className="price">{station.state === 'busy' ? `هزینه ${money(elapsedCost)} تومان` : `از ${money(station.ratePerHour)} تومان / ساعت`}</div>
+      {(() => {
+        const customer = customers.find(item => item.username === station.customerCode || item.code === station.customerCode);
+        const remaining = station.prepaidEndsAt
+          ? Math.max(0, Math.ceil((new Date(station.prepaidEndsAt).getTime() - now) / 60000))
+          : station.remainingMinutes;
+        return <div className="station-customer-summary">
+          <div className="station-customer-line"><strong>{station.customerCode || 'مهمان'}</strong><span>{customer?.name ?? 'بدون مشتری ثبت‌شده'}</span></div>
+          {customer && <div className="station-customer-line secondary"><span>بدهی: {money(customer.debt)} تومان</span><span>{customer.alias || customer.transactionHistory?.[0] || '—'}</span></div>}
+          {station.state === 'busy' && <div className="station-remaining">{remaining == null ? 'جلسه باز' : remaining <= 0 ? 'زمان تمام‌شده' : 'باقی‌مانده: ' + money(remaining) + ' دقیقه'}</div>}
+        </div>;
+      })()}
+      <span className="type">{station.type} · اینترنت {station.network ?? 1}</span>
+      <div className="time">{station.state === 'busy' ? `${money(Math.floor(minutes / 60)).padStart(2, '۰')}:${money(Math.floor(minutes % 60)).padStart(2, '۰')}` : station.state === 'reserved' ? 'رزرو' : station.state === 'off' ? '⛔' : '--:--'}</div>
       {station.state === 'busy' && <><div className="person-dots">{'● '.repeat(station.persons ?? 1)}</div><div className="progress-bar"><span style={{ width: `${Math.min(100, minutes % 60 / 60 * 100)}%` }} /></div><span className="pulse" /></>}
       {station.state === 'off' && <small>{station.outOfServiceReason ?? 'در تعمیر'}</small>}
       <div className="station-hover-actions" draggable={false} onMouseDown={event => { event.stopPropagation(); window.getSelection()?.removeAllRanges(); }} onClick={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}>
@@ -1173,6 +1215,14 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
       <main className="dashboard-main" onDragStart={event => event.preventDefault()}>
         <div className="toolbar dashboard-toolbar">
           <div className="zone-filter">{Object.entries(zoneLabels).map(([key, label]) => <button key={key} type="button" className={zone === key ? 'active' : ''} onClick={() => setZone(key as ZoneKey)}>{label}</button>)}</div>
+          {(zone === 'pc' || zone === 'all') && <label className="pc-group-control">گروه‌بندی PC
+            <select value={pcGroupBy} onChange={event => setPcGroupBy(event.target.value as PcGroupBy)}>
+              <option value="state">وضعیت</option>
+              <option value="vip">VIP / عادی</option>
+              <option value="network">اینترنت ۱ / ۲</option>
+              <option value="remaining">زمان باقی‌مانده</option>
+            </select>
+          </label>}
           <div className="search-box"><input aria-label="جست‌وجوی ایستگاه" value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی ایستگاه…" /></div>
           <div className="view-switch" aria-label="حالت نمایش">{(['v-card', 'v-compact', 'v-list'] as ViewMode[]).map((item, index) => <button key={item} type="button" className={view === item ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(item)}>{['▦', '▤', '☰'][index]}</button>)}</div>
           <label className="zoom-control">اندازه <input type="range" min="70" max="130" step="5" value={zoom} onChange={event => setZoom(Number(event.target.value))} />{money(zoom)}٪</label>
@@ -1184,8 +1234,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
         {zone === 'all' ? groups.map(([key, title]) => {
           const items = visibleStations.filter(item => item.zone === key);
           if (!items.length) return null;
+          if (key === 'pc') {
+            return <section key={key}><div className="section-title">{title} · {items.length}</div>{pcGroupedStations.map(([groupName, groupItems]) => <div key={groupName} className="pc-group"><div className="pc-group-title">{groupName} · {groupItems.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{groupItems.map(renderStation)}</div></div>)}</section>;
+          }
           return <section key={key}><div className="section-title">{title} · {items.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{items.map(renderStation)}</div></section>;
-        }) : <div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{visibleStations.map(renderStation)}</div>}
+        }) : zone === 'pc' ? <div>{pcGroupedStations.map(([groupName, groupItems]) => <div key={groupName} className="pc-group"><div className="pc-group-title">{groupName} · {groupItems.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{groupItems.map(renderStation)}</div></div>)}</div> : <div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{visibleStations.map(renderStation)}</div>
       </main>
       {selectionRect && <div
         className="station-selection-rect"
