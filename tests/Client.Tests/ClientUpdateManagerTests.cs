@@ -54,6 +54,9 @@ public sealed class ClientUpdateManagerTests
             Assert.Equal("2.0.0", rolledBack.HealthyVersion);
 
             await manager.MarkHealthyAsync("1.0.0", CancellationToken.None);
+            var healthyBeforeCommit = await manager.GetStateAsync(CancellationToken.None);
+            Assert.Equal("1.0.0", healthyBeforeCommit!.PendingRollbackVersion);
+
             await manager.CommitHealthyAsync("1.0.0", CancellationToken.None);
             var rollbackHealthy = await manager.GetStateAsync(CancellationToken.None);
             Assert.Equal("1.0.0", rollbackHealthy!.ActiveVersion);

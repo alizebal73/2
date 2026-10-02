@@ -203,7 +203,8 @@ public sealed class ClientUpdateManager
             current.ActiveVersion ?? version,
             current.PreviousVersion,
             version,
-            current.ActivatedAt);
+            current.ActivatedAt,
+            current.PendingRollbackVersion);
 
         await SaveStateAsync(next, cancellationToken);
     }
