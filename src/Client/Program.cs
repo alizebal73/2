@@ -269,6 +269,7 @@ static async Task RunTestSessionFlowAsync(
             cancellationToken);
 
         Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
+        Console.WriteLine($"AGENT_SESSION_START_OK:{started.SessionId}");
 
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
 
@@ -280,6 +281,7 @@ static async Task RunTestSessionFlowAsync(
             cancellationToken);
 
         Console.WriteLine($"Agent session end موفق؛ SessionId={ended.SessionId}; EndAt={ended.EndAt:O}.");
+        Console.WriteLine($"AGENT_SESSION_END_OK:{ended.SessionId}");
     }
     catch (Exception exception) when (
         exception is HubException or HttpRequestException or InvalidOperationException)
