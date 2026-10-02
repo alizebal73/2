@@ -807,6 +807,99 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (
 })
 .WithName("CreateCustomerDebt");
 
+app.MapGet("/api/customers/{customerId:guid}/debts", async (
+    Guid customerId,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var debts = await database.Invoices
+        .AsNoTracking()
+        .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
+        .OrderBy(item => item.IssuedAt)
+        .Select(item => new
+        {
+            id = item.Id,
+            amount = item.TotalAmount,
+            issuedAt = item.IssuedAt,
+            description = item.Items.Select(line => line.Description).FirstOrDefault() ?? "بدهی مشتری"
+        })
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(debts);
+})
+.WithName("GetCustomerDebts");
+
+app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", async (
+    Guid customerId,
+    Guid invoiceId,
+    CustomerDebtSettlementRequest request,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var method = request.Method?.Trim().ToLowerInvariant();
+    if (method is not ("cash" or "card" or "wallet"))
+        return Results.BadRequest(new { code = "invalid_debt_settlement_method", message = "روش تسویه بدهی معتبر نیست." });
+
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+    var invoice = await database.Invoices
+        .Include(item => item.Customer)
+        .FirstOrDefaultAsync(item => item.Id == invoiceId && item.CustomerId == customerId && item.Status == InvoiceStatus.Draft, cancellationToken);
+
+    if (invoice is null)
+        return Results.NotFound(new { code = "debt_not_found", message = "بدهی موردنظر پیدا نشد یا قبلاً تسویه شده است." });
+
+    if (method == "wallet")
+    {
+        if (invoice.Customer.Balance < invoice.TotalAmount)
+            return Results.Conflict(new { code = "insufficient_balance", message = "موجودی کیف پول برای تسویه این بدهی کافی نیست." });
+
+        invoice.Customer.Balance -= invoice.TotalAmount;
+        database.WalletTransactions.Add(new WalletTransaction
+        {
+            CustomerId = customerId,
+            Amount = invoice.TotalAmount,
+            Type = WalletTransactionType.Debit,
+            ReferenceInvoiceId = invoice.Id,
+            Description = "تسویه بدهی از کیف پول"
+        });
+    }
+
+    invoice.Status = InvoiceStatus.Paid;
+    invoice.PaidAt = DateTimeOffset.UtcNow;
+    database.InvoicePayments.Add(new InvoicePayment
+    {
+        InvoiceId = invoice.Id,
+        Method = method,
+        Amount = invoice.TotalAmount
+    });
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "CustomerDebtSettled",
+        EntityName = "Invoice",
+        EntityId = invoice.Id.ToString(),
+        Details = invoice.TotalAmount.ToString("0.##") + " تومان · " + method,
+        AppUserId = request.AppUserId
+    });
+
+    await database.SaveChangesAsync(cancellationToken);
+    await transaction.CommitAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        invoiceId = invoice.Id,
+        customerId,
+        amount = invoice.TotalAmount,
+        method,
+        debtRemaining = await database.Invoices
+            .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
+            .Select(item => (decimal?)item.TotalAmount)
+            .SumAsync() ?? 0m,
+        walletBalanceAfter = invoice.Customer.Balance
+    });
+})
+.WithName("SettleCustomerDebt");
+
 app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (
     Guid customerId,
     GameNetDbContext database,
