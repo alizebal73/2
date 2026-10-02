@@ -623,7 +623,7 @@ app.MapGet("/api/approvals", async (
             createdAt = item.CreatedAt,
             decidedAt = item.DecidedAt
         })
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     return Results.Ok(approvals);
 })
