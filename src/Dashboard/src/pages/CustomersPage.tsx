@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { mockService } from '../services/mockService';
-import type { CustomerRecord } from '../types';
+import { getWalletLedger, recordWalletTransaction } from '../services/walletLedgerService';
+import type { CustomerRecord, WalletLedgerEntry } from '../types';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 type Filter = 'all' | 'vip' | 'debt';
@@ -27,8 +28,15 @@ export function CustomersPage() {
   const [draft, setDraft] = useState<CustomerDraft>({ name: '', alias: '', mobile: '', nationalId: '', username: '', vip: 'none', password: '' });
   const [editName, setEditName] = useState('');
   const [editPassword, setEditPassword] = useState('');
+  const [walletLedger, setWalletLedger] = useState<WalletLedgerEntry[]>([]);
 
   useEffect(() => { void mockService.getCustomers().then(setCustomers); }, []);
+  useEffect(() => {
+    if (!selected?.id) { setWalletLedger([]); return; }
+    let active = true;
+    void getWalletLedger(selected.id).then(rows => { if (active) setWalletLedger(rows); }).catch(() => { if (active) setWalletLedger([]); });
+    return () => { active = false; };
+  }, [selected?.id]);
 
   const visible = useMemo(() => customers.filter(customer => {
     const matchesFilter = filter === 'all' || (filter === 'vip' ? customer.vip !== 'none' : customer.debt > 0);
@@ -72,7 +80,7 @@ export function CustomersPage() {
       .replace(/[٬,s]/g, '')) || 0;
   }
 
-  function submitAction() {
+  async function submitAction() {
     if (action === 'new') {
       const name = draft.name.trim();
       if (!name) {
@@ -133,7 +141,16 @@ export function CustomersPage() {
       return;
     }
 
-    if (action === 'wallet') updateCustomer(selected.id, { wallet: selected.wallet + value }, `شارژ کیف پول · ${money(value)} تومان`);
+    if (action === 'wallet') {
+      try {
+        const entry = await recordWalletTransaction(selected.id, { amount: value, type: 'credit', description: 'شارژ کیف پول توسط اپراتور' });
+        updateCustomer(selected.id, { wallet: entry.balanceAfter }, 'شارژ کیف پول · ' + money(value) + ' تومان');
+        setWalletLedger(current => [entry, ...current]);
+      } catch (error) {
+        setNotice(error instanceof Error ? error.message : 'ثبت شارژ کیف پول انجام نشد');
+        return;
+      }
+    }
     else if (action === 'debt') updateCustomer(selected.id, { debt: selected.debt + value }, `ثبت بدهی · ${money(value)} تومان`);
     else if (action === 'gift') updateCustomer(selected.id, { giftCredit: selected.giftCredit + value }, `اعتبار رایگان · ${money(value)} تومان`);
     else if (action === 'package') {
@@ -194,6 +211,32 @@ export function CustomersPage() {
             <div className="info-row"><span>مصرف امروز / باقی‌مانده</span><strong>{selected.hoursUsedToday ?? 0} / {Math.max(0, (selected.dailyHourCap ?? 0) - (selected.hoursUsedToday ?? 0))} ساعت</strong></div>
             {(selected.hoursUsedToday ?? 0) >= (selected.dailyHourCap ?? Infinity) && <strong className="limit-warning">لیمیت خورده · زمان مازاد نیم‌بها محاسبه می‌شود</strong>}
           </div>
+        </div>
+
+        <div className="profile-section">
+          <div className="profile-section-head">
+            <h4>دفتر کیف پول</h4>
+            <span>{walletLedger.length.toLocaleString('fa-IR')} تراکنش</span>
+          </div>
+          {walletLedger.length === 0 ? (
+            <div className="customer-ledger-empty">هنوز تراکنش کیف پولی برای این مشتری ثبت نشده است.</div>
+          ) : (
+            <div className="customer-ledger">
+              {walletLedger.slice(0, 12).map(entry => (
+                <div className="customer-ledger-row" key={entry.id}>
+                  <span className={'customer-ledger-sign ' + entry.direction}>{entry.direction === 'credit' ? '+' : '−'}</span>
+                  <div className="customer-ledger-main">
+                    <strong>{entry.description}</strong>
+                    <small>{new Date(entry.createdAt).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' })}</small>
+                  </div>
+                  <div className="customer-ledger-money">
+                    <strong>{entry.direction === 'credit' ? '+' : '−'} {money(entry.amount)} تومان</strong>
+                    <small>مانده {money(entry.balanceAfter)} تومان</small>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="profile-section"><div className="profile-section-head"><h4>تاریخچه تراکنش‌ها</h4><span>{selected.transactionHistory?.length ?? 0} مورد</span></div><div className="customer-history-list">{(selected.transactionHistory ?? []).map((item, index) =>
