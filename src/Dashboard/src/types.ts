@@ -267,3 +267,15 @@ export type SessionTimelineEvent = {
   detail: string;
   amount?: number;
 };
+
+
+export type WalletLedgerEntry = {
+  id: string;
+  customerId: string;
+  amount: number;
+  direction: 'credit' | 'debit';
+  type: 'charge' | 'debit' | 'settlement' | 'refund' | 'adjustment';
+  description: string;
+  createdAt: string;
+  balanceAfter: number;
+};
