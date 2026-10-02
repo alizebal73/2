@@ -74,7 +74,6 @@ public sealed class SessionSettlementService(GameNetDbContext database)
             throw new ArgumentException("جزئیات مبلغ تسویه معتبر نیست.");
 
         var invoice = await database.Invoices
-            .Include(item => item.Items)
             .FirstOrDefaultAsync(item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft, cancellationToken);
 
         if (invoice is null)
@@ -95,12 +94,15 @@ public sealed class SessionSettlementService(GameNetDbContext database)
             throw new InvalidOperationException("فاکتور بوفه متعلق به این مشتری نیست.");
         }
 
-        var existingBuffetTotal = invoice.Items.Where(item => item.ProductId.HasValue).Sum(item => item.Amount);
+        var existingBuffetTotal = await database.InvoiceItems
+            .Where(item => item.InvoiceId == invoice.Id && item.ProductId.HasValue)
+            .SumAsync(item => item.Amount, cancellationToken);
         var timeAmount = request.TimeAmount ?? Math.Max(0m, request.TotalAmount - existingBuffetTotal);
         if (timeAmount > 0)
         {
-            invoice.Items.Add(new InvoiceItem
+            database.InvoiceItems.Add(new InvoiceItem
             {
+                InvoiceId = invoice.Id,
                 Description = "هزینه جلسه " + session.Station.Name,
                 Quantity = 1,
                 UnitPrice = timeAmount,
@@ -111,8 +113,9 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         var discountAmount = Math.Max(0m, request.DiscountAmount ?? 0m);
         if (discountAmount > 0)
         {
-            invoice.Items.Add(new InvoiceItem
+            database.InvoiceItems.Add(new InvoiceItem
             {
+                InvoiceId = invoice.Id,
                 Description = "تخفیف تسویه جلسه",
                 Quantity = 1,
                 UnitPrice = -discountAmount,
@@ -123,8 +126,9 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         var prepaidAmount = Math.Max(0m, request.PrepaidAmount ?? 0m);
         if (prepaidAmount > 0)
         {
-            invoice.Items.Add(new InvoiceItem
+            database.InvoiceItems.Add(new InvoiceItem
             {
+                InvoiceId = invoice.Id,
                 Description = "اعتبار پیش‌پرداخت جلسه",
                 Quantity = 1,
                 UnitPrice = -prepaidAmount,
@@ -136,8 +140,9 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         var roundingAdjustment = request.TotalAmount - itemSubtotal;
         if (Math.Abs(roundingAdjustment) >= 0.01m)
         {
-            invoice.Items.Add(new InvoiceItem
+            database.InvoiceItems.Add(new InvoiceItem
             {
+                InvoiceId = invoice.Id,
                 Description = "تعدیل نهایی تسویه",
                 Quantity = 1,
                 UnitPrice = roundingAdjustment,
