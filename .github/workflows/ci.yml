@@ -259,65 +259,59 @@ jobs:
 
               Write-Host ("Stage 8 Agent command transport smoke passed: commandId={0}; result={1}" -f $commandStatus.commandId, $commandStatus.resultMessage)
 
+              $multiProcesses = @()
               try {
                 $multiAgentRoot = Join-Path $env:RUNNER_TEMP 'gamenet-stage8-multi-agent'
-              New-Item -ItemType Directory -Path $multiAgentRoot -Force | Out-Null
-              $multiNames = @('CI Agent Stage 8 B', 'CI Agent Stage 8 C')
-              $multiProcesses = @()
-              $multiStdout = @{}
-              $multiStderr = @{}
-              foreach ($multiName in $multiNames) {
-                $safe = ($multiName -replace '[^A-Za-z0-9]+','-').Trim('-').ToLowerInvariant()
-                $dir = Join-Path $multiAgentRoot $safe
-                New-Item -ItemType Directory -Path $dir -Force | Out-Null
-                $out = Join-Path $multiAgentRoot ($safe + '.stdout.log')
-                $err = Join-Path $multiAgentRoot ($safe + '.stderr.log')
-                $multiStdout[$multiName] = $out
-                $multiStderr[$multiName] = $err
-                $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
-                $env:GAMENET_AGENT_NAME = $multiName
-                $env:GAMENET_AGENT_DATA_DIR = $dir
-                $multiProcesses += Start-Process -FilePath 'dotnet' -ArgumentList @(
+                New-Item -ItemType Directory -Path $multiAgentRoot -Force | Out-Null
+                $multiNames = @('CI Agent Stage 8 B', 'CI Agent Stage 8 C')
+                $multiStdout = @{}
+                $multiStderr = @{}
+                foreach ($multiName in $multiNames) {
+                  $safe = ($multiName -replace '[^A-Za-z0-9]+','-').Trim('-').ToLowerInvariant()
+                  $dir = Join-Path $multiAgentRoot $safe
+                  New-Item -ItemType Directory -Path $dir -Force | Out-Null
+                  $out = Join-Path $multiAgentRoot ($safe + '.stdout.log')
+                  $err = Join-Path $multiAgentRoot ($safe + '.stderr.log')
+                  $multiStdout[$multiName] = $out
+                  $multiStderr[$multiName] = $err
+                  $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
+                  $env:GAMENET_AGENT_NAME = $multiName
+                  $env:GAMENET_AGENT_DATA_DIR = $dir
+                  $multiProcesses += Start-Process -FilePath 'dotnet' -ArgumentList @(
                   'src/Client/bin/Release/net10.0/GameNetManager.Client.dll'
                 ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $out -RedirectStandardError $err
-              }
+                }
 
-              $allMultiOnline = $false
+                $allMultiOnline = $false
               $multiRows = @()
-              for ($i = 0; $i -lt 30; $i++) {
-                try {
-                  $rows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
-                  $multiRows = @($rows | Where-Object { $_.name -in $multiNames })
-                  if ($multiRows.Count -eq $multiNames.Count -and @($multiRows | Where-Object { $_.isOnline -and $_.lastSeenAt }).Count -eq $multiNames.Count) {
-                    $allMultiOnline = $true
-                    break
+                for ($i = 0; $i -lt 30; $i++) {
+                  try {
+                    $rows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                    $multiRows = @($rows | Where-Object { $_.name -in $multiNames })
+                    if ($multiRows.Count -eq $multiNames.Count -and @($multiRows | Where-Object { $_.isOnline -and $_.lastSeenAt }).Count -eq $multiNames.Count) {
+                      $allMultiOnline = $true
+                      break
+                    }
+                  } catch {}
+                  Start-Sleep -Seconds 1
+                }
+
+                if (-not $allMultiOnline) {
+                  foreach ($multiName in $multiNames) {
+                    Write-Host ("--- {0} stdout ---" -f $multiName)
+                    if (Test-Path $multiStdout[$multiName]) { Get-Content $multiStdout[$multiName] }
+                    Write-Host ("--- {0} stderr ---" -f $multiName)
+                    if (Test-Path $multiStderr[$multiName]) { Get-Content $multiStderr[$multiName] }
                   }
-                } catch {}
-                Start-Sleep -Seconds 1
-              }
-
-              if (-not $allMultiOnline) {
-                foreach ($multiName in $multiNames) {
-                  Write-Host ("--- {0} stdout ---" -f $multiName)
-                  if (Test-Path $multiStdout[$multiName]) { Get-Content $multiStdout[$multiName] }
-                  Write-Host ("--- {0} stderr ---" -f $multiName)
-                  if (Test-Path $multiStderr[$multiName]) { Get-Content $multiStderr[$multiName] }
+                  throw 'Stage 8 multi-Agent concurrent online smoke failed.'
                 }
-                throw 'Stage 8 multi-Agent concurrent online smoke failed.'
-              }
 
-              $multiDeviceIds = @($multiRows | Select-Object -ExpandProperty deviceId)
-              if ($multiDeviceIds.Count -ne @($multiDeviceIds | Select-Object -Unique).Count) {
-                throw 'Stage 8 multi-Agent smoke detected duplicate device identities.'
-              }
-
-              Write-Host ("Stage 8 multi-Agent concurrency smoke passed: {0} agents online." -f $multiNames.Count)
-              foreach ($process in $multiProcesses) {
-                if (-not $process.HasExited) {
-                  Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+                $multiDeviceIds = @($multiRows | Select-Object -ExpandProperty deviceId)
+                if ($multiDeviceIds.Count -ne @($multiDeviceIds | Select-Object -Unique).Count) {
+                  throw 'Stage 8 multi-Agent smoke detected duplicate device identities.'
                 }
-              }
-                $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+
+                Write-Host ("Stage 8 multi-Agent concurrency smoke passed: {0} agents online." -f $multiNames.Count)
               } finally {
                 foreach ($process in $multiProcesses) {
                   if (-not $process.HasExited) {
