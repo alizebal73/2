@@ -23,6 +23,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<InvoicePayment> InvoicePayments => Set<InvoicePayment>();
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
     public DbSet<BenefitTransaction> BenefitTransactions => Set<BenefitTransaction>();
+    public DbSet<CustomerLogin> CustomerLogins => Set<CustomerLogin>();
     public DbSet<InventoryTransaction> InventoryTransactions => Set<InventoryTransaction>();
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<Expense> Expenses => Set<Expense>();
@@ -36,6 +37,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureStationType(modelBuilder);
         ConfigureTariff(modelBuilder);
         ConfigureCustomer(modelBuilder);
+        ConfigureCustomerLogin(modelBuilder);
         ConfigureProduct(modelBuilder);
         ConfigureAppUser(modelBuilder);
         ConfigurePermission(modelBuilder);
@@ -107,6 +109,21 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         customer.Property(item => item.Email).HasMaxLength(120);
         customer.Property(item => item.Notes).HasMaxLength(500);
         customer.Property(item => item.Balance).HasColumnType("decimal(18,2)");
+        customer.Property(item => item.FreeMoney).HasColumnType("decimal(18,2)");
+        customer.Property(item => item.ConcurrentLoginLimit).IsRequired();
+    }
+
+    private static void ConfigureCustomerLogin(ModelBuilder modelBuilder)
+    {
+        var login = modelBuilder.Entity<CustomerLogin>();
+        login.HasKey(item => item.Id);
+        login.Property(item => item.ClientKey).HasMaxLength(120).IsRequired();
+        login.Property(item => item.IsActive).IsRequired();
+        login.HasIndex(item => new { item.CustomerId, item.ClientKey, item.IsActive });
+        login.HasOne(item => item.Customer)
+            .WithMany()
+            .HasForeignKey(item => item.CustomerId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureProduct(ModelBuilder modelBuilder)
