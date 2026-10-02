@@ -204,8 +204,12 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
     else if (action === 'gift') {
       try {
         const benefits = await changeFreeBenefits(selected.id, { moneyAmount: value, mode: 'credit', description: 'اعطای اعتبار مالی رایگان توسط اپراتور' });
-        updateCustomer(selected.id, { giftCredit: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes }, 'اعتبار مالی رایگان · ' + money(value) + ' تومان');
-        setServerFreeBenefits({ freeMoney: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes });
+        if (benefits) {
+          updateCustomer(selected.id, { giftCredit: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes }, 'اعتبار مالی رایگان · ' + money(value) + ' تومان');
+          setServerFreeBenefits({ freeMoney: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes });
+        } else {
+          updateCustomer(selected.id, { giftCredit: selected.giftCredit + value }, 'اعتبار مالی رایگان · ' + money(value) + ' تومان');
+        }
       } catch (error) {
         setNotice(userErrorMessage(error, 'ثبت اعتبار مالی رایگان انجام نشد'));
         return;
@@ -216,8 +220,12 @@ export function CustomersPage({ role = 'operator' }: { role?: 'operator' | 'mana
       if (minutes <= 0) { setNotice('تعداد دقیقه معتبر وارد کنید'); return; }
       try {
         const benefits = await changeFreeBenefits(selected.id, { minutes, mode: 'credit', description: 'اعطای زمان رایگان توسط اپراتور' });
-        updateCustomer(selected.id, { freeTimeMinutes: benefits.freeTimeMinutes, giftCredit: benefits.freeMoney }, minutes + ' دقیقه زمان رایگان');
-        setServerFreeBenefits({ freeMoney: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes });
+        if (benefits) {
+          updateCustomer(selected.id, { freeTimeMinutes: benefits.freeTimeMinutes, giftCredit: benefits.freeMoney }, minutes + ' دقیقه زمان رایگان');
+          setServerFreeBenefits({ freeMoney: benefits.freeMoney, freeTimeMinutes: benefits.freeTimeMinutes });
+        } else {
+          updateCustomer(selected.id, { freeTimeMinutes: (selected.freeTimeMinutes ?? 0) + minutes }, minutes + ' دقیقه زمان رایگان');
+        }
       } catch (error) {
         setNotice(userErrorMessage(error, 'ثبت زمان رایگان انجام نشد'));
         return;
