@@ -97,6 +97,18 @@ export type AgentStatusDto = {
   uptimeSeconds?: number | null;
 };
 
+export type AgentCommandStatusDto = {
+  commandId: string;
+  agentDeviceId: string;
+  commandType: string;
+  status: string;
+  requestedAt: string;
+  sentAt?: string | null;
+  completedAt?: string | null;
+  succeeded?: boolean | null;
+  resultMessage?: string | null;
+};
+
 export type ServerInfoDto = {
   name: string;
   environment: string;
