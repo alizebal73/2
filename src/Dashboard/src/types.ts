@@ -41,6 +41,9 @@ export type StationDto = {
   customerFullName?: string;
   customerDebt?: number;
   customerNote?: string;
+  agentOnline?: boolean;
+  agentLastSeenAt?: string | null;
+  agentVersion?: string | null;
 };
 
 export type StartSessionInput = {
@@ -69,6 +72,22 @@ export type DashboardSnapshotDto = {
   totalStations: number;
   stations: StationDto[];
   generatedAt: string;
+};
+
+export type AgentStatusDto = {
+  agentId: string;
+  deviceId: string;
+  name: string;
+  stationId?: string | null;
+  stationName?: string | null;
+  isOnline: boolean;
+  lastSeenAt?: string | null;
+  connectedAt?: string | null;
+  agentVersion?: string | null;
+  osVersion?: string | null;
+  cpuUsagePercent?: number | null;
+  memoryAvailableBytes?: number | null;
+  uptimeSeconds?: number | null;
 };
 
 export type ServerInfoDto = {
