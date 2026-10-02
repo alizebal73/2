@@ -1188,7 +1188,17 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate, role
           {station.state === 'busy' && <div className="station-remaining">{remaining == null ? 'جلسه باز' : remaining <= 0 ? 'زمان تمام‌شده' : 'باقی‌مانده: ' + money(remaining) + ' دقیقه'}</div>}
         </div>;
       })()}
-      <span className="type">{station.type} · اینترنت {station.network ?? 1}</span>
+      <span className="type">
+        {station.type} · اینترنت {station.network ?? 1}
+        {station.zone === 'pc' && station.agentOnline !== undefined && (
+          <span
+            className={`agent-state ${station.agentOnline ? 'online' : 'offline'}`}
+            title={station.agentLastSeenAt ? `آخرین ارتباط Agent: ${new Date(station.agentLastSeenAt).toLocaleTimeString('fa-IR')}` : 'Agent هنوز heartbeat معتبر ندارد'}
+          >
+            · Agent {station.agentOnline ? 'متصل' : 'آفلاین'}
+          </span>
+        )}
+      </span>
       <div className="time">{station.state === 'busy' ? `${money(Math.floor(minutes / 60)).padStart(2, '۰')}:${money(Math.floor(minutes % 60)).padStart(2, '۰')}` : station.state === 'reserved' ? 'رزرو' : station.state === 'off' ? '⛔' : '--:--'}</div>
       {station.state === 'busy' && <><div className="person-dots">{'● '.repeat(station.persons ?? 1)}</div><div className="progress-bar"><span style={{ width: `${Math.min(100, minutes % 60 / 60 * 100)}%` }} /></div><span className="pulse" /></>}
       {station.state === 'off' && <small>{station.outOfServiceReason ?? 'در تعمیر'}</small>}
