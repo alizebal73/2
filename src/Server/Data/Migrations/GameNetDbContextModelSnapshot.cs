@@ -1762,8 +1762,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
             modelBuilder.Entity("GameNetManager.Server.Data.Station", b =>
                 {
-                    b.Navigation("AgentDevices");
-
                     b.Navigation("Reservations");
 
                     b.Navigation("Sessions");
