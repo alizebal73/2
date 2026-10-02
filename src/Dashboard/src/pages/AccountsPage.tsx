@@ -10,6 +10,7 @@ export function AccountsPage() {
   const [draft, setDraft] = useState<AccountRecord | null>(null);
   const [logs, setLogs] = useState<string[] | null>(null);
   const [notice, setNotice] = useState('');
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     void mockService.getAccounts().then(setAccounts);
@@ -58,18 +59,40 @@ export function AccountsPage() {
       </div>
       <p className="account-security-note">رمزهای اکانت فقط در سمت سرور نگهداری می‌شوند و هرگز به UI مشتری ارسال نمی‌شوند.</p>
 
-      <div className="accounts-grid">
-        {visible.map((account) => (
-          <div key={account.id} className="account-card">
-            <div className="account-card-heading"><b>{account.title}</b><span>{account.platform}</span></div>
-            <div className="meta">بازی‌های مجاز: {account.allowedGames.join('، ') || 'تعریف نشده'}</div>
-            <div className="info-row"><span>وضعیت</span><strong className={account.status === 'free' ? 'positive' : account.status === 'locked' ? 'negative' : ''}>{account.status === 'free' ? 'آزاد' : account.status === 'in-use' ? 'در استفاده' : 'قفل‌شده'}</strong></div>
-            <div className="info-row"><span>در اختیار</span><strong>{account.assignedClient || '—'}</strong></div>
-            <div className="info-row"><span>Guard / 2FA</span><strong>{account.guardStatus}</strong></div>
-            <div className="meta">مالک: {account.owner} · انقضا: {account.expiresAt || '—'}</div>
-            <div className="account-card-actions"><button className="btn sm" onClick={() => setDraft({ ...account })}>ویرایش</button>{account.status === 'locked' && <button className="btn sm" onClick={() => void unlock(account)}>رفع قفل</button>}<button className="btn sm" onClick={() => void showLogs()}>لاگ</button></div>
+      <div className="accounts-master-detail">
+        <aside className="account-platform-nav">
+          <div className="account-platform-title">استخر اکانت‌ها</div>
+          {(['all', 'Steam', 'Battle.net', 'Riot', 'Epic'] as Platform[]).map(platform => {
+            const count = platform === 'all' ? accounts.length : accounts.filter(item => item.platform === platform).length;
+            return <button type="button" key={platform} className={filter === platform ? 'active' : ''} onClick={() => { setFilter(platform); setSelectedAccountId(null); }}>
+              <strong>{platform === 'all' ? 'همه پلتفرم‌ها' : platform}</strong><span>{count.toLocaleString('fa-IR')}</span>
+            </button>;
+          })}
+        </aside>
+        <section className="account-list-panel">
+          <div className="account-list-head"><strong>{filter === 'all' ? 'همه اکانت‌ها' : 'اکانت‌های ' + filter}</strong><span>{visible.length.toLocaleString('fa-IR')} مورد</span></div>
+          <div className="account-list">
+            {visible.map(account => <button type="button" key={account.id} className={'account-list-row ' + (selectedAccountId === account.id ? 'active' : '')} onClick={() => setSelectedAccountId(account.id)}>
+              <span className="account-platform-badge">{account.platform.slice(0,1)}</span>
+              <span><strong>{account.title}</strong><small>{account.allowedGames.length ? account.allowedGames.join('، ') : 'بازی مشخص نشده'}</small></span>
+              <em className={account.status}>{account.status === 'free' ? 'آزاد' : account.status === 'in-use' ? 'در استفاده' : 'قفل'}</em>
+            </button>)}
           </div>
-        ))}
+        </section>
+        <section className="account-detail-panel">
+          {(() => {
+            const selected = accounts.find(item => item.id === selectedAccountId) ?? visible[0];
+            if (!selected) return <div className="games-empty">پلتفرم یا اکانتی برای نمایش وجود ندارد.</div>;
+            return <><div className="account-detail-head"><div><span className="game-detail-kicker">{selected.platform}</span><h2>{selected.title}</h2><p>{selected.owner} · {selected.expiresAt || 'بدون انقضا'}</p></div><strong className={'account-detail-status ' + selected.status}>{selected.status === 'free' ? 'آزاد' : selected.status === 'in-use' ? 'در استفاده' : 'قفل‌شده'}</strong></div>
+              <div className="account-detail-grid">
+                <div className="info-row"><span>بازی‌های مجاز</span><strong>{selected.allowedGames.join('، ') || 'تعریف نشده'}</strong></div>
+                <div className="info-row"><span>کلاینت</span><strong>{selected.assignedClient || '—'}</strong></div>
+                <div className="info-row"><span>Guard / 2FA</span><strong>{selected.guardStatus}</strong></div>
+              </div>
+              <div className="account-card-actions"><button className="btn primary" onClick={() => setDraft({ ...selected })}>ویرایش</button>{selected.status === 'locked' && <button className="btn" onClick={() => void unlock(selected)}>رفع قفل</button>}<button className="btn" onClick={() => void showLogs()}>لاگ استخر</button></div>
+            </>;
+          })()}
+        </section>
       </div>
       {draft && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setDraft(null)}><section className="operation-modal" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setDraft(null)}>×</button><h2>{accounts.some(item => item.id === draft.id) ? 'ویرایش اکانت' : 'اکانت جدید'}</h2>
         <label>نام / شناسه<input value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></label>
