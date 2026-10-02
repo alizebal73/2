@@ -102,6 +102,18 @@ export async function createServerCustomer(input: CustomerWriteInput): Promise<C
   return mapCustomer(await response.json() as Parameters<typeof mapCustomer>[0]);
 }
 
+export async function getCustomerVipUsage(customerId: string) {
+  const response = await fetch('/api/customers/' + customerId + '/vip-usage');
+  if (!response.ok) throw new Error(await readError(response, 'دریافت مصرف VIP انجام نشد'));
+  return response.json() as Promise<import('../types').CustomerVipUsage>;
+}
+
+export async function getCustomerHistory(customerId: string) {
+  const response = await fetch('/api/customers/' + customerId + '/history');
+  if (!response.ok) throw new Error(await readError(response, 'دریافت تاریخچه مشتری انجام نشد'));
+  return response.json() as Promise<import('../types').CustomerHistoryItem[]>;
+}
+
 export async function createServerCustomerDebt(customerId: string, amount: number, description: string) {
   const response = await fetch('/api/customers/' + customerId + '/debt', {
     method: 'POST',
