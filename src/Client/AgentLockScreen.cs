@@ -9,6 +9,7 @@ public sealed class AgentLockScreenController : IDisposable
     private LockScreenForm? form;
     private TaskCompletionSource<bool>? shown;
     private bool disposed;
+    private bool Headless => !Environment.UserInteractive || string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_HEADLESS"), "1", StringComparison.Ordinal);
 
     public async Task LockAsync(CancellationToken cancellationToken)
     {
@@ -17,6 +18,8 @@ public sealed class AgentLockScreenController : IDisposable
         lock (gate)
         {
             ThrowIfDisposed();
+            if (Headless)
+                return;
 
             if (form is not null && !form.IsDisposed)
                 return;
