@@ -7,7 +7,8 @@ public sealed record WalletLedgerEntryDto(
     string Type,
     string Description,
     DateTimeOffset CreatedAt,
-    decimal BalanceAfter);
+    decimal BalanceAfter,
+    Guid? ReferenceTransactionId);
 
 public sealed record WalletTransactionRequestDto(
     decimal Amount,
@@ -18,4 +19,5 @@ public sealed record WalletTransactionRequestDto(
 public sealed record WalletRefundRequestDto(
     decimal Amount,
     string Reason,
-    Guid? AppUserId);
+    Guid? AppUserId,
+    Guid? SourceTransactionId);
