@@ -52,6 +52,12 @@ public sealed class AgentPresenceMonitor(
                         device.IsOnline = false;
                         device.ConnectionId = null;
 
+                        if (!string.Equals(device.LifecycleState, ClientLifecycleStates.Degraded, StringComparison.Ordinal))
+                        {
+                            device.LifecycleState = ClientLifecycleStates.Degraded;
+                            device.LifecycleStateChangedAt = now;
+                        }
+
                         if (device.LockOnDisconnect && !device.IsLocked)
                         {
                             device.IsLocked = true;
