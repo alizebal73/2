@@ -35,10 +35,32 @@ public sealed class AgentPresenceMonitor(
 
                 if (staleDevices.Count > 0)
                 {
+                    var now = DateTimeOffset.UtcNow;
                     foreach (var device in staleDevices)
                     {
                         device.IsOnline = false;
                         device.ConnectionId = null;
+
+                        var unfinishedCommands = await database.AgentCommands
+                            .Where(command => command.AgentDeviceId == device.Id
+                                && (command.Status == "Pending" || command.Status == "Sent"))
+                            .ToListAsync(stoppingToken);
+
+                        foreach (var command in unfinishedCommands)
+                        {
+                            command.Status = "Failed";
+                            command.Succeeded = false;
+                            command.CompletedAt = now;
+                            command.ResultMessage = "Agent قبل از تکمیل فرمان از دسترس خارج شد.";
+
+                            database.AuditLogs.Add(new AuditLog
+                            {
+                                Action = "AgentCommandFailed",
+                                EntityName = "AgentCommand",
+                                EntityId = command.Id.ToString(),
+                                Details = $"Agent {device.DeviceId} قبل از تکمیل فرمان {command.CommandType} آفلاین شد."
+                            });
+                        }
                     }
 
                     await database.SaveChangesAsync(stoppingToken);
