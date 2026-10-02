@@ -2,7 +2,7 @@ name: GameNet Manager CI
 
 on:
   push:
-    branches: [main, repair/ef-snapshot-and-preview]
+    branches: [main]
 
 concurrency:
   group: gamenet-ci-main
@@ -38,76 +38,6 @@ jobs:
       - name: Build .NET
         run: dotnet build GameNetManager.sln --no-restore --configuration Release
 
-      - name: Rebuild EF snapshot probe
-        shell: pwsh
-        run: |
-          $migrations = Join-Path $env:GITHUB_WORKSPACE 'src\Server\Data\Migrations'
-          $snapshot = Join-Path $migrations 'GameNetDbContextModelSnapshot.cs'
-          $backup = Join-Path $env:RUNNER_TEMP 'GameNetDbContextModelSnapshot.bak'
-          $probe = Join-Path $migrations '__SnapshotProbe'
-          $artifact = Join-Path $env:GITHUB_WORKSPACE 'ef-snapshot-probe'
-          $factory = Join-Path $env:GITHUB_WORKSPACE 'src\Server\DesignTimeDbContextFactory.cs'
-          $log = Join-Path $artifact 'ef-probe.log'
-
-          if (Test-Path $backup) { Remove-Item $backup -Force }
-          if (Test-Path $probe) { Remove-Item $probe -Recurse -Force }
-          if (Test-Path $artifact) { Remove-Item $artifact -Recurse -Force }
-          New-Item -ItemType Directory -Force $artifact | Out-Null
-
-          @'
-using GameNetManager.Server.Data;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Design;
-
-public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<GameNetDbContext>
-{
-    public GameNetDbContext CreateDbContext(string[] args)
-    {
-        var options = new DbContextOptionsBuilder<GameNetDbContext>()
-            .UseSqlite("Data Source=:memory:")
-            .Options;
-        return new GameNetDbContext(options);
-    }
-}
-'@ | Set-Content -Path $factory -Encoding utf8
-
-          Move-Item $snapshot $backup
-          try {
-            New-Item -ItemType Directory -Force $probe | Out-Null
-            dotnet tool restore *>&1 | Tee-Object -FilePath $log -Append
-            dotnet build src\Server\GameNetManager.Server.csproj --no-restore --configuration Release *>&1 | Tee-Object -FilePath $log -Append
-            if ($LASTEXITCODE -ne 0) {
-              'SERVER_BUILD_FAILED' | Add-Content $log
-            } else {
-              dotnet tool run dotnet-ef migrations add SnapshotRebuildProbe --project src\Server --startup-project src\Server --output-dir Data\Migrations\__SnapshotProbe --no-build *>&1 | Tee-Object -FilePath $log -Append
-              $efExit = $LASTEXITCODE
-              "EF_EXIT_CODE=$efExit" | Add-Content $log
-              $generated = Get-ChildItem $probe -Filter '*ModelSnapshot.cs' | Select-Object -First 1
-              if ($generated) {
-                Copy-Item $generated.FullName (Join-Path $artifact 'GameNetDbContextModelSnapshot.cs') -Force
-                'SNAPSHOT_GENERATED=YES' | Add-Content $log
-              } else {
-                'SNAPSHOT_GENERATED=NO' | Add-Content $log
-              }
-            }
-          } catch {
-            $_ | Out-String | Add-Content $log
-          } finally {
-            if (Test-Path $snapshot) { Remove-Item $snapshot -Force }
-            if (Test-Path $backup) { Move-Item $backup $snapshot -Force }
-            if (Test-Path $probe) { Remove-Item $probe -Recurse -Force }
-            if (Test-Path $factory) { Remove-Item $factory -Force }
-          }
-
-          Write-Host (Get-Content $log -Raw)
-
-      - name: Upload EF snapshot probe
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ef-snapshot-probe
-          path: ef-snapshot-probe
-          if-no-files-found: error
       - name: Test .NET
         run: dotnet test GameNetManager.sln --no-build --configuration Release
 
