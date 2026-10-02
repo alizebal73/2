@@ -49,7 +49,8 @@ public sealed class ClientUpdateManagerTests
             await manager.RollbackAsync(CancellationToken.None);
             var rolledBack = await manager.GetStateAsync(CancellationToken.None);
             Assert.Equal("1.0.0", rolledBack!.ActiveVersion);
-            Assert.Equal("2.0.0", rolledBack.PreviousVersion);
+            Assert.Null(rolledBack.PreviousVersion);
+            Assert.Equal("1.0.0", rolledBack.HealthyVersion);
         }
         finally
         {
