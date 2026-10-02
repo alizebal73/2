@@ -43,7 +43,7 @@ export function OperationsPage() {
     id: '', name: '', zone: 'pc', type: 'PC', ratePerHour: 95000, status: 'active', ip: '', note: '',
   });
   const [productForm, setProductForm] = useState<ProductRecord>({
-    id: '', name: '', category: 'نوشیدنی', price: 0, buyPrice: 0, stock: 0, maxStock: 20,
+    id: '', name: '', category: 'نوشیدنی', price: 0, buyPrice: 0, stock: 0, minimumStock: 0, unit: 'عدد', lowStock: false, maxStock: 20,
   });
   const [packageForm, setPackageForm] = useState<VipPackageRecord>({
     id: '', name: '', tier: 'silver', price: 0, dailyMinutes: 120, totalMinutes: 3000, discount: 10, active: true,
@@ -131,7 +131,7 @@ export function OperationsPage() {
   async function saveProduct() {
     if (!productForm.name.trim() || productForm.price <= 0) return;
     await mockService.saveProduct({ ...productForm, id: productForm.id || crypto.randomUUID() });
-    setProductForm({ id: '', name: '', category: 'نوشیدنی', price: 0, buyPrice: 0, stock: 0, maxStock: 20 });
+    setProductForm({ id: '', name: '', category: 'نوشیدنی', price: 0, buyPrice: 0, stock: 0, minimumStock: 0, unit: 'عدد', lowStock: false, maxStock: 20 });
     await loadAll();
     setNotice('کالا ذخیره شد');
   }
