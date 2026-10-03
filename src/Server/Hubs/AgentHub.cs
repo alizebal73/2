@@ -442,19 +442,12 @@ public sealed class AgentHub(
                 Details = $"خروج کاربر و قفل دستگاه · Agent {device.DeviceId}"
             });
 
-            await database.SaveChangesAsync(Context.ConnectionAborted);
-
-            await dashboardHub.Clients.All.SendAsync(
-                "AgentSessionChanged",
-                new
-                {
-                    sessionId = activeSession.Id,
-                    stationId = activeSession.StationId,
-                    customerId = activeSession.CustomerId,
-                    state = "Ended",
-                    changedAt = now
-                },
+            await accountPool.ReleaseActiveForSessionWithinTransactionAsync(
+                activeSession.Id,
+                "آزادسازی خودکار با خروج و قفل Agent",
                 Context.ConnectionAborted);
+
+            await database.SaveChangesAsync(Context.ConnectionAborted);
         }
 
         device.IsLocked = true;
@@ -473,9 +466,16 @@ public sealed class AgentHub(
 
         if (activeSession is not null)
         {
-            await accountPool.ReleaseActiveForSessionAsync(
-                activeSession.Id,
-                "آزادسازی خودکار با خروج و قفل Agent",
+            await dashboardHub.Clients.All.SendAsync(
+                "AgentSessionChanged",
+                new
+                {
+                    sessionId = activeSession.Id,
+                    stationId = activeSession.StationId,
+                    customerId = activeSession.CustomerId,
+                    state = "Ended",
+                    changedAt = now
+                },
                 Context.ConnectionAborted);
         }
 
@@ -685,10 +685,9 @@ public sealed class AgentHub(
         await database.SaveChangesAsync(Context.ConnectionAborted);
         await transaction.CommitAsync(Context.ConnectionAborted);
 
-        // Lease release belongs to the terminal lifecycle transition, after the
-        // Session state is durably Ended. StartSession must never release its own
-        // active leases.
-        await accountPool.ReleaseActiveForSessionAsync(
+        // Lease release is part of the same transaction as the terminal
+        // Session transition, so EndSession cannot commit with an InUse lease.
+        await accountPool.ReleaseActiveForSessionWithinTransactionAsync(
             session.Id,
             "آزادسازی خودکار با پایان Session",
             Context.ConnectionAborted);
