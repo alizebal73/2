@@ -53,6 +53,46 @@ function mapAccount(row: AccountDto): AccountRecord {
   };
 }
 
+export type AccountPoolHealth = {
+  total: number;
+  free: number;
+  inUse: number;
+  locked: number;
+  expired: number;
+  missingCredential: number;
+  activeLeases: number;
+  expiringLeases: number;
+};
+
+export type AccountLeaseHistory = {
+  leaseId: string;
+  accountId: string;
+  gameId: string;
+  accountTitle: string;
+  gameName: string;
+  platform: string;
+  assignedClient?: string | null;
+  agentDeviceId?: string | null;
+  customerId?: string | null;
+  sessionId?: string | null;
+  leasedAt: string;
+  releasedAt?: string | null;
+  state: string;
+  releaseReason?: string | null;
+};
+
+export async function getServerAccountPoolHealth(): Promise<AccountPoolHealth> {
+  const response = await fetch('/api/account-pool/health');
+  if (!response.ok) throw new Error(await readError(response, 'دریافت سلامت استخر اکانت‌ها انجام نشد'));
+  return response.json() as Promise<AccountPoolHealth>;
+}
+
+export async function getServerLeaseHistory(limit = 200): Promise<AccountLeaseHistory[]> {
+  const response = await fetch('/api/account-pool/leases/history?limit=' + encodeURIComponent(String(limit)));
+  if (!response.ok) throw new Error(await readError(response, 'دریافت تاریخچه Leaseها انجام نشد'));
+  return response.json() as Promise<AccountLeaseHistory[]>;
+}
+
 export async function getServerAccountPool(): Promise<AccountRecord[]> {
   const response = await fetch('/api/account-pool');
   if (!response.ok) throw new Error(await readError(response, 'دریافت استخر اکانت‌ها از سرور انجام نشد'));
