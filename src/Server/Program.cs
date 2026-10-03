@@ -22,6 +22,7 @@ builder.Services.AddScoped<ReportingService>();
 builder.Services.AddScoped<ReservationService>();
 builder.Services.AddScoped<OperationsService>();
 builder.Services.AddScoped<BackupService>();
+builder.Services.AddScoped<EventService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 builder.Services.AddHostedService<BackupScheduler>();
