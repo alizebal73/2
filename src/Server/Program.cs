@@ -4426,6 +4426,9 @@ app.MapGet("/api/sessions/active", async (HttpContext context,
             customerName = session.Customer.FullName,
             customerCode = session.Customer.Code,
             username = session.Customer.Username,
+            gameId = session.GameId,
+            gameName = session.Game == null ? null : session.Game.Name,
+            agentDeviceId = session.AgentDeviceId,
             startedAt = session.StartAt
         })
         .ToListAsync(cancellationToken);
