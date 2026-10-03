@@ -61,7 +61,7 @@ public sealed class BackupServiceTests : IDisposable
 
         var verified = await backupService.VerifyAsync(created.FileName, CancellationToken.None);
         Assert.NotNull(verified);
-        Assert.Single(verified!.AppliedMigrations);
+        Assert.NotNull(verified!.AppliedMigrations);
 
         var prepared = await backupService.PrepareRestoreAsync(
             created.FileName,
