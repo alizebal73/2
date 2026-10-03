@@ -363,10 +363,21 @@ jobs:
               $rollbackStatus = $null
               for ($i = 0; $i -lt 120; $i++) {
                 $rollbackStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($rollbackCommand.commandId)" -Method Get -WebSession $adminSession
-                if ($rollbackStatus.status -in @('Succeeded','Failed')) { $rollbackCompleted = $true; break }
+                if ($rollbackStatus.status -in @('Succeeded','Failed','RolledBack')) { $rollbackCompleted = $true; break }
                 Start-Sleep -Milliseconds 500
               }
-              if (-not $rollbackCompleted -or $rollbackStatus.status -ne 'Succeeded') {
+              if (-not $rollbackCompleted -or $rollbackStatus.status -notin @('Succeeded','RolledBack')) {
+                Write-Host ("Stage 10 rollback command did not complete. Status={0}; Succeeded={1}; Result={2}" -f $rollbackStatus.status, $rollbackStatus.succeeded, $rollbackStatus.resultMessage)
+                Write-Host '--- Agent stdout during rollback ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr during rollback ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                Write-Host '--- Persisted Agent state during rollback ---'
+                $agentStatePath = Join-Path $agentData 'agent-state.json'
+                if (Test-Path $agentStatePath) { Get-Content $agentStatePath }
+                Write-Host '--- Update state during rollback ---'
+                $updateStatePath = Join-Path $agentData 'update-active.json'
+                if (Test-Path $updateStatePath) { Get-Content $updateStatePath }
                 throw 'Stage 10 rollback command did not complete successfully.'
               }
 
