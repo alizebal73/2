@@ -2090,6 +2090,11 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
             modelBuilder.Entity("GameNetManager.Server.Data.Session", b =>
                 {
+                    b.HasOne("GameNetManager.Server.Data.AgentDevice", "AgentDevice")
+                        .WithMany()
+                        .HasForeignKey("AgentDeviceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
                         .WithMany("Sessions")
                         .HasForeignKey("AppUserId")
@@ -2112,9 +2117,13 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasForeignKey("TariffId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.Navigation("AgentDevice");
+
                     b.Navigation("AppUser");
 
                     b.Navigation("Customer");
+
+                    b.Navigation("Game");
 
                     b.Navigation("Station");
 
