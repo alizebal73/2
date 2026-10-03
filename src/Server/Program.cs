@@ -433,7 +433,7 @@ app.MapPost("/api/account-pool/leases/{leaseId:guid}/release", async (
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var lease = await accountPool.ReleaseAsync(leaseId, cancellationToken);
+    var lease = await accountPool.ReleaseAsync(leaseId, request.Reason, cancellationToken);
     if (lease is null)
         return Results.NotFound(new { code = "lease_not_found", message = "Lease فعال پیدا نشد." });
 
