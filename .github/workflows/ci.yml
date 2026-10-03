@@ -892,10 +892,11 @@ jobs:
               status = 'Free'
             } | ConvertTo-Json)
 
+            $stage12DeviceId = "ci-stage12-agent-$stage9SmokeId"
             $stage12CustomerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
               usernameOrCode = $stage9Customer.username
               password = 'Stage9Smoke123!'
-              clientKey = "ci-stage12-session-$stage9SmokeId"
+              clientKey = $stage12DeviceId
             } | ConvertTo-Json)
 
             if (-not $stage12CustomerAuth.authenticated -or -not $stage12CustomerAuth.loginId) {
@@ -912,7 +913,7 @@ jobs:
             $env:GAMENET_SERVER_URL = $baseUrl
             $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
             $env:GAMENET_AGENT_NAME = "CI Agent Stage 12 $stage9SmokeId"
-            $env:GAMENET_AGENT_DEVICE_ID = "ci-stage12-agent-$stage9SmokeId"
+            $env:GAMENET_AGENT_DEVICE_ID = $stage12DeviceId
             $env:GAMENET_STATION_ID = $sessionStation.id
             $env:GAMENET_AGENT_DATA_DIR = $stage12Data
             $env:GAMENET_AGENT_HEADLESS = '1'
@@ -931,7 +932,10 @@ jobs:
               $stage12SessionId = $null
 
               for ($i = 0; $i -lt 45; $i++) {
-                if ($stage12AgentProcess.HasExited) { break }
+                if ($stage12AgentProcess.HasExited) {
+                Write-Host ("Stage 12 Agent exited early. ExitCode={0}" -f $stage12AgentProcess.ExitCode)
+                break
+              }
                 if (Test-Path $stage12Stdout) {
                   $log = Get-Content $stage12Stdout -Raw
 
