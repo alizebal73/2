@@ -1,4 +1,5 @@
 using GameNetManager.Server.Data;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -49,7 +50,7 @@ public sealed class AccountPoolTests
 
         await using (var allocationContext = CreateContext(connection))
         {
-            var service = new AccountPoolService(allocationContext);
+            var service = new AccountPoolService(allocationContext, new GameCredentialProtectionService(DataProtectionProvider.Create("GameNetManager.Tests")));
             var (account, lease) = await service.AllocateAsync(gameId, null, null, null, CancellationToken.None);
 
             Assert.NotNull(account);
@@ -102,7 +103,7 @@ public sealed class AccountPoolTests
             await using var connectionA = CreateSharedMemoryConnection(databaseName);
             await connectionA.OpenAsync();
             await using var context = CreateContext(connectionA);
-            return await new AccountPoolService(context).AllocateAsync(gameId, null, null, null, CancellationToken.None);
+            return await new AccountPoolService(context, new GameCredentialProtectionService(DataProtectionProvider.Create("GameNetManager.Tests"))).AllocateAsync(gameId, null, null, null, CancellationToken.None);
         });
         var taskB = Task.Run(async () =>
         {
@@ -117,3 +118,147 @@ public sealed class AccountPoolTests
         Assert.Equal(1, results.Count(result => result.Account is null && result.Lease is null));
     }
 }
+
+
+    [Fact]
+    public async Task OperationalSession_AllocatesLeaseAndDeliversCredentialOnlyWithinLease()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var protection = new GameCredentialProtectionService(DataProtectionProvider.Create("GameNetManager.Tests.Operational"));
+
+        Guid sessionId;
+        Guid agentId;
+        Guid leaseId;
+        string leaseToken;
+
+        await using (var setup = CreateContext(connection))
+        {
+            await setup.Database.EnsureCreatedAsync();
+
+            var stationType = new StationType { Name = "PC" };
+            var tariff = new Tariff { Name = "Stage12", HourlyRate = 1000m, DailyRate = 5000m, IsActive = true };
+            var station = new Station
+            {
+                Name = "ST12-01",
+                Zone = "Stage12",
+                Type = "PC",
+                StationType = stationType,
+                Tariff = tariff,
+                RatePerHour = 1000m,
+                State = StationState.Occupied,
+                IsActive = true
+            };
+            var game = new Game { Name = "Stage12 Game", IsActive = true, Status = "online" };
+            var customer = new Customer
+            {
+                FullName = "Stage12 Customer",
+                Username = "stage12",
+                ConcurrentLoginLimit = 1
+            };
+            var agent = new AgentDevice
+            {
+                DeviceId = "stage12-agent",
+                Name = "Stage12 Agent",
+                AgentTokenHash = PasswordSecurity.HashToken("stage12-token"),
+                Station = station,
+                IsOnline = true,
+                IsActive = true
+            };
+            var login = new CustomerLogin
+            {
+                Customer = customer,
+                ClientKey = agent.DeviceId,
+                IsActive = true
+            };
+
+            setup.Stations.Add(station);
+            setup.Games.Add(game);
+            setup.Customers.Add(customer);
+            setup.AgentDevices.Add(agent);
+            setup.CustomerLogins.Add(login);
+            await setup.SaveChangesAsync();
+
+            var session = new Session
+            {
+                CustomerId = customer.Id,
+                StationId = station.Id,
+                AgentDeviceId = agent.Id,
+                GameId = game.Id,
+                StartAt = DateTimeOffset.UtcNow,
+                State = SessionState.Active
+            };
+            setup.Sessions.Add(session);
+
+            setup.AccountPoolEntries.Add(new AccountPoolEntry
+            {
+                Title = "Stage12 Pool",
+                Platform = "Steam",
+                Login = "stage12-login",
+                SecretHash = PasswordSecurity.Hash("Stage12Secret!"),
+                SecretCiphertext = protection.Protect("Stage12Secret!"),
+                AllowedGameIdsCsv = game.Id.ToString(),
+                Status = AccountPoolStatus.Free,
+                IsActive = true
+            });
+
+            await setup.SaveChangesAsync();
+            sessionId = session.Id;
+            agentId = agent.Id;
+        }
+
+        await using (var context = CreateContext(connection))
+        {
+            var service = new AccountPoolService(context, protection);
+            var result = await service.AllocateForOperationalSessionAsync(sessionId, CancellationToken.None);
+
+            Assert.NotNull(result);
+            leaseId = result!.Value.Lease.Id;
+            leaseToken = result.Value.Lease.LeaseToken;
+
+            var credential = await service.GetCredentialAsync(
+                leaseId,
+                leaseToken,
+                agentId,
+                CancellationToken.None);
+
+            Assert.NotNull(credential);
+            Assert.Equal("stage12-login", credential!.Login);
+            Assert.Equal("Stage12Secret!", credential.Secret);
+
+            var deniedWrongAgent = await service.GetCredentialAsync(
+                leaseId,
+                leaseToken,
+                Guid.NewGuid(),
+                CancellationToken.None);
+
+            Assert.Null(deniedWrongAgent);
+
+            var deniedWrongToken = await service.GetCredentialAsync(
+                leaseId,
+                "wrong-token",
+                agentId,
+                CancellationToken.None);
+
+            Assert.Null(deniedWrongToken);
+
+            var released = await service.ReleaseAsync(
+                leaseId,
+                "Stage12 test release",
+                CancellationToken.None);
+
+            Assert.NotNull(released);
+        }
+
+        await using (var verify = CreateContext(connection))
+        {
+            var account = await verify.AccountPoolEntries.SingleAsync();
+            Assert.Equal(AccountPoolStatus.Free, account.Status);
+
+            var lease = await verify.AccountLeases.SingleAsync();
+            Assert.Equal(AccountLeaseState.Released, lease.State);
+            Assert.Null(lease.CredentialAccessExpiresAt);
+            Assert.Equal("Stage12 test release", lease.ReleaseReason);
+        }
+    }
