@@ -36,6 +36,7 @@ public sealed class AccountPoolService(GameNetDbContext database)
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var candidates = await database.AccountPoolEntries
+                .AsNoTracking()
                 .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
                 .Take(50)
                 .ToListAsync(cancellationToken);
