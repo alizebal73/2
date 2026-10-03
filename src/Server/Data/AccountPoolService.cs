@@ -31,7 +31,7 @@ public sealed class AccountPoolService(
             var candidates = await database.AccountPoolEntries.AsNoTracking()
                 .Where(item => item.Status == AccountPoolStatus.Free
                     && item.IsActive
-                    && (!item.ExpiresAt.HasValue || item.ExpiresAt > now))
+                    && (item.ExpiresAt == null || item.ExpiresAt.Value > now))
                 .ToListAsync(cancellationToken);
 
             var candidate = candidates
@@ -49,7 +49,8 @@ public sealed class AccountPoolService(
                 var updated = await database.AccountPoolEntries
                     .Where(item => item.Id == candidate.Id
                         && item.Status == AccountPoolStatus.Free
-                        && item.IsActive)
+                        && item.IsActive
+                        && (item.ExpiresAt == null || item.ExpiresAt.Value > now))
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(item => item.Status, AccountPoolStatus.InUse)
                         .SetProperty(item => item.AssignedAgentDeviceId, agentDeviceId)
