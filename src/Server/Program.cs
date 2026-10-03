@@ -553,7 +553,7 @@ app.MapPost("/api/agent/register", async (
             previousDevice.ConnectedAt = null;
             previousDevice.LifecycleState = ClientLifecycleStates.Degraded;
             previousDevice.LifecycleStateChangedAt = DateTimeOffset.UtcNow;
-            previousDevice.AgentTokenHash = null;
+            previousDevice.AgentTokenHash = PasswordSecurity.HashToken(AuthorizationService.CreateToken());
 
             database.AuditLogs.Add(new AuditLog
             {
