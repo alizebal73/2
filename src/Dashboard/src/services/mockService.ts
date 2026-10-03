@@ -308,13 +308,13 @@ export const mockService = {
     return { ...permissionStore };
   },
   createBackup: async () => ({
-    customers, products, users, tariffs, games, accounts, clients: clientSystems, settings,
+    customers, products, users, tariffs, clients: clientSystems, settings,
     expenses, reportRows, shifts, currentShift, permissions: permissionStore, createdAt: new Date().toISOString()
   }),
   restoreBackup: async (payload: any) => {
     const replace = (target: any[], source: any[]) => { if (Array.isArray(source)) target.splice(0, target.length, ...source); };
     replace(customers, payload.customers); replace(products, payload.products); replace(users, payload.users); replace(tariffs, payload.tariffs);
-    replace(games, payload.games); replace(accounts, payload.accounts); replace(clientSystems, payload.clients); replace(settings, payload.settings);
+    replace(clientSystems, payload.clients); replace(settings, payload.settings);
     replace(expenses, payload.expenses); replace(reportRows, payload.reportRows); replace(shifts, payload.shifts);
     Object.keys(permissionStore).forEach(key => delete permissionStore[key]);
     Object.assign(permissionStore, payload.permissions || {});
