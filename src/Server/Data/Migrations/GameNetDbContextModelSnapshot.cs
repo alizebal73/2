@@ -845,6 +845,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.HasIndex("CustomerId");
 
+                    b.HasIndex("CustomerLoginId");
+
                     b.HasIndex("GameId");
 
                     b.ToTable("GameAccounts");
