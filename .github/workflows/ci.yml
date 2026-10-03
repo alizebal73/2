@@ -985,9 +985,9 @@ jobs:
 
                     $stage12PoolRows = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
                     $stage12AccountRow = @($stage12PoolRows | Where-Object { $_.id -eq $stage12Account.id })[0]
-                    if ($stage12AccountRow
-                        -and $stage12AccountRow.status -eq 'InUse'
-                        -and [string]$stage12AccountRow.assignedAgentDeviceId -eq [string]$stage12AgentId) {
+                    if ($stage12AccountRow -and
+                        $stage12AccountRow.status -eq 'InUse' -and
+                        [string]$stage12AccountRow.assignedAgentDeviceId -eq [string]$stage12AgentId) {
                       $stage12LeaseVerified = $true
                     }
                   }
