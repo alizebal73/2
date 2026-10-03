@@ -34,6 +34,7 @@ public static class AuthorizationService
             ["payroll.manage"] = "ثبت و مدیریت حقوق و حساب پرسنلی",
             ["audit.view"] = "مشاهده Audit",
             ["reservation.manage"] = "مدیریت رزرو و صف انتظار",
+            ["station.manage"] = "مدیریت ایستگاه‌ها",
             ["operations.view"] = "مشاهده سلامت و وضعیت عملیاتی",
             ["backup.manage"] = "پشتیبان‌گیری و بازیابی"
         };
