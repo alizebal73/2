@@ -215,6 +215,8 @@ public sealed class AgentHub(
                     device.DeviceId);
             }
 
+            await RedeliverPendingCommandsAsync(device.Id, Context.ConnectionId, now, Context.ConnectionAborted);
+
             return new AgentHeartbeatResponse(
                 device.Id,
                 now,
@@ -729,6 +731,68 @@ public sealed class AgentHub(
             .FirstOrDefaultAsync(
                 item => item.ConnectionId == connectionId && item.IsActive,
                 cancellationToken);
+    }
+
+    private async Task RedeliverPendingCommandsAsync(
+        Guid agentDeviceId,
+        string connectionId,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var timeout = TimeSpan.FromSeconds(
+            Math.Clamp(
+                configuration.GetValue("Agent:CommandTimeoutSeconds", 15),
+                5,
+                300));
+
+        var pending = await database.AgentCommands
+            .AsNoTracking()
+            .Where(item => item.AgentDeviceId == agentDeviceId
+                && item.Status == "Sent"
+                && item.RequestedAt >= now - timeout)
+            .OrderBy(item => item.RequestedAt)
+            .Take(20)
+            .ToListAsync(cancellationToken);
+
+        if (pending.Count == 0)
+            return;
+
+        await database.AgentCommands
+            .Where(item => item.AgentDeviceId == agentDeviceId
+                && item.Status == "Sent"
+                && item.RequestedAt >= now - timeout)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(item => item.AgentConnectionId, connectionId),
+                cancellationToken);
+
+        foreach (var command in pending)
+        {
+            try
+            {
+                await Clients.Caller.SendAsync(
+                    "AgentCommand",
+                    new AgentCommandEnvelope(
+                        command.Id,
+                        command.CommandType,
+                        command.PayloadJson,
+                        command.RequestedAt),
+                    cancellationToken);
+
+                logger.LogInformation(
+                    "Redelivered pending Agent command after heartbeat. DeviceId={DeviceId}, CommandId={CommandId}, ConnectionId={ConnectionId}",
+                    agentDeviceId,
+                    command.Id,
+                    connectionId);
+            }
+            catch (Exception exception)
+            {
+                logger.LogWarning(
+                    exception,
+                    "Failed to redeliver pending Agent command. DeviceId={DeviceId}, CommandId={CommandId}",
+                    agentDeviceId,
+                    command.Id);
+            }
+        }
     }
 
     private int HeartbeatIntervalSeconds()
