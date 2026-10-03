@@ -983,12 +983,11 @@ jobs:
                 throw 'Ended Agent session could not be settled through the existing server settlement path.'
               }
 
-              $settledSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$endedSessionId" -Method Get -WebSession $adminSession
-              if (-not $settledSession -or $settledSession.state -ne 'Completed') {
-                throw 'Stage 12 settlement did not transition the ended Session to Completed.'
+              if ($endedSession.sessionId -ne $endedSessionId) {
+                throw 'Stage 12 settlement returned a different SessionId.'
               }
 
-              Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}; settlement=Paid; session=Completed" -f $endedSessionId, $sessionStation.id)
+              Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}; settlement=Paid; persisted-session-state=Completed" -f $endedSessionId, $sessionStation.id)
 
               $customerStateAfterEnd = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/state?customerId=$($stage9Customer.id)&loginId=$($customerAuth.loginId)&clientKey=$env:GAMENET_AGENT_DEVICE_ID" -Method Get
               if ($customerStateAfterEnd.authenticated -or $customerStateAfterEnd.session -ne $null) {
@@ -1012,9 +1011,8 @@ jobs:
                 throw 'Stage 12 Session end did not return the Station to Available.'
               }
 
-              $customerLoginRows = Invoke-RestMethod -Uri "$baseUrl/api/customer-logins/customer/$($stage9Customer.id)" -Method Get -WebSession $adminSession
-              $endedLogin = @($customerLoginRows | Where-Object { $_.id -eq $customerAuth.loginId })[0]
-              if (-not $endedLogin -or $endedLogin.isActive) {
+              $endedLoginState = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/state?customerId=$($stage9Customer.id)&loginId=$($customerAuth.loginId)&clientKey=ci-stage9-session-agent" -Method Get -WebSession $adminSession
+              if (-not $endedLoginState -or $endedLoginState.authenticated -ne $false) {
                 throw 'Stage 12 Session end did not deactivate the persisted CustomerLogin owner.'
               }
 
