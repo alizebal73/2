@@ -1,5 +1,3 @@
-import type { AuditLogRecord, CustomerPerformance, OperatorPerformance } from '../types';
-
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
   if (!response.ok) {
