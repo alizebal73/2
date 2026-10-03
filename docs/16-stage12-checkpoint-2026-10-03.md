@@ -56,3 +56,25 @@
 - Stage 13 قبل از Done واقعی Stage 12 شروع نشود.
 - هیچ marker بدون state/command evidence به معنی موفقیت تلقی نشود.
 - هر تغییر بعدی فقط در صورت تعلق به lifecycle/persistence/concurrency/contract/verification این زنجیره باشد.
+
+## Handoff / lessons ثبت‌شده برای ادامه
+
+### چرا این اصلاحات انجام شدند
+- `CustomerLogin → Session` باید persisted ownership باشد، نه query inference بر اساس Customer + Device.
+- `EndSession` و `AgentLogoutAndLock` نباید Loginهای نامرتبط همان Agent را ببندند.
+- `Session End → Lease Release` باید یک transaction boundary واحد داشته باشد؛ commit شدن Session با Lease باقی‌مانده ممنوع است.
+- `Game Sync Sent` فقط پذیرش/ارسال است؛ موفقیت واقعی با `AgentCommand.Status = Succeeded` و state محلی Agent اثبات می‌شود.
+- Snapshot و migration باید همزمان با مدل به‌روز شوند؛ relationship بدون navigation metadata نیز gap است.
+
+### Exact latest state
+- Latest head at checkpoint write: `533e8812a0627edd9dc1ce46be9d362ad3a6089d`
+- PR #19 is open and non-draft.
+- CI Run #1094 is executing on self-hosted runner `Server`.
+- At last observed point: .NET Restore = Success، Build = Success، Test = Running.
+- Stage 12 must not be marked Done until Run #1094 reaches Success on this exact SHA and all Stage 12 smoke assertions pass.
+
+### بعد از سبز شدن CI
+1. exact-SHA evidence را ثبت کن.
+2. migration `SessionCustomerLogin` را روی empty DB و upgrade DB smoke تأیید کن.
+3. Stage 12 final audit را refresh کن.
+4. فقط بعد از این، Wave بعدی را با Integration Contract شروع کن.
