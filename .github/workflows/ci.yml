@@ -1,11 +1,11 @@
 name: GameNet Manager CI
 on:
   push:
-    branches: [main]
+    branches: [main, stage12-session-lease]
   pull_request:
 
 concurrency:
-  group: gamenet-ci-main
+  group: gamenet-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
