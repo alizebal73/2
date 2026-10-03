@@ -848,6 +848,9 @@ jobs:
             $env:GAMENET_AGENT_TEST_LOGIN_ID = $customerAuth.loginId
             $env:GAMENET_AGENT_TEST_GAME_ID = $stage12Game.id
             $env:GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW = '1'
+            $stage12AccountHandshakeFile = Join-Path $sessionAgentData 'stage12-account-acquired.continue'
+            Remove-Item $stage12AccountHandshakeFile -Force -ErrorAction SilentlyContinue
+            $env:GAMENET_AGENT_TEST_ACCOUNT_HANDSHAKE_FILE = $stage12AccountHandshakeFile
 
             $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
               'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
@@ -942,7 +945,8 @@ jobs:
                     $accountRows = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
                     $inUseAccount = @($accountRows | Where-Object { $_.id -eq $stage12Account.id })[0]
                     if (-not $inUseAccount -or $inUseAccount.status -ne 'InUse') { throw 'Stage 12 Account Pool entry did not become InUse after Agent acquisition.' }
-                    Write-Host ("Stage 12 Agent Game account acquisition passed: leaseId={0}; gameId={1}" -f $gameLeaseId, $gameLeaseGameId)
+                    New-Item -ItemType File -Path $stage12AccountHandshakeFile -Force | Out-Null
+                    Write-Host ("Stage 12 Agent Game account acquisition passed: leaseId={0}; gameId={1}; status={2}" -f $gameLeaseId, $gameLeaseGameId, $inUseAccount.status)
                   }
 
                   if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
