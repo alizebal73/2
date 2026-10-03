@@ -847,8 +847,6 @@ modelBuilder.Entity("GameNetManager.Server.Data.GameAccount", b =>
 
         b.HasIndex("CustomerId");
 
-        b.HasIndex("CustomerLoginId");
-
         b.HasIndex("GameId");
 
         b.ToTable("GameAccounts");
@@ -1486,6 +1484,8 @@ modelBuilder.Entity("GameNetManager.Server.Data.Session", b =>
         b.HasIndex("AppUserId");
 
         b.HasIndex("CustomerId");
+
+        b.HasIndex("CustomerLoginId");
 
         b.HasIndex("GameId");
 
