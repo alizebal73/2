@@ -218,6 +218,7 @@ public sealed class AccountPoolTests
             var session = new Session
             {
                 CustomerId = customer.Id,
+                CustomerLoginId = login.Id,
                 StationId = station.Id,
                 AgentDeviceId = agent.Id,
                 GameId = game.Id,
@@ -268,6 +269,19 @@ public sealed class AccountPoolTests
                 leaseId, "wrong-token", agentId, CancellationToken.None));
             Assert.Null(await service.GetCredentialAsync(
                 leaseId, leaseToken, Guid.NewGuid(), CancellationToken.None));
+
+            var persistedLogin = await context.CustomerLogins.SingleAsync(item => item.Id == (
+                context.Sessions.Where(item => item.Id == sessionId).Select(item => item.CustomerLoginId).Single()!.Value));
+            persistedLogin.IsActive = false;
+            persistedLogin.LoggedOutAt = DateTimeOffset.UtcNow;
+            await context.SaveChangesAsync();
+
+            Assert.Null(await service.GetCredentialAsync(
+                leaseId, leaseToken, agentId, CancellationToken.None));
+
+            persistedLogin.IsActive = true;
+            persistedLogin.LoggedOutAt = null;
+            await context.SaveChangesAsync();
         }
 
         await using (var context = CreateContext(connection))
