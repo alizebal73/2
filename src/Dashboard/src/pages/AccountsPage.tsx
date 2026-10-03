@@ -4,6 +4,7 @@ import {
   allocateServerAccount,
   createServerAccount,
   getServerAccountPool,
+  saveServerAccount,
   getServerLeases,
   releaseServerLease,
   unlockServerAccount,
@@ -47,7 +48,7 @@ export function AccountsPage() {
   );
 
   function createAccount() {
-    setDraft({ id: '', title: '', platform: 'Steam', status: 'free', owner: 'مجموعه', expiresAt: '', allowedGames: [], assignedClient: '', guardStatus: 'محافظت‌شده' });
+    setDraft({ id: '', title: '', login: '', platform: 'Steam', status: 'free', owner: 'مجموعه', expiresAt: '', allowedGames: [], assignedClient: '', guardStatus: 'محافظت‌شده' });
     setAllowedGameNames('');
     setSecret('');
   }
@@ -73,26 +74,17 @@ export function AccountsPage() {
         await createServerAccount({
           title: draft.title,
           platform: draft.platform,
+          login: draft.login,
           owner: draft.owner,
           allowedGameIds,
           secret,
         });
       } else {
-        const response = await fetch('/api/account-pool/' + draft.id, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            title: draft.title,
-            platform: draft.platform,
-            login: null,
-            secret: secret || null,
-            owner: draft.owner,
-            expiresAt: null,
-            allowedGameIds,
-            status: draft.status === 'in-use' ? 'InUse' : draft.status === 'locked' ? 'Locked' : 'Free',
-          }),
-        });
-        if (!response.ok) throw new Error('ویرایش اکانت در سرور انجام نشد');
+        await saveServerAccount(
+          draft,
+          allowedGameIds,
+          secret || undefined,
+        );
       }
       setDraft(null);
       setSecret('');
@@ -230,6 +222,7 @@ export function AccountsPage() {
           <button className="modal-close" onClick={() => setDraft(null)}>×</button>
           <h2>{draft.id ? 'ویرایش اکانت' : 'اکانت جدید'}</h2>
           <label>نام / شناسه<input value={draft.title} onChange={event => setDraft({ ...draft, title: event.target.value })} /></label>
+          <label>Login / ایمیل اکانت<input className="ltr" value={draft.login} onChange={event => setDraft({ ...draft, login: event.target.value })} placeholder="نام کاربری یا ایمیل" /></label>
           <label>Platform<select value={draft.platform} onChange={event => setDraft({ ...draft, platform: event.target.value as AccountRecord['platform'] })}><option>Steam</option><option>Battle.net</option><option>Riot</option><option>Epic</option></select></label>
           <label>مالک<input value={draft.owner} onChange={event => setDraft({ ...draft, owner: event.target.value })} /></label>
           <label>بازی‌های مجاز<input value={allowedGameNames} onChange={event => setAllowedGameNames(event.target.value)} placeholder="نام بازی‌ها با ویرگول جدا شود" /></label>
