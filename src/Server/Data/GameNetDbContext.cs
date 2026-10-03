@@ -158,6 +158,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         station.HasIndex(item => item.Name).IsUnique();
         station.HasIndex(item => item.Zone);
         station.Property(item => item.Name).HasMaxLength(80).IsRequired();
+        station.Property(item => item.NetworkRoute).HasMaxLength(30).IsRequired();
         station.Property(item => item.Zone).HasMaxLength(60).IsRequired();
         station.Property(item => item.Type).HasMaxLength(50).IsRequired();
         station.Property(item => item.State).HasConversion<string>().HasMaxLength(20);
@@ -471,7 +472,14 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         var reservation = modelBuilder.Entity<Reservation>();
         reservation.HasKey(item => item.Id);
         reservation.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
+        reservation.Property(item => item.Kind).HasConversion<string>().HasMaxLength(20);
         reservation.Property(item => item.Notes).HasMaxLength(500);
+        reservation.HasIndex(item => new { item.StationId, item.StartAt });
+        reservation.HasIndex(item => new { item.Kind, item.Status, item.Priority, item.CreatedAt });
+        reservation.HasOne(item => item.CreatedByUser)
+            .WithMany()
+            .HasForeignKey(item => item.CreatedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
         reservation.HasOne(item => item.Customer)
             .WithMany(item => item.Reservations)
             .HasForeignKey(item => item.CustomerId)
