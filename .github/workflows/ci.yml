@@ -778,14 +778,36 @@ jobs:
               throw 'Stage 9 smoke customer creation failed.'
             }
 
-            $customerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
-              usernameOrCode = $stage9Customer.username
-              password = 'Stage9Smoke123!'
-              clientKey = 'ci-stage9-session-agent'
+            $stage12Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              name = "Stage12 Game $stage9SmokeId"
+              version = '1.0'
+              genre = 'CI'
+              status = 'online'
+              path = 'C:\Games\Stage12'
+              executable = 'Stage12.exe'
+              cover = ''
+              trailer = ''
+              launchArgs = ''
+              connectionType = 'آنلاین'
+              active = $true
+              targetSystem = 'all'
+              target = 'all'
+              targetZone = 'pc'
+              targetStations = ''
             } | ConvertTo-Json)
-            if (-not $customerAuth.authenticated -or -not $customerAuth.loginId -or $customerAuth.balance -ne 0) {
-              throw 'Customer authentication for Agent session smoke failed or returned incomplete financial state.'
-            }
+            if (-not $stage12Game.id) { throw 'Stage 12 Game create smoke failed.' }
+
+            $stage12Account = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              title = "Stage12 Account $stage9SmokeId"
+              platform = 'Steam'
+              login = "stage12-login-$stage9SmokeId"
+              secret = 'Stage12Secret!'
+              owner = 'CI'
+              expiresAt = $null
+              allowedGameIds = @($stage12Game.id)
+              status = 'Free'
+            } | ConvertTo-Json)
+            if (-not $stage12Account.id) { throw 'Stage 12 Account Pool create smoke failed.' }
 
             $env:GAMENET_SERVER_URL = $baseUrl
             $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
@@ -797,6 +819,8 @@ jobs:
             $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
             $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $stage9Customer.id
             $env:GAMENET_AGENT_TEST_LOGIN_ID = $customerAuth.loginId
+            $env:GAMENET_AGENT_TEST_GAME_ID = $stage12Game.id
+            $env:GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW = '1'
 
             $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
               'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
@@ -823,6 +847,20 @@ jobs:
 
                   if ($log -match 'AGENT_SESSION_END_AUTH_GUARD_OK') {
                     Write-Host 'Stage 9 Agent Session End login ownership guard passed.'
+                  }
+
+                  if ($log -match 'AGENT_GAME_ACCOUNT_OK:([0-9a-fA-F-]+):([0-9a-fA-F-]+):([^:]+):(.+)') {
+                    $gameLeaseId = $Matches[1]
+                    $gameLeaseGameId = $Matches[2]
+                    if ($gameLeaseGameId -ne $stage12Game.id) { throw "Stage 12 Agent received a credential for an unexpected GameId: $gameLeaseGameId" }
+                    $gameRows = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
+                    $gameRow = @($gameRows | Where-Object { $_.id -eq $stage12Game.id })[0]
+                    if (-not $gameRow -or [int]$gameRow.activeUsers -ne 1) { throw 'Stage 12 Game activeUsers did not become authoritative while the Session was active.' }
+
+                    $accountRows = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+                    $inUseAccount = @($accountRows | Where-Object { $_.id -eq $stage12Account.id })[0]
+                    if (-not $inUseAccount -or $inUseAccount.status -ne 'InUse') { throw 'Stage 12 Account Pool entry did not become InUse after Agent acquisition.' }
+                    Write-Host ("Stage 12 Agent Game account acquisition passed: leaseId={0}; gameId={1}" -f $gameLeaseId, $gameLeaseGameId)
                   }
 
                   if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
@@ -856,6 +894,20 @@ jobs:
 
               Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}" -f $endedSessionId, $sessionStation.id)
 
+              $accountRowsAfterRelease = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+              $releasedStage12Account = @($accountRowsAfterRelease | Where-Object { $_.id -eq $stage12Account.id })[0]
+              if (-not $releasedStage12Account -or $releasedStage12Account.status -ne 'Free' -or $releasedStage12Account.assignedAgentDeviceId) {
+                throw 'Stage 12 Session end did not release the Account Pool entry back to Free.'
+              }
+
+              $gameRowsAfterRelease = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
+              $releasedGame = @($gameRowsAfterRelease | Where-Object { $_.id -eq $stage12Game.id })[0]
+              if (-not $releasedGame -or [int]$releasedGame.activeUsers -ne 0) {
+                throw 'Stage 12 Game activeUsers did not return to zero after Session end.'
+              }
+
+              Write-Host 'Stage 12 Session → Game → Agent → Account Lease → Credential → Session End → Release smoke passed.'
+
               $duplicateDeviceId = "ci-stage9-duplicate-$stage9SmokeId"
               try {
                 Invoke-RestMethod -Uri "$baseUrl/api/agent/register" -Method Post -ContentType 'application/json' -Headers @{
@@ -883,6 +935,8 @@ jobs:
               $env:GAMENET_AGENT_TEST_SESSION_FLOW = $null
               $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $null
               $env:GAMENET_AGENT_TEST_LOGIN_ID = $null
+              $env:GAMENET_AGENT_TEST_GAME_ID = $null
+              $env:GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW = $null
               $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
             }
 
