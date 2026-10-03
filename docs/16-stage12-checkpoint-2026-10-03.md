@@ -16,15 +16,18 @@ Stage 12 must not modify `main` directly.
 
 ## Current branch head
 
-`48f07290e4c5c2b587955136656f6d7b192d4d86`
+`9e1b8f7219e39991b508f09db4c74a307eddc811`
 
 ## Current CI
 
-Run #976 on the exact Stage 12 head:
-- Build .NET: ✅
-- Test .NET: ✅
-- EF snapshot validation: ❌
-- Server/Dashboard steps were skipped because snapshot validation failed.
+Run #1007+ on the evolving Stage 12 head; previous runs were cancelled by the branch concurrency guard while the branch was being corrected. The latest head has not yet produced a completed verdict.
+
+Current pre-CI status:
+- Agent command transport: implemented with stable per-device SignalR group.
+- Stage 12 Agent Session → Game → Lease → Credential → EndSession/Release smoke: added.
+- Game activeUsers: authoritative from active Sessions.
+- Stale/Disconnect Lease recovery: implemented.
+- Customer authentication smoke restored before the Stage 12 flow.
 
 ## What is actually implemented
 
@@ -43,18 +46,9 @@ Run #976 on the exact Stage 12 head:
 
 ## Current blocker
 
-EF reports pending model changes.
+The current branch head is awaiting a completed CI run. Do not mark Stage 12 Done until the exact head is green for Build, Tests, EF validation, Server Smoke, and the required Agent/Session/Lease E2E.
 
-This is NOT evidence that the Stage 12 business flow is wrong. The failure is in the committed EF model snapshot. The current snapshot was manually edited across earlier stages and is not byte/structure-equivalent to the model EF scaffolds today.
-
-## Correct next action
-
-1. Regenerate the complete `GameNetDbContextModelSnapshot.cs` from the actual current EF model on this branch.
-2. Verify that the Stage 12 migration contains only database operations that are genuinely not already represented by earlier migrations.
-3. Run:
-   Build → Test → EF snapshot validation → migration/startup smoke.
-4. Only after that continue Stage 12 business hardening.
-5. Do not merge PR #18 until the exact branch head is green.
+The previous Agent ping timeout was treated as a transport race and corrected without weakening the timeout assertion.
 
 ## Important recovery rule
 
