@@ -926,12 +926,15 @@ jobs:
                 Start-Sleep -Seconds 1
               }
 
-              if (-not $gameSyncVerified -or -not $sessionStartVerified -or -not $sessionFlowCompleted) {
+              $sessionDuplicateGuardVerified = $log -match 'AGENT_SESSION_DUPLICATE_GUARD_OK'
+              $sessionEndLoginGuardVerified = $log -match 'AGENT_SESSION_END_LOGIN_GUARD_OK'
+
+              if (-not $gameSyncVerified -or -not $sessionStartVerified -or -not $sessionDuplicateGuardVerified -or -not $sessionEndLoginGuardVerified -or -not $sessionFlowCompleted) {
                 Write-Host '--- Stage 9 Session Agent stdout ---'
                 if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
                 Write-Host '--- Stage 9 Session Agent stderr ---'
                 if (Test-Path $sessionAgentStderr) { Get-Content $sessionAgentStderr }
-                throw 'Agent-driven Session Start/End smoke did not complete.'
+                throw 'Agent-driven Session Start/End ownership and lifecycle smoke did not complete.'
               }
 
               $endedSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$endedSessionId/settle" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
