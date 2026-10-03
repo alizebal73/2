@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.DataProtection;
 using GameNetManager.Server.Data;
 using GameNetManager.Server.Hubs;
@@ -43,6 +44,28 @@ builder.Services.AddDbContext<GameNetDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
 
 var app = builder.Build();
+
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        var feature = context.Features.Get<IExceptionHandlerPathFeature>();
+        if (feature?.Error is DbUpdateConcurrencyException)
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                code = "concurrency_conflict",
+                message = "این رکورد توسط اپراتور دیگری تغییر کرده است. اطلاعات را تازه کنید و دوباره تلاش کنید."
+            });
+            return;
+        }
+
+        throw feature?.Error ?? new InvalidOperationException("خطای نامشخص سرور.");
+    });
+});
+
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
