@@ -80,6 +80,7 @@ jobs:
           $env:App__ClientPackageVersion = '0.7.1'
           $env:App__ClientPackagePath = $releasePackage
           $env:App__ClientPackageSha256 = $releaseHash
+          $env:STAGE12_TEST_SECRET = 'Stage12SmokeSecret!'
 
           $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
             'run','--no-build','--configuration','Release',
@@ -857,6 +858,143 @@ jobs:
               $env:GAMENET_AGENT_TEST_SESSION_FLOW = $null
               $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $null
               $env:GAMENET_AGENT_TEST_LOGIN_ID = $null
+              $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
+            }
+
+
+            # Stage 12: real Session -> Game Account Lease -> Agent credential delivery -> Session end release.
+            $stage12Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              name = "CI Stage12 Game $stage9SmokeId"
+              version = '1.0'
+              genre = 'Stage12'
+              status = 'online'
+              path = 'C:\Games\Stage12'
+              executable = 'Stage12.exe'
+              cover = ''
+              trailer = ''
+              launchArgs = ''
+              connectionType = 'آنلاین'
+              active = $true
+              targetSystem = 'all'
+              target = 'all'
+              targetZone = 'pc'
+              targetStations = ''
+            } | ConvertTo-Json)
+
+            $stage12Account = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              title = "CI Stage12 Account $stage9SmokeId"
+              platform = 'Steam'
+              login = "stage12-login-$stage9SmokeId"
+              secret = $env:STAGE12_TEST_SECRET
+              owner = 'CI'
+              expiresAt = $null
+              allowedGameIds = @($stage12Game.id)
+              status = 'Free'
+            } | ConvertTo-Json)
+
+            $stage12CustomerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
+              usernameOrCode = $stage9Customer.username
+              password = 'Stage9Smoke123!'
+              clientKey = "ci-stage12-session-$stage9SmokeId"
+            } | ConvertTo-Json)
+
+            if (-not $stage12CustomerAuth.authenticated -or -not $stage12CustomerAuth.loginId) {
+              throw 'Stage 12 customer authentication setup failed.'
+            }
+
+            $stage12Root = Join-Path $env:RUNNER_TEMP 'gamenet-stage12-agent'
+            $stage12Data = Join-Path $stage12Root 'data'
+            $stage12Stdout = Join-Path $stage12Root 'stdout.log'
+            $stage12Stderr = Join-Path $stage12Root 'stderr.log'
+            Remove-Item $stage12Root -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $stage12Data -Force | Out-Null
+
+            $env:GAMENET_SERVER_URL = $baseUrl
+            $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
+            $env:GAMENET_AGENT_NAME = "CI Agent Stage 12 $stage9SmokeId"
+            $env:GAMENET_AGENT_DEVICE_ID = "ci-stage12-agent-$stage9SmokeId"
+            $env:GAMENET_STATION_ID = $sessionStation.id
+            $env:GAMENET_AGENT_DATA_DIR = $stage12Data
+            $env:GAMENET_AGENT_HEADLESS = '1'
+            $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
+            $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $stage9Customer.id
+            $env:GAMENET_AGENT_TEST_LOGIN_ID = $stage12CustomerAuth.loginId
+            $env:GAMENET_AGENT_TEST_GAME_ID = $stage12Game.id
+
+            $stage12AgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
+              'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
+            ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $stage12Stdout -RedirectStandardError $stage12Stderr
+
+            try {
+              $stage12CredentialReceived = $false
+              $stage12Completed = $false
+              $stage12SessionId = $null
+
+              for ($i = 0; $i -lt 45; $i++) {
+                if ($stage12AgentProcess.HasExited) { break }
+                if (Test-Path $stage12Stdout) {
+                  $log = Get-Content $stage12Stdout -Raw
+
+                  if ($log -match 'AGENT_GAME_ACCOUNT_CREDENTIAL_OK:([0-9a-fA-F-]+):(.+)') {
+                    $stage12CredentialReceived = $true
+                  }
+
+                  if ($log -match 'AGENT_SESSION_START_OK:([0-9a-fA-F-]+)') {
+                    $stage12SessionId = $Matches[1]
+                    $activeStage12 = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+                    $activeRow = @($activeStage12 | Where-Object { $_.id -eq $stage12SessionId })[0]
+                    if (-not $activeRow -or $activeRow.gameId -ne $stage12Game.id -or $activeRow.agentDeviceId -eq $null) {
+                      throw 'Stage 12 active Session did not persist authoritative Game/Agent references.'
+                    }
+                  }
+
+                  if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
+                    $stage12Completed = $true
+                    break
+                  }
+                }
+                Start-Sleep -Seconds 1
+              }
+
+              if (-not $stage12CredentialReceived) {
+                Write-Host '--- Stage 12 Agent stdout ---'
+                if (Test-Path $stage12Stdout) { Get-Content $stage12Stdout }
+                Write-Host '--- Stage 12 Agent stderr ---'
+                if (Test-Path $stage12Stderr) { Get-Content $stage12Stderr }
+                throw 'Stage 12 Agent did not receive a valid lease-bound Game credential.'
+              }
+
+              if (-not $stage12Completed) {
+                Write-Host '--- Stage 12 Agent stdout ---'
+                if (Test-Path $stage12Stdout) { Get-Content $stage12Stdout }
+                Write-Host '--- Stage 12 Agent stderr ---'
+                if (Test-Path $stage12Stderr) { Get-Content $stage12Stderr }
+                throw 'Stage 12 Agent Session did not end cleanly.'
+              }
+
+              $stage12Pool = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+              $stage12AccountRow = @($stage12Pool | Where-Object { $_.id -eq $stage12Account.id })[0]
+              if (-not $stage12AccountRow -or $stage12AccountRow.status -ne 'Free' -or $stage12AccountRow.assignedAgentDeviceId) {
+                throw 'Stage 12 Session end did not release the Account Pool entry.'
+              }
+
+              $stage12Leases = Invoke-RestMethod -Uri "$baseUrl/api/account-pool/leases" -Method Get -WebSession $adminSession
+              if (@($stage12Leases | Where-Object { $_.accountId -eq $stage12Account.id }).Count -ne 0) {
+                throw 'Stage 12 released account still appears as an active Lease.'
+              }
+
+              Write-Host ("Stage 12 Session -> Game Lease -> Agent credential -> Session release smoke passed: gameId={0}; accountId={1}" -f $stage12Game.id, $stage12Account.id)
+            }
+            finally {
+              if (-not $stage12AgentProcess.HasExited) {
+                Stop-Process -Id $stage12AgentProcess.Id -Force -ErrorAction SilentlyContinue
+              }
+              $env:GAMENET_AGENT_DEVICE_ID = $null
+              $env:GAMENET_STATION_ID = $null
+              $env:GAMENET_AGENT_TEST_SESSION_FLOW = $null
+              $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $null
+              $env:GAMENET_AGENT_TEST_LOGIN_ID = $null
+              $env:GAMENET_AGENT_TEST_GAME_ID = $null
               $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
             }
 
