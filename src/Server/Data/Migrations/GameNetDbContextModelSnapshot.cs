@@ -884,7 +884,7 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTimeOffset?>("SessionId")
+                    b.Property<Guid?>("SessionId")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("State")
