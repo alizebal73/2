@@ -68,7 +68,7 @@ public sealed class AccountPoolService(GameNetDbContext database)
                         .SetProperty(item => item.UpdatedAt, now), cancellationToken);
 
                 if (updated != 1)
-                    return (null, null);
+                    continue;
 
                 var lease = new AccountLease
                 {
