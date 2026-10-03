@@ -1398,6 +1398,8 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CreatedByUserId");
+
                     b.HasIndex("StartAt", "Status");
 
                     b.ToTable("Events");
@@ -1434,6 +1436,8 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CustomerId");
 
                     b.HasIndex("EventId", "CustomerId")
                         .IsUnique();
