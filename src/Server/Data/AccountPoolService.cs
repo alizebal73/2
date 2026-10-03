@@ -20,8 +20,24 @@ public sealed class AccountPoolService(
             throw new InvalidOperationException("ایستگاه/Agent انتخاب‌شده پیدا نشد.");
         if (customerId.HasValue && !await database.Customers.AnyAsync(item => item.Id == customerId.Value, cancellationToken))
             throw new InvalidOperationException("مشتری انتخاب‌شده پیدا نشد.");
-        if (sessionId.HasValue && !await database.Sessions.AnyAsync(item => item.Id == sessionId.Value, cancellationToken))
-            throw new InvalidOperationException("جلسه انتخاب‌شده پیدا نشد.");
+
+        if (sessionId.HasValue)
+        {
+            var session = await database.Sessions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Id == sessionId.Value, cancellationToken);
+
+            if (session is null)
+                throw new InvalidOperationException("جلسه انتخاب‌شده پیدا نشد.");
+            if (session.State != SessionState.Active)
+                throw new InvalidOperationException("فقط جلسه فعال می‌تواند Lease اکانت داشته باشد.");
+            if (session.GameId != gameId)
+                throw new InvalidOperationException("بازی Lease با بازی ثبت‌شده روی Session یکسان نیست.");
+            if (!agentDeviceId.HasValue || session.AgentDeviceId != agentDeviceId)
+                throw new InvalidOperationException("Agent Lease با Agent ثبت‌شده روی Session یکسان نیست.");
+            if (!customerId.HasValue || session.CustomerId != customerId)
+                throw new InvalidOperationException("مشتری Lease با مشتری ثبت‌شده روی Session یکسان نیست.");
+        }
 
         var gameIdText = game.Id.ToString();
 
