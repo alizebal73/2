@@ -74,9 +74,10 @@ public static class AgentCommandTypes
     public const string LogoutLock = "logout-lock";
     public const string Update = "update";
     public const string Rollback = "rollback";
+    public const string GameSync = "game-sync";
 
     public static bool IsSupported(string? commandType)
-        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock or Update or Rollback;
+        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock or Update or Rollback or GameSync;
 }
 
 public sealed record AgentCommandRequest(
@@ -123,12 +124,16 @@ public sealed record AgentSessionStartRequest(
     Guid CustomerLoginId,
     Guid? TariffId,
     decimal? HourlyRateOverride,
-    int? Persons);
+    int? Persons,
+    Guid? GameId = null);
 
 public sealed record AgentSessionStartResponse(
     Guid SessionId,
     Guid StationId,
     Guid CustomerId,
+    Guid? GameId,
+    Guid? LeaseId,
+    string? LeaseToken,
     DateTimeOffset StartAt);
 
 public sealed record AgentSessionEndRequest(
