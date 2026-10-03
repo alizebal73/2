@@ -276,6 +276,7 @@ export type GameRecord = {
 export type AccountRecord = {
   id: string;
   title: string;
+  login: string;
   platform: 'Steam' | 'Battle.net' | 'Riot' | 'Epic';
   status: 'free' | 'in-use' | 'locked';
   owner: string;
