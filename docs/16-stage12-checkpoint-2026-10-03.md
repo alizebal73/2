@@ -91,3 +91,10 @@ Stage 13 یا Wave بعدی فقط بعد از re-entry audit اختصاصی ه�
 2. migration `SessionCustomerLogin` روی DB خالی و upgrade DB smoke تأیید شود.
 3. Stage 12 final audit refresh شود.
 4. فقط بعد از این، Wave بعدی با Integration Contract شروع شود.
+
+### Latest verification correction
+- Run #1094 on head `533e8812a0627edd9dc1ce46be9d362ad3a6089d`: Build/Test/EF passed; startup/migration was initially blocked by a bad snapshot navigation placement in an intermediate snapshot.
+- Run #1122 on current head before the latest CI assertion fix reached Stage 12 itself: Game Sync command `Succeeded`, Agent manifest persisted, Session Start/activeUsers passed, Credential/Lease passed, Session End + settlement passed, CustomerLogin release passed, Account release passed.
+- Run #1122 then failed only because CI read `releasedStation.status`; the authoritative `StationDto` contract exposes `State` serialized as `state`.
+- Fixed in head `87dfcf7d5b46798d1981095b2d86c619275e568c`: Stage 12 smoke now asserts `releasedStation.state == Available`.
+- At checkpoint update, no workflow run had yet appeared for the exact head `87dfcf7d5b46798d1981095b2d86c619275e568c`? 
