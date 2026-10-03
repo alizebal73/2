@@ -871,6 +871,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<Guid>("GameId")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTimeOffset?>("CredentialAccessExpiresAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("LeasedAt")
                         .HasColumnType("TEXT");
 
@@ -955,6 +958,10 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.Property<string>("SecretHash")
                         .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SecretCiphertext")
+                        .HasMaxLength(2000)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
@@ -1404,6 +1411,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("AgentDeviceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("AppUserId")
                         .HasColumnType("TEXT");
 
@@ -1411,6 +1421,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("CustomerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("GameId")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("EndAt")
@@ -1461,9 +1474,13 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AgentDeviceId");
+
                     b.HasIndex("AppUserId");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("GameId");
 
                     b.HasIndex("StationId");
 
