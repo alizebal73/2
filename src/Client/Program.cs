@@ -502,14 +502,33 @@ static async Task RunTestSessionFlowAsync(
             new AgentSessionStartRequest(
                 customerId,
                 customerLoginId,
-                Guid.NewGuid(),
-                1m,
+                null,
+                null,
                 1,
                 gameId),
             cancellationToken);
 
         Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
         Console.WriteLine($"AGENT_SESSION_START_OK:{started.SessionId}");
+
+        try
+        {
+            await connection.InvokeAsync<AgentSessionStartResponse>(
+                "StartSession",
+                new AgentSessionStartRequest(
+                    customerId,
+                    customerLoginId,
+                    null,
+                    null,
+                    1,
+                    gameId),
+                cancellationToken);
+            throw new InvalidOperationException("Duplicate Agent session start unexpectedly succeeded.");
+        }
+        catch (HubException)
+        {
+            Console.WriteLine("AGENT_SESSION_DUPLICATE_GUARD_OK");
+        }
 
         if (testGameAccountFlow && gameId.HasValue)
         {
@@ -533,6 +552,19 @@ static async Task RunTestSessionFlowAsync(
         catch (HubException)
         {
             Console.WriteLine("AGENT_SESSION_END_AUTH_GUARD_OK");
+        }
+
+        try
+        {
+            await connection.InvokeAsync<AgentSessionEndResponse>(
+                "EndSession",
+                new AgentSessionEndRequest(started.SessionId, Guid.NewGuid()),
+                cancellationToken);
+            throw new InvalidOperationException("Agent session end with a different CustomerLoginId unexpectedly succeeded.");
+        }
+        catch (HubException)
+        {
+            Console.WriteLine("AGENT_SESSION_END_LOGIN_GUARD_OK");
         }
 
         var ended = await connection.InvokeAsync<AgentSessionEndResponse>(
