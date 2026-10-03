@@ -24,7 +24,28 @@ public sealed class AgentHub(
             return;
         }
 
+        // Authentication is established here, but the device is not marked online
+        // until the client explicitly confirms the bidirectional SignalR connection.
+        // This prevents REST callers from racing a not-yet-ready server-to-client channel.
         Context.Items[AgentDeviceContextKey] = device.Id;
+        await Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            DeviceGroup(device.Id),
+            Context.ConnectionAborted);
+
+        await base.OnConnectedAsync();
+    }
+
+    public async Task<AgentReadyDto> ConfirmConnection()
+    {
+        var device = await ResolveDeviceAsync(Context, Context.ConnectionAborted);
+        if (device is null || !device.IsActive)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        Context.Items[AgentDeviceContextKey] = device.Id;
+
+        // Re-add the active connection to the durable per-device group from inside
+        // the already-established bidirectional hub channel.
         await Groups.AddToGroupAsync(
             Context.ConnectionId,
             DeviceGroup(device.Id),
@@ -42,20 +63,16 @@ public sealed class AgentHub(
         device.LastUpdateError = null;
         await database.SaveChangesAsync(Context.ConnectionAborted);
 
-        await Clients.Caller.SendAsync(
-            "AgentReady",
-            new AgentReadyDto(
-                device.Id,
-                device.DeviceId,
-                now,
-                HeartbeatIntervalSeconds(),
-                device.IsLocked,
-                device.KioskEnabled,
-                device.LockOnDisconnect),
-            Context.ConnectionAborted);
-
         await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
-        await base.OnConnectedAsync();
+
+        return new AgentReadyDto(
+            device.Id,
+            device.DeviceId,
+            now,
+            HeartbeatIntervalSeconds(),
+            device.IsLocked,
+            device.KioskEnabled,
+            device.LockOnDisconnect);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
@@ -136,6 +153,13 @@ public sealed class AgentHub(
 
             if (!device.IsActive)
                 throw new HubException("دستگاه غیرفعال است.");
+
+            // Heartbeat is also a group-healing path. Any transient group loss is
+            // repaired from the currently authenticated SignalR connection.
+            await Groups.AddToGroupAsync(
+                Context.ConnectionId,
+                DeviceGroup(device.Id),
+                Context.ConnectionAborted);
 
             var now = DateTimeOffset.UtcNow;
             device.IsOnline = true;
