@@ -2524,6 +2524,78 @@ app.MapPost("/api/customers/{customerId:guid}/vip-package", async (HttpContext c
 })
 .WithName("AssignVipPackage");
 
+app.MapPut("/api/vip-packages/{packageId:guid}", async (
+    Guid packageId,
+    CreateVipPackageRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var package = await database.VipPackages.FirstOrDefaultAsync(item => item.Id == packageId, cancellationToken);
+    if (package is null)
+        return Results.NotFound(new { code = "vip_package_not_found", message = "پکیج VIP پیدا نشد." });
+
+    if (string.IsNullOrWhiteSpace(request.Name) || request.DurationDays <= 0 || request.DailyMinutes <= 0 || request.TotalMinutes <= 0 || request.Price < 0)
+        return Results.BadRequest(new { code = "invalid_vip_package", message = "مقادیر پکیج VIP معتبر نیستند." });
+
+    package.Name = request.Name.Trim();
+    package.Tier = NormalizeVipTier(request.Tier);
+    package.Price = request.Price;
+    package.DurationDays = request.DurationDays;
+    package.DailyMinutes = request.DailyMinutes;
+    package.TotalMinutes = request.TotalMinutes;
+    package.DiscountPercent = Math.Clamp(request.DiscountPercent, 0, 100);
+    package.OverflowRule = string.IsNullOrWhiteSpace(request.OverflowRule) ? "half-hourly" : request.OverflowRule.Trim();
+    package.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+    package.IsActive = request.IsActive;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "VipPackageUpdate",
+        EntityName = "VipPackage",
+        EntityId = package.Id.ToString(),
+        Details = "ویرایش پکیج VIP · " + package.Name,
+        AppUserId = auth.User!.Id
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new VipPackageDto(
+        package.Id, package.Name, package.Tier, package.Price, package.DurationDays,
+        package.DailyMinutes, package.TotalMinutes, package.DiscountPercent,
+        package.OverflowRule, package.Description, package.IsActive));
+})
+.WithName("UpdateVipPackage");
+
+app.MapDelete("/api/vip-packages/{packageId:guid}", async (
+    Guid packageId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var package = await database.VipPackages.FirstOrDefaultAsync(item => item.Id == packageId, cancellationToken);
+    if (package is null)
+        return Results.NotFound(new { code = "vip_package_not_found", message = "پکیج VIP پیدا نشد." });
+
+    package.IsActive = false;
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "VipPackageArchive",
+        EntityName = "VipPackage",
+        EntityId = package.Id.ToString(),
+        Details = "غیرفعال‌سازی پکیج VIP · " + package.Name,
+        AppUserId = auth.User!.Id
+    });
+    await database.SaveChangesAsync(cancellationToken);
+    return Results.Ok(new { archived = true });
+})
+.WithName("ArchiveVipPackage");
+
 app.MapPost("/api/customers", async (HttpContext context,
     CreateCustomerRequest request,
     GameNetDbContext database,
