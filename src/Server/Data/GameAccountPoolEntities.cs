@@ -22,7 +22,7 @@ public sealed class AccountPoolEntry : BaseEntity
     public string? SecretHash { get; set; }
     public string? SecretCiphertext { get; set; }
     public string Owner { get; set; } = "مجموعه";
-    public DateTimeOffset? ExpiresAt { get; set; }
+    public DateTime? ExpiresAt { get; set; }
     public string AllowedGameIdsCsv { get; set; } = string.Empty;
     public AccountPoolStatus Status { get; set; } = AccountPoolStatus.Free;
     public bool IsActive { get; set; } = true;
