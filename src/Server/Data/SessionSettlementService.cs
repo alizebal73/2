@@ -223,6 +223,45 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         session.EndAt ??= DateTimeOffset.UtcNow;
         session.State = SessionState.Completed;
 
+        var activeLeases = await database.AccountLeases
+            .AsNoTracking()
+            .Where(item => item.SessionId == session.Id && item.State == AccountLeaseState.Active)
+            .ToListAsync(cancellationToken);
+
+        foreach (var lease in activeLeases)
+        {
+            var now = DateTimeOffset.UtcNow;
+            var leaseUpdated = await database.AccountLeases
+                .Where(item => item.Id == lease.Id && item.State == AccountLeaseState.Active)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.State, AccountLeaseState.Released)
+                    .SetProperty(item => item.ReleasedAt, now)
+                    .SetProperty(item => item.CredentialAccessExpiresAt, (DateTimeOffset?)null)
+                    .SetProperty(item => item.ReleaseReason, "تسویه جلسه")
+                    .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+            if (leaseUpdated != 1)
+                continue;
+
+            var accountUpdated = await database.AccountPoolEntries
+                .Where(item => item.Id == lease.AccountPoolEntryId && item.Status == AccountPoolStatus.InUse)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.Status, AccountPoolStatus.Free)
+                    .SetProperty(item => item.AssignedAgentDeviceId, (Guid?)null)
+                    .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+            if (accountUpdated != 1)
+                throw new InvalidOperationException("آزادسازی اکانت جلسه کامل نشد.");
+
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "AccountLeaseReleased",
+                EntityName = "AccountLease",
+                EntityId = lease.Id.ToString(),
+                Details = "آزادسازی خودکار Lease هنگام تسویه جلسه · " + session.Id
+            });
+        }
+
         database.AuditLogs.Add(new AuditLog
         {
             Action = "SessionSettlement",
