@@ -109,13 +109,17 @@ public sealed class AccountPoolService(
         if (session.StationId != session.AgentDevice.StationId)
             throw new InvalidOperationException("Agent و ایستگاه جلسه با هم منطبق نیستند.");
 
+        if (!session.CustomerLoginId.HasValue)
+            throw new InvalidOperationException("ورود مشتری به Session متصل نشده است.");
+
         var login = await database.CustomerLogins.AsNoTracking().FirstOrDefaultAsync(
-            item => item.CustomerId == session.CustomerId
+            item => item.Id == session.CustomerLoginId.Value
+                && item.CustomerId == session.CustomerId
                 && item.ClientKey == session.AgentDevice.DeviceId
                 && item.IsActive,
             cancellationToken);
         if (login is null)
-            throw new InvalidOperationException("ورود مشتری برای Agent این جلسه فعال نیست.");
+            throw new InvalidOperationException("ورود مشتری ثبت‌شده برای این Session فعال نیست.");
 
         var lease = await database.AccountLeases
             .Include(item => item.AccountPoolEntry)
@@ -212,13 +216,17 @@ public sealed class AccountPoolService(
         if (session.StationId != session.AgentDevice.StationId)
             throw new InvalidOperationException("Agent و ایستگاه جلسه با هم منطبق نیستند.");
 
+        if (!session.CustomerLoginId.HasValue)
+            throw new InvalidOperationException("ورود مشتری به Session متصل نشده است.");
+
         var login = await database.CustomerLogins.AsNoTracking().FirstOrDefaultAsync(
-            item => item.CustomerId == session.CustomerId
+            item => item.Id == session.CustomerLoginId.Value
+                && item.CustomerId == session.CustomerId
                 && item.ClientKey == session.AgentDevice.DeviceId
                 && item.IsActive, cancellationToken);
 
         if (login is null)
-            throw new InvalidOperationException("ورود مشتری برای Agent این جلسه فعال نیست.");
+            throw new InvalidOperationException("ورود مشتری ثبت‌شده برای این Session فعال نیست.");
 
         var result = await AllocateAsync(
             session.GameId.Value,
@@ -252,6 +260,7 @@ public sealed class AccountPoolService(
             .AsNoTracking()
             .Include(item => item.AccountPoolEntry)
             .Include(item => item.Session)
+                .ThenInclude(item => item.CustomerLogin)
             .FirstOrDefaultAsync(
                 item => item.Id == leaseId
                     && item.AgentDeviceId == agentDeviceId
@@ -262,6 +271,13 @@ public sealed class AccountPoolService(
             || !lease.SessionId.HasValue
             || lease.Session is null
             || lease.Session.State != SessionState.Active
+            || lease.Session.AgentDeviceId != agentDeviceId
+            || !lease.Session.CustomerLoginId.HasValue
+            || lease.Session.CustomerLogin is null
+            || !lease.Session.CustomerLogin.IsActive
+            || lease.Session.CustomerLogin.Id != lease.Session.CustomerLoginId.Value
+            || lease.Session.CustomerLogin.ClientKey != lease.Session.AgentDevice?.DeviceId
+            || lease.GameId != lease.Session.GameId
             || !string.Equals(lease.LeaseToken, leaseToken, StringComparison.Ordinal)
             || !lease.CredentialAccessExpiresAt.HasValue
             || lease.CredentialAccessExpiresAt.Value <= DateTimeOffset.UtcNow
