@@ -159,3 +159,9 @@ partial class ClientLifecycleState
 partial class Stage11GameAccountPool
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261003020000_AccountLeaseReleaseReason")]
+partial class AccountLeaseReleaseReason
+{
+}
