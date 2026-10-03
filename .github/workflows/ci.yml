@@ -809,6 +809,15 @@ jobs:
             } | ConvertTo-Json)
             if (-not $stage12Account.id) { throw 'Stage 12 Account Pool create smoke failed.' }
 
+            $customerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
+              usernameOrCode = $stage9Customer.username
+              password = 'Stage9Smoke123!'
+              clientKey = 'ci-stage9-session-agent'
+            } | ConvertTo-Json)
+            if (-not $customerAuth.authenticated -or -not $customerAuth.loginId -or $customerAuth.balance -ne 0) {
+              throw 'Customer authentication for Agent session smoke failed or returned incomplete financial state.'
+            }
+
             $env:GAMENET_SERVER_URL = $baseUrl
             $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
             $env:GAMENET_AGENT_NAME = 'CI Agent Stage 9 Session'
