@@ -983,7 +983,12 @@ jobs:
                 throw 'Ended Agent session could not be settled through the existing server settlement path.'
               }
 
-              Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}" -f $endedSessionId, $sessionStation.id)
+              $settledSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$endedSessionId" -Method Get -WebSession $adminSession
+              if (-not $settledSession -or $settledSession.state -ne 'Completed') {
+                throw 'Stage 12 settlement did not transition the ended Session to Completed.'
+              }
+
+              Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}; settlement=Paid; session=Completed" -f $endedSessionId, $sessionStation.id)
 
               $customerStateAfterEnd = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/state?customerId=$($stage9Customer.id)&loginId=$($customerAuth.loginId)&clientKey=$env:GAMENET_AGENT_DEVICE_ID" -Method Get
               if ($customerStateAfterEnd.authenticated -or $customerStateAfterEnd.session -ne $null) {
@@ -996,13 +1001,30 @@ jobs:
                 throw 'Stage 12 Session end did not release the Account Pool entry back to Free.'
               }
 
+              $endedSessionRows = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+              if (@($endedSessionRows | Where-Object { $_.id -eq $endedSessionId }).Count -ne 0) {
+                throw 'Stage 12 ended Session still appears in the active-session read model.'
+              }
+
+              $stationRowsAfterEnd = Invoke-RestMethod -Uri "$baseUrl/api/stations" -Method Get -WebSession $adminSession
+              $releasedStation = @($stationRowsAfterEnd | Where-Object { $_.id -eq $sessionStation.id })[0]
+              if (-not $releasedStation -or $releasedStation.state -ne 'Available') {
+                throw 'Stage 12 Session end did not return the Station to Available.'
+              }
+
+              $customerLoginRows = Invoke-RestMethod -Uri "$baseUrl/api/customer-logins/customer/$($stage9Customer.id)" -Method Get -WebSession $adminSession
+              $endedLogin = @($customerLoginRows | Where-Object { $_.id -eq $customerAuth.loginId })[0]
+              if (-not $endedLogin -or $endedLogin.isActive) {
+                throw 'Stage 12 Session end did not deactivate the persisted CustomerLogin owner.'
+              }
+
               $gameRowsAfterRelease = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
               $releasedGame = @($gameRowsAfterRelease | Where-Object { $_.id -eq $stage12Game.id })[0]
               if (-not $releasedGame -or [int]$releasedGame.activeUsers -ne 0) {
                 throw 'Stage 12 Game activeUsers did not return to zero after Session end.'
               }
 
-              Write-Host 'Stage 12 Session → Game → Agent → Account Lease → Credential → Session End → Release smoke passed.'
+              Write-Host 'Stage 12 Session → Game → Agent → Account Lease → Credential → Session End → Station/Login/Lease Release smoke passed.'
 
               $duplicateDeviceId = "ci-stage9-duplicate-$stage9SmokeId"
               try {
