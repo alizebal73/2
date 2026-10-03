@@ -107,6 +107,16 @@ public sealed class AccountPoolService(GameNetDbContext database)
             return null;
 
         var now = DateTimeOffset.UtcNow;
+        var releasedLease = await database.AccountLeases
+            .Where(item => item.Id == leaseId && item.State == AccountLeaseState.Active)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.State, AccountLeaseState.Released)
+                .SetProperty(item => item.ReleasedAt, now)
+                .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+        if (releasedLease != 1)
+            return null;
+
         var releasedAccount = await database.AccountPoolEntries
             .Where(item => item.Id == lease.AccountPoolEntryId
                 && item.Status == AccountPoolStatus.InUse)
@@ -120,8 +130,8 @@ public sealed class AccountPoolService(GameNetDbContext database)
 
         lease.State = AccountLeaseState.Released;
         lease.ReleasedAt = now;
+        lease.UpdatedAt = now;
 
-        await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return lease;
     }
