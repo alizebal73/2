@@ -12,10 +12,12 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
+builder.Services.AddDataProtection().SetApplicationName("GameNetManager");
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
+builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
@@ -64,13 +66,26 @@ app.MapGet("/api/games", async (
         .AsNoTracking()
         .Where(item => item.IsActive)
         .OrderBy(item => item.Name)
-        .Select(item => new GameRecordDto(
+        .ToListAsync(cancellationToken);
+
+    var activeGameCounts = await database.Sessions
+        .AsNoTracking()
+        .Where(item => item.State == SessionState.Active && item.GameId.HasValue)
+        .GroupBy(item => item.GameId!.Value)
+        .Select(group => new { GameId = group.Key, Count = group.Count() })
+        .ToDictionaryAsync(item => item.GameId, item => item.Count, cancellationToken);
+
+    return Results.Ok(games.Select(item =>
+    {
+        var activeUsers = activeGameCounts.TryGetValue(item.Id, out var count) ? count : 0;
+        var operationalStatus = activeUsers > 0 ? "online" : item.Status;
+        return new GameRecordDto(
             item.Id,
             item.Name,
             item.Version,
             item.Genre,
-            item.Status,
-            0,
+            operationalStatus,
+            activeUsers,
             item.Path,
             item.Executable,
             item.Cover,
@@ -81,10 +96,8 @@ app.MapGet("/api/games", async (
             item.TargetSystem,
             item.Target,
             item.TargetZone,
-            item.TargetStations))
-        .ToListAsync(cancellationToken);
-
-    return Results.Ok(games);
+            item.TargetStations);
+    }).ToList());
 }).WithName("GetGames");
 
 app.MapPost("/api/games", async (
@@ -252,6 +265,7 @@ app.MapPost("/api/account-pool", async (
     SaveAccountPoolEntryRequest request,
     HttpContext context,
     GameNetDbContext database,
+    GameCredentialProtectionService credentialProtection,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
@@ -273,6 +287,7 @@ app.MapPost("/api/account-pool", async (
         Platform = request.Platform.Trim(),
         Login = request.Login?.Trim(),
         SecretHash = string.IsNullOrWhiteSpace(request.Secret) ? null : PasswordSecurity.Hash(request.Secret),
+        SecretCiphertext = string.IsNullOrWhiteSpace(request.Secret) ? null : credentialProtection.Protect(request.Secret),
         Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim(),
         ExpiresAt = request.ExpiresAt,
         AllowedGameIdsCsv = string.Join(",", gameIds),
@@ -298,6 +313,7 @@ app.MapPut("/api/account-pool/{accountId:guid}", async (
     SaveAccountPoolEntryRequest request,
     HttpContext context,
     GameNetDbContext database,
+    GameCredentialProtectionService credentialProtection,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
@@ -318,7 +334,10 @@ app.MapPut("/api/account-pool/{accountId:guid}", async (
     account.Platform = request.Platform.Trim();
     account.Login = request.Login?.Trim();
     if (!string.IsNullOrWhiteSpace(request.Secret))
+    {
         account.SecretHash = PasswordSecurity.Hash(request.Secret);
+        account.SecretCiphertext = credentialProtection.Protect(request.Secret);
+    }
     account.Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim();
     account.ExpiresAt = request.ExpiresAt;
     account.AllowedGameIdsCsv = string.Join(",", gameIds);
@@ -352,6 +371,7 @@ app.MapPost("/api/account-pool/{accountId:guid}/unlock", async (
         return Results.Conflict(new { code = "account_in_use", message = "اکانت در حال استفاده است." });
 
     account.Status = AccountPoolStatus.Free;
+    account.AssignedAgentDeviceId = null;
     database.AuditLogs.Add(new AuditLog
     {
         Action = "AccountPoolUnlocked",
@@ -4175,6 +4195,8 @@ app.MapPost("/api/sessions", async (
     {
         CustomerId = request.CustomerId,
         StationId = request.StationId,
+        AgentDeviceId = request.AgentDeviceId,
+        GameId = request.GameId,
         TariffId = request.TariffId,
         AppUserId = auth.User!.Id,
         StartAt = DateTimeOffset.UtcNow,
@@ -4203,6 +4225,7 @@ app.MapPost("/api/sessions", async (
         session.Id,
         station.Id,
         session.CustomerId,
+        session.GameId,
         session.StartAt));
 })
 .WithName("StartSession");
@@ -4786,12 +4809,12 @@ public sealed record CloseShiftRequest(
     decimal ExternalCash,
     string? Note);
 
-public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId, decimal? HourlyRateOverride, int? Persons);
+public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId, decimal? HourlyRateOverride, int? Persons, Guid? GameId = null, Guid? AgentDeviceId = null);
 public sealed record SessionDetailsRequest(decimal? HourlyRate, int? Persons);
 public sealed record SessionTimeAdjustmentRequest(int Minutes);
 public sealed record SessionTransferRequest(Guid TargetStationId);
 public sealed record SessionTransferResultDto(Guid SessionId, Guid StationId);
-public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, DateTimeOffset StartAt);
+public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, Guid? GameId, DateTimeOffset StartAt);
 
 public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
 public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
