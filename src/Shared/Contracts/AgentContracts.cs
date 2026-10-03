@@ -74,9 +74,10 @@ public static class AgentCommandTypes
     public const string LogoutLock = "logout-lock";
     public const string Update = "update";
     public const string Rollback = "rollback";
+    public const string ApplyGame = "apply-game";
 
     public static bool IsSupported(string? commandType)
-        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock or Update or Rollback;
+        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock or Update or Rollback or ApplyGame;
 }
 
 public sealed record AgentCommandRequest(
@@ -88,6 +89,21 @@ public sealed record AgentCommandEnvelope(
     string CommandType,
     string? PayloadJson,
     DateTimeOffset RequestedAt);
+
+public sealed record AgentGameApplyCommandPayload(
+    Guid GameId,
+    string Name,
+    string Version,
+    string Path,
+    string Executable,
+    string LaunchArgs,
+    string ConnectionType,
+    string TargetSystem,
+    string Target,
+    string TargetZone,
+    string TargetStations,
+    bool Active);
+
 
 public sealed record AgentCommandAcknowledgement(
     Guid CommandId,
