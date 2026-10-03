@@ -700,15 +700,14 @@ public sealed class AgentHub(
         var httpContext = context.GetHttpContext();
         var deviceId = httpContext?.Request.Headers["X-GameNet-Device-Id"].ToString().Trim();
         var authorization = httpContext?.Request.Headers.Authorization.ToString();
+        var queryToken = httpContext?.Request.Query["access_token"].ToString().Trim();
 
-        if (string.IsNullOrWhiteSpace(deviceId)
-            || string.IsNullOrWhiteSpace(authorization)
-            || !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(deviceId))
             return null;
 
         var token = authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
             ? authorization["Bearer ".Length..].Trim()
-            : httpContext?.Request.Query["access_token"].ToString().Trim();
+            : queryToken;
 
         if (string.IsNullOrWhiteSpace(token))
             return null;
