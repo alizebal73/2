@@ -701,15 +701,15 @@ public sealed class AgentHub(
             Details = $"پایان جلسه از Agent · دستگاه {device.DeviceId}"
         });
 
-        await database.SaveChangesAsync(Context.ConnectionAborted);
-        await transaction.CommitAsync(Context.ConnectionAborted);
-
         // Lease release is part of the same transaction as the terminal
         // Session transition, so EndSession cannot commit with an InUse lease.
         await accountPool.ReleaseActiveForSessionWithinTransactionAsync(
             session.Id,
             "آزادسازی خودکار با پایان Session",
             Context.ConnectionAborted);
+
+        await database.SaveChangesAsync(Context.ConnectionAborted);
+        await transaction.CommitAsync(Context.ConnectionAborted);
 
         await dashboardHub.Clients.All.SendAsync(
             "AgentSessionChanged",
