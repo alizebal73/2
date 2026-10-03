@@ -41,15 +41,14 @@ public sealed class EventService(GameNetDbContext database)
         var start = request.StartAt;
         var end = start.AddMinutes(request.DurationMinutes);
 
-        var conflict = await database.Events
+        var possibleConflicts = await database.Events
             .AsNoTracking()
             .Where(item => item.Status != EventStatus.Cancelled
-                && item.Status != EventStatus.Completed
-                && item.StartAt < end
-                && item.EndAt > start)
-            .AnyAsync(cancellationToken);
+                && item.Status != EventStatus.Completed)
+            .ToListAsync(cancellationToken);
 
-        if (conflict && kind.Equals("tournament", StringComparison.OrdinalIgnoreCase))
+        if (possibleConflicts.Any(item => item.StartAt < end && item.EndAt > start)
+            && kind.Equals("tournament", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Event دیگری در این بازه فعال است.");
 
         var entity = new GameEvent
