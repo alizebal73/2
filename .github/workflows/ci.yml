@@ -766,7 +766,7 @@ jobs:
             $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
             $env:GAMENET_AGENT_NAME = 'CI Agent Stage 9 Session'
             $env:GAMENET_AGENT_DEVICE_ID = 'ci-stage9-session-agent'
-            $env:GAMENET_STATION_ID = $stage12Station.id
+            $env:GAMENET_STATION_ID = $sessionStation.id
             $env:GAMENET_AGENT_DATA_DIR = $sessionAgentData
             $env:GAMENET_AGENT_HEADLESS = '1'
             $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
@@ -941,7 +941,7 @@ jobs:
             $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
             $env:GAMENET_AGENT_NAME = "CI Agent Stage 12 $stage9SmokeId"
             $env:GAMENET_AGENT_DEVICE_ID = $stage12DeviceId
-            $env:GAMENET_STATION_ID = $sessionStation.id
+            $env:GAMENET_STATION_ID = $stage12Station.id
             $env:GAMENET_AGENT_DATA_DIR = $stage12Data
             $env:GAMENET_AGENT_HEADLESS = '1'
             $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
