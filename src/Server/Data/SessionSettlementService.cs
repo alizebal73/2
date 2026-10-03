@@ -222,6 +222,11 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         session.TotalAmount = request.TotalAmount;
         session.EndAt ??= DateTimeOffset.UtcNow;
         session.State = SessionState.Completed;
+        // A completed Session is terminal for the Station too. Keep the
+        // Dashboard/read model derived from the same server-side invariant,
+        // regardless of whether the session arrived here through Agent EndSession
+        // or through an operator settlement path.
+        session.Station.State = StationState.Available;
 
         database.AuditLogs.Add(new AuditLog
         {
