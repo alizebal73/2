@@ -42,6 +42,8 @@ public sealed class AgentPresenceMonitor(
                 var cutoff = now.AddSeconds(-offlineAfter);
                 var commandCutoff = now.AddSeconds(-commandTimeoutSeconds);
 
+                // SQLite does not translate DateTimeOffset comparisons reliably.
+                // Materialize the bounded Agent set, then apply stale-time comparison in memory.
                 var onlineDevices = await database.AgentDevices
                     .Where(item => item.IsActive
                         && item.IsOnline
