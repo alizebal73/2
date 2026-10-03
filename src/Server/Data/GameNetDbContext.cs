@@ -511,6 +511,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         eventEntity.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
         eventEntity.Property(item => item.Notes).HasMaxLength(500);
         eventEntity.HasIndex(item => new { item.StartAt, item.Status });
+        eventEntity.HasIndex(item => item.CreatedByUserId);
         eventEntity.HasOne(item => item.CreatedByUser)
             .WithMany()
             .HasForeignKey(item => item.CreatedByUserId)
@@ -523,6 +524,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         participant.HasKey(item => item.Id);
         participant.Property(item => item.Status).HasMaxLength(30).IsRequired();
         participant.HasIndex(item => new { item.EventId, item.CustomerId }).IsUnique();
+        participant.HasIndex(item => item.CustomerId);
         participant.HasIndex(item => new { item.EventId, item.Seed });
         participant.HasOne(item => item.Event)
             .WithMany(item => item.Participants)
