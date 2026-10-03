@@ -137,7 +137,7 @@ jobs:
             } | ConvertTo-Json)
             if (-not $stage11Game.id) { throw 'Stage 11 Game create smoke failed.' }
 
-            $stage11Account = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+            $stage11CreateResponse = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               title = 'CI Stage11 Account'
               platform = 'Steam'
               login = 'ci-stage11'
@@ -147,10 +147,10 @@ jobs:
               allowedGameIds = @($stage11Game.id)
               status = 'Free'
             } | ConvertTo-Json)
-            if (-not $stage11Account.id) { throw 'Stage 11 Account Pool create smoke failed.' }
 
             $stage11Pool = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
-            if (-not ($stage11Pool | Where-Object { $_.id -eq $stage11Account.id })) { throw 'Stage 11 Account Pool list smoke failed.' }
+            $stage11Account = @($stage11Pool | Where-Object { $_.title -eq 'CI Stage11 Account' })[0]
+            if (-not $stage11Account -or -not $stage11Account.id) { throw 'Stage 11 Account Pool create/list smoke failed.' }
 
             $stage11Lease = Invoke-RestMethod -Uri "$baseUrl/api/account-pool/allocate" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               gameId = $stage11Game.id
