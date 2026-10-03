@@ -1005,10 +1005,10 @@ jobs:
                 throw 'Stage 12 ended Session still appears in the active-session read model.'
               }
 
-              $stationRowsAfterEnd = Invoke-RestMethod -Uri "$baseUrl/api/stations" -Method Get -WebSession $adminSession
-              $releasedStation = @($stationRowsAfterEnd | Where-Object { $_.id -eq $sessionStation.id })[0]
-              if (-not $releasedStation -or $releasedStation.state -ne 'Available') {
-                throw 'Stage 12 Session end did not return the Station to Available.'
+              $dashboardAfterEnd = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+              $releasedStation = @($dashboardAfterEnd.stations | Where-Object { $_.id -eq $sessionStation.id })[0]
+              if (-not $releasedStation -or $releasedStation.status -ne 'Available') {
+                throw 'Stage 12 Session end did not return the Station to Available in the authoritative Dashboard read model.'
               }
 
               $endedLoginState = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/state?customerId=$($stage9Customer.id)&loginId=$($customerAuth.loginId)&clientKey=ci-stage9-session-agent" -Method Get -WebSession $adminSession
