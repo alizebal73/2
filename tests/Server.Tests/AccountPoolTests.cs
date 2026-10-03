@@ -110,15 +110,13 @@ public sealed class AccountPoolTests
             await using var connectionB = CreateSharedMemoryConnection(databaseName);
             await connectionB.OpenAsync();
             await using var context = CreateContext(connectionB);
-            return await new AccountPoolService(context).AllocateAsync(gameId, null, null, null, CancellationToken.None);
+            return await new AccountPoolService(context, new GameCredentialProtectionService(DataProtectionProvider.Create("GameNetManager.Tests"))).AllocateAsync(gameId, null, null, null, CancellationToken.None);
         });
 
         var results = await Task.WhenAll(taskA, taskB);
         Assert.Equal(1, results.Count(result => result.Account is not null && result.Lease is not null));
         Assert.Equal(1, results.Count(result => result.Account is null && result.Lease is null));
     }
-}
-
 
     [Fact]
     public async Task OperationalSession_AllocatesLeaseAndDeliversCredentialOnlyWithinLease()
@@ -262,3 +260,5 @@ public sealed class AccountPoolTests
             Assert.Equal("Stage12 test release", lease.ReleaseReason);
         }
     }
+
+}
