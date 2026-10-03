@@ -892,8 +892,15 @@ jobs:
                     if (-not @($activeRows | Where-Object { $_.id -eq $startedSessionId -and $_.stationName -eq $sessionStation.name })) {
                       throw 'Agent Session Start marker appeared but server active-session state did not contain the same SessionId/station.'
                     }
+
+                    $activeGameRows = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
+                    $activeGameRow = @($activeGameRows | Where-Object { $_.id -eq $stage12Game.id })[0]
+                    if (-not $activeGameRow -or [int]$activeGameRow.activeUsers -ne 1) {
+                      throw 'Stage 12 Game activeUsers did not become authoritative immediately after the active Session Start.'
+                    }
+
                     $sessionStartVerified = $true
-                    Write-Host ("Stage 9 Agent Session Start persisted server-side: sessionId={0}; station={1}" -f $startedSessionId, $sessionStation.name)
+                    Write-Host ("Stage 9 Agent Session Start persisted server-side: sessionId={0}; station={1}; gameActiveUsers={2}" -f $startedSessionId, $sessionStation.name, $activeGameRow.activeUsers)
                   }
 
                   if ($log -match 'AGENT_SESSION_END_AUTH_GUARD_OK') {
@@ -904,10 +911,6 @@ jobs:
                     $gameLeaseId = $Matches[1]
                     $gameLeaseGameId = $Matches[2]
                     if ($gameLeaseGameId -ne $stage12Game.id) { throw "Stage 12 Agent received a credential for an unexpected GameId: $gameLeaseGameId" }
-                    $gameRows = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
-                    $gameRow = @($gameRows | Where-Object { $_.id -eq $stage12Game.id })[0]
-                    if (-not $gameRow -or [int]$gameRow.activeUsers -ne 1) { throw 'Stage 12 Game activeUsers did not become authoritative while the Session was active.' }
-
                     $accountRows = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
                     $inUseAccount = @($accountRows | Where-Object { $_.id -eq $stage12Account.id })[0]
                     if (-not $inUseAccount -or $inUseAccount.status -ne 'InUse') { throw 'Stage 12 Account Pool entry did not become InUse after Agent acquisition.' }
