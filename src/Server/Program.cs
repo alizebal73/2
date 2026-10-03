@@ -4385,6 +4385,44 @@ app.MapGet("/api/reports/stations", async (
     }
 }).WithName("GetStationReport");
 
+app.MapGet("/api/reports/customers", async (
+    HttpContext context,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    ReportingService reporting,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context, database, cancellationToken, "reports.view", "customer.manage");
+    if (auth.Error is not null) return auth.Error;
+
+    var end = to ?? DateTimeOffset.UtcNow;
+    var start = from ?? end.Date;
+    if (end < start)
+        return Results.BadRequest(new { code = "invalid_report_range", message = "بازه گزارش نامعتبر است." });
+    return Results.Ok(await reporting.GetCustomerPerformanceAsync(start, end, cancellationToken));
+}).WithName("GetCustomerReport");
+
+app.MapGet("/api/reports/operators", async (
+    HttpContext context,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    ReportingService reporting,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context, database, cancellationToken, "reports.view", "shift.manage", "payroll.view");
+    if (auth.Error is not null) return auth.Error;
+
+    var end = to ?? DateTimeOffset.UtcNow;
+    var start = from ?? end.Date;
+    if (end < start)
+        return Results.BadRequest(new { code = "invalid_report_range", message = "بازه گزارش نامعتبر است." });
+    return Results.Ok(await reporting.GetOperatorPerformanceAsync(start, end, cancellationToken));
+}).WithName("GetOperatorReport");
+
 app.MapGet("/api/reports/heatmap", async (
     HttpContext context,
     DateTimeOffset? from,
