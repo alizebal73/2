@@ -1,7 +1,9 @@
 name: GameNet Manager CI
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - completion/control-20261003
   pull_request:
 
 concurrency:
