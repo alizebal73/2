@@ -376,7 +376,9 @@ app.MapGet("/api/account-pool", async (
         item.Platform,
         item.Login,
         item.Owner,
-        item.ExpiresAt,
+        item.ExpiresAt.HasValue
+            ? new DateTimeOffset(DateTime.SpecifyKind(item.ExpiresAt.Value, DateTimeKind.Utc))
+            : null,
         item.AllowedGameIdsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(id => Guid.TryParse(id, out var guid) && gameMap.TryGetValue(guid, out var name) ? name : null)
             .Where(name => name is not null)
@@ -417,7 +419,7 @@ app.MapPost("/api/account-pool", async (
         SecretHash = string.IsNullOrWhiteSpace(request.Secret) ? null : PasswordSecurity.Hash(request.Secret),
         SecretCiphertext = string.IsNullOrWhiteSpace(request.Secret) ? null : credentialProtection.Protect(request.Secret),
         Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim(),
-        ExpiresAt = request.ExpiresAt,
+        ExpiresAt = request.ExpiresAt?.UtcDateTime,
         AllowedGameIdsCsv = string.Join(",", gameIds),
         Status = Enum.TryParse<AccountPoolStatus>(request.Status, true, out var status) ? status : AccountPoolStatus.Free,
         IsActive = true
@@ -467,7 +469,7 @@ app.MapPut("/api/account-pool/{accountId:guid}", async (
         account.SecretCiphertext = credentialProtection.Protect(request.Secret);
     }
     account.Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim();
-    account.ExpiresAt = request.ExpiresAt;
+    account.ExpiresAt = request.ExpiresAt?.UtcDateTime;
     account.AllowedGameIdsCsv = string.Join(",", gameIds);
     if (Enum.TryParse<AccountPoolStatus>(request.Status, true, out var status))
         account.Status = status;
