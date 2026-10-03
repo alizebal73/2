@@ -12,6 +12,8 @@ public sealed class AgentHub(
     ILogger<AgentHub> logger) : Hub
 {
     private const string AgentDeviceContextKey = "GameNet.AgentDeviceId";
+
+    public static string DeviceGroup(Guid deviceId) => $"agent-device:{deviceId:N}";
     public override async Task OnConnectedAsync()
     {
         var device = await ResolveDeviceAsync(Context, Context.ConnectionAborted);
@@ -22,6 +24,10 @@ public sealed class AgentHub(
         }
 
         Context.Items[AgentDeviceContextKey] = device.Id;
+        await Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            DeviceGroup(device.Id),
+            Context.ConnectionAborted);
 
         var now = DateTimeOffset.UtcNow;
         device.IsOnline = true;
@@ -248,8 +254,7 @@ public sealed class AgentHub(
                                         || item.Status == "AwaitingHealth"))
                                 || (item.CommandType != AgentCommandTypes.Update
                                     && item.CommandType != AgentCommandTypes.Rollback
-                                    && item.Status == "Sent"
-                                    && item.AgentConnectionId == Context.ConnectionId)
+                                    && item.Status == "Sent")
                             ))
                     ),
                 Context.ConnectionAborted);
