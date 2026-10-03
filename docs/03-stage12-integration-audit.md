@@ -17,7 +17,7 @@ CustomerLogin + AgentIdentity → Session → Game → AccountLease → Credenti
 7. Lease allocation دارای atomic claim است.
 8. Secret خام به Dashboard DTO وارد نمی‌شود.
 9. Disconnect و stale Agent مسیر release دارند.
-10. Session End اکنون release lease را بعد از commit انجام می‌دهد.
+10. Session End اکنون Session/Login/Station و Lease Release را در یک transaction هماهنگ می‌کند؛ در خطای release، EndSession commit نمی‌شود.
 
 ## شکاف‌های معماری که باید قبل از اعلام Done اصلاح/تعیین تکلیف شوند
 
