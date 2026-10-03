@@ -1,50 +1,4 @@
-export type ReportSummary = {
-  from: string;
-  to: string;
-  revenue: number;
-  expense: number;
-  operatingProfit: number;
-  sessions: number;
-  paidInvoices: number;
-  customersServed: number;
-};
-
-export type StationPerformance = {
-  stationId: string;
-  stationName: string;
-  zone: string;
-  sessionCount: number;
-  billableMinutes: number;
-  revenue: number;
-  averageSessionRevenue: number;
-  occupancyEvents: number;
-};
-
-export type HeatmapCell = {
-  dayOfWeek: number;
-  hour: number;
-  sessionCount: number;
-  billableMinutes: number;
-  revenue: number;
-};
-
-export type AuditExplorerRow = {
-  id: string;
-  createdAt: string;
-  appUserId?: string | null;
-  operatorName: string;
-  action: string;
-  entityName: string;
-  entityId?: string | null;
-  details?: string | null;
-};
-
-function query(from?: Date, to?: Date) {
-  const params = new URLSearchParams();
-  if (from) params.set('from', from.toISOString());
-  if (to) params.set('to', to.toISOString());
-  return params;
-}
+import type { AuditLogRecord, CustomerPerformance, OperatorPerformance } from '../types';
 
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
@@ -55,16 +9,54 @@ async function getJson<T>(url: string): Promise<T> {
   return await response.json() as T;
 }
 
+export type CustomerReport = {
+  customerId: string;
+  customerCode: string;
+  customerName: string;
+  sessionCount: number;
+  billableMinutes: number;
+  revenue: number;
+  vipMinutesUsed: number;
+  walletBalance: number;
+  outstandingDebt: number;
+};
+
+export type OperatorReport = {
+  appUserId: string;
+  operatorName: string;
+  shiftCount: number;
+  shiftHours: number;
+  paidInvoiceCount: number;
+  revenue: number;
+  expenses: number;
+  difference: number;
+};
+
+function query(from?: Date, to?: Date) {
+  const params = new URLSearchParams();
+  if (from) params.set('from', from.toISOString());
+  if (to) params.set('to', to.toISOString());
+  return params;
+}
+
 export function getReportSummary(from?: Date, to?: Date) {
-  return getJson<ReportSummary>('/api/reports/summary?' + query(from, to).toString());
+  return getJson<import('../types').ReportSummary>('/api/reports/summary?' + query(from, to).toString());
 }
 
 export function getStationReport(from?: Date, to?: Date) {
-  return getJson<StationPerformance[]>('/api/reports/stations?' + query(from, to).toString());
+  return getJson<import('../types').StationPerformance[]>('/api/reports/stations?' + query(from, to).toString());
 }
 
 export function getHeatmapReport(from?: Date, to?: Date) {
-  return getJson<HeatmapCell[]>('/api/reports/heatmap?' + query(from, to).toString());
+  return getJson<import('../types').HeatmapCell[]>('/api/reports/heatmap?' + query(from, to).toString());
+}
+
+export function getCustomerReport(from?: Date, to?: Date) {
+  return getJson<CustomerReport[]>('/api/reports/customers?' + query(from, to).toString());
+}
+
+export function getOperatorReport(from?: Date, to?: Date) {
+  return getJson<OperatorReport[]>('/api/reports/operators?' + query(from, to).toString());
 }
 
 export function getAuditReport(input: {
@@ -80,7 +72,7 @@ export function getAuditReport(input: {
   if (input.entityName) params.set('entityName', input.entityName);
   if (input.search) params.set('search', input.search);
   if (input.limit) params.set('limit', String(input.limit));
-  return getJson<AuditExplorerRow[]>('/api/reports/audit?' + params.toString());
+  return getJson<import('../types').AuditExplorerRow[]>('/api/reports/audit?' + params.toString());
 }
 
 export async function exportFinanceReport(from?: Date, to?: Date) {
