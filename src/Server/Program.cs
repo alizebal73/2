@@ -12,7 +12,7 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
-builder.Services.AddDataProtection().SetApplicationName("GameNetManager");
+builder.Services.AddDataProtection();
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
