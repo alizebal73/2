@@ -970,9 +970,29 @@ jobs:
 
                   if ($log -match 'AGENT_SESSION_START_OK:([0-9a-fA-F-]+)') {
                     $stage12SessionId = $Matches[1]
-                    $activeStage12 = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
-                    $activeRow = @($activeStage12 | Where-Object { $_.id -eq $stage12SessionId })[0]
-                    if (-not $activeRow -or $activeRow.gameId -ne $stage12Game.id -or $activeRow.agentDeviceId -eq $null) {
+                    $stage12ActiveVerified = $false
+
+                    for ($attempt = 0; $attempt -lt 10; $attempt++) {
+                      $activeStage12 = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+                      $activeRow = @($activeStage12 | Where-Object { $_.id -eq $stage12SessionId })[0]
+
+                      if ($activeRow) {
+                        $actualGameId = [string]$activeRow.gameId
+                        $actualAgentDeviceId = [string]$activeRow.agentDeviceId
+                        $expectedGameId = [string]$stage12Game.id
+                        if ($actualGameId -eq $expectedGameId -and -not [string]::IsNullOrWhiteSpace($actualAgentDeviceId)) {
+                          $stage12ActiveVerified = $true
+                          break
+                        }
+                      }
+
+                      Start-Sleep -Milliseconds 500
+                    }
+
+                    if (-not $stage12ActiveVerified) {
+                      Write-Host '--- Stage 12 active Session payload ---'
+                      $activeStage12 | ConvertTo-Json -Depth 8
+                      Write-Host ("Stage 12 expected gameId={0}; expected agentDeviceId={1}; SessionId={2}" -f $stage12Game.id, $stage12DeviceId, $stage12SessionId)
                       throw 'Stage 12 active Session did not persist authoritative Game/Agent references.'
                     }
                   }
