@@ -6,6 +6,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
 {
     public DbSet<Station> Stations => Set<Station>();
     public DbSet<AgentDevice> AgentDevices => Set<AgentDevice>();
+    public DbSet<AgentProcessTelemetry> AgentProcessTelemetry => Set<AgentProcessTelemetry>();
     public DbSet<AgentCommand> AgentCommands => Set<AgentCommand>();
     public DbSet<StationType> StationTypes => Set<StationType>();
     public DbSet<Tariff> Tariffs => Set<Tariff>();
@@ -70,6 +71,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
 
         ConfigureStation(modelBuilder);
         ConfigureAgentDevice(modelBuilder);
+        ConfigureAgentProcessTelemetry(modelBuilder);
         ConfigureAgentCommand(modelBuilder);
         ConfigureStationType(modelBuilder);
         ConfigureTariff(modelBuilder);
@@ -134,6 +136,24 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         device.HasOne(item => item.Station)
             .WithMany()
             .HasForeignKey(item => item.StationId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private static void ConfigureAgentProcessTelemetry(ModelBuilder modelBuilder)
+    {
+        var telemetry = modelBuilder.Entity<AgentProcessTelemetry>();
+        telemetry.HasKey(item => item.Id);
+        telemetry.HasIndex(item => new { item.AgentDeviceId, item.ObservedAt });
+        telemetry.HasIndex(item => new { item.AgentDeviceId, item.GameId, item.ProcessName });
+        telemetry.Property(item => item.ProcessName).HasMaxLength(260).IsRequired();
+        telemetry.Property(item => item.ProcessId).IsRequired();
+        telemetry.HasOne(item => item.AgentDevice)
+            .WithMany()
+            .HasForeignKey(item => item.AgentDeviceId)
+            .OnDelete(DeleteBehavior.Cascade);
+        telemetry.HasOne(item => item.Game)
+            .WithMany()
+            .HasForeignKey(item => item.GameId)
             .OnDelete(DeleteBehavior.SetNull);
     }
 
