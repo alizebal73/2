@@ -76,3 +76,15 @@ public sealed record AccountLeaseDto(
     string State);
 
 public sealed record ReleaseAccountLeaseRequest(string? Reason);
+
+
+public sealed record GameAccountCredentialRequest(Guid LeaseId, string LeaseToken);
+
+public sealed record AgentGameAccountCredentialDto(
+    Guid LeaseId,
+    Guid GameId,
+    string AccountTitle,
+    string Platform,
+    string? Login,
+    string Secret,
+    DateTimeOffset CredentialExpiresAt);
