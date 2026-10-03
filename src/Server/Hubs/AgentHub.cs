@@ -706,7 +706,10 @@ public sealed class AgentHub(
             || !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
             return null;
 
-        var token = authorization["Bearer ".Length..].Trim();
+        var token = authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+            ? authorization["Bearer ".Length..].Trim()
+            : httpContext?.Request.Query["access_token"].ToString().Trim();
+
         if (string.IsNullOrWhiteSpace(token))
             return null;
 
@@ -752,6 +755,7 @@ public sealed class AgentHub(
         if (!string.Equals(device.ConnectionId, connectionId, StringComparison.Ordinal))
         {
             var now = DateTimeOffset.UtcNow;
+            var previousConnectionId = device.ConnectionId;
             device.ConnectionId = connectionId;
             device.IsOnline = true;
             device.LastSeenAt = now;
@@ -764,7 +768,7 @@ public sealed class AgentHub(
             logger.LogInformation(
                 "Rebound Agent connection after reconnect. DeviceId={DeviceId}, PreviousConnectionId={PreviousConnectionId}, ConnectionId={ConnectionId}",
                 device.DeviceId,
-                device.ConnectionId,
+                previousConnectionId,
                 connectionId);
         }
 
