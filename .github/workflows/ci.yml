@@ -838,11 +838,39 @@ jobs:
             try {
               $sessionFlowCompleted = $false
               $sessionStartVerified = $false
+              $gameSyncVerified = $false
               $endedSessionId = $null
+
+              $syncAccepted = $false
+              for ($syncAttempt = 0; $syncAttempt -lt 20; $syncAttempt++) {
+                try {
+                  $syncResult = Invoke-RestMethod -Uri "$baseUrl/api/games/$($stage12Game.id)/sync" -Method Post -WebSession $adminSession
+                  if ([int]$syncResult.targetedAgents -lt 1) { throw 'Stage 12 Game sync returned no targeted online Agent.' }
+                  $syncAccepted = $true
+                  break
+                } catch {
+                  if ($syncAttempt -eq 19) { throw }
+                  Start-Sleep -Milliseconds 500
+                }
+              }
+              if (-not $syncAccepted) { throw 'Stage 12 real Game sync request did not reach an online Agent.' }
               for ($i = 0; $i -lt 30; $i++) {
                 if ($sessionAgentProcess.HasExited) { break }
                 if (Test-Path $sessionAgentStdout) {
                   $log = Get-Content $sessionAgentStdout -Raw
+
+                  if (-not $gameSyncVerified -and $log -match 'CLIENT_GAME_APPLIED:([0-9a-fA-F]+)') {
+                    $syncedGameId = $Matches[1]
+                    if ($syncedGameId -ne ($stage12Game.id -replace '-', '')) {
+                      throw "Stage 12 Game sync marker returned unexpected GameId: $syncedGameId"
+                    }
+                    $manifestPath = Join-Path $sessionAgentData "games\$syncedGameId.json"
+                    if (-not (Test-Path $manifestPath)) {
+                      throw 'Stage 12 Agent reported Game sync success but the local game manifest was not persisted.'
+                    }
+                    $gameSyncVerified = $true
+                    Write-Host "Stage 12 real Game Apply/Sync persisted on Agent."
+                  }
 
                   if (-not $sessionStartVerified -and $log -match 'AGENT_SESSION_START_OK:([0-9a-fA-F-]+)') {
                     $startedSessionId = $Matches[1]
@@ -881,7 +909,7 @@ jobs:
                 Start-Sleep -Seconds 1
               }
 
-              if (-not $sessionStartVerified -or -not $sessionFlowCompleted) {
+              if (-not $gameSyncVerified -or -not $sessionStartVerified -or -not $sessionFlowCompleted) {
                 Write-Host '--- Stage 9 Session Agent stdout ---'
                 if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
                 Write-Host '--- Stage 9 Session Agent stderr ---'
