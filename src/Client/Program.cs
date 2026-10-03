@@ -125,6 +125,7 @@ try
                 command,
                 lockScreen,
                 updateManager,
+                dataDirectory,
                 agentVersion,
                 shutdown.Token);
 
@@ -624,6 +625,7 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
     AgentCommandEnvelope command,
     AgentLockScreenController lockScreen,
     ClientUpdateManager updateManager,
+    string dataDirectory,
     string agentVersion,
     CancellationToken cancellationToken)
 {
@@ -711,6 +713,18 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 Console.WriteLine($"CLIENT_ROLLBACK_REQUESTED:{rollbackVersion}");
                 break;
 
+            case AgentCommandTypes.ApplyGame:
+            {
+                var payload = JsonSerializer.Deserialize<AgentGameApplyCommandPayload>(
+                    command.PayloadJson ?? string.Empty)
+                    ?? throw new JsonException("دادهٔ همگام‌سازی بازی معتبر نیست.");
+
+                await ApplyGameManifestAsync(dataDirectory, payload, cancellationToken);
+                Console.WriteLine($"CLIENT_GAME_APPLIED:{payload.GameId:N}");
+                message = $"تنظیمات بازی «{payload.Name}» روی Agent ثبت شد.";
+                break;
+            }
+
             default:
                 success = false;
                 message = "فرمان Agent ناشناخته است.";
@@ -773,6 +787,40 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         restartVersion,
         restartVersion is not null,
         awaitingFinalResult);
+}
+
+static async Task ApplyGameManifestAsync(
+    string dataDirectory,
+    AgentGameApplyCommandPayload payload,
+    CancellationToken cancellationToken)
+{
+    if (payload.GameId == Guid.Empty)
+        throw new InvalidOperationException("شناسهٔ بازی معتبر نیست.");
+    if (string.IsNullOrWhiteSpace(payload.Name))
+        throw new InvalidOperationException("نام بازی خالی است.");
+    if (string.IsNullOrWhiteSpace(payload.Executable))
+        throw new InvalidOperationException("فایل اجرایی بازی مشخص نشده است.");
+
+    var gamesDirectory = Path.Combine(dataDirectory, "games");
+    Directory.CreateDirectory(gamesDirectory);
+
+    var targetPath = Path.Combine(gamesDirectory, payload.GameId.ToString("N") + ".json");
+    var temporaryPath = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+    var json = JsonSerializer.Serialize(
+        payload,
+        new JsonSerializerOptions { WriteIndented = true });
+
+    await File.WriteAllTextAsync(temporaryPath, json, Encoding.UTF8, cancellationToken);
+
+    try
+    {
+        File.Move(temporaryPath, targetPath, overwrite: true);
+    }
+    catch
+    {
+        try { File.Delete(temporaryPath); } catch { }
+        throw;
+    }
 }
 
 static async Task<AgentState> FinalizePendingLifecycleCommandAsync(
