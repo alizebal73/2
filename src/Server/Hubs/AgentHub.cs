@@ -491,7 +491,7 @@ public sealed class AgentHub(
             TariffId = station.TariffId,
             AppUserId = null,
             AgentDeviceId = device.Id,
-            GameId = game.Id,
+            GameId = game?.Id,
             StartAt = DateTimeOffset.UtcNow,
             State = SessionState.Active,
             TotalAmount = 0m,
