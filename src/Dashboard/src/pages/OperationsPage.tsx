@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useEffect, useMemo, useState } from 'react';
 import { getServerCustomers, type CustomerRecord } from '../services/customerService';
 import {
   addExpense as addServerExpense,
@@ -17,6 +16,11 @@ import {
   saveVipPackage,
   toggleStation,
   transitionReservation,
+  getEvents,
+  createEvent,
+  transitionEvent,
+  addEventParticipant,
+  getOperationsHealth,
   adjustServerStock,
   createServerProduct,
   updateServerProduct,
@@ -50,6 +54,9 @@ export function OperationsPage() {
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [events, setEvents] = useState<Awaited<ReturnType<typeof getEvents>>>([]);
   const [eventForm, setEventForm] = useState({ name: '', kind: 'tournament', minutes: '180', maxParticipants: '16', note: '' });
+  const [eventCustomerCode, setEventCustomerCode] = useState('');
+  const [eventSeed, setEventSeed] = useState('1');
+  const [operationsHealth, setOperationsHealth] = useState<Awaited<ReturnType<typeof getOperationsHealth>> | null>(null);
   const [notice, setNotice] = useState('');
   const [stationFilter, setStationFilter] = useState('');
   const [auditFilter, setAuditFilter] = useState('');
@@ -97,6 +104,7 @@ export function OperationsPage() {
     setWaitlist(w);
     setCustomers(cst);
     setEvents(castEvents);
+    try { setOperationsHealth(await getOperationsHealth()); } catch { setOperationsHealth(null); }
     setReservation(current => ({
       ...current,
       stationId: current.stationId === 'station-4' ? (s.find(item => item.status !== 'off')?.id || current.stationId) : current.stationId,
@@ -113,6 +121,16 @@ export function OperationsPage() {
     () => audits.filter(item => !auditFilter || item.operator.includes(auditFilter) || item.action.includes(auditFilter) || item.target.includes(auditFilter)),
     [audits, auditFilter],
   );
+
+  async function addParticipant(eventId: string) {
+    const customer = customers.find(item => (item.code || '').trim() === eventCustomerCode.trim());
+    if (!customer) { setNotice('کد مشتری برای ثبت‌نام Event پیدا نشد'); return; }
+    await addEventParticipant(eventId, customer.id, Math.max(0, Number(eventSeed) || 0));
+    setEventCustomerCode('');
+    setEventSeed('1');
+    await loadAll();
+    setNotice('شرکت‌کننده Event ثبت شد');
+  }
 
   async function saveEvent() {
     if (!eventForm.name.trim()) return;
@@ -335,6 +353,12 @@ export function OperationsPage() {
 
       {tab === 'events' && (
         <section className="card-panel" style={{ margin: '0 22px 14px', padding: 14 }}>
+          {operationsHealth && <div className="summary-grid" style={{ marginBottom: 12 }}>
+            <div className="summary-card"><div className="label">ایستگاه فعال</div><div className="value blue">{operationsHealth.stationsAvailable}</div></div>
+            <div className="summary-card"><div className="label">Agent آنلاین</div><div className="value green">{operationsHealth.agentsOnline}</div></div>
+            <div className="summary-card"><div className="label">Session فعال</div><div className="value purple">{operationsHealth.activeSessions}</div></div>
+            <div className="summary-card"><div className="label">Lease فعال</div><div className="value">{operationsHealth.activeLeases}</div></div>
+          </div>}
           <h3>Event / Tournament Mode</h3>
           <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 14 }}>
             <label>نام Event<input value={eventForm.name} onChange={e => setEventForm(v => ({ ...v, name: e.target.value }))} placeholder="مسابقات EA FC" /></label>
@@ -343,10 +367,17 @@ export function OperationsPage() {
             <label>ظرفیت<input type="number" min="0" value={eventForm.maxParticipants} onChange={e => setEventForm(v => ({ ...v, maxParticipants: e.target.value }))} /></label>
             <button className="btn primary" onClick={() => void saveEvent()}>ثبت Event</button>
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 1fr auto', gap: 8, marginBottom: 12 }}>
+            <input value={eventCustomerCode} onChange={e => setEventCustomerCode(e.target.value)} placeholder="کد مشتری برای ثبت‌نام" />
+            <input type="number" min="0" value={eventSeed} onChange={e => setEventSeed(e.target.value)} placeholder="Seed" />
+            <span className="security-footnote">Event را انتخاب کن و سپس ثبت‌نام را بزن.</span>
+            <span />
+          </div>
           <div className="table-wrap"><table><thead><tr><th>نام</th><th>نوع</th><th>شروع</th><th>ظرفیت</th><th>ثبت‌نام</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>
             {events.map(event => <tr key={event.id}>
               <td>{event.name}</td><td>{event.kind}</td><td>{dt(event.startAt)}</td><td>{event.maxParticipants || 'آزاد'}</td><td>{event.participantCount}</td><td>{event.status}</td>
               <td>
+                <button className="btn" onClick={() => void addParticipant(event.id)}>ثبت مشتری</button>
                 {event.status === 'Scheduled' && <button className="btn" onClick={async()=>{await transitionEvent(event.id,'start');await loadAll();setNotice('Event شروع شد')}}>شروع</button>}
                 {event.status === 'Running' && <button className="btn" onClick={async()=>{await transitionEvent(event.id,'complete');await loadAll();setNotice('Event تکمیل شد')}}>اتمام</button>}
                 {event.status !== 'Completed' && event.status !== 'Cancelled' && <button className="btn danger" onClick={async()=>{await transitionEvent(event.id,'cancel');await loadAll();setNotice('Event لغو شد')}}>لغو</button>}
