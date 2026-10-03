@@ -12,10 +12,12 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
+builder.Services.AddDataProtection();
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
+builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
@@ -252,6 +254,7 @@ app.MapPost("/api/account-pool", async (
     SaveAccountPoolEntryRequest request,
     HttpContext context,
     GameNetDbContext database,
+    GameCredentialProtectionService credentialProtection,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
@@ -273,6 +276,7 @@ app.MapPost("/api/account-pool", async (
         Platform = request.Platform.Trim(),
         Login = request.Login?.Trim(),
         SecretHash = string.IsNullOrWhiteSpace(request.Secret) ? null : PasswordSecurity.Hash(request.Secret),
+        SecretCiphertext = string.IsNullOrWhiteSpace(request.Secret) ? null : credentialProtection.Protect(request.Secret),
         Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim(),
         ExpiresAt = request.ExpiresAt,
         AllowedGameIdsCsv = string.Join(",", gameIds),
@@ -298,6 +302,7 @@ app.MapPut("/api/account-pool/{accountId:guid}", async (
     SaveAccountPoolEntryRequest request,
     HttpContext context,
     GameNetDbContext database,
+    GameCredentialProtectionService credentialProtection,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
@@ -318,7 +323,10 @@ app.MapPut("/api/account-pool/{accountId:guid}", async (
     account.Platform = request.Platform.Trim();
     account.Login = request.Login?.Trim();
     if (!string.IsNullOrWhiteSpace(request.Secret))
+    {
         account.SecretHash = PasswordSecurity.Hash(request.Secret);
+        account.SecretCiphertext = credentialProtection.Protect(request.Secret);
+    }
     account.Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim();
     account.ExpiresAt = request.ExpiresAt;
     account.AllowedGameIdsCsv = string.Join(",", gameIds);
