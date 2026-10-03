@@ -20,6 +20,8 @@ public static class AuthorizationService
             ["buffet.sell"] = "فروش بوفه",
             ["buffet.inventory"] = "مدیریت انبار",
             ["finance.view"] = "مشاهده گزارش مالی",
+            ["reports.view"] = "مشاهده مرکز گزارش",
+            ["reports.export"] = "خروجی گرفتن از گزارش‌ها",
             ["finance.manage"] = "ثبت و مدیریت هزینه",
             ["shift.manage"] = "باز و بسته کردن شیفت",
             ["tariff.manage"] = "مدیریت تعرفه",
