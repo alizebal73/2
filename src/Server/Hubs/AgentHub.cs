@@ -510,6 +510,11 @@ public sealed class AgentHub(
         if (login is null)
             throw new HubException("ورود معتبر مشتری برای این دستگاه پیدا نشد.");
 
+        if (await database.Sessions.AnyAsync(
+                item => item.CustomerLoginId == login.Id && item.State == SessionState.Active,
+                Context.ConnectionAborted))
+            throw new HubException("این ورود مشتری از قبل یک Session فعال دارد.");
+
         Game? game = null;
         if (request.GameId.HasValue)
         {
@@ -544,6 +549,7 @@ public sealed class AgentHub(
         var session = new Session
         {
             CustomerId = customer.Id,
+            CustomerLoginId = login.Id,
             StationId = station.Id,
             TariffId = station.TariffId,
             AppUserId = null,
@@ -602,16 +608,21 @@ public sealed class AgentHub(
 
         var session = await database.Sessions
             .Include(item => item.Station)
+            .Include(item => item.CustomerLogin)
             .FirstOrDefaultAsync(item => item.Id == request.SessionId, Context.ConnectionAborted);
 
         if (session is null)
             throw new HubException("جلسه پیدا نشد.");
 
+        if (session.AgentDeviceId != device.Id)
+            throw new HubException("این Session متعلق به Agent درخواست‌کننده نیست.");
         if (session.StationId != device.StationId.Value)
             throw new HubException("این جلسه متعلق به ایستگاه Agent نیست.");
 
         if (!request.CustomerLoginId.HasValue)
             throw new HubException("شناسهٔ ورود مشتری برای پایان جلسه الزامی است.");
+        if (!session.CustomerLoginId.HasValue || session.CustomerLoginId.Value != request.CustomerLoginId.Value)
+            throw new HubException("ورود مشتری ثبت‌شده برای این Session با درخواست پایان جلسه یکسان نیست.");
 
         var login = await database.CustomerLogins.FirstOrDefaultAsync(
             item => item.Id == request.CustomerLoginId.Value
