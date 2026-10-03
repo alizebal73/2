@@ -871,6 +871,73 @@ app.MapPost("/api/account-pool/leases/{leaseId:guid}/release", async (
     return Results.Ok(new { released = true });
 }).WithName("ReleaseAccountLease");
 
+app.MapGet("/api/account-pool/health", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var accounts = await database.AccountPoolEntries
+        .AsNoTracking()
+        .Where(item => item.IsActive)
+        .ToListAsync(cancellationToken);
+    var now = DateTime.UtcNow;
+    var expiryWindow = DateTimeOffset.UtcNow.AddHours(24);
+    var activeLeases = await database.AccountLeases
+        .AsNoTracking()
+        .Where(item => item.State == AccountLeaseState.Active)
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(new AccountPoolHealthDto(
+        accounts.Count,
+        accounts.Count(item => item.Status == AccountPoolStatus.Free),
+        accounts.Count(item => item.Status == AccountPoolStatus.InUse),
+        accounts.Count(item => item.Status == AccountPoolStatus.Locked),
+        accounts.Count(item => item.ExpiresAt.HasValue && item.ExpiresAt.Value <= now),
+        accounts.Count(item => string.IsNullOrWhiteSpace(item.SecretCiphertext)),
+        activeLeases.Count,
+        activeLeases.Count(item => item.CredentialAccessExpiresAt.HasValue
+            && item.CredentialAccessExpiresAt.Value <= expiryWindow)));
+}).WithName("GetAccountPoolHealth");
+
+app.MapGet("/api/account-pool/leases/history", async (
+    HttpContext context,
+    GameNetDbContext database,
+    int? limit,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var take = Math.Clamp(limit ?? 200, 1, 1000);
+    var rows = await database.AccountLeases
+        .AsNoTracking()
+        .Include(item => item.AccountPoolEntry)
+        .Include(item => item.Game)
+        .Include(item => item.AgentDevice)
+        .OrderByDescending(item => item.LeasedAt)
+        .Take(take)
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(rows.Select(item => new AccountLeaseHistoryDto(
+        item.Id,
+        item.AccountPoolEntryId,
+        item.GameId,
+        item.AccountPoolEntry.Title,
+        item.Game.Name,
+        item.AccountPoolEntry.Platform,
+        item.AgentDevice?.Name,
+        item.AgentDeviceId,
+        item.CustomerId,
+        item.SessionId,
+        item.LeasedAt,
+        item.ReleasedAt,
+        item.State.ToString(),
+        item.ReleaseReason)).ToList());
+}).WithName("GetAccountLeaseHistory");
+
 app.MapGet("/api/account-pool/leases", async (
     HttpContext context,
     GameNetDbContext database,
