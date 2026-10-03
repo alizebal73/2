@@ -79,11 +79,12 @@ Stage 13 یا Wave بعدی فقط بعد از re-entry audit اختصاصی ه�
 - Snapshot و migration باید همزمان با مدل به‌روز شوند؛ relationship بدون navigation metadata نیز gap است.
 
 ### Exact latest state
-- Latest head at checkpoint write: `533c256f604f244d0e63fa0cd62ddbe2adb754da`
+- Latest head: `dc887439c6a1de554a2444f7b233eb046d610852`
 - PR #19 is open and non-draft.
-- CI Run #1117 targets the latest head on the self-hosted runner `Server`, but is currently pending.
-- اجرای قدیمی #1113 هنوز روی runner `Server` در وضعیت `in_progress` و بدون step ثبت‌شده مانده و عملاً runner را اشغال کرده است؛ Runهای #1116 و #1117 برای headهای جدید به همین علت صف/لغو شده‌اند.
-- Stage 12 تا سبز شدن اجرای مربوط به exact head `533c256f...` و عبور تمام smokeهای Stage 12 Done اعلام نمی‌شود.
+- Latest completed CI observed for the previous head `062be144...` was Run #1118: Build/Test/EF/Agent/Stage12 core smoke passed, but the authoritative Dashboard Station invariant failed.
+- Root cause addressed in the latest head: Session settlement now enforces `StationState.Available`, EndSession lease release is moved inside the same transaction before commit, and a regression test verifies Station release.
+- A new CI run for head `dc887439...` has not yet appeared in the workflow-run lookup at checkpoint time.
+- Therefore Stage 12 is structurally completed but **not yet officially Done** until the exact latest head passes CI and its Stage 12 smoke.
 
 ### بعد از سبز شدن CI
 1. exact-SHA evidence ثبت شود.
