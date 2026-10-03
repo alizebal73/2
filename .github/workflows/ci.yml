@@ -69,6 +69,10 @@ jobs:
           }
           git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
           Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Rebuild .NET after EF validation
+        run: dotnet build GameNetManager.sln --no-restore --configuration Release
+
       - name: Server startup and migration smoke
         shell: pwsh
         run: |
