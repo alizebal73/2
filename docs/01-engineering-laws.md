@@ -1,3 +1,6 @@
+## 1. Integration Before Implementation
+قبل از ساخت هر زنجیره جدید، زنجیره‌های قبلی، owner هر state، identity، Permission، transaction boundary، persistence، audit، approval، command/event protocol، retry/idempotency و recovery باید استخراج و با آن تطبیق داده شوند. قابلیت جدید نباید lifecycle موازی برای state موجود بسازد.
+
 # GameNet — Engineering Laws (Mandatory)
 
 این قوانین از 2026-10-03 قوانین حاکم بر ادامه توسعه هستند.
