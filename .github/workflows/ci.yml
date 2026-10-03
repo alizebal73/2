@@ -766,7 +766,7 @@ jobs:
             $env:GAMENET_AGENT_REGISTRATION_TOKEN = 'Stage8CiRegistrationToken!'
             $env:GAMENET_AGENT_NAME = 'CI Agent Stage 9 Session'
             $env:GAMENET_AGENT_DEVICE_ID = 'ci-stage9-session-agent'
-            $env:GAMENET_STATION_ID = $sessionStation.id
+            $env:GAMENET_STATION_ID = $stage12Station.id
             $env:GAMENET_AGENT_DATA_DIR = $sessionAgentData
             $env:GAMENET_AGENT_HEADLESS = '1'
             $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
@@ -861,6 +861,33 @@ jobs:
               $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
             }
 
+
+            # Ensure Stage 9 Agent disconnect has been persisted before reusing its Station for Stage 12.
+            $stage9Disconnected = $false
+            for ($i = 0; $i -lt 20; $i++) {
+              try {
+                $stage9AgentRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                $stage9AgentRow = @($stage9AgentRows | Where-Object { $_.name -eq 'CI Agent Stage 9 Session' })[0]
+                if (-not $stage9AgentRow -or -not $stage9AgentRow.isOnline) {
+                  $stage9Disconnected = $true
+                  break
+                }
+              } catch {}
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $stage9Disconnected) {
+              Write-Host '--- Stage 9 Agent rows before Stage 12 ---'
+              try { Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession | ConvertTo-Json -Depth 8 } catch {}
+              throw 'Stage 9 Agent did not become offline before Stage 12 Station reuse.'
+            }
+
+            $stage12Dashboard = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
+            $stage12Station = @($stage12Dashboard.stations | Where-Object { $_.type -eq 'PC' -and $_.state -eq 'Available' }) | Select-Object -First 1
+            if (-not $stage12Station) {
+              Write-Host '--- Available station snapshot before Stage 12 ---'
+              @($stage12Dashboard.stations | Where-Object { $_.state -eq 'Available' } | Select-Object -First 10) | ConvertTo-Json -Depth 5
+              throw 'No available PC station was found for Stage 12 Agent smoke.'
+            }
 
             # Stage 12: real Session -> Game Account Lease -> Agent credential delivery -> Session end release.
             $stage12Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
