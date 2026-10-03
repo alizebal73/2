@@ -393,6 +393,17 @@ jobs:
                 Start-Sleep -Milliseconds 500
               }
               if (-not $rollbackCompleted -or $rollbackStatus.status -ne 'Succeeded') {
+                Write-Host ("Stage 10 rollback command failed/timeout. Completed={0}; Status={1}; Succeeded={2}; Result={3}" -f $rollbackCompleted, $rollbackStatus.status, $rollbackStatus.succeeded, $rollbackStatus.resultMessage)
+                Write-Host '--- Agent stdout after rollback command failure ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr after rollback command failure ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                Write-Host '--- Persisted Agent state after rollback command failure ---'
+                $agentStatePath = Join-Path $agentData 'agent-state.json'
+                if (Test-Path $agentStatePath) { Get-Content $agentStatePath }
+                Write-Host '--- Update state after rollback command failure ---'
+                $updateStatePath = Join-Path $agentData 'update-active.json'
+                if (Test-Path $updateStatePath) { Get-Content $updateStatePath }
                 throw 'Stage 10 rollback command did not complete successfully.'
               }
 
