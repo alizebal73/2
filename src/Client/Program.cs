@@ -2,6 +2,8 @@ using GameNetManager.Client;
 using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using GameNetManager.Shared.Contracts;
 using Microsoft.AspNetCore.SignalR;
@@ -512,48 +514,94 @@ static async Task<int?> SendHeartbeatAsync(
 
 static async Task<AgentState> LoadStateAsync(string path)
 {
-    if (!File.Exists(path))
-        return new AgentState(string.Empty, string.Empty, string.Empty, null);
+    return await WithAgentStateFileLockAsync(
+        path,
+        async () =>
+        {
+            if (!File.Exists(path))
+                return new AgentState(string.Empty, string.Empty, string.Empty, null);
 
-    try
-    {
-        var json = await File.ReadAllTextAsync(path);
-        return JsonSerializer.Deserialize<AgentState>(json)
-            ?? new AgentState(string.Empty, string.Empty, string.Empty, null);
-    }
-    catch (Exception exception)
-    {
-        Console.WriteLine($"فایل وضعیت Agent خوانده نشد؛ Agent با هویت جدید/قابل‌بازیابی ادامه می‌دهد: {exception.Message}");
-        return new AgentState(string.Empty, string.Empty, string.Empty, null);
-    }
+            try
+            {
+                var json = await File.ReadAllTextAsync(path);
+                return JsonSerializer.Deserialize<AgentState>(json)
+                    ?? new AgentState(string.Empty, string.Empty, string.Empty, null);
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"فایل وضعیت Agent خوانده نشد؛ Agent با هویت جدید/قابل‌بازیابی ادامه می‌دهد: {exception.Message}");
+                return new AgentState(string.Empty, string.Empty, string.Empty, null);
+            }
+        });
 }
 
 static async Task SaveStateAsync(string path, AgentState state)
 {
-    var json = JsonSerializer.Serialize(
-        state,
-        new JsonSerializerOptions { WriteIndented = true });
+    await WithAgentStateFileLockAsync(
+        path,
+        async () =>
+        {
+            var json = JsonSerializer.Serialize(
+                state,
+                new JsonSerializerOptions { WriteIndented = true });
 
-    var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-    await File.WriteAllTextAsync(tempPath, json);
+            var tempPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            await File.WriteAllTextAsync(tempPath, json);
+
+            try
+            {
+                File.Move(tempPath, path, overwrite: true);
+            }
+            catch
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch
+                {
+                    // Preserve the original state file when replacement cannot complete.
+                }
+
+                throw;
+            }
+
+            return 0;
+        });
+}
+
+static async Task<T> WithAgentStateFileLockAsync<T>(
+    string path,
+    Func<Task<T>> action)
+{
+    using var mutex = CreateAgentStateMutex(path);
+    if (!mutex.WaitOne(TimeSpan.FromSeconds(15)))
+        throw new IOException("دسترسی همزمان به فایل وضعیت Agent بیش از حد طولانی شد.");
 
     try
     {
-        File.Move(tempPath, path, overwrite: true);
+        return await action();
     }
-    catch
+    finally
     {
         try
         {
-            File.Delete(tempPath);
+            mutex.ReleaseMutex();
         }
-        catch
+        catch (ApplicationException)
         {
-            // Preserve the original state file when replacement cannot complete.
+            // The mutex was not owned by this process; disposal still releases local resources.
         }
-
-        throw;
     }
+}
+
+static Mutex CreateAgentStateMutex(string path)
+{
+    var canonicalPath = Path.GetFullPath(path).Trim().ToUpperInvariant();
+    var hash = Convert.ToHexString(
+        SHA256.HashData(Encoding.UTF8.GetBytes(canonicalPath)));
+
+    return new Mutex(false, $"GameNetManager.AgentState.{hash}");
 }
 static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
     HubConnection connection,
@@ -1135,18 +1183,26 @@ static async Task<AgentState?> ReadAgentStateAsync(
     CancellationToken cancellationToken)
 {
     var path = Path.Combine(dataDirectory, "agent-state.json");
-    if (!File.Exists(path))
-        return null;
 
-    try
-    {
-        await using var stream = File.OpenRead(path);
-        return await JsonSerializer.DeserializeAsync<AgentState>(stream, cancellationToken: cancellationToken);
-    }
-    catch
-    {
-        return null;
-    }
+    return await WithAgentStateFileLockAsync(
+        path,
+        async () =>
+        {
+            if (!File.Exists(path))
+                return null;
+
+            try
+            {
+                await using var stream = File.OpenRead(path);
+                return await JsonSerializer.DeserializeAsync<AgentState>(
+                    stream,
+                    cancellationToken: cancellationToken);
+            }
+            catch
+            {
+                return null;
+            }
+        });
 }
 
 static void TryTerminateProcess(Process? process)
