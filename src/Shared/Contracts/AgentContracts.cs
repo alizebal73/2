@@ -25,6 +25,13 @@ public sealed record AgentReadyDto(
     bool KioskEnabled,
     bool LockOnDisconnect);
 
+public sealed record AgentProcessTelemetryDto(
+    Guid? GameId,
+    string ProcessName,
+    int ProcessId,
+    DateTimeOffset ObservedAt,
+    DateTimeOffset? StartedAt);
+
 public sealed record AgentHeartbeatRequest(
     string AgentVersion,
     string? OsVersion,
@@ -34,7 +41,8 @@ public sealed record AgentHeartbeatRequest(
     bool IsLocked,
     string? LifecycleState = null,
     string? PendingUpdateVersion = null,
-    string? LastUpdateError = null);
+    string? LastUpdateError = null,
+    IReadOnlyList<AgentProcessTelemetryDto>? RunningProcesses = null);
 
 public sealed record AgentHeartbeatResponse(
     Guid AgentId,
