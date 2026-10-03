@@ -50,17 +50,22 @@ jobs:
           dotnet tool install --global dotnet-ef --version 10.0.12 --ignore-failed-sources
           $env:PATH = "$env:USERPROFILE\\.dotnet\\tools;$env:PATH"
           dotnet ef migrations has-pending-model-changes --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --context GameNetDbContext --verbose
+          # Optional probe: an empty scaffolded migration is valid and must not fail CI.
           $probeDir = 'src/Server/Data/Migrations/__Stage12ModelProbe'
           Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
           dotnet ef migrations add Stage12ModelProbe --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --output-dir Data/Migrations/__Stage12ModelProbe --context GameNetDbContext --no-build
-          $probeFiles = Get-ChildItem $probeDir -File -ErrorAction SilentlyContinue
-          if ($probeFiles.Count -gt 0) {
-            Write-Host 'Unexpected model-diff migration was scaffolded:'
-            git diff -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
-            $probeFiles | ForEach-Object { Write-Host ("===== " + $_.FullName + " ====="); Get-Content $_.FullName }
-            git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
-            Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
-            throw 'EF model snapshot has pending changes.'
+          $probeMigration = Get-ChildItem $probeDir -Filter '????????????????_Stage12ModelProbe.cs' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($probeMigration) {
+            $probeText = Get-Content $probeMigration.FullName -Raw
+            if ($probeText -match 'migrationBuilder\.(Add|Alter|Drop|Create|Rename|Sql)') {
+              Write-Host 'Unexpected model-diff migration was scaffolded:'
+              git diff -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+              Write-Host ("===== " + $probeMigration.FullName + " =====")
+              Get-Content $probeMigration.FullName
+              git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+              Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+              throw 'EF model snapshot has pending changes.'
+            }
           }
           git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
           Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
