@@ -97,7 +97,7 @@ public sealed class AccountPoolService(GameNetDbContext database)
         return (null, null);
     }
 
-    public async Task<AccountLease?> ReleaseAsync(Guid leaseId, CancellationToken cancellationToken)
+    public async Task<AccountLease?> ReleaseAsync(Guid leaseId, string? releaseReason, CancellationToken cancellationToken)
     {
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
@@ -114,6 +114,7 @@ public sealed class AccountPoolService(GameNetDbContext database)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(item => item.State, AccountLeaseState.Released)
                 .SetProperty(item => item.ReleasedAt, now)
+                .SetProperty(item => item.ReleaseReason, releaseReason)
                 .SetProperty(item => item.UpdatedAt, now), cancellationToken);
 
         if (releasedLease != 1)
@@ -132,6 +133,7 @@ public sealed class AccountPoolService(GameNetDbContext database)
 
         lease.State = AccountLeaseState.Released;
         lease.ReleasedAt = now;
+        lease.ReleaseReason = releaseReason;
         lease.UpdatedAt = now;
 
         await transaction.CommitAsync(cancellationToken);
