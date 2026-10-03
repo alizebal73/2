@@ -224,7 +224,13 @@ public sealed class AccountPoolService(
 
         if (result.Account is null || result.Lease is null) return null;
         if (string.IsNullOrWhiteSpace(result.Account.SecretCiphertext))
+        {
+            await ReleaseAsync(
+                result.Lease.Id,
+                "اکانت عملیاتی فاقد رمز امن بود.",
+                cancellationToken);
             throw new InvalidOperationException("برای این اکانت رمز امن ثبت نشده است.");
+        }
 
         return (result.Account, result.Lease);
     }
