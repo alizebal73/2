@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { mockService } from '../../services/mockService';
+import { getServerGames } from '../../services/gameService';
+import { getServerAccountPool } from '../../services/accountPoolService';
 import type {
   AccountRecord,
   ClientRecord,
@@ -171,8 +173,8 @@ export function GlobalCommandCenter({ open, stations, onNavigate, onClose }: Pro
       mockService.getCustomers(),
       mockService.getProducts(),
       mockService.getTariffs(),
-      mockService.getGames(),
-      mockService.getAccounts(),
+      getServerGames(),
+      getServerAccountPool(),
       mockService.getClients(),
       mockService.getUsers(),
       mockService.getManagementInvoices(),
