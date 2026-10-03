@@ -2106,6 +2106,11 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("GameNetManager.Server.Data.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("GameNetManager.Server.Data.Station", "Station")
                         .WithMany("Sessions")
                         .HasForeignKey("StationId")
