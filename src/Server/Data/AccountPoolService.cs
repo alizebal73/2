@@ -101,17 +101,25 @@ public sealed class AccountPoolService(GameNetDbContext database)
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
         var lease = await database.AccountLeases
-            .Include(item => item.AccountPoolEntry)
             .FirstOrDefaultAsync(item => item.Id == leaseId, cancellationToken);
 
         if (lease is null || lease.State != AccountLeaseState.Active)
             return null;
 
         var now = DateTimeOffset.UtcNow;
+        var releasedAccount = await database.AccountPoolEntries
+            .Where(item => item.Id == lease.AccountPoolEntryId
+                && item.Status == AccountPoolStatus.InUse)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Status, AccountPoolStatus.Free)
+                .SetProperty(item => item.AssignedAgentDeviceId, (Guid?)null)
+                .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+        if (releasedAccount != 1)
+            return null;
+
         lease.State = AccountLeaseState.Released;
         lease.ReleasedAt = now;
-        lease.AccountPoolEntry.Status = AccountPoolStatus.Free;
-        lease.AccountPoolEntry.AssignedAgentDeviceId = null;
 
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
