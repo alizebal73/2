@@ -4,6 +4,9 @@
 
 ---
 
+> **قرارداد اتصال زنجیره‌ها:** [02-integration-contract.md](02-integration-contract.md) — الگوی هویت، Permission، Transaction، Persistence، Audit، Approval، Agent Command، Event، Secret، Concurrency و اتصال زنجیره جدید.
+> **ممیزی Stage 12:** [03-stage12-integration-audit.md](03-stage12-integration-audit.md) — شکاف‌های واقعی Stage 12 قبل از ادامه کدنویسی.
+
 
 > **مرجع جدید تکمیل محصول:** از 2026-10-03، تصمیم‌گیری فقط بر اساس [00-completion-control.md](00-completion-control.md) و [01-engineering-laws.md](01-engineering-laws.md) انجام می‌شود. اسناد Stage/roadmap قدیمی سابقه تاریخی‌اند و معیار Done جدید نیستند.
 - ✅ فلوی سرعت سرور (F1→شناسه→Enter→مبلغ→F4/F5/F6/F7/F8): F5 شارژ مستقیم، F6 شارژ+بدهی، F7 کسر کیف پول، F8 کسر+مازاد به بدهی — هم دکمه زیر کادر مبلغ هم کلید
