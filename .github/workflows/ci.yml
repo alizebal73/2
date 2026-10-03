@@ -912,6 +912,11 @@ jobs:
                       throw 'Agent Session Start marker appeared but server active-session state did not contain the same SessionId/station.'
                     }
 
+                    $customerStateAfterStart = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/state?customerId=$($stage9Customer.id)&loginId=$($customerAuth.loginId)&clientKey=$env:GAMENET_AGENT_DEVICE_ID" -Method Get
+                    if (-not $customerStateAfterStart.authenticated -or $customerStateAfterStart.loginId -ne $customerAuth.loginId -or -not $customerStateAfterStart.session -or $customerStateAfterStart.session.id -ne $startedSessionId -or $customerStateAfterStart.session.state -ne 'Active') {
+                      throw 'Stage 12 CustomerLogin → Session ownership was not visible through authoritative customer state after Agent Session Start.'
+                    }
+
                     $activeGameRows = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
                     $activeGameRow = @($activeGameRows | Where-Object { $_.id -eq $stage12Game.id })[0]
                     if (-not $activeGameRow -or [int]$activeGameRow.activeUsers -ne 1) {
@@ -969,6 +974,11 @@ jobs:
               }
 
               Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}" -f $endedSessionId, $sessionStation.id)
+
+              $customerStateAfterEnd = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/state?customerId=$($stage9Customer.id)&loginId=$($customerAuth.loginId)&clientKey=$env:GAMENET_AGENT_DEVICE_ID" -Method Get
+              if ($customerStateAfterEnd.authenticated -or $customerStateAfterEnd.session -ne $null) {
+                throw 'Stage 12 Session end did not release the persisted CustomerLogin.'
+              }
 
               $accountRowsAfterRelease = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
               $releasedStage12Account = @($accountRowsAfterRelease | Where-Object { $_.id -eq $stage12Account.id })[0]
