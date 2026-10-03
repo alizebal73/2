@@ -12,7 +12,6 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
-builder.Services.AddDataProtection();
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
@@ -25,6 +24,13 @@ var databasePath = Path.IsPathRooted(databaseFile)
     ? databaseFile
     : Path.Combine(builder.Environment.ContentRootPath, databaseFile);
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+
+var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+Directory.CreateDirectory(dataProtectionKeysPath);
+builder.Services
+    .AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+    .SetApplicationName("GameNetManager");
 builder.Services.AddDbContext<GameNetDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
 
