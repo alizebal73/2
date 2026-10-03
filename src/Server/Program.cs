@@ -606,13 +606,12 @@ app.MapGet("/api/account-pool/leases", async (
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var leases = await database.AccountLeases
+    var leases = (await database.AccountLeases
         .AsNoTracking()
         .Include(item => item.AccountPoolEntry)
         .Include(item => item.Game)
         .Include(item => item.AgentDevice)
         .Where(item => item.State == AccountLeaseState.Active)
-        .OrderByDescending(item => item.LeasedAt)
         .Select(item => new AccountLeaseDto(
             item.Id,
             item.AccountPoolEntryId,
@@ -623,7 +622,9 @@ app.MapGet("/api/account-pool/leases", async (
             item.AgentDevice == null ? null : item.AgentDevice.Name,
             item.LeasedAt,
             item.State.ToString()))
-        .ToListAsync(cancellationToken);
+        .ToListAsync(cancellationToken))
+        .OrderByDescending(item => item.LeasedAt)
+        .ToList();
 
     return Results.Ok(leases);
 }).WithName("GetActiveAccountLeases");
@@ -2801,11 +2802,10 @@ app.MapGet("/api/customer-auth/state", async (
         .FirstOrDefaultAsync(item => item.DeviceId == normalizedClientKey && item.IsActive, cancellationToken);
 
     var session = device?.StationId is Guid stationId
-        ? await database.Sessions
+        ? (await database.Sessions
             .Where(item => item.CustomerId == customerId
                 && item.StationId == stationId
                 && (item.State == SessionState.Active || item.State == SessionState.Ended))
-            .OrderByDescending(item => item.StartAt)
             .Select(item => new
             {
                 id = item.Id,
@@ -2814,7 +2814,9 @@ app.MapGet("/api/customer-auth/state", async (
                 endAt = item.EndAt,
                 stationName = item.Station.Name
             })
-            .FirstOrDefaultAsync(cancellationToken)
+            .ToListAsync(cancellationToken))
+            .OrderByDescending(item => item.startAt)
+            .FirstOrDefault()
         : null;
 
     return Results.Ok(new
@@ -4026,15 +4028,22 @@ app.MapGet("/api/finance/summary", async (HttpContext context,
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
-    var revenue = await database.Invoices
+    // SQLite cannot translate DateTimeOffset comparison. Time filtering is therefore
+    // performed after materializing this bounded reporting data.
+    var paidInvoices = await database.Invoices
         .AsNoTracking()
-        .Where(item => item.Status == InvoiceStatus.Paid && item.IssuedAt >= start && item.IssuedAt <= end)
-        .SumAsync(item => (decimal?)item.TotalAmount, cancellationToken) ?? 0m;
+        .Where(item => item.Status == InvoiceStatus.Paid)
+        .ToListAsync(cancellationToken);
+    var revenue = paidInvoices
+        .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
+        .Sum(item => item.TotalAmount);
 
-    var expense = await database.Expenses
+    var expenses = await database.Expenses
         .AsNoTracking()
+        .ToListAsync(cancellationToken);
+    var expense = expenses
         .Where(item => item.CreatedAt >= start && item.CreatedAt <= end)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        .Sum(item => item.Amount);
 
     return Results.Ok(new FinanceSummaryDto(
         start,
@@ -4059,9 +4068,10 @@ app.MapGet("/api/finance/transactions", async (HttpContext context,
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
-    var invoices = await database.Invoices
+    var invoices = (await database.Invoices
         .AsNoTracking()
         .Include(item => item.Items)
+        .ToListAsync(cancellationToken))
         .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
         .OrderByDescending(item => item.IssuedAt)
         .Take(500)
@@ -4076,7 +4086,7 @@ app.MapGet("/api/finance/transactions", async (HttpContext context,
                 .Select(child => child.Description)
                 .FirstOrDefault() ?? "فاکتور"
         })
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     var invoiceIds = invoices.Select(item => item.Id).ToList();
     var payments = await database.InvoicePayments
@@ -4120,11 +4130,13 @@ app.MapGet("/api/shifts/current", async (HttpContext context,
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var shift = await database.Shifts
+    var shift = (await database.Shifts
         .AsNoTracking()
         .Include(item => item.AppUser)
+        .Where(item => item.CloseAt == null)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.OpenAt)
-        .FirstOrDefaultAsync(item => item.CloseAt == null, cancellationToken);
+        .FirstOrDefault();
 
     if (shift is null)
         return Results.Ok<ShiftSnapshotDto?>(null);
@@ -4140,12 +4152,13 @@ app.MapGet("/api/shifts/history", async (HttpContext context,
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var shifts = await database.Shifts
+    var shifts = (await database.Shifts
         .AsNoTracking()
         .Include(item => item.AppUser)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.OpenAt)
         .Take(30)
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     var result = new List<ShiftSnapshotDto>(shifts.Count);
     foreach (var shift in shifts)
@@ -4223,13 +4236,15 @@ app.MapPost("/api/shifts/{shiftId:guid}/close", async (
         return Results.Conflict(new { code = "shift_closed", message = "این شیفت قبلاً بسته شده است." });
 
     var now = DateTimeOffset.UtcNow;
-    var cashSales = await database.InvoicePayments
+    var cashPayments = await database.InvoicePayments
         .Where(item => item.Method == "cash"
             && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null
-            && item.Invoice.PaidAt >= shift.OpenAt
+            && item.Invoice.PaidAt != null)
+        .ToListAsync(cancellationToken);
+    var cashSales = cashPayments
+        .Where(item => item.Invoice.PaidAt >= shift.OpenAt
             && item.Invoice.PaidAt <= now)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        .Sum(item => item.Amount);
 
     var expenseTotal = await database.Expenses
         .Where(item => item.ShiftId == shift.Id)
@@ -4850,13 +4865,15 @@ static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
 {
     var end = shift.CloseAt ?? DateTimeOffset.UtcNow;
 
-    var cashSales = await database.InvoicePayments
+    var cashPayments = await database.InvoicePayments
         .Where(item => item.Method == "cash"
             && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null
-            && item.Invoice.PaidAt >= shift.OpenAt
+            && item.Invoice.PaidAt != null)
+        .ToListAsync(cancellationToken);
+    var cashSales = cashPayments
+        .Where(item => item.Invoice.PaidAt >= shift.OpenAt
             && item.Invoice.PaidAt <= end)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        .Sum(item => item.Amount);
 
     var expenseTotal = await database.Expenses
         .Where(item => item.ShiftId == shift.Id)
