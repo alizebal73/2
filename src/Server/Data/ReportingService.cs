@@ -151,7 +151,16 @@ public sealed class ReportingService(GameNetDbContext database)
                 var minutes = group.Sum(item => SessionTiming.GetBillableMinutes(item, item.EndAt ?? to));
                 var vipMinutes = group.Sum(item =>
                 {
-                    if (customer?.VipPackage is null) return 0;
+                    if (customer?.VipPackage is null)
+                        return 0;
+
+                    var activation = customer.VipActivatedAt;
+                    var expiry = customer.VipExpiresAt;
+                    if (!activation.HasValue || !expiry.HasValue
+                        || item.StartAt < activation.Value
+                        || item.StartAt >= expiry.Value)
+                        return 0;
+
                     return Math.Max(0, SessionTiming.GetBillableMinutes(item, item.EndAt ?? to));
                 });
 
