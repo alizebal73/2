@@ -386,7 +386,13 @@ app.MapPost("/api/account-pool/allocate", async (
         if (account is null || lease is null)
             return Results.Conflict(new { code = "account_pool_empty", message = "اکانت آزاد و سازگار برای این بازی وجود ندارد." });
 
-        await database.Entry(account).Reference(item => item.AssignedAgentDevice).LoadAsync(cancellationToken);
+        var assignedAgentName = account.AssignedAgentDeviceId.HasValue
+            ? await database.AgentDevices
+                .AsNoTracking()
+                .Where(item => item.Id == account.AssignedAgentDeviceId.Value)
+                .Select(item => item.Name)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
         var game = await database.Games.AsNoTracking().FirstAsync(item => item.Id == lease.GameId, cancellationToken);
 
         database.AuditLogs.Add(new AuditLog
@@ -406,7 +412,7 @@ app.MapPost("/api/account-pool/allocate", async (
             account.Title,
             account.Platform,
             account.Login,
-            account.AssignedAgentDevice?.Name,
+            assignedAgentName,
             lease.LeasedAt,
             lease.State.ToString()));
     }
