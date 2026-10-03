@@ -80,9 +80,7 @@ export function GamesPage() {
 
       const pendingCommands = result.commands.filter(item => item.status === 'Sent');
       if (pendingCommands.length === 0) {
-        const failed = result.commands.filter(item =>
-          item.status === 'Failed' || item.status === 'RolledBack'
-        ).length;
+        const failed = result.commands.filter(item => item.status === 'Failed').length;
         setNotice(
           failed === 0
             ? `همگام‌سازی «${game.name}» تکمیل شده است`
