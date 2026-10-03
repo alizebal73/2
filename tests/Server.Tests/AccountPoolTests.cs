@@ -144,7 +144,7 @@ public sealed class AccountPoolTests
                     AllowedGameIdsCsv = game.Id.ToString(),
                     Status = AccountPoolStatus.Free,
                     IsActive = true,
-                    ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1)
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(-1)
                 },
                 new AccountPoolEntry
                 {
@@ -153,7 +153,7 @@ public sealed class AccountPoolTests
                     AllowedGameIdsCsv = game.Id.ToString(),
                     Status = AccountPoolStatus.Free,
                     IsActive = true,
-                    ExpiresAt = DateTimeOffset.UtcNow.AddHours(1)
+                    ExpiresAt = DateTime.UtcNow.AddHours(1)
                 });
             await setup.SaveChangesAsync();
         }
