@@ -21,6 +21,7 @@ builder.Services.AddScoped<AccountPoolService>();
 builder.Services.AddScoped<ReportingService>();
 builder.Services.AddScoped<ReservationService>();
 builder.Services.AddScoped<OperationsService>();
+builder.Services.AddScoped<BackupService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
@@ -60,6 +61,165 @@ if (app.Environment.IsDevelopment())
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
     .WithName("GetHealth");
+
+app.MapGet("/api/backups", async (
+    HttpContext context,
+    BackupService backups,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "backup.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    return Results.Ok(await backups.ListAsync(cancellationToken));
+}).WithName("ListBackups");
+
+app.MapGet("/api/backups/settings", async (
+    HttpContext context,
+    BackupService backups,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "backup.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    return Results.Ok(await backups.GetSettingsAsync(cancellationToken));
+}).WithName("GetBackupSettings");
+
+app.MapPut("/api/backups/settings", async (
+    BackupSettings request,
+    HttpContext context,
+    BackupService backups,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "backup.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    try
+    {
+        await backups.SaveSettingsAsync(request.Enabled, request.Hour, request.Keep, request.TargetDirectory, cancellationToken);
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "BackupSettingsUpdate",
+            EntityName = "BackupSettings",
+            EntityId = "server",
+            AppUserId = auth.User!.Id,
+            Details = $"فعال={request.Enabled} · ساعت={request.Hour} · نگهداری={request.Keep}"
+        });
+        await database.SaveChangesAsync(cancellationToken);
+        return Results.Ok(await backups.GetSettingsAsync(cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_backup_settings", message = exception.Message });
+    }
+}).WithName("SaveBackupSettings");
+
+app.MapPost("/api/backups", async (
+    HttpContext context,
+    BackupService backups,
+    GameNetDbContext database,
+    IConfiguration configuration,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "backup.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    try
+    {
+        var result = await backups.CreateBackupAsync(configuration["App:ProductVersion"], cancellationToken);
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "BackupCreate",
+            EntityName = "Backup",
+            EntityId = result.FileName,
+            AppUserId = auth.User!.Id,
+            Details = $"Backup ایجاد شد · {result.FileName}"
+        });
+        await database.SaveChangesAsync(cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (Exception exception) when (exception is IOException or InvalidOperationException or SqliteException)
+    {
+        return Results.Problem(statusCode: StatusCodes.Status500InternalServerError, title: "ایجاد Backup انجام نشد.", detail: exception.Message);
+    }
+}).WithName("CreateBackup");
+
+app.MapPost("/api/backups/{fileName}/verify", async (
+    string fileName,
+    HttpContext context,
+    BackupService backups,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "backup.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    try
+    {
+        var result = await backups.VerifyAsync(fileName, cancellationToken);
+        return result is null
+            ? Results.Conflict(new { code = "backup_invalid", message = "Backup اعتبارسنجی نشد." })
+            : Results.Ok(result);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_backup_name", message = exception.Message });
+    }
+}).WithName("VerifyBackup");
+
+app.MapPost("/api/backups/{fileName}/restore", async (
+    string fileName,
+    HttpContext context,
+    BackupService backups,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "backup.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    try
+    {
+        var result = await backups.PrepareRestoreAsync(fileName, auth.User!.Id, cancellationToken);
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "BackupRestorePrepared",
+            EntityName = "Backup",
+            EntityId = result.FileName,
+            AppUserId = auth.User.Id,
+            Details = "Restore برای راه‌اندازی بعدی آماده شد."
+        });
+        await database.SaveChangesAsync(cancellationToken);
+        return Results.Accepted($"/api/backups/{Uri.EscapeDataString(result.FileName)}/verify", result);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_backup_name", message = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "restore_conflict", message = exception.Message });
+    }
+}).WithName("PrepareBackupRestore");
+
+app.MapGet("/api/backups/{fileName}/download", async (
+    string fileName,
+    HttpContext context,
+    BackupService backups,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "backup.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var result = await backups.VerifyAsync(fileName, cancellationToken);
+    if (result is null) return Results.NotFound(new { code = "backup_not_found", message = "Backup معتبر پیدا نشد." });
+
+    var settings = await backups.GetSettingsAsync(cancellationToken);
+    var directory = Path.IsPathRooted(settings.TargetDirectory)
+        ? settings.TargetDirectory
+        : Path.Combine(app.Environment.ContentRootPath, settings.TargetDirectory);
+    var path = Path.GetFullPath(Path.Combine(directory, fileName));
+    if (!string.Equals(Path.GetDirectoryName(path), Path.GetFullPath(directory), StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { code = "invalid_backup_name", message = "نام فایل Backup نامعتبر است." });
+
+    return Results.File(path, "application/zip", enableRangeProcessing: true, fileDownloadName: Path.GetFileName(path));
+}).WithName("DownloadBackup");
 
 app.MapGet("/api/server-info", (IWebHostEnvironment environment) =>
     Results.Ok(new ServerInfoDto("GameNet Manager", environment.EnvironmentName, DateTimeOffset.UtcNow)))
