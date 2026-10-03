@@ -460,7 +460,12 @@ static async Task RunTestSessionFlowAsync(
             Console.WriteLine($"AGENT_GAME_ACCOUNT_CREDENTIAL_OK:{credential.LeaseId}:{credential.AccountTitle}");
         }
 
-        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        var holdSeconds = 1;
+        var configuredHoldSeconds = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_HOLD_SECONDS");
+        if (int.TryParse(configuredHoldSeconds, out var parsedHoldSeconds))
+            holdSeconds = Math.Clamp(parsedHoldSeconds, 1, 30);
+
+        await Task.Delay(TimeSpan.FromSeconds(holdSeconds), cancellationToken);
 
         try
         {
