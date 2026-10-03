@@ -137,6 +137,32 @@ jobs:
             } | ConvertTo-Json)
             if (-not $stage11Game.id) { throw 'Stage 11 Game create smoke failed.' }
 
+            $stage11GameList = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
+            if (-not (@($stage11GameList | Where-Object { $_.id -eq $stage11Game.id })).Count) { throw 'Stage 11 Game list smoke failed.' }
+
+            $stage11GameUpdated = Invoke-RestMethod -Uri "$baseUrl/api/games/$($stage11Game.id)" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              name = 'CI Stage11 Game'
+              version = '1.1'
+              genre = 'CI'
+              status = 'online'
+              path = 'C:\Games\Stage11'
+              executable = 'Stage11.exe'
+              cover = ''
+              trailer = ''
+              launchArgs = '--stage11'
+              connectionType = 'آنلاین'
+              active = $true
+              targetSystem = 'all'
+              target = 'all'
+              targetZone = 'pc'
+              targetStations = ''
+            } | ConvertTo-Json)
+            if ($stage11GameUpdated.version -ne '1.1' -or $stage11GameUpdated.launchArgs -ne '--stage11') { throw 'Stage 11 Game update smoke failed.' }
+
+            $stage11GameListAfterUpdate = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
+            $stage11GameAfterUpdate = @($stage11GameListAfterUpdate | Where-Object { $_.id -eq $stage11Game.id })[0]
+            if (-not $stage11GameAfterUpdate -or $stage11GameAfterUpdate.version -ne '1.1') { throw 'Stage 11 Game update/list consistency smoke failed.' }
+
             $stage11CreateResponse = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               title = 'CI Stage11 Account'
               platform = 'Steam'
@@ -150,6 +176,25 @@ jobs:
 
             $stage11AccountId = [string]$stage11CreateResponse.id
             if ([string]::IsNullOrWhiteSpace($stage11AccountId)) { throw 'Stage 11 Account Pool create smoke failed: no account id returned.' }
+
+            $stage11AccountPool = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+            $stage11Account = @($stage11AccountPool | Where-Object { $_.id -eq $stage11AccountId })[0]
+            if (-not $stage11Account -or $stage11Account.login -ne 'ci-stage11') { throw 'Stage 11 Account Pool create/list smoke failed.' }
+
+            Invoke-RestMethod -Uri "$baseUrl/api/account-pool/$stage11AccountId" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              title = 'CI Stage11 Account'
+              platform = 'Steam'
+              login = 'ci-stage11-updated'
+              secret = $null
+              owner = 'CI'
+              expiresAt = $null
+              allowedGameIds = @($stage11Game.id)
+              status = 'Locked'
+            } | ConvertTo-Json) | Out-Null
+
+            Invoke-RestMethod -Uri "$baseUrl/api/account-pool/$stage11AccountId/unlock" -Method Post -WebSession $adminSession | Out-Null
+            $stage11AccountAfterUpdate = @((Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession) | Where-Object { $_.id -eq $stage11AccountId })[0]
+            if (-not $stage11AccountAfterUpdate -or $stage11AccountAfterUpdate.login -ne 'ci-stage11-updated' -or $stage11AccountAfterUpdate.status -ne 'Free') { throw 'Stage 11 Account Pool update/unlock smoke failed.' }
 
             $stage11Lease = Invoke-RestMethod -Uri "$baseUrl/api/account-pool/allocate" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               gameId = $stage11Game.id
@@ -170,7 +215,7 @@ jobs:
             if (-not $stage11Free -or $stage11Free.status -ne 'Free') { throw 'Stage 11 Account Pool release state was not visible as Free.' }
 
             Invoke-RestMethod -Uri "$baseUrl/api/games/$($stage11Game.id)" -Method Delete -WebSession $adminSession | Out-Null
-            Write-Host 'Stage 11 Game/Account Pool create -> allocate -> release -> archive smoke passed.'
+            Write-Host 'Stage 11 Game CRUD + Account Pool CRUD/unlock + allocate -> release -> archive smoke passed.'
 
             # Stage 8: prove a real Client Agent can register, connect to the dedicated SignalR hub,
             # persist a heartbeat, and become offline again after disconnect.
