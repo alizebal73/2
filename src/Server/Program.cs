@@ -47,6 +47,7 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
+    await BackupService.ApplyPendingRestoreAsync(builder.Environment.ContentRootPath, databasePath, logger, CancellationToken.None);
     await InitializeDatabaseAsync(app.Services, databasePath, logger);
     logger.LogInformation("Database ready at {DatabasePath}", databasePath);
 }
