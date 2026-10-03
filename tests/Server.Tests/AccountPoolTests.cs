@@ -14,6 +14,11 @@ public sealed class AccountPoolTests
         return new GameNetDbContext(options);
     }
 
+    private static SqliteConnection CreateSharedMemoryConnection(string databaseName)
+    {
+        return new SqliteConnection($"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5");
+    }
+
     [Fact]
     public async Task AllocateAndRelease_IsServerAuthoritative()
     {
@@ -67,11 +72,12 @@ public sealed class AccountPoolTests
     [Fact]
     public async Task ConcurrentAllocation_CannotLeaseTheSamePoolEntryTwice()
     {
-        await using var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var databaseName = $"stage11-concurrent-{Guid.NewGuid():N}";
+        await using var keeper = CreateSharedMemoryConnection(databaseName);
+        await keeper.OpenAsync();
 
         Guid gameId;
-        await using (var setup = CreateContext(connection))
+        await using (var setup = CreateContext(keeper))
         {
             await setup.Database.EnsureCreatedAsync();
             var game = new Game { Name = "Concurrent Game", IsActive = true };
@@ -92,12 +98,16 @@ public sealed class AccountPoolTests
 
         var taskA = Task.Run(async () =>
         {
-            await using var context = CreateContext(connection);
+            await using var connectionA = CreateSharedMemoryConnection(databaseName);
+            await connectionA.OpenAsync();
+            await using var context = CreateContext(connectionA);
             return await new AccountPoolService(context).AllocateAsync(gameId, null, null, null, CancellationToken.None);
         });
         var taskB = Task.Run(async () =>
         {
-            await using var context = CreateContext(connection);
+            await using var connectionB = CreateSharedMemoryConnection(databaseName);
+            await connectionB.OpenAsync();
+            await using var context = CreateContext(connectionB);
             return await new AccountPoolService(context).AllocateAsync(gameId, null, null, null, CancellationToken.None);
         });
 
