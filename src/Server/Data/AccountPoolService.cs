@@ -32,10 +32,11 @@ public sealed class AccountPoolService(
                 .Where(item => item.Status == AccountPoolStatus.Free
                     && item.IsActive
                     && (!item.ExpiresAt.HasValue || item.ExpiresAt.Value > now))
-                .OrderBy(item => item.CreatedAt)
                 .ToListAsync(cancellationToken);
 
             var candidate = candidates
+                .OrderBy(item => item.CreatedAt)
+                .ThenBy(item => item.Id)
                 .FirstOrDefault(item =>
                     item.AllowedGameIdsCsv
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
