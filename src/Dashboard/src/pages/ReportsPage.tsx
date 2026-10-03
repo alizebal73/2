@@ -4,7 +4,7 @@ import type { AppUserRecord } from '../types';
 import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createShiftExpense } from '../services/financeService';
 import { getCurrentShift } from '../services/shiftService';
 import { getServerBuffetProfit } from '../services/buffetService';
-import { exportFinanceReport, getAuditReport, getHeatmapReport, getReportSummary, getStationReport } from '../services/reportService';
+import { exportFinanceReport, getAuditReport, getCustomerReport, getHeatmapReport, getOperatorReport, getReportSummary, getStationReport } from '../services/reportService';
 import type { BuffetProfitReport } from '../types';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
@@ -51,6 +51,8 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
   const [stationReport, setStationReport] = useState<Awaited<ReturnType<typeof getStationReport>>>([]);
   const [heatmap, setHeatmap] = useState<Awaited<ReturnType<typeof getHeatmapReport>>>([]);
   const [auditRows, setAuditRows] = useState<Awaited<ReturnType<typeof getAuditReport>>>([]);
+  const [customerReport, setCustomerReport] = useState<Awaited<ReturnType<typeof getCustomerReport>>>([]);
+  const [operatorReport, setOperatorReport] = useState<Awaited<ReturnType<typeof getOperatorReport>>>([]);
   const [reportDataError, setReportDataError] = useState('');
 
   useEffect(() => {
@@ -111,10 +113,14 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
       getReportSummary(start, end),
       getStationReport(start, end),
       getHeatmapReport(start, end),
-    ]).then(([summary, stations, heat]) => {
+      getCustomerReport(start, end),
+      getOperatorReport(start, end),
+    ]).then(([summary, stations, heat, customers, operators]) => {
       setReportSummary(summary);
       setStationReport(stations);
       setHeatmap(heat);
+      setCustomerReport(customers);
+      setOperatorReport(operators);
     }).catch(error => {
       setReportDataError(error instanceof Error ? error.message : 'دریافت گزارش‌های سرور انجام نشد');
     });
@@ -306,9 +312,11 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
       </div>
       <div className="table-wrap"><table className="data-table"><thead><tr><th>ایستگاه</th><th>زون</th><th>جلسه</th><th>زمان</th><th>درآمد</th><th>میانگین</th></tr></thead><tbody>{stationReport.map(row => <tr key={row.stationId}><td>{row.stationName}</td><td>{row.zone}</td><td>{row.sessionCount}</td><td>{Math.round(row.billableMinutes)} دقیقه</td><td>{money(row.revenue)} ت</td><td>{money(row.averageSessionRevenue)} ت</td></tr>)}</tbody></table></div>
     </> : reportCategory === 'customers' ? <>
-      <section className="report-placeholder"><strong>مشتری و VIP</strong><span>اطلاعات پایه مشتریان در مسیر Server/API موجود است؛ گزارش دوره‌ای اختصاصی مشتری/VIP در موج بعدی دامنه مشتری تکمیل می‌شود.</span></section>
+      {reportDataError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>گزارش مشتری کامل نشد</strong><span>{reportDataError}</span></div></div>}
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>مشتری</th><th>جلسه</th><th>زمان</th><th>درآمد</th><th>VIP</th><th>کیف پول</th><th>بدهی</th></tr></thead><tbody>{customerReport.map(row => <tr key={row.customerId}><td>{row.customerName} ({row.customerCode})</td><td>{row.sessionCount}</td><td>{Math.round(row.billableMinutes)} دقیقه</td><td>{money(row.revenue)} ت</td><td>{Math.round(row.vipMinutesUsed)} دقیقه</td><td>{money(row.walletBalance)} ت</td><td>{money(row.outstandingDebt)} ت</td></tr>)}</tbody></table></div>
     </> : reportCategory === 'users' ? <>
-      <section className="report-placeholder"><strong>کاربران و شیفت</strong><span>شیفت و حقوق منبع سرور دارند؛ نمای تجمیعی این دسته بعد از اتصال scopeهای دقیق کاربر در همین موج ادامه می‌یابد.</span></section>
+      {reportDataError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>گزارش اپراتورها کامل نشد</strong><span>{reportDataError}</span></div></div>}
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>اپراتور</th><th>شیفت</th><th>ساعت</th><th>فاکتور</th><th>درآمد</th><th>هزینه</th><th>خالص</th></tr></thead><tbody>{operatorReport.map(row => <tr key={row.appUserId}><td>{row.operatorName}</td><td>{row.shiftCount}</td><td>{row.shiftHours.toFixed(1)}</td><td>{row.paidInvoiceCount}</td><td>{money(row.revenue)} ت</td><td>{money(row.expenses)} ت</td><td>{money(row.difference)} ت</td></tr>)}</tbody></table></div>
     </> : <>
       <section className="card-panel" style={{ margin: '0 22px 14px', padding: 14 }}>
         <h3>Audit Explorer</h3>
