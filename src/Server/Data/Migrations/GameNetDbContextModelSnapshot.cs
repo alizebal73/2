@@ -2140,9 +2140,13 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasForeignKey("TariffId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.Navigation("AgentDevice");
+
                     b.Navigation("AppUser");
 
                     b.Navigation("Customer");
+
+                    b.Navigation("Game");
 
                     b.Navigation("Station");
 
