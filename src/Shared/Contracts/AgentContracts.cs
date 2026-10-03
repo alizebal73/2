@@ -123,7 +123,8 @@ public sealed record AgentSessionStartRequest(
     Guid CustomerLoginId,
     Guid? TariffId,
     decimal? HourlyRateOverride,
-    int? Persons);
+    int? Persons,
+    Guid? GameId = null);
 
 public sealed record AgentSessionStartResponse(
     Guid SessionId,
