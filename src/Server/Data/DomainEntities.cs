@@ -43,6 +43,15 @@ public enum ReservationKind
     Waitlist
 }
 
+public enum EventStatus
+{
+    Draft,
+    Scheduled,
+    Running,
+    Completed,
+    Cancelled
+}
+
 public enum SessionState
 {
     Active,
@@ -299,6 +308,31 @@ public sealed class Client : BaseEntity
     public string? Type { get; set; }
     public string? Contact { get; set; }
     public ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
+}
+
+public sealed class GameEvent : BaseEntity
+{
+    public required string Name { get; set; }
+    public string Kind { get; set; } = "tournament";
+    public DateTimeOffset StartAt { get; set; }
+    public DateTimeOffset EndAt { get; set; }
+    public EventStatus Status { get; set; } = EventStatus.Draft;
+    public int MaxParticipants { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public AppUser CreatedByUser { get; set; } = default!;
+    public string? Notes { get; set; }
+    public ICollection<GameEventParticipant> Participants { get; set; } = new List<GameEventParticipant>();
+}
+
+public sealed class GameEventParticipant : BaseEntity
+{
+    public Guid EventId { get; set; }
+    public GameEvent Event { get; set; } = default!;
+    public Guid CustomerId { get; set; }
+    public Customer Customer { get; set; } = default!;
+    public int Seed { get; set; }
+    public string Status { get; set; } = "registered";
+    public DateTimeOffset JoinedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public sealed class Reservation : BaseEntity
