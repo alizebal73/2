@@ -100,6 +100,137 @@ public sealed class ReportingService(GameNetDbContext database)
             .ToList();
     }
 
+
+    public async Task<IReadOnlyList<CustomerPerformanceDto>> GetCustomerPerformanceAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var sessions = await database.Sessions
+            .AsNoTracking()
+            .Include(item => item.Customer)
+            .Where(item => item.StartAt >= from && item.StartAt <= to)
+            .ToListAsync(cancellationToken);
+
+        var sessionIds = sessions.Select(item => item.Id).ToList();
+        var paid = sessionIds.Count == 0
+            ? new List<(Guid SessionId, decimal Amount, DateTimeOffset IssuedAt)>()
+            : (await database.Invoices
+                .AsNoTracking()
+                .Where(item => item.Status == InvoiceStatus.Paid
+                    && item.SessionId.HasValue
+                    && sessionIds.Contains(item.SessionId.Value))
+                .Select(item => new { SessionId = item.SessionId!.Value, item.TotalAmount, item.IssuedAt })
+                .ToListAsync(cancellationToken))
+                .Where(item => item.IssuedAt >= from && item.IssuedAt <= to)
+                .Select(item => (item.SessionId, item.TotalAmount, item.IssuedAt))
+                .ToList();
+
+        var revenueByCustomer = sessions
+            .GroupJoin(
+                paid.GroupBy(item => sessions.FirstOrDefault(s => s.Id == item.SessionId)?.CustomerId ?? Guid.Empty),
+                session => session.CustomerId,
+                group => group.Key,
+                (session, group) => new { session, revenue = group.Sum(item => item.Sum(x => x.Amount)) })
+            .ToList();
+
+        var customerIds = sessions.Select(item => item.CustomerId).Distinct().ToList();
+        var customers = await database.Customers
+            .AsNoTracking()
+            .Where(item => customerIds.Contains(item.Id))
+            .Include(item => item.VipPackage)
+            .ToListAsync(cancellationToken);
+        var customerById = customers.ToDictionary(item => item.Id);
+
+        var draftDebtRows = await database.Invoices
+            .AsNoTracking()
+            .Where(item => item.Status == InvoiceStatus.Draft && customerIds.Contains(item.CustomerId))
+            .Select(item => new { item.CustomerId, item.TotalAmount })
+            .ToListAsync(cancellationToken);
+
+        return sessions
+            .GroupBy(item => item.CustomerId)
+            .Select(group =>
+            {
+                customerById.TryGetValue(group.Key, out var customer);
+                var revenue = paid
+                    .Where(item => group.Any(session => session.Id == item.SessionId))
+                    .Sum(item => item.Amount);
+                var minutes = group.Sum(item => SessionTiming.GetBillableMinutes(item, item.EndAt ?? to));
+                var vipMinutes = group.Sum(item =>
+                {
+                    if (customer?.VipPackage is null) return 0;
+                    return Math.Max(0, SessionTiming.GetBillableMinutes(item, item.EndAt ?? to));
+                });
+
+                return new CustomerPerformanceDto(
+                    group.Key,
+                    customer?.Code ?? customer?.Username ?? group.Key.ToString(),
+                    customer?.FullName ?? "مشتری",
+                    group.Count(),
+                    minutes,
+                    revenue,
+                    vipMinutes,
+                    customer?.Balance ?? 0m,
+                    draftDebtRows.Where(item => item.CustomerId == group.Key).Sum(item => item.TotalAmount));
+            })
+            .OrderByDescending(item => item.Revenue)
+            .ThenBy(item => item.CustomerName)
+            .ToList();
+    }
+
+    public async Task<IReadOnlyList<OperatorPerformanceDto>> GetOperatorPerformanceAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var shifts = await database.Shifts
+            .AsNoTracking()
+            .Include(item => item.AppUser)
+            .ToListAsync(cancellationToken);
+        shifts = shifts
+            .Where(item => item.OpenAt <= to && (item.CloseAt ?? to) >= from)
+            .ToList();
+
+        var invoices = await database.Invoices
+            .AsNoTracking()
+            .Where(item => item.Status == InvoiceStatus.Paid && item.AppUserId.HasValue)
+            .ToListAsync(cancellationToken);
+        invoices = invoices.Where(item => item.IssuedAt >= from && item.IssuedAt <= to).ToList();
+
+        var expenses = await database.Expenses
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        expenses = expenses.Where(item => item.CreatedAt >= from && item.CreatedAt <= to).ToList();
+
+        var result = shifts
+            .GroupBy(item => new { item.AppUserId, Name = item.AppUser.FullName })
+            .Select(group =>
+            {
+                var userInvoices = invoices.Where(item => item.AppUserId == group.Key.AppUserId).ToList();
+                var userExpenses = expenses
+                    .Where(item => group.Any(shift => shift.Id == item.ShiftId))
+                    .Sum(item => item.Amount);
+                var hours = group.Sum(item =>
+                    Math.Max(0, (item.CloseAt ?? to - item.OpenAt).TotalHours));
+
+                return new OperatorPerformanceDto(
+                    group.Key.AppUserId,
+                    group.Key.Name,
+                    group.Count(),
+                    hours,
+                    userInvoices.Count,
+                    userInvoices.Sum(item => item.TotalAmount),
+                    userExpenses,
+                    userInvoices.Sum(item => item.TotalAmount) - userExpenses);
+            })
+            .OrderByDescending(item => item.Revenue)
+            .ThenBy(item => item.OperatorName)
+            .ToList();
+
+        return result;
+    }
+
     public async Task<IReadOnlyList<HeatmapCellDto>> GetHeatmapAsync(
         DateTimeOffset from,
         DateTimeOffset to,
