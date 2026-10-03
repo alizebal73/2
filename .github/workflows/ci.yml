@@ -1013,7 +1013,7 @@ jobs:
 
               $dashboardAfterEnd = Invoke-RestMethod -Uri "$baseUrl/api/dashboard" -Method Get -WebSession $adminSession
               $releasedStation = @($dashboardAfterEnd.stations | Where-Object { $_.id -eq $sessionStation.id })[0]
-              if (-not $releasedStation -or $releasedStation.status -ne 'Available') {
+              if (-not $releasedStation -or $releasedStation.state -ne 'Available') {
                 throw 'Stage 12 Session end did not return the Station to Available in the authoritative Dashboard read model.'
               }
 
