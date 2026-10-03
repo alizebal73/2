@@ -16,11 +16,11 @@ Stage 12 must not modify `main` directly.
 
 ## Current branch head
 
-`9e1b8f7219e39991b508f09db4c74a307eddc811`
+`2c7246494cea64c17695847514897fe569e51237`
 
 ## Current CI
 
-Run #1007+ on the evolving Stage 12 head; previous runs were cancelled by the branch concurrency guard while the branch was being corrected. The latest head has not yet produced a completed verdict.
+Latest final-head CI pair is Run #1042 / #1043 for the exact head above; one is pending and one queued because the workflow has push + pull_request triggers. Previous failures on earlier heads are not the final-head verdict.
 
 Current pre-CI status:
 - Agent command transport: implemented with stable per-device SignalR group.
@@ -28,6 +28,10 @@ Current pre-CI status:
 - Game activeUsers: authoritative from active Sessions.
 - Stale/Disconnect Lease recovery: implemented.
 - Customer authentication smoke restored before the Stage 12 flow.
+- Real Game Apply/Sync contract, server dispatch, Agent manifest persistence and E2E verification added.
+- Expired Free accounts are excluded from allocation with regression coverage.
+- Fake Dashboard Backup/Restore controls disabled; real backup remains a pre-production Stage 15 gate.
+- Canonical roadmap reconciled to the current 15-stage execution map.
 
 ## What is actually implemented
 
@@ -46,7 +50,7 @@ Current pre-CI status:
 
 ## Current blocker
 
-The current branch head is awaiting a completed CI run. Do not mark Stage 12 Done until the exact head is green for Build, Tests, EF validation, Server Smoke, and the required Agent/Session/Lease E2E.
+The current branch head is awaiting a completed CI run. The latest final-head runs are pending/queued, so Stage 12 is not yet certified. Do not mark Stage 12 Done until the exact head is green for Build, Tests, EF validation, Server Smoke, and the required Agent/Session/Lease E2E.
 
 The previous Agent ping timeout was treated as a transport race and corrected without weakening the timeout assertion.
 
