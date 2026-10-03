@@ -29,15 +29,14 @@ public sealed class AccountPoolService(
         {
             var now = DateTimeOffset.UtcNow;
             var candidates = await database.AccountPoolEntries.AsNoTracking()
-                .Where(item => item.Status == AccountPoolStatus.Free
-                    && item.IsActive
-                    && (item.ExpiresAt == null || item.ExpiresAt.Value > now))
+                .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
                 .ToListAsync(cancellationToken);
 
             var candidate = candidates
                 .OrderBy(item => item.CreatedAt)
                 .FirstOrDefault(item =>
-                    item.AllowedGameIdsCsv
+                    (!item.ExpiresAt.HasValue || item.ExpiresAt.Value > now)
+                    && item.AllowedGameIdsCsv
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                         .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
 
@@ -49,8 +48,7 @@ public sealed class AccountPoolService(
                 var updated = await database.AccountPoolEntries
                     .Where(item => item.Id == candidate.Id
                         && item.Status == AccountPoolStatus.Free
-                        && item.IsActive
-                        && (item.ExpiresAt == null || item.ExpiresAt.Value > now))
+                        && item.IsActive)
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(item => item.Status, AccountPoolStatus.InUse)
                         .SetProperty(item => item.AssignedAgentDeviceId, agentDeviceId)
