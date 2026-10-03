@@ -30,7 +30,7 @@ export function AccountsPage() {
 
   async function refresh() {
     try {
-      const [nextAccounts, nextGames, nextLeases] = await Promise.all([
+      const [nextAccounts, nextGames, nextLeases, nextHealth, nextHistory] = await Promise.all([
         getServerAccountPool(),
         getServerGames(),
         getServerLeases(),
