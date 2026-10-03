@@ -789,13 +789,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .IsRequired()
                         .HasMaxLength(60)
                         .HasColumnType("TEXT");
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset?>("UpdatedAt")
-                        .IsConcurrencyToken()
-                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
