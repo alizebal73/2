@@ -30,22 +30,23 @@ public sealed class AccountPoolService(GameNetDbContext database)
             && !await database.Sessions.AnyAsync(item => item.Id == sessionId.Value, cancellationToken))
             throw new InvalidOperationException("جلسه انتخاب‌شده پیدا نشد.");
 
-        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-
         var candidates = await database.AccountPoolEntries
             .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
-            .OrderBy(item => item.CreatedAt)
             .Take(50)
             .ToListAsync(cancellationToken);
 
         var gameIdText = game.Id.ToString();
-        var candidate = candidates.FirstOrDefault(item =>
-            item.AllowedGameIdsCsv
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
+        var candidate = candidates
+            .OrderBy(item => item.CreatedAt)
+            .FirstOrDefault(item =>
+                item.AllowedGameIdsCsv
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
 
         if (candidate is null)
             return (null, null);
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
         var updated = await database.AccountPoolEntries
