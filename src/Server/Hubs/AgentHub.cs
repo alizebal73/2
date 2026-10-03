@@ -9,7 +9,8 @@ public sealed class AgentHub(
     GameNetDbContext database,
     IConfiguration configuration,
     IHubContext<DashboardHub> dashboardHub,
-    ILogger<AgentHub> logger) : Hub
+    ILogger<AgentHub> logger,
+    AccountPoolService accountPool) : Hub
 {
     private const string AgentDeviceContextKey = "GameNet.AgentDeviceId";
 
@@ -90,6 +91,13 @@ public sealed class AgentHub(
                 {
                     if (device.LockOnDisconnect)
                         logger.LogWarning("Agent {DeviceId} disconnected; LockOnDisconnect policy locked the device.", device.DeviceId);
+
+                    var releasedLeases = await accountPool.ReleaseActiveForAgentAsync(
+                        device.Id,
+                        "آزادسازی خودکار به دلیل قطع ارتباط Agent",
+                        CancellationToken.None);
+                    if (releasedLeases > 0)
+                        logger.LogWarning("Agent {DeviceId} disconnected; released {LeaseCount} active account lease(s).", device.DeviceId, releasedLeases);
 
                     await BroadcastStatusAsync(device, now, CancellationToken.None);
                 }
@@ -346,6 +354,29 @@ public sealed class AgentHub(
             Context.ConnectionAborted);
     }
 
+    public async Task<AgentGameAccountCredentialDto> AcquireGameAccount(Guid sessionId)
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        try
+        {
+            var credential = await accountPool.AcquireCredentialForOperationalSessionAsync(
+                sessionId,
+                device.Id,
+                Context.ConnectionAborted);
+            if (credential is null)
+                throw new HubException("اکانت آزاد و سازگار برای بازی این جلسه وجود ندارد.");
+
+            return credential;
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+    }
+
     public async Task AgentLogoutAndLock()
     {
         var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
@@ -388,6 +419,10 @@ public sealed class AgentHub(
             });
 
             await database.SaveChangesAsync(Context.ConnectionAborted);
+            await accountPool.ReleaseActiveForSessionAsync(
+                activeSession.Id,
+                "آزادسازی خودکار با خروج و قفل Agent",
+                Context.ConnectionAborted);
 
             await dashboardHub.Clients.All.SendAsync(
                 "AgentSessionChanged",
@@ -446,6 +481,16 @@ public sealed class AgentHub(
         if (login is null)
             throw new HubException("ورود معتبر مشتری برای این دستگاه پیدا نشد.");
 
+        Game? game = null;
+        if (request.GameId.HasValue)
+        {
+            game = await database.Games.FirstOrDefaultAsync(
+                item => item.Id == request.GameId.Value && item.IsActive,
+                Context.ConnectionAborted);
+            if (game is null)
+                throw new HubException("بازی انتخاب‌شده پیدا نشد یا غیرفعال است.");
+        }
+
         var station = await database.Stations
             .Include(item => item.Tariff)
             .FirstOrDefaultAsync(item => item.Id == device.StationId.Value, Context.ConnectionAborted);
@@ -476,6 +521,8 @@ public sealed class AgentHub(
             StartAt = DateTimeOffset.UtcNow,
             State = SessionState.Active,
             TotalAmount = 0m,
+            GameId = game?.Id,
+            AgentDeviceId = device.Id,
             // Customer/Agent cannot override the price. Server tariff is authoritative.
             HourlyRateOverride = null,
             Persons = persons
@@ -494,6 +541,10 @@ public sealed class AgentHub(
 
         await database.SaveChangesAsync(Context.ConnectionAborted);
         await transaction.CommitAsync(Context.ConnectionAborted);
+        await accountPool.ReleaseActiveForSessionAsync(
+            session.Id,
+            "آزادسازی خودکار با پایان Session",
+            Context.ConnectionAborted);
 
         await dashboardHub.Clients.All.SendAsync(
             "AgentSessionChanged",
