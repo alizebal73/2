@@ -203,17 +203,17 @@ public sealed class AccountPoolTests
         await using (var context = CreateContext(connection))
         {
             var service = new AccountPoolService(context, protection);
-            var result = await service.AllocateForOperationalSessionAsync(sessionId, CancellationToken.None);
-
-            Assert.NotNull(result);
-            leaseId = result!.Value.Lease.Id;
-            leaseToken = result.Value.Lease.LeaseToken;
-
-            var credential = await service.GetCredentialAsync(
-                leaseId,
-                leaseToken,
+            var credential = await service.AcquireCredentialForOperationalSessionAsync(
+                sessionId,
                 agentId,
                 CancellationToken.None);
+
+            Assert.NotNull(credential);
+            leaseId = credential!.LeaseId;
+            leaseToken = await context.AccountLeases
+                .Where(item => item.Id == leaseId)
+                .Select(item => item.LeaseToken)
+                .SingleAsync();
 
             Assert.NotNull(credential);
             Assert.Equal("Stage12Secret!", credential!.Secret);
@@ -227,8 +227,8 @@ public sealed class AccountPoolTests
         await using (var context = CreateContext(connection))
         {
             var service = new AccountPoolService(context, protection);
-            Assert.NotNull(await service.ReleaseAsync(
-                leaseId,
+            Assert.Equal(1, await service.ReleaseActiveForSessionAsync(
+                sessionId,
                 "Stage12 test release",
                 CancellationToken.None));
         }
