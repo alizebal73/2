@@ -56,9 +56,10 @@ public sealed class AccountPoolTests
             Assert.NotNull(lease);
             Assert.Equal(AccountPoolStatus.InUse, account!.Status);
 
-            var released = await service.ReleaseAsync(lease!.Id, CancellationToken.None);
+            var released = await service.ReleaseAsync(lease!.Id, "test release", CancellationToken.None);
             Assert.NotNull(released);
             Assert.Equal(AccountLeaseState.Released, released!.State);
+            Assert.Equal("test release", released.ReleaseReason);
         }
 
         await using (var verify = CreateContext(connection))
