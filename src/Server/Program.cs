@@ -24,6 +24,7 @@ builder.Services.AddScoped<OperationsService>();
 builder.Services.AddScoped<BackupService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
+builder.Services.AddHostedService<BackupScheduler>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
 var databasePath = Path.IsPathRooted(databaseFile)
