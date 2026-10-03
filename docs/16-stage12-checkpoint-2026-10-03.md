@@ -1,79 +1,58 @@
-# Stage 12 — Checkpoint 2026-10-03
+# Stage 12 — Current Checkpoint (2026-10-03)
 
-## Active branch
+## مرجع توسعه
+- Branch: `completion/control-20261003`
+- PR: #19 — Completion Control
+- Main base: `93ba89c9231bd821f45f93ab2aa7b9c25b8cc338`
+- آخرین head ثبت‌شده: `cd77000b3bbd6de7458be6f06001610cc853ae04`
 
-`stage12-session-lease`
+## وضعیت Stage 12
 
-## Stable main
+زنجیره هدف:
+`CustomerLogin + AgentIdentity → Session → Game → AccountLease → Credential → Agent → Session End → Lease Release → Game.activeUsers`
 
-`main` = `93ba89c9231bd821f45f93ab2aa7b9c25b8cc338`
+اصلاحات معماری انجام‌شده:
+1. `Session.CustomerLoginId` به مدل اضافه شد.
+2. migration رسمی `20261003150000_SessionCustomerLogin` اضافه شد.
+3. model snapshot و relationship/navigation همسان شد.
+4. Agent Session Start، Login واقعی را در Session persist می‌کند.
+5. duplicate active Session برای همان CustomerLogin رد می‌شود.
+6. EndSession هم Agent ownership و هم CustomerLogin ownership را دقیق بررسی می‌کند.
+7. Credential acquisition/get فقط به Login persisted و Agent/Session/Game binding معتبر پاسخ می‌دهد.
+8. Agent logout فقط Login متعلق به همان Session را می‌بندد.
+9. Session End + Lease Release در یک transaction قرار گرفته‌اند.
+10. Game Sync علاوه بر manifest/marker، lifecycle واقعی `AgentCommand` را هم تا `Succeeded` در CI بررسی می‌کند.
+11. smoke جدید duplicate Session و wrong CustomerLogin در EndSession را صریحاً رد می‌کند.
+12. AccountPool regression test برای persisted Login و inactive Login اضافه شد.
 
-## Stage 12 baseline
+## وضعیت CI
 
-`7d6d6f753ab7741b6ea29a57a3a2beb1b34b348b`
+آخرین اجرای رسمی دیده‌شده قبل از آخرین head روی self-hosted runner در حالت pending بوده است. برای head `cd77000b3bbd6de7458be6f06001610cc853ae04` هنوز اجرای رسمی جدید مشاهده نشده است.
 
-Stage 12 must not modify `main` directly.
+بنابراین:
+- Build/Test/EF/Server smoke روی head نهایی هنوز به‌صورت رسمی green اعلام نمی‌شود.
+- این موضوع gate است و Stage 12 تا عبور همین head Done اعلام نمی‌شود.
 
-## Current branch head
+## معیارهای Done باقی‌مانده
 
-`2c7246494cea64c17695847514897fe569e51237`
+1. اجرای CI روی exact final SHA و سبز شدن:
+   - Build
+   - Tests
+   - EF snapshot/model
+   - Server startup/migration smoke
+   - Stage 8/9 Agent lifecycle
+   - Stage 10 update/rollback
+   - Stage 12 Game Sync → AgentCommand Succeeded
+   - Session Start → activeUsers
+   - Credential/Lease
+   - Session End → atomic release
+   - Dashboard build/smoke
+2. بررسی migration `SessionCustomerLogin` روی DB خالی و DB دارای migrationهای قبلی.
+3. بعد از سبز شدن exact SHA، بازبینی نهایی diff و ثبت evidence.
 
-## Current CI
+## قواعد ادامه
 
-Latest final-head CI pair is Run #1042 / #1043 for the exact head above; one is pending and one queued because the workflow has push + pull_request triggers. Previous failures on earlier heads are not the final-head verdict.
-
-Current pre-CI status:
-- Agent command transport: implemented with stable per-device SignalR group.
-- Stage 12 Agent Session → Game → Lease → Credential → EndSession/Release smoke: added.
-- Game activeUsers: authoritative from active Sessions.
-- Stale/Disconnect Lease recovery: implemented.
-- Customer authentication smoke restored before the Stage 12 flow.
-- Real Game Apply/Sync contract, server dispatch, Agent manifest persistence and E2E verification added.
-- Expired Free accounts are excluded from allocation with regression coverage.
-- Fake Dashboard Backup/Restore controls disabled; real backup remains a pre-production Stage 15 gate.
-- Canonical roadmap reconciled to the current 15-stage execution map.
-
-## What is actually implemented
-
-- Session can reference Game and AgentDevice.
-- AccountPoolEntry keeps encrypted credential material separately from SecretHash.
-- AccountLease has a short credential-access expiry.
-- Operational Session allocation validates Session + Game + Agent + CustomerLogin.
-- Allocation is atomic and creates a Session-bound Lease.
-- Agent credential retrieval is Lease-token + Agent-bound and denied outside the active window.
-- Session end releases the Lease.
-- Agent disconnect/stale heartbeat releases active Leases.
-- Game active-user count is derived from authoritative active Sessions.
-- Legacy GameAccount remains separate.
-- Dashboard never receives raw account secrets.
-- Stage 12 has an Agent/Session/Lease credential E2E smoke path.
-
-## Current blocker
-
-The current branch head is awaiting a completed CI run. The latest final-head runs are pending/queued, so Stage 12 is not yet certified. Do not mark Stage 12 Done until the exact head is green for Build, Tests, EF validation, Server Smoke, and the required Agent/Session/Lease E2E.
-
-The previous Agent ping timeout was treated as a transport race and corrected without weakening the timeout assertion.
-
-## Important recovery rule
-
-If work is interrupted, resume from this file first. Do not infer progress from chat memory.
-
-## Working method
-
-One logical change per checkpoint:
-- inspect
-- implement
-- test
-- commit
-- record SHA/state
-- continue
-
-For long work, do not keep one giant uncommitted sequence. Every major slice must leave a recoverable commit and an updated checkpoint.
-
-## Do not do
-
-- Do not edit `main` for Stage 12.
-- Do not weaken CI assertions just to get green.
-- Do not recreate fake Apply/Sync success.
-- Do not replace legacy `GameAccount`.
-- Do not call Stage 12 Done until the same branch SHA has green Build, Tests, EF validation, Server Smoke and required Agent/Session/Lease E2E.
+- main مستقیم دستکاری نشود.
+- Stage 13 قبل از Done واقعی Stage 12 شروع نشود.
+- هیچ marker بدون state/command evidence به معنی موفقیت تلقی نشود.
+- هر تغییر بعدی فقط در صورت تعلق به lifecycle/persistence/concurrency/contract/verification این زنجیره باشد.
