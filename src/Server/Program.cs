@@ -228,6 +228,130 @@ app.MapDelete("/api/games/{gameId:guid}", async (
     return Results.Ok(new { archived = true });
 }).WithName("ArchiveGame");
 
+app.MapPost("/api/games/{gameId:guid}/sync", async (
+    Guid gameId,
+    HttpContext context,
+    GameNetDbContext database,
+    IHubContext<AgentHub> agentHub,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "game.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var game = await database.Games
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == gameId && item.IsActive, cancellationToken);
+    if (game is null)
+        return Results.NotFound(new { code = "game_not_found", message = "بازی فعال پیدا نشد." });
+
+    var agents = await database.AgentDevices
+        .Include(item => item.Station)
+        .Where(item => item.IsActive
+            && item.IsOnline
+            && item.ConnectionId != null)
+        .ToListAsync(cancellationToken);
+
+    var targetedAgents = agents.Where(device =>
+        game.Target switch
+        {
+            "zone" => device.Station != null
+                && string.Equals(device.Station.Zone, game.TargetZone, StringComparison.OrdinalIgnoreCase),
+            "stations" => !string.IsNullOrWhiteSpace(game.TargetStations)
+                && game.TargetStations
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Any(target => string.Equals(target, device.DeviceId, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(target, device.Station?.Name, StringComparison.OrdinalIgnoreCase)),
+            _ => true
+        }).ToList();
+
+    if (targetedAgents.Count == 0)
+        return Results.Conflict(new
+        {
+            code = "no_target_agents_online",
+            message = "برای این بازی هیچ Agent آنلاین و واجد شرایطی برای همگام‌سازی وجود ندارد."
+        });
+
+    var payload = System.Text.Json.JsonSerializer.Serialize(new AgentGameApplyCommandPayload(
+        game.Id,
+        game.Name,
+        game.Version,
+        game.Path,
+        game.Executable,
+        game.LaunchArgs,
+        game.ConnectionType,
+        game.TargetSystem,
+        game.Target,
+        game.TargetZone,
+        game.TargetStations,
+        game.IsActive));
+
+    var results = new List<object>();
+    foreach (var device in targetedAgents)
+    {
+        var command = new AgentCommand
+        {
+            AgentDeviceId = device.Id,
+            RequestedByAppUserId = auth.User!.Id,
+            CommandType = AgentCommandTypes.ApplyGame,
+            PayloadJson = payload,
+            Status = "Sent",
+            RequestedAt = DateTimeOffset.UtcNow,
+            SentAt = DateTimeOffset.UtcNow,
+            AgentConnectionId = device.ConnectionId
+        };
+
+        database.AgentCommands.Add(command);
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "GameSyncRequested",
+            EntityName = "Game",
+            EntityId = game.Id.ToString(),
+            AppUserId = auth.User.Id,
+            Details = $"همگام‌سازی بازی {game.Name} برای Agent {device.DeviceId}"
+        });
+        await database.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
+                "AgentCommand",
+                new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
+                cancellationToken);
+
+            results.Add(new
+            {
+                agentId = device.Id,
+                deviceId = device.DeviceId,
+                commandId = command.Id,
+                status = "Sent"
+            });
+        }
+        catch
+        {
+            command.Status = "Failed";
+            command.Succeeded = false;
+            command.CompletedAt = DateTimeOffset.UtcNow;
+            command.ResultMessage = "ارسال همگام‌سازی بازی به Agent انجام نشد.";
+            await database.SaveChangesAsync(CancellationToken.None);
+
+            results.Add(new
+            {
+                agentId = device.Id,
+                deviceId = device.DeviceId,
+                commandId = command.Id,
+                status = "Failed"
+            });
+        }
+    }
+
+    return Results.Ok(new
+    {
+        gameId = game.Id,
+        targetedAgents = targetedAgents.Count,
+        commands = results
+    });
+}).WithName("SyncGameToAgents");
+
 app.MapGet("/api/account-pool", async (
     HttpContext context,
     GameNetDbContext database,
