@@ -1493,7 +1493,9 @@ modelBuilder.Entity("GameNetManager.Server.Data.Session", b =>
 
         b.HasIndex("GameId");
 
-        b.HasIndex("StationId");
+        b.HasIndex("StationId")
+            .IsUnique()
+            .HasFilter("State = 'Active'");
 
         b.HasIndex("TariffId");
 
