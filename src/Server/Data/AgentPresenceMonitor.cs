@@ -151,6 +151,31 @@ public sealed class AgentPresenceMonitor(
                                 Details = $"Agent {device.DeviceId} قبل از تکمیل فرمان {command.CommandType} آفلاین شد."
                             });
                         }
+
+                        var staleLeaseIds = await database.AccountLeases
+                            .AsNoTracking()
+                            .Where(item => item.AgentDeviceId == device.Id && item.State == AccountLeaseState.Active)
+                            .Select(item => item.Id)
+                            .ToListAsync(stoppingToken);
+
+                        if (staleLeaseIds.Count > 0)
+                        {
+                            var accountPool = scope.ServiceProvider.GetRequiredService<AccountPoolService>();
+                            foreach (var leaseId in staleLeaseIds)
+                            {
+                                try
+                                {
+                                    await accountPool.ReleaseAsync(
+                                        leaseId,
+                                        "Agent به دلیل قطع Heartbeat آفلاین شد.",
+                                        stoppingToken);
+                                }
+                                catch (Exception releaseException)
+                                {
+                                    logger.LogError(releaseException, "Failed to release Game account lease {LeaseId} after stale Agent {DeviceId}.", leaseId, device.DeviceId);
+                                }
+                            }
+                        }
                     }
                 }
 
