@@ -106,3 +106,12 @@ Root Cause → Domain owner → Data model → Contract → Concurrency/transact
 - Deployment/Recovery/Field Evidence
 
 قدیمی بودن Stage یا checklist دلیل Done بودن نیست؛ رفتار واقعی فعلی ملاک است.
+
+## وضعیت اجرای 2026-10-04
+
+- Stage 12 به‌عنوان vertical-slice مرجع سخت‌گیری شده و Login→Session، Credential→Agent و Session End→Lease Release به ownership/transaction صریح متصل‌اند.
+- Stage 13 implementation در Server truth تکمیل شده: Reporting, Heatmap, Customer/Operator reports, Audit Explorer, Finance export.
+- Stage 14 implementation در Server truth تکمیل شده: Station management, NetworkRoute, Reservation, Waitlist, Event/Tournament, Operations health.
+- Stage 15 implementation در Server truth تکمیل شده: Backup, DataProtection keys, retention, scheduler, verify, restart-based restore.
+- وضعیت دقیق گپ‌ها در `docs/22-final-gap-register-2026-10-04.md` است.
+- این Stageها تا exact-SHA CI و runtime evidence همچنان «implementation-complete» هستند، نه «field-proven».
