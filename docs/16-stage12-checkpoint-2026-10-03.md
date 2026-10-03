@@ -68,3 +68,25 @@ Stage 12 دیگر blocker زنجیره‌های بعدی نیست و به‌عن
 
 ## مسیر بعدی
 Stage 13 یا Wave بعدی فقط بعد از re-entry audit اختصاصی همان زنجیره شروع می‌شود؛ Stage 12 دیگر محل افزودن قابلیت جدید نیست مگر برای defect واقعی در همین lifecycle.
+
+## Handoff / lessons ثبت‌شده برای ادامه
+
+### چرا این اصلاحات انجام شدند
+- `CustomerLogin → Session` باید persisted ownership باشد، نه query inference بر اساس Customer + Device.
+- `EndSession` و `AgentLogoutAndLock` نباید Loginهای نامرتبط همان Agent را ببندند.
+- `Session End → Lease Release` باید یک transaction boundary واحد داشته باشد؛ commit شدن Session با Lease باقی‌مانده ممنوع است.
+- `Game Sync Sent` فقط پذیرش/ارسال است؛ موفقیت واقعی با `AgentCommand.Status = Succeeded` و state محلی Agent اثبات می‌شود.
+- Snapshot و migration باید همزمان با مدل به‌روز شوند؛ relationship بدون navigation metadata نیز gap است.
+
+### Exact latest state
+- Latest head at checkpoint write: `533e8812a0627edd9dc1ce46be9d362ad3a6089d`
+- PR #19 is open and non-draft.
+- CI Run #1094 is executing on self-hosted runner `Server`.
+- در آخرین مشاهده: Restore موفق، Build موفق و Test در حال اجرا بوده است.
+- Stage 12 تا سبز شدن Run #1094 روی همین SHA و عبور تمام smokeهای Stage 12 Done اعلام نمی‌شود.
+
+### بعد از سبز شدن CI
+1. exact-SHA evidence ثبت شود.
+2. migration `SessionCustomerLogin` روی DB خالی و upgrade DB smoke تأیید شود.
+3. Stage 12 final audit refresh شود.
+4. فقط بعد از این، Wave بعدی با Integration Contract شروع شود.
