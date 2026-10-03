@@ -25,6 +25,8 @@ var dataDirectory = Environment.GetEnvironmentVariable("GAMENET_AGENT_DATA_DIR")
 var testSessionFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_SESSION_FLOW"), "1", StringComparison.Ordinal);
 var testSessionCustomerId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_CUSTOMER_ID");
 var testSessionLoginId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_LOGIN_ID");
+var testGameIdText = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_GAME_ID");
+var testGameAccountFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW"), "1", StringComparison.Ordinal);
 
 if (string.IsNullOrWhiteSpace(dataDirectory))
     dataDirectory = Path.Combine(
@@ -238,6 +240,8 @@ try
                     connection,
                     testCustomerId,
                     testLoginId,
+                    Guid.TryParse(testGameIdText, out var testGameId) ? testGameId : null,
+                    testGameAccountFlow,
                     shutdown.Token);
             }
         });
@@ -426,6 +430,8 @@ static async Task RunTestSessionFlowAsync(
     HubConnection connection,
     Guid customerId,
     Guid customerLoginId,
+    Guid? gameId,
+    bool testGameAccountFlow,
     CancellationToken cancellationToken)
 {
     try
@@ -437,11 +443,21 @@ static async Task RunTestSessionFlowAsync(
                 customerLoginId,
                 Guid.NewGuid(),
                 1m,
-                1),
+                1,
+                gameId),
             cancellationToken);
 
         Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
         Console.WriteLine($"AGENT_SESSION_START_OK:{started.SessionId}");
+
+        if (testGameAccountFlow && gameId.HasValue)
+        {
+            var credential = await connection.InvokeAsync<AgentGameAccountCredentialDto>(
+                "AcquireGameAccount",
+                started.SessionId,
+                cancellationToken);
+            Console.WriteLine($"AGENT_GAME_ACCOUNT_OK:{credential.LeaseId}:{credential.GameId}:{credential.Platform}:{credential.Login}");
+        }
 
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
 
