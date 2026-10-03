@@ -62,16 +62,14 @@ public sealed class ReservationService(GameNetDbContext database)
             if (station.State is StationState.Offline or StationState.Maintenance)
                 throw new InvalidOperationException("این ایستگاه قابل رزرو نیست.");
 
-            var conflicting = await database.Reservations
+            var possibleConflicts = await database.Reservations
                 .AsNoTracking()
                 .Where(item => item.StationId == station.Id
                     && item.Kind == ReservationKind.Reservation
-                    && item.Status is ReservationStatus.Pending or ReservationStatus.Confirmed or ReservationStatus.CheckedIn
-                    && item.StartAt < end
-                    && item.EndAt > start)
-                .AnyAsync(cancellationToken);
+                    && item.Status is ReservationStatus.Pending or ReservationStatus.Confirmed or ReservationStatus.CheckedIn)
+                .ToListAsync(cancellationToken);
 
-            if (conflicting)
+            if (possibleConflicts.Any(item => item.StartAt < end && item.EndAt > start))
                 throw new InvalidOperationException("این ایستگاه در این بازه قبلاً رزرو شده است.");
         }
 
@@ -201,17 +199,15 @@ public sealed class ReservationService(GameNetDbContext database)
             reservation.Station = station;
         }
 
-        var conflict = await database.Reservations
+        var possibleConflicts = await database.Reservations
             .AsNoTracking()
             .Where(item => item.Id != reservation.Id
                 && item.StationId == reservation.StationId
                 && item.Kind == ReservationKind.Reservation
-                && item.Status is ReservationStatus.Pending or ReservationStatus.Confirmed or ReservationStatus.CheckedIn
-                && item.StartAt < reservation.EndAt
-                && item.EndAt > reservation.StartAt)
-            .AnyAsync(cancellationToken);
+                && item.Status is ReservationStatus.Pending or ReservationStatus.Confirmed or ReservationStatus.CheckedIn)
+            .ToListAsync(cancellationToken);
 
-        if (conflict)
+        if (possibleConflicts.Any(item => item.StartAt < reservation.EndAt && item.EndAt > reservation.StartAt))
             throw new InvalidOperationException("ایستگاه مقصد در این بازه رزرو شده است.");
     }
 
