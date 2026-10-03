@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
 
-namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
+namespace GameNetManager.Server.Data.Migrations
 {
     [DbContext(typeof(GameNetDbContext))]
     partial class GameNetDbContextModelSnapshot : ModelSnapshot
