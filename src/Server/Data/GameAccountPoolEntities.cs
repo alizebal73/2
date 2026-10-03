@@ -45,5 +45,6 @@ public sealed class AccountLease : BaseEntity
     public required string LeaseToken { get; set; }
     public DateTimeOffset LeasedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ReleasedAt { get; set; }
+    public string? ReleaseReason { get; set; }
     public AccountLeaseState State { get; set; } = AccountLeaseState.Active;
 }
