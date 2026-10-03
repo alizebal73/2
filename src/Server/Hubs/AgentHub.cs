@@ -571,11 +571,6 @@ public sealed class AgentHub(
         await database.SaveChangesAsync(Context.ConnectionAborted);
         await transaction.CommitAsync(Context.ConnectionAborted);
 
-        await accountPool.ReleaseActiveForSessionAsync(
-            session.Id,
-            "آزادسازی خودکار با پایان Session",
-            Context.ConnectionAborted);
-
         await dashboardHub.Clients.All.SendAsync(
             "AgentSessionChanged",
             new
@@ -678,6 +673,14 @@ public sealed class AgentHub(
 
         await database.SaveChangesAsync(Context.ConnectionAborted);
         await transaction.CommitAsync(Context.ConnectionAborted);
+
+        // Lease release belongs to the terminal lifecycle transition, after the
+        // Session state is durably Ended. StartSession must never release its own
+        // active leases.
+        await accountPool.ReleaseActiveForSessionAsync(
+            session.Id,
+            "آزادسازی خودکار با پایان Session",
+            Context.ConnectionAborted);
 
         await dashboardHub.Clients.All.SendAsync(
             "AgentSessionChanged",
