@@ -820,6 +820,23 @@ jobs:
             } | ConvertTo-Json)
             if (-not $stage12Account.id) { throw 'Stage 12 Account Pool create smoke failed.' }
 
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/account-pool/$($stage12Account.id)" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                title = $stage12Account.title
+                platform = $stage12Account.platform
+                login = $stage12Account.login
+                secret = $null
+                owner = 'CI'
+                expiresAt = $null
+                allowedGameIds = @($stage12Game.id)
+                status = 'InUse'
+              } | ConvertTo-Json) | Out-Null
+              throw 'Manual Account Pool transition to InUse was unexpectedly accepted without a Lease.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 409) { throw }
+            }
+
             $customerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
               usernameOrCode = $stage9Customer.username
               password = 'Stage9Smoke123!'
