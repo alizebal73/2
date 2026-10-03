@@ -25,6 +25,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<AccountLease> AccountLeases => Set<AccountLease>();
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Reservation> Reservations => Set<Reservation>();
+    public DbSet<GameEvent> Events => Set<GameEvent>();
+    public DbSet<GameEventParticipant> EventParticipants => Set<GameEventParticipant>();
     public DbSet<Session> Sessions => Set<Session>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
@@ -88,6 +90,8 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureAccountLease(modelBuilder);
         ConfigureClient(modelBuilder);
         ConfigureReservation(modelBuilder);
+        ConfigureGameEvent(modelBuilder);
+        ConfigureGameEventParticipant(modelBuilder);
         ConfigureSession(modelBuilder);
         ConfigureInvoice(modelBuilder);
         ConfigureInvoiceItem(modelBuilder);
@@ -496,6 +500,38 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany(item => item.Reservations)
             .HasForeignKey(item => item.ClientId)
             .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private static void ConfigureGameEvent(ModelBuilder modelBuilder)
+    {
+        var eventEntity = modelBuilder.Entity<GameEvent>();
+        eventEntity.HasKey(item => item.Id);
+        eventEntity.Property(item => item.Name).HasMaxLength(120).IsRequired();
+        eventEntity.Property(item => item.Kind).HasMaxLength(40).IsRequired();
+        eventEntity.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
+        eventEntity.Property(item => item.Notes).HasMaxLength(500);
+        eventEntity.HasIndex(item => new { item.StartAt, item.Status });
+        eventEntity.HasOne(item => item.CreatedByUser)
+            .WithMany()
+            .HasForeignKey(item => item.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private static void ConfigureGameEventParticipant(ModelBuilder modelBuilder)
+    {
+        var participant = modelBuilder.Entity<GameEventParticipant>();
+        participant.HasKey(item => item.Id);
+        participant.Property(item => item.Status).HasMaxLength(30).IsRequired();
+        participant.HasIndex(item => new { item.EventId, item.CustomerId }).IsUnique();
+        participant.HasIndex(item => new { item.EventId, item.Seed });
+        participant.HasOne(item => item.Event)
+            .WithMany(item => item.Participants)
+            .HasForeignKey(item => item.EventId)
+            .OnDelete(DeleteBehavior.Cascade);
+        participant.HasOne(item => item.Customer)
+            .WithMany()
+            .HasForeignKey(item => item.CustomerId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 
     private static void ConfigureSession(ModelBuilder modelBuilder)
