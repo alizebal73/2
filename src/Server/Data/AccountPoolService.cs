@@ -27,16 +27,17 @@ public sealed class AccountPoolService(
 
         for (var attempt = 0; attempt < 2; attempt++)
         {
-            var now = DateTimeOffset.UtcNow;
+            var now = DateTime.UtcNow;
             var candidates = await database.AccountPoolEntries.AsNoTracking()
-                .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
+                .Where(item => item.Status == AccountPoolStatus.Free
+                    && item.IsActive
+                    && (!item.ExpiresAt.HasValue || item.ExpiresAt.Value > now))
+                .OrderBy(item => item.CreatedAt)
                 .ToListAsync(cancellationToken);
 
             var candidate = candidates
-                .OrderBy(item => item.CreatedAt)
                 .FirstOrDefault(item =>
-                    (!item.ExpiresAt.HasValue || item.ExpiresAt.Value > now)
-                    && item.AllowedGameIdsCsv
+                    item.AllowedGameIdsCsv
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                         .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
 
@@ -48,7 +49,8 @@ public sealed class AccountPoolService(
                 var updated = await database.AccountPoolEntries
                     .Where(item => item.Id == candidate.Id
                         && item.Status == AccountPoolStatus.Free
-                        && item.IsActive)
+                        && item.IsActive
+                        && (!item.ExpiresAt.HasValue || item.ExpiresAt.Value > now))
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(item => item.Status, AccountPoolStatus.InUse)
                         .SetProperty(item => item.AssignedAgentDeviceId, agentDeviceId)
