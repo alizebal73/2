@@ -13,6 +13,7 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
+builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
@@ -4295,6 +4296,7 @@ app.MapPost("/api/sessions", async (
     StartSessionRequest request,
     HttpContext context,
     GameNetDbContext database,
+    SessionPricingService pricingService,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.start", cancellationToken);
@@ -4308,10 +4310,12 @@ app.MapPost("/api/sessions", async (
         return Results.BadRequest(new { code = "invalid_session_reference", message = "مشتری و ایستگاه معتبر نیستند." });
     }
 
-    var customerExists = await database.Customers.AnyAsync(item => item.Id == request.CustomerId, cancellationToken);
+    var customer = await database.Customers
+        .Include(item => item.VipPackage)
+        .FirstOrDefaultAsync(item => item.Id == request.CustomerId, cancellationToken);
     var station = await database.Stations.FirstOrDefaultAsync(item => item.Id == request.StationId, cancellationToken);
 
-    if (!customerExists)
+    if (customer is null)
     {
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
     }
@@ -4326,25 +4330,20 @@ app.MapPost("/api/sessions", async (
         return Results.Conflict(new { code = "station_not_available", message = "این ایستگاه دیگر آزاد نیست." });
     }
 
-    if (request.TariffId is not null)
-    {
-        var tariffExists = await database.Tariffs.AnyAsync(item => item.Id == request.TariffId.Value, cancellationToken);
-        if (!tariffExists)
-        {
-            return Results.BadRequest(new { code = "tariff_not_found", message = "تعرفه انتخاب‌شده پیدا نشد." });
-        }
-    }
+    var now = DateTimeOffset.UtcNow;
+    var pricing = await pricingService.GetPricingAsync(customer.Id, station.Id, now, cancellationToken);
 
     var session = new Session
     {
-        CustomerId = request.CustomerId,
-        StationId = request.StationId,
-        TariffId = request.TariffId,
+        CustomerId = customer.Id,
+        StationId = station.Id,
+        TariffId = station.TariffId,
         AppUserId = auth.User!.Id,
-        StartAt = DateTimeOffset.UtcNow,
+        StartAt = now,
         State = SessionState.Active,
         TotalAmount = 0m,
-        HourlyRateOverride = request.HourlyRateOverride > 0 ? request.HourlyRateOverride : null,
+        // Browser-supplied hourly rate is intentionally ignored. Pricing is server-owned.
+        HourlyRateOverride = null,
         Persons = Math.Max(1, request.Persons ?? 1)
     };
 
@@ -4356,7 +4355,7 @@ app.MapPost("/api/sessions", async (
         Action = "SessionStart",
         EntityName = "Session",
         EntityId = session.Id.ToString(),
-        Details = "شروع جلسه · ایستگاه " + station.Name,
+        Details = "شروع جلسه · ایستگاه " + station.Name + " · نرخ مرجع " + pricing.HourlyRate.ToString("0.##") + " · تخفیف VIP " + pricing.VipDiscountPercent.ToString("0.##") + "%",
         AppUserId = auth.User!.Id
     });
 
