@@ -34,3 +34,5 @@ public sealed record EventParticipantDto(
 public sealed record EventParticipantRequest(
     Guid CustomerId,
     int Seed = 0);
+
+public sealed record EventTransitionRequest(string Action);
