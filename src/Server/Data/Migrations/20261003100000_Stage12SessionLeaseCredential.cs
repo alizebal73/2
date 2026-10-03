@@ -42,18 +42,12 @@ public partial class Stage12SessionLeaseCredential : Migration
             name: "IX_Sessions_GameId",
             table: "Sessions",
             column: "GameId");
-
-        migrationBuilder.CreateIndex(
-            name: "IX_AccountLeases_CredentialAccessExpiresAt",
-            table: "AccountLeases",
-            column: "CredentialAccessExpiresAt");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.DropIndex(name: "IX_Sessions_AgentDeviceId", table: "Sessions");
         migrationBuilder.DropIndex(name: "IX_Sessions_GameId", table: "Sessions");
-        migrationBuilder.DropIndex(name: "IX_AccountLeases_CredentialAccessExpiresAt", table: "AccountLeases");
 
         migrationBuilder.DropColumn(name: "SecretCiphertext", table: "AccountPoolEntries");
         migrationBuilder.DropColumn(name: "CredentialAccessExpiresAt", table: "AccountLeases");
