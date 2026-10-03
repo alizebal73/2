@@ -37,6 +37,12 @@ public enum ReservationStatus
     Cancelled
 }
 
+public enum ReservationKind
+{
+    Reservation,
+    Waitlist
+}
+
 public enum SessionState
 {
     Active,
@@ -308,6 +314,10 @@ public sealed class Reservation : BaseEntity
     public DateTimeOffset StartAt { get; set; }
     public DateTimeOffset EndAt { get; set; }
     public ReservationStatus Status { get; set; } = ReservationStatus.Pending;
+    public ReservationKind Kind { get; set; } = ReservationKind.Reservation;
+    public int Priority { get; set; }
+    public Guid? CreatedByUserId { get; set; }
+    public AppUser? CreatedByUser { get; set; }
     public string? Notes { get; set; }
 }
 
