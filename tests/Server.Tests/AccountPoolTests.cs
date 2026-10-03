@@ -122,6 +122,52 @@ public sealed class AccountPoolTests
     }
 
     [Fact]
+    public async Task Allocation_SkipsExpiredFreeAccounts()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        Guid gameId;
+        await using (var setup = CreateContext(connection))
+        {
+            await setup.Database.EnsureCreatedAsync();
+            var game = new Game { Name = "Expiry Game", IsActive = true };
+            setup.Games.Add(game);
+            await setup.SaveChangesAsync();
+            gameId = game.Id;
+
+            setup.AccountPoolEntries.AddRange(
+                new AccountPoolEntry
+                {
+                    Title = "Expired",
+                    Platform = "Steam",
+                    AllowedGameIdsCsv = game.Id.ToString(),
+                    Status = AccountPoolStatus.Free,
+                    IsActive = true,
+                    ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1)
+                },
+                new AccountPoolEntry
+                {
+                    Title = "Valid",
+                    Platform = "Steam",
+                    AllowedGameIdsCsv = game.Id.ToString(),
+                    Status = AccountPoolStatus.Free,
+                    IsActive = true,
+                    ExpiresAt = DateTimeOffset.UtcNow.AddHours(1)
+                });
+            await setup.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(connection);
+        var service = new AccountPoolService(context, CreateProtection());
+        var result = await service.AllocateAsync(gameId, null, null, null, CancellationToken.None);
+
+        Assert.NotNull(result.Account);
+        Assert.NotNull(result.Lease);
+        Assert.Equal("Valid", result.Account!.Title);
+    }
+
+    [Fact]
     public async Task OperationalSession_AllocatesLeaseAndCredentialIsBoundToActiveLease()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
