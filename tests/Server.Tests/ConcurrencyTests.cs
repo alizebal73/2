@@ -19,7 +19,9 @@ public sealed class ConcurrencyTests : IDisposable
 
         Guid customerId;
         Guid loginId;
+        Guid secondLoginId;
         Guid stationId;
+        Guid secondStationId;
 
         await using (var seed = new GameNetDbContext(options))
         {
@@ -29,6 +31,15 @@ public sealed class ConcurrencyTests : IDisposable
             var station = new Station
             {
                 Name = "CONCURRENCY-ST-1",
+                Zone = "Concurrency",
+                Type = "PC",
+                StationType = stationType,
+                State = StationState.Available,
+                IsActive = true
+            };
+            var secondStation = new Station
+            {
+                Name = "CONCURRENCY-ST-2",
                 Zone = "Concurrency",
                 Type = "PC",
                 StationType = stationType,
@@ -46,19 +57,27 @@ public sealed class ConcurrencyTests : IDisposable
             var login = new CustomerLogin
             {
                 Customer = customer,
-                ClientKey = "concurrency-agent",
+                ClientKey = "concurrency-agent-1",
+                IsActive = true
+            };
+            var secondLogin = new CustomerLogin
+            {
+                Customer = customer,
+                ClientKey = "concurrency-agent-2",
                 IsActive = true
             };
 
             seed.StationTypes.Add(stationType);
-            seed.Stations.Add(station);
+            seed.Stations.AddRange(station, secondStation);
             seed.Customers.Add(customer);
-            seed.CustomerLogins.Add(login);
+            seed.CustomerLogins.AddRange(login, secondLogin);
             await seed.SaveChangesAsync();
 
             customerId = customer.Id;
             loginId = login.Id;
+            secondLoginId = secondLogin.Id;
             stationId = station.Id;
+            secondStationId = secondStation.Id;
         }
 
         await using (var db = new GameNetDbContext(options))
@@ -80,7 +99,7 @@ public sealed class ConcurrencyTests : IDisposable
             {
                 CustomerId = customerId,
                 CustomerLoginId = loginId,
-                StationId = Guid.NewGuid(),
+                StationId = secondStationId,
                 StartAt = DateTimeOffset.UtcNow,
                 State = SessionState.Active
             });
@@ -94,7 +113,7 @@ public sealed class ConcurrencyTests : IDisposable
             duplicateStation.Sessions.Add(new Session
             {
                 CustomerId = customerId,
-                CustomerLoginId = null,
+                CustomerLoginId = secondLoginId,
                 StationId = stationId,
                 StartAt = DateTimeOffset.UtcNow,
                 State = SessionState.Active
