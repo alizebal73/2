@@ -551,6 +551,7 @@ app.MapPost("/api/agent/register", async (
             previousDevice.IsOnline = false;
             previousDevice.ConnectionId = null;
             previousDevice.ConnectedAt = null;
+            previousDevice.StationId = null;
             previousDevice.LifecycleState = ClientLifecycleStates.Degraded;
             previousDevice.LifecycleStateChangedAt = DateTimeOffset.UtcNow;
             previousDevice.AgentTokenHash = PasswordSecurity.HashToken(AuthorizationService.CreateToken());
