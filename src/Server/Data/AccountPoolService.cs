@@ -87,6 +87,109 @@ public sealed class AccountPoolService(
         return (null, null);
     }
 
+    public async Task<AgentGameAccountCredentialDto?> AcquireCredentialForOperationalSessionAsync(
+        Guid sessionId,
+        Guid agentDeviceId,
+        CancellationToken cancellationToken)
+    {
+        var session = await database.Sessions.AsNoTracking()
+            .Include(item => item.Game)
+            .Include(item => item.AgentDevice)
+            .FirstOrDefaultAsync(item => item.Id == sessionId && item.State == SessionState.Active, cancellationToken);
+
+        if (session?.GameId is null || session.Game is null)
+            throw new InvalidOperationException("جلسهٔ فعال بازی معتبر ندارد.");
+        if (session.AgentDeviceId != agentDeviceId || session.AgentDevice is null || !session.AgentDevice.IsActive || !session.AgentDevice.IsOnline)
+            throw new InvalidOperationException("Agent درخواست‌کننده مالک این جلسه نیست یا آنلاین نیست.");
+        if (session.StationId != session.AgentDevice.StationId)
+            throw new InvalidOperationException("Agent و ایستگاه جلسه با هم منطبق نیستند.");
+
+        var login = await database.CustomerLogins.AsNoTracking().FirstOrDefaultAsync(
+            item => item.CustomerId == session.CustomerId
+                && item.ClientKey == session.AgentDevice.DeviceId
+                && item.IsActive,
+            cancellationToken);
+        if (login is null)
+            throw new InvalidOperationException("ورود مشتری برای Agent این جلسه فعال نیست.");
+
+        var lease = await database.AccountLeases
+            .Include(item => item.AccountPoolEntry)
+            .FirstOrDefaultAsync(
+                item => item.SessionId == sessionId
+                    && item.AgentDeviceId == agentDeviceId
+                    && item.State == AccountLeaseState.Active,
+                cancellationToken);
+
+        if (lease is not null)
+        {
+            if (lease.CredentialAccessExpiresAt <= DateTimeOffset.UtcNow)
+            {
+                var renewedAt = DateTimeOffset.UtcNow;
+                await database.AccountLeases
+                    .Where(item => item.Id == lease.Id && item.State == AccountLeaseState.Active)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(item => item.CredentialAccessExpiresAt, renewedAt.Add(CredentialAccessWindow))
+                        .SetProperty(item => item.UpdatedAt, renewedAt), cancellationToken);
+                lease.CredentialAccessExpiresAt = renewedAt.Add(CredentialAccessWindow);
+            }
+        }
+        else
+        {
+            var allocated = await AllocateForOperationalSessionAsync(sessionId, cancellationToken);
+            if (allocated is null)
+                return null;
+            lease = allocated.Value.Lease;
+        }
+
+        return await GetCredentialAsync(
+            lease.Id,
+            lease.LeaseToken,
+            agentDeviceId,
+            cancellationToken);
+    }
+
+    public async Task<int> ReleaseActiveForSessionAsync(
+        Guid sessionId,
+        string releaseReason,
+        CancellationToken cancellationToken)
+    {
+        var leaseIds = await database.AccountLeases
+            .AsNoTracking()
+            .Where(item => item.SessionId == sessionId && item.State == AccountLeaseState.Active)
+            .Select(item => item.Id)
+            .ToListAsync(cancellationToken);
+
+        var released = 0;
+        foreach (var leaseId in leaseIds)
+        {
+            if (await ReleaseAsync(leaseId, releaseReason, cancellationToken) is not null)
+                released++;
+        }
+
+        return released;
+    }
+
+    public async Task<int> ReleaseActiveForAgentAsync(
+        Guid agentDeviceId,
+        string releaseReason,
+        CancellationToken cancellationToken)
+    {
+        var leaseIds = await database.AccountLeases
+            .AsNoTracking()
+            .Where(item => item.AgentDeviceId == agentDeviceId && item.State == AccountLeaseState.Active)
+            .Select(item => item.Id)
+            .ToListAsync(cancellationToken);
+
+        var released = 0;
+        foreach (var leaseId in leaseIds)
+        {
+            if (await ReleaseAsync(leaseId, releaseReason, cancellationToken) is not null)
+                released++;
+        }
+
+        return released;
+    }
+
     public async Task<(AccountPoolEntry Account, AccountLease Lease)?> AllocateForOperationalSessionAsync(
         Guid sessionId, CancellationToken cancellationToken)
     {
