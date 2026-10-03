@@ -1367,6 +1367,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("CreatedByUserId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("EndAt")
                         .HasColumnType("TEXT");
 
@@ -1385,6 +1388,14 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Priority")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid?>("TariffId")
                         .HasColumnType("TEXT");
 
@@ -1396,9 +1407,15 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.HasIndex("ClientId");
 
+                    b.HasIndex("CreatedByUserId");
+
                     b.HasIndex("CustomerId");
 
-                    b.HasIndex("StationId")
+                    b.HasIndex("Kind", "Status", "Priority", "CreatedAt");
+
+                    b.HasIndex("StationId");
+
+                    b.HasIndex("StationId", "StartAt")
                         .IsUnique()
                         .HasFilter("State = 'Active'");
 
@@ -1554,6 +1571,11 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NetworkRoute")
+                        .IsRequired()
+                        .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
                     b.Property<decimal>("RatePerHour")
@@ -2079,6 +2101,11 @@ namespace GameNetManager.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("GameNetManager.Server.Data.AppUser", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("GameNetManager.Server.Data.Station", "Station")
                         .WithMany("Reservations")
                         .HasForeignKey("StationId")
@@ -2091,6 +2118,8 @@ namespace GameNetManager.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Client");
+
+                    b.Navigation("CreatedByUser");
 
                     b.Navigation("Customer");
 
