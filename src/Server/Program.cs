@@ -72,7 +72,7 @@ app.MapGet("/api/games", async (
             item.Version,
             item.Genre,
             item.Status,
-            0,
+            database.Sessions.Count(session => session.GameId == item.Id && session.State == SessionState.Active),
             item.Path,
             item.Executable,
             item.Cover,
@@ -133,7 +133,11 @@ app.MapPost("/api/games", async (
     });
     await database.SaveChangesAsync(cancellationToken);
 
-    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, 0,
+    var activeUsers = await database.Sessions.CountAsync(
+        item => item.GameId == game.Id && item.State == SessionState.Active,
+        cancellationToken);
+
+    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, activeUsers,
         game.Path, game.Executable, game.Cover, game.Trailer, game.LaunchArgs, game.ConnectionType,
         game.IsActive, game.TargetSystem, game.Target, game.TargetZone, game.TargetStations));
 }).WithName("CreateGame");
@@ -180,7 +184,11 @@ app.MapPut("/api/games/{gameId:guid}", async (
     });
     await database.SaveChangesAsync(cancellationToken);
 
-    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, 0,
+    var activeUsers = await database.Sessions.CountAsync(
+        item => item.GameId == game.Id && item.State == SessionState.Active,
+        cancellationToken);
+
+    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, activeUsers,
         game.Path, game.Executable, game.Cover, game.Trailer, game.LaunchArgs, game.ConnectionType,
         game.IsActive, game.TargetSystem, game.Target, game.TargetZone, game.TargetStations));
 }).WithName("UpdateGame");
