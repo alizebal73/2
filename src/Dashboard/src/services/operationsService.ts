@@ -114,6 +114,38 @@ export async function getReservations(): Promise<ReservationRecord[]> {
   }));
 }
 
+export type ServerEvent = {
+  id: string;
+  name: string;
+  kind: string;
+  startAt: string;
+  endAt: string;
+  status: string;
+  maxParticipants: number;
+  participantCount: number;
+  notes?: string | null;
+};
+
+export async function getEvents(): Promise<ServerEvent[]> {
+  return json<ServerEvent[]>('/api/events?from=' + encodeURIComponent(new Date(Date.now() - 86400000).toISOString()) + '&to=' + encodeURIComponent(new Date(Date.now() + 30 * 86400000).toISOString()));
+}
+
+export async function createEvent(input: { name: string; kind: string; startAt: string; durationMinutes: number; maxParticipants: number; notes?: string }) {
+  return json<ServerEvent>('/api/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+
+export async function transitionEvent(id: string, action: string) {
+  return json<ServerEvent>('/api/events/' + id + '/transition', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action }),
+  });
+}
+
 export async function getWaitlist() {
   const rows = await json<ServerReservation[]>('/api/waitlist');
   return rows.map(row => ({
