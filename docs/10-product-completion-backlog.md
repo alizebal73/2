@@ -153,30 +153,29 @@
 - بستن شیفت باید Summary و Handover داشته باشد؛ وضعیت اختلاف صندوق جدا از بدهی/طلب حقوقی پرسنل نگه داشته شود.
 - Permission و Approval برای پرداخت حقوق، پاداش، کسری، خسارت، اصلاح حقوق و مشاهده اطلاعات حقوقی حساس الزامی است.
 
-## نقشهٔ یکپارچهٔ ۱۴ مرحلهٔ اصلی پروژه
+## نقشهٔ اجرایی یکپارچهٔ ۱۵ مرحله‌ای — مرجع فعلی
 
-برای جلوگیری از قاطی‌شدن «فاز معماری»، «مرحلهٔ محصول» و «آیتم backlog»، از اینجا شماره‌گذاری اصلی پروژه این است:
+ممیزی سراسری 2026-10-03 مشخص کرد که Stage 12 واقعی پروژه «Session → Game → Agent → Account Lease → Credential lifecycle» است، نه Reporting. بنابراین نقشهٔ قبلی ۱۴ مرحله‌ای تا این بخش تاریخی است و از اینجا شماره‌گذاری اجرایی به شکل زیر تثبیت می‌شود:
 
 1. **Foundation** — ریپو، Runner، CI، اسکلت Server/Dashboard
 2. **Prototype & Behavior Transfer** — انتقال Prototype و رفتارهای پایه به React
-3. **Operational Completion** — تکمیل عملیات روزانه اپراتور و UX؛ A1 تا A8
-4. **Finance & Session Core** — Ledger، Reverse واقعی، Settlement، Split Payment، شیفت و انتقال جلسه
-5. **Customer & VIP Domain** — مشتری، کیف پول، بدهی، Free Time/Money، محدودیت ورود
-6. **Buffet & Inventory Domain** — سفارش بوفه، موجودی، ضایعات، مرجوعی، حداقل موجودی
-7. **Users & Permissions** — Permission واقعی، Approval سروری، چندصندوقی و تعارض عملیات
-8. **PC Agent Foundation** — Heartbeat، Health، Telemetry و اتصال ۴۰ PC
-9. **Real Client Commands & Kiosk** — فرمان‌های واقعی، Shell/Kiosk و Policy
-10. **Client Lifecycle** — Update/Rollback، Recovery و سلامت چرخهٔ کلاینت
-11. **Games & Accounts** — Game Library واقعی، Process Detection، Account Pool و Lease
-12. **Reporting & Audit** — Heatmap، درآمد/کارکرد، سود، Audit Explorer و گزارش‌های کامل
-13. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
-14. **UI/Deployment Hardening** — Primitiveهای UI، DataTable/InfoPanel، Keyboard-first، Desktop Shell، Installer و انتشار نهایی
+3. **Operational Completion** — تکمیل عملیات روزانه اپراتور و UX
+4. **Finance & Session Core** — Ledger، Settlement، Reverse، Split Payment و شیفت
+5. **Customer & VIP Domain** — مشتری، کیف پول، بدهی، Free Time/Money و محدودیت ورود
+6. **Buffet & Inventory Domain** — فروش، انبار، موجودی، ضایعات، مرجوعی و سود
+7. **Users & Permissions** — Authentication، Permission، Approval، Payroll و Concurrency
+8. **PC Agent Foundation** — Identity، Heartbeat، Health، Telemetry و Command Transport
+9. **Real Client Commands & Kiosk** — Lock/Unlock، Kiosk و Agent-driven Session
+10. **Client Lifecycle** — Update/Rollback، Recovery، Watchdog و Health
+11. **Games & Accounts Data Foundation** — Game Catalog، Account Pool/Lease، atomic allocation؛ Process Detection به carry-forward وابسته به Client telemetry
+12. **Session/Game/Agent/Lease/Credential Integration** — اتصال عملیاتی Session↔Game↔Agent↔Lease↔Credential و real Game Apply/Sync
+13. **Reporting & Audit** — گزارش‌های مالی/جلسه/ایستگاه/بوفه، Heatmap و Audit Explorer
+14. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
+15. **UI/Deployment Hardening** — Primitiveهای UI، DataTable، Keyboard-first، Desktop Shell، Backup/Recovery، Installer، Canary و انتشار نهایی
 
-**جایگاه فعلی:** Stage 10 — **Client Lifecycle** از نظر نرم‌افزاری تکمیل و merge شده است؛ Stage 11 — Games & Accounts مرحلهٔ بعدی توسعه است.  
-مرحلهٔ ۳ (Operational Completion)، هستهٔ عملیاتی مرحلهٔ ۴ (Finance & Session Core)، مرحلهٔ ۵ (Customer & VIP Domain) و مرحلهٔ ۶ (Buffet & Inventory Domain) بسته شده‌اند. مرحلهٔ ۷ با احراز هویت/Permission/Approval، Payroll، Read/Write hardening، Invoice Reverse و Wallet Refund روی head نهایی تأیید و در `main` merge شده است.
+**جایگاه فعلی:** Stage 12 در حال تکمیل است؛ Stage 1 تا 10 شواهد تاریخی CI دارند، Stage 11 با مرزهای مشخص‌شده بستهٔ نرم‌افزاری آن است، و Stage 12 هنوز تا CI هم‌زمانِ head نهایی Done محسوب نمی‌شود.
 
-این ۱۴ مرحله یک نقشهٔ اجرایی واحد برای پروژه است؛ فازهای قدیمی ۴گانهٔ معماری و مراحل فنی ۰ تا ۷ اسناد قبلی به‌عنوان سابقهٔ معماری باقی می‌مانند و برای شماره‌گذاری روزمره ملاک نیستند.
-
+این نقشه مرجع اجرایی فعلی است؛ اسناد تاریخی قبلی شماره‌گذاری قدیمی خود را حفظ می‌کنند، اما برای ادامهٔ توسعه از این جدول استفاده می‌شود.
 ## وضعیت نهایی مرحلهٔ ۷ — Users & Permissions
 
 ### برش تأییدشده تا CI #527
