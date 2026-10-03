@@ -1909,6 +1909,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.Navigation("Customer");
 
+                    b.Navigation("CustomerLogin");
+
                     b.Navigation("Game");
                 });
 
