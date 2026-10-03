@@ -447,6 +447,12 @@ static async Task RunTestSessionFlowAsync(
         Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
         Console.WriteLine($"AGENT_SESSION_START_OK:{started.SessionId}");
 
+        if (gameId.HasValue && started.GameId != gameId)
+            throw new InvalidOperationException("Server SessionStart پاسخ GameId مورد انتظار را برنگرداند.");
+
+        if (gameId.HasValue && !started.LeaseId.HasValue)
+            throw new InvalidOperationException("برای Session دارای بازی، Lease از Server برنگشت.");
+
         if (started.LeaseId.HasValue && !string.IsNullOrWhiteSpace(started.LeaseToken))
         {
             var credential = await connection.InvokeAsync<AgentGameAccountCredentialDto>(
