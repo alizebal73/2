@@ -414,7 +414,9 @@ public sealed class AgentHub(
             ? await database.Sessions
                 .Include(item => item.Station)
                 .FirstOrDefaultAsync(
-                    item => item.StationId == device.StationId.Value && item.State == SessionState.Active,
+                    item => item.StationId == device.StationId.Value
+                        && item.AgentDeviceId == device.Id
+                        && item.State == SessionState.Active,
                     Context.ConnectionAborted)
             : null;
 
@@ -424,14 +426,31 @@ public sealed class AgentHub(
             activeSession.State = SessionState.Ended;
             activeSession.Station.State = StationState.Available;
 
-            var logins = await database.CustomerLogins
-                .Where(item => item.IsActive && item.ClientKey == device.DeviceId)
-                .ToListAsync(Context.ConnectionAborted);
-
-            foreach (var login in logins)
+            CustomerLogin? sessionLogin = null;
+            if (activeSession.CustomerLoginId.HasValue)
             {
-                login.IsActive = false;
-                login.LoggedOutAt = now;
+                sessionLogin = await database.CustomerLogins
+                    .FirstOrDefaultAsync(
+                        item => item.Id == activeSession.CustomerLoginId.Value
+                            && item.CustomerId == activeSession.CustomerId
+                            && item.ClientKey == device.DeviceId,
+                        Context.ConnectionAborted);
+            }
+            else
+            {
+                // Legacy sessions created before CustomerLoginId was introduced.
+                sessionLogin = await database.CustomerLogins
+                    .FirstOrDefaultAsync(
+                        item => item.CustomerId == activeSession.CustomerId
+                            && item.ClientKey == device.DeviceId
+                            && item.IsActive,
+                        Context.ConnectionAborted);
+            }
+
+            if (sessionLogin is not null && sessionLogin.IsActive)
+            {
+                sessionLogin.IsActive = false;
+                sessionLogin.LoggedOutAt = now;
             }
 
             database.AuditLogs.Add(new AuditLog
