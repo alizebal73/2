@@ -43,11 +43,12 @@ public sealed class AccountPoolService(
             var candidates = await database.AccountPoolEntries
                 .AsNoTracking()
                 .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
-                .OrderBy(item => item.CreatedAt)
                 .Take(50)
                 .ToListAsync(cancellationToken);
 
-            var candidate = candidates.FirstOrDefault(item =>
+            var candidate = candidates
+                .OrderBy(item => item.CreatedAt)
+                .FirstOrDefault(item =>
                 item.AllowedGameIdsCsv
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
