@@ -1,5 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
-import { mockService } from '../services/mockService';
+import { useEffect, useMemo, useState } from 'react';
+import { getServerCustomers, type CustomerRecord } from '../services/customerService';
+import {
+  addExpense as addServerExpense,
+  createReservation as createServerReservation,
+  deleteVipPackage,
+  getAuditLogs,
+  getManagedStations,
+  getManagementExpenses,
+  getManagementInvoices,
+  getReservations,
+  getServerProducts,
+  getVipPackagesForOperations,
+  getWaitlist,
+  saveManagedStation,
+  saveVipPackage,
+  toggleStation,
+  transitionReservation,
+  adjustServerStock,
+  createServerProduct,
+  updateServerProduct,
+} from '../services/operationsService';
+import { getServerActiveSessions, transferServerSession } from '../services/sessionService';
 import type {
   AuditLogRecord,
   ExpenseRecord,
@@ -25,6 +47,7 @@ export function OperationsPage() {
   const [audits, setAudits] = useState<AuditLogRecord[]>([]);
   const [invoices, setInvoices] = useState<ManagementInvoiceRecord[]>([]);
   const [waitlist, setWaitlist] = useState<Array<{ id: string; customerCode: string; customerName: string; stationType: string; createdAt: string; status: 'waiting' | 'assigned' }>>([]);
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [notice, setNotice] = useState('');
   const [stationFilter, setStationFilter] = useState('');
   const [auditFilter, setAuditFilter] = useState('');
@@ -50,15 +73,16 @@ export function OperationsPage() {
   });
 
   async function loadAll() {
-    const [s, r, p, v, e, a, i, w] = await Promise.all([
-      mockService.getManagedStations(),
-      mockService.getReservations(),
-      mockService.getProducts(),
-      mockService.getVipPackages(),
-      mockService.getManagementExpenses(),
-      mockService.getAuditLogs(),
-      mockService.getManagementInvoices(),
-      mockService.getWaitlist(),
+    const [s, r, p, v, e, a, i, w, cst] = await Promise.all([
+      getManagedStations(),
+      getReservations(),
+      getServerProducts(),
+      getVipPackagesForOperations(),
+      getManagementExpenses(),
+      getAuditLogs(),
+      getManagementInvoices(),
+      getWaitlist(),
+      getServerCustomers(),
     ]);
     setStations(s);
     setReservations(r);
@@ -68,6 +92,11 @@ export function OperationsPage() {
     setAudits(a);
     setInvoices(i);
     setWaitlist(w);
+    setCustomers(cst);
+    setReservation(current => ({
+      ...current,
+      stationId: current.stationId === 'station-4' ? (s.find(item => item.status !== 'off')?.id || current.stationId) : current.stationId,
+    }));
   }
 
   useEffect(() => { void loadAll(); }, []);
@@ -83,63 +112,98 @@ export function OperationsPage() {
 
   async function saveStation() {
     if (!stationForm.name.trim() || stationForm.ratePerHour <= 0) return;
-    await mockService.saveManagedStation({ ...stationForm, id: stationForm.id || crypto.randomUUID() });
-    setStationForm({ id: '', name: '', zone: 'pc', type: 'PC', ratePerHour: 95000, status: 'active', ip: '', note: '' });
+    const first = stations.find(item => item.stationTypeId);
+    const stationTypeId = stationForm.stationTypeId || first?.stationTypeId;
+    if (!stationTypeId) { setNotice('نوع ایستگاه معتبر سروری پیدا نشد'); return; }
+
+    await saveManagedStation(
+      { ...stationForm, id: stationForm.id || '' },
+      { stationTypeId, tariffId: stationForm.tariffId ?? first?.tariffId ?? null },
+    );
+    setStationForm({ id: '', name: '', zone: 'pc', type: 'PC', ratePerHour: 95000, status: 'active', ip: '', note: 'internet1', networkRoute: 'internet1' });
     await loadAll();
-    setNotice('ایستگاه ذخیره شد');
+    setNotice('ایستگاه در سرور ذخیره شد');
   }
 
   async function deleteStation(id: string) {
-    await mockService.deleteManagedStation(id);
+    const current = stations.find(item => item.id === id);
+    if (!current) return;
+    await toggleStation(id, false, {
+      stationTypeId: current.stationTypeId || stations.find(item => item.stationTypeId)?.stationTypeId || '',
+      tariffId: current.tariffId ?? null,
+    }, current);
     await loadAll();
-    setNotice('ایستگاه حذف شد');
+    setNotice('ایستگاه به‌جای حذف دائمی، غیرفعال شد');
   }
 
-  async function toggleStation(item: StationManagementRecord) {
-    await mockService.toggleStationOutOfService(item.id);
+  async function toggleStationState(item: StationManagementRecord) {
+    const stationTypeId = item.stationTypeId || stations.find(row => row.stationTypeId)?.stationTypeId;
+    if (!stationTypeId) { setNotice('نوع ایستگاه معتبر پیدا نشد'); return; }
+    await toggleStation(item.id, item.status === 'off', {
+      stationTypeId,
+      tariffId: item.tariffId ?? null,
+    }, item);
     await loadAll();
     setNotice(item.status === 'off' ? 'ایستگاه فعال شد' : 'ایستگاه خارج از سرویس شد');
   }
 
   async function createReservation() {
     const station = stations.find(item => item.id === reservation.stationId);
-    if (!station) return;
-    await mockService.saveReservation({
-      id: crypto.randomUUID(),
+    const customer = customers.find(item => (item.code || '').trim() === reservation.customerCode.trim());
+    if (!station || !customer) { setNotice('ایستگاه یا مشتری معتبر پیدا نشد'); return; }
+
+    await createServerReservation({
+      customerId: customer.id,
       stationId: station.id,
-      stationName: station.name,
-      customerCode: reservation.customerCode,
-      customerName: reservation.customerName,
-      reservedAt: new Date(Date.now() + 60 * 60000).toISOString(),
+      startAt: new Date(Date.now() + 60 * 60000).toISOString(),
       durationMinutes: Number(reservation.minutes) || 60,
-      status: 'confirmed',
-      note: reservation.note,
+      notes: reservation.note,
     });
     await loadAll();
-    setNotice('رزرو ثبت شد');
+    setNotice('رزرو در سرور ثبت شد');
   }
 
   async function addExpense() {
     const amount = Number(expense.amount);
     if (!expense.title || !amount) return;
-    await mockService.addExpense({ title: expense.title, amount, category: expense.category, operator: 'علی محمدی' });
+    await addServerExpense({ title: expense.title, amount, category: expense.category });
     setExpense({ title: '', amount: '', category: 'خرید/تأمین' });
     await loadAll();
-    setNotice('هزینه ثبت شد');
+    setNotice('هزینه روی شیفت سرور ثبت شد');
   }
 
   async function saveProduct() {
     if (!productForm.name.trim() || productForm.price <= 0) return;
-    await mockService.saveProduct({ ...productForm, id: productForm.id || crypto.randomUUID() });
+    if (productForm.id) {
+      await updateServerProduct(productForm.id, {
+        name: productForm.name,
+        category: productForm.category,
+        price: productForm.price,
+        buyPrice: productForm.buyPrice,
+        minimumStock: productForm.minimumStock,
+        unit: productForm.unit,
+        active: true,
+      });
+    } else {
+      await createServerProduct({
+        name: productForm.name,
+        category: productForm.category,
+        price: productForm.price,
+        buyPrice: productForm.buyPrice,
+        initialStock: productForm.stock,
+        minimumStock: productForm.minimumStock,
+        unit: productForm.unit,
+      });
+    }
     setProductForm({ id: '', name: '', category: 'نوشیدنی', price: 0, buyPrice: 0, stock: 0, minimumStock: 0, unit: 'عدد', lowStock: false, maxStock: 20 });
     await loadAll();
-    setNotice('کالا ذخیره شد');
+    setNotice('کالا روی سرور ذخیره شد');
   }
 
   async function addStock(product: ProductRecord) {
     const quantity = Number(stockAdd[product.id] || 0);
     if (quantity <= 0) return;
-    await mockService.addStock(product.id, quantity);
+    await adjustServerStock(product.id, quantity, 'in', 'ورود انبار از مرکز مدیریت', 'Purchase');
     setStockAdd(current => ({ ...current, [product.id]: '' }));
     await loadAll();
     setNotice('ورودی انبار ثبت شد');
@@ -147,22 +211,28 @@ export function OperationsPage() {
 
   async function savePackage() {
     if (!packageForm.name.trim() || packageForm.price <= 0) return;
-    await mockService.saveVipPackage({ ...packageForm, id: packageForm.id || crypto.randomUUID() });
+    await saveVipPackage(packageForm);
     setPackageForm({ id: '', name: '', tier: 'silver', price: 0, dailyMinutes: 120, totalMinutes: 3000, discount: 10, active: true });
     await loadAll();
-    setNotice('پکیج VIP ذخیره شد');
+    setNotice('پکیج VIP روی سرور ذخیره شد');
   }
 
   async function doTransfer() {
-    await mockService.transferSession(transfer.from, transfer.to);
+    const active = await getServerActiveSessions();
+    const source = active.find(item => item.stationName === transfer.from);
+    const target = stations.find(item => item.name === transfer.to);
+    if (!source || !target) { setNotice('جلسه فعال یا ایستگاه مقصد پیدا نشد'); return; }
+    await transferServerSession(source.id, target.id);
     await loadAll();
-    setNotice('انتقال جلسه در Audit ثبت شد');
+    setNotice('انتقال جلسه در سرور و Audit ثبت شد');
   }
 
   async function assignWait(id: string) {
-    await mockService.assignWaitlist(id, transfer.to);
+    const target = stations.find(item => item.name === transfer.to);
+    if (!target) { setNotice('ایستگاه مقصد پیدا نشد'); return; }
+    await transitionReservation(id, 'assign', target.id);
     await loadAll();
-    setNotice('نفر صف به ایستگاه تخصیص داده شد');
+    setNotice('نفر صف در سرور به ایستگاه تخصیص داده شد');
   }
 
   const tabs: Array<[Tab, string]> = [
@@ -178,7 +248,7 @@ export function OperationsPage() {
   return (
     <>
       <div className="page-header">
-        <div><p>تکمیل Stage 1B</p><h1>مرکز مدیریت</h1></div>
+        <div><p>Operations / Stage 14</p><h1>مرکز عملیات</h1></div>
         {notice && <div className="operation-toast" onClick={() => setNotice('')}>{notice}</div>}
       </div>
 
@@ -197,20 +267,20 @@ export function OperationsPage() {
             <label>نوع<select value={stationForm.type} onChange={e => setStationForm(v => ({ ...v, type: e.target.value }))}><option>PC</option><option>PS5</option><option>PS4</option><option>فوتبال‌دستی</option></select></label>
             <label>زون<select value={stationForm.zone} onChange={e => setStationForm(v => ({ ...v, zone: e.target.value as StationManagementRecord['zone'] }))}><option value="pc">PC</option><option value="console">کنسول</option><option value="table">فوتبال‌دستی</option></select></label>
             <label>نرخ/ساعت<input type="number" value={stationForm.ratePerHour} onChange={e => setStationForm(v => ({ ...v, ratePerHour: Number(e.target.value) }))} /></label>
-            <label>IP<input dir="ltr" value={stationForm.ip || ''} onChange={e => setStationForm(v => ({ ...v, ip: e.target.value }))} /></label>
+            <label>مسیر شبکه<select value={stationForm.networkRoute || stationForm.note || 'internet1'} onChange={e => setStationForm(v => ({ ...v, note: e.target.value, networkRoute: e.target.value }))}><option value="internet1">اینترنت ۱</option><option value="internet2">اینترنت ۲</option><option value="lan">LAN</option></select></label>
             <button className="btn primary" onClick={() => void saveStation()}>{stationForm.id ? 'ویرایش' : 'افزودن'}</button>
           </div>
           <div className="section-toolbar"><input value={stationFilter} onChange={e => setStationFilter(e.target.value)} placeholder="جست‌وجوی ایستگاه…" /><span>{filteredStations.length} ایستگاه</span></div>
-          <div className="table-wrap"><table><thead><tr><th>ایستگاه</th><th>نوع</th><th>زون</th><th>تعرفه/ساعت</th><th>وضعیت</th><th>IP</th><th>عملیات</th></tr></thead><tbody>
+          <div className="table-wrap"><table><thead><tr><th>ایستگاه</th><th>نوع</th><th>زون</th><th>تعرفه/ساعت</th><th>وضعیت</th><th>شبکه</th><th>عملیات</th></tr></thead><tbody>
             {filteredStations.map(item => (
               <tr key={item.id}>
                 <td>{item.name}</td><td>{item.type}</td><td>{item.zone}</td><td>{money(item.ratePerHour)}</td>
                 <td>{item.status === 'off' ? 'خارج از سرویس' : item.status === 'reserved' ? 'رزرو' : 'فعال'}</td>
-                <td dir="ltr">{item.ip || '—'}</td>
+                <td>{item.networkRoute || item.note || 'internet1'}</td>
                 <td>
-                  <button className="btn" onClick={() => void toggleStation(item)}>{item.status === 'off' ? 'فعال‌سازی' : 'خارج از سرویس'}</button>
+                  <button className="btn" onClick={() => void toggleStationState(item)}>{item.status === 'off' ? 'فعال‌سازی' : 'خارج از سرویس'}</button>
                   <button className="btn" onClick={() => setStationForm({ ...item })}>ویرایش</button>
-                  <button className="btn danger" onClick={() => void deleteStation(item.id)}>حذف</button>
+                  <button className="btn danger" onClick={() => void deleteStation(item.id)}>غیرفعال‌سازی</button>
                 </td>
               </tr>
             ))}
@@ -222,8 +292,12 @@ export function OperationsPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: '0 22px 30px' }}>
           <section className="card-panel" style={{ padding: 14 }}><h3>رزرو جدید</h3>
             <label>ایستگاه<select value={reservation.stationId} onChange={e => setReservation(v => ({ ...v, stationId: e.target.value }))}>{stations.filter(s => s.status !== 'off').map(s => <option value={s.id} key={s.id}>{s.name}</option>)}</select></label>
-            <label>کد مشتری<input value={reservation.customerCode} onChange={e => setReservation(v => ({ ...v, customerCode: e.target.value }))} /></label>
-            <label>نام<input value={reservation.customerName} onChange={e => setReservation(v => ({ ...v, customerName: e.target.value }))} /></label>
+            <label>کد مشتری<input value={reservation.customerCode} onChange={e => {
+  const code = e.target.value;
+  const found = customers.find(item => (item.code || '').trim() === code.trim());
+  setReservation(v => ({ ...v, customerCode: code, customerName: found?.name ?? '' }));
+}} /></label>
+            <label>نام مشتری<input value={reservation.customerName} readOnly /></label>
             <label>مدت (دقیقه)<input type="number" value={reservation.minutes} onChange={e => setReservation(v => ({ ...v, minutes: e.target.value }))} /></label>
             <label>یادداشت<input value={reservation.note} onChange={e => setReservation(v => ({ ...v, note: e.target.value }))} /></label>
             <button className="btn primary" onClick={() => void createReservation()}>ثبت رزرو</button>
@@ -234,7 +308,7 @@ export function OperationsPage() {
             {waitlist.map(item => <div className="list-row" key={item.id}><span>{item.customerName} · {item.stationType}</span><button className="btn" disabled={item.status !== 'waiting'} onClick={() => void assignWait(item.id)}>{item.status === 'waiting' ? 'تخصیص' : 'تخصیص شد'}</button></div>)}
           </section>
           <section className="card-panel" style={{ padding: 14, gridColumn: '1 / -1' }}><h3>رزروها</h3>
-            {reservations.map(item => <div className="list-row" key={item.id}><span>{item.stationName} · {item.customerName} ({item.customerCode}) · {dt(item.reservedAt)} · {item.durationMinutes} دقیقه · {item.status}</span>{item.status !== 'cancelled' && <button className="btn danger" onClick={async () => { await mockService.cancelReservation(item.id); await loadAll(); setNotice('رزرو لغو شد'); }}>لغو</button>}</div>)}
+            {reservations.map(item => <div className="list-row" key={item.id}><span>{item.stationName} · {item.customerName} ({item.customerCode}) · {dt(item.reservedAt)} · {item.durationMinutes} دقیقه · {item.status}</span>{item.status !== 'cancelled' && <button className="btn danger" onClick={async () => { await transitionReservation(item.id, 'cancel'); await loadAll(); setNotice('رزرو لغو شد'); }}>لغو</button>}</div>)}
           </section>
         </div>
       )}
@@ -269,7 +343,7 @@ export function OperationsPage() {
             <button className="btn primary" onClick={() => void savePackage()}>{packageForm.id ? 'ویرایش' : 'افزودن'}</button>
           </div>
           <div className="table-wrap"><table><thead><tr><th>پکیج</th><th>سطح</th><th>قیمت</th><th>سقف روزانه</th><th>کل زمان</th><th>تخفیف</th><th>عملیات</th></tr></thead><tbody>
-            {packages.map(item => <tr key={item.id}><td>{item.name}</td><td>{item.tier}</td><td>{money(item.price)}</td><td>{item.dailyMinutes === 1440 ? '۲۴ ساعت' : item.dailyMinutes + ' دقیقه'}</td><td>{item.totalMinutes} دقیقه</td><td>{item.discount}%</td><td><input type="checkbox" checked={item.active} onChange={async e => { await mockService.saveVipPackage({ ...item, active: e.target.checked }); await loadAll(); }} /> <button className="btn" onClick={() => setPackageForm({ ...item })}>ویرایش</button> <button className="btn danger" onClick={async () => { await mockService.deleteVipPackage(item.id); await loadAll(); setNotice('پکیج حذف شد'); }}>حذف</button></td></tr>)}
+            {packages.map(item => <tr key={item.id}><td>{item.name}</td><td>{item.tier}</td><td>{money(item.price)}</td><td>{item.dailyMinutes === 1440 ? '۲۴ ساعت' : item.dailyMinutes + ' دقیقه'}</td><td>{item.totalMinutes} دقیقه</td><td>{item.discount}%</td><td><input type="checkbox" checked={item.active} onChange={async e => { await saveVipPackage({ ...item, active: e.target.checked }); await loadAll(); }} /> <button className="btn" onClick={() => setPackageForm({ ...item })}>ویرایش</button> <button className="btn danger" onClick={async () => { await deleteVipPackage(item.id); await loadAll(); setNotice('پکیج غیرفعال شد'); }}>حذف</button></td></tr>)}
           </tbody></table></div>
         </section>
       )}
