@@ -20,8 +20,7 @@ public sealed record BackupManifest(
     string DatabaseFileName,
     DateTimeOffset CreatedAt,
     IReadOnlyList<string> AppliedMigrations,
-    string DatabaseSha256,
-    string ArchiveSha256);
+    string DatabaseSha256);
 
 public sealed record BackupFileDto(
     string FileName,
@@ -138,13 +137,12 @@ public sealed class BackupService(
                 CopyDirectory(DataProtectionKeysDirectory, tempKeys);
 
             var databaseHash = await Sha256FileAsync(tempDb, cancellationToken);
-            var manifestWithoutArchiveHash = new BackupManifest(
+            var manifest = new BackupManifest(
                 productVersion ?? configuration["App:ProductVersion"] ?? "unknown",
                 Path.GetFileName(DatabasePath),
                 DateTimeOffset.UtcNow,
                 applied,
-                databaseHash,
-                string.Empty);
+                databaseHash);
 
             await File.WriteAllTextAsync(
                 tempManifest,
@@ -153,32 +151,6 @@ public sealed class BackupService(
                 cancellationToken);
 
             ZipFile.CreateFromDirectory(tempRoot, archivePath, CompressionLevel.Optimal, false);
-
-            var archiveHash = await Sha256FileAsync(archivePath, cancellationToken);
-            var finalManifest = manifestWithoutArchiveHash with { ArchiveSha256 = archiveHash };
-
-            // Rewrite the manifest inside a temporary verification archive so the
-            // archive's manifest carries the final hash. The archive hash necessarily
-            // changes after this rewrite, so the archive hash in the manifest is a
-            // verification hint, while the file itself is always re-hashed by verify.
-            var finalRoot = Path.Combine(Path.GetTempPath(), "GameNetBackup", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(finalRoot);
-            try
-            {
-                ZipFile.ExtractToDirectory(archivePath, finalRoot, true);
-                await File.WriteAllTextAsync(
-                    Path.Combine(finalRoot, "manifest.json"),
-                    JsonSerializer.Serialize(finalManifest, JsonOptions),
-                    Encoding.UTF8,
-                    cancellationToken);
-
-                File.Delete(archivePath);
-                ZipFile.CreateFromDirectory(finalRoot, archivePath, CompressionLevel.Optimal, false);
-            }
-            finally
-            {
-                TryDeleteDirectory(finalRoot);
-            }
 
             var verified = await VerifyBackupAsync(archivePath, cancellationToken);
             if (verified is null)
@@ -217,7 +189,7 @@ public sealed class BackupService(
                 manifest.CreatedAt,
                 manifest.ProductVersion,
                 manifest.DatabaseSha256,
-                manifest.ArchiveSha256,
+                await Sha256FileAsync(file, cancellationToken),
                 manifest.AppliedMigrations));
         }
 
@@ -226,7 +198,7 @@ public sealed class BackupService(
 
     public async Task<BackupFileDto?> VerifyAsync(string fileName, CancellationToken cancellationToken)
     {
-        var path = ResolveBackupFile(fileName);
+        var path = await ResolveBackupFileAsync(fileName, cancellationToken);
         return await VerifyBackupAsync(path, cancellationToken);
     }
 
@@ -235,7 +207,7 @@ public sealed class BackupService(
         Guid appUserId,
         CancellationToken cancellationToken)
     {
-        var source = ResolveBackupFile(fileName);
+        var source = await ResolveBackupFileAsync(fileName, cancellationToken);
         var verified = await VerifyBackupAsync(source, cancellationToken)
             ?? throw new InvalidOperationException("Backup قابل بازیابی نیست.");
 
@@ -369,7 +341,7 @@ public sealed class BackupService(
                 manifest.CreatedAt,
                 manifest.ProductVersion,
                 manifest.DatabaseSha256,
-                manifest.ArchiveSha256,
+                await Sha256FileAsync(path, cancellationToken),
                 manifest.AppliedMigrations);
         }
         finally
@@ -386,12 +358,12 @@ public sealed class BackupService(
         return Path.GetFullPath(path);
     }
 
-    private string ResolveBackupFile(string fileName)
+    private async Task<string> ResolveBackupFileAsync(string fileName, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(fileName))
             throw new ArgumentException("نام فایل Backup الزامی است.");
 
-        var settings = GetSettingsAsync(CancellationToken.None).GetAwaiter().GetResult();
+        var settings = await GetSettingsAsync(cancellationToken);
         var directory = ResolveBackupDirectory(settings.TargetDirectory);
         var full = Path.GetFullPath(Path.Combine(directory, fileName));
         if (!string.Equals(Path.GetDirectoryName(full), directory, StringComparison.OrdinalIgnoreCase)
