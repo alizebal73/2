@@ -220,11 +220,11 @@ try
                 var readyAfterReconnect = await connection.InvokeAsync<AgentReadyDto>(
                     "ConfirmConnection",
                     shutdown.Token);
-                await ApplyAgentReadyAsync(
+                var readyResult = await ApplyAgentReadyAsync(
                     connection,
                     readyAfterReconnect,
-                    ref state,
-                    ref testSessionFlowCompleted,
+                    state,
+                    testSessionFlowCompleted,
                     lockScreen,
                     updateManager,
                     statePath,
@@ -235,6 +235,10 @@ try
                     testSessionFlow,
                     testGameAccountFlow,
                     shutdown.Token);
+                state = readyResult.State;
+                testSessionFlowCompleted = readyResult.TestSessionFlowCompleted;
+                kioskEnabled = readyResult.KioskEnabled;
+                lockOnDisconnect = readyResult.LockOnDisconnect;
 
                 _ = await SendHeartbeatAsync(
                     connection,
@@ -280,11 +284,11 @@ try
             var ready = await connection.InvokeAsync<AgentReadyDto>(
                 "ConfirmConnection",
                 shutdown.Token);
-            await ApplyAgentReadyAsync(
+            var readyResult = await ApplyAgentReadyAsync(
                 connection,
                 ready,
-                ref state,
-                ref testSessionFlowCompleted,
+                state,
+                testSessionFlowCompleted,
                 lockScreen,
                 updateManager,
                 statePath,
@@ -295,6 +299,10 @@ try
                 testSessionFlow,
                 testGameAccountFlow,
                 shutdown.Token);
+            state = readyResult.State;
+            testSessionFlowCompleted = readyResult.TestSessionFlowCompleted;
+            kioskEnabled = readyResult.KioskEnabled;
+            lockOnDisconnect = readyResult.LockOnDisconnect;
 
             Console.WriteLine($"Agent GameNet روی {hubUrl} فعال و اتصال دوطرفه تأیید شد.");
 
@@ -422,11 +430,11 @@ static async Task<AgentState> RegisterAgentAsync(
     return state with { AgentToken = registration.AgentToken };
 }
 
-static async Task ApplyAgentReadyAsync(
+static async Task<(AgentState State, bool TestSessionFlowCompleted, bool KioskEnabled, bool LockOnDisconnect)> ApplyAgentReadyAsync(
     HubConnection connection,
     AgentReadyDto ready,
-    ref AgentState state,
-    ref bool testSessionFlowCompleted,
+    AgentState state,
+    bool testSessionFlowCompleted,
     AgentLockScreenController lockScreen,
     ClientUpdateManager updateManager,
     string statePath,
@@ -475,6 +483,8 @@ static async Task ApplyAgentReadyAsync(
             testGameAccountFlow,
             cancellationToken);
     }
+
+    return (state, testSessionFlowCompleted, ready.KioskEnabled, ready.LockOnDisconnect);
 }
 
 static async Task RunTestSessionFlowAsync(
