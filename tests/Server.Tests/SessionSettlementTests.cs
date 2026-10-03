@@ -82,6 +82,11 @@ public sealed class SessionSettlementTests : IDisposable
         var savedCustomer = await db.Customers.SingleAsync(item => item.Id == customer.Id);
 
         Assert.Equal(SessionState.Completed, savedSession.State);
+        Assert.Equal(StationState.Available, savedSession.Station.State);
+        Assert.Equal(StationState.Available, await db.Stations
+            .Where(item => item.Id == station.Id)
+            .Select(item => item.State)
+            .SingleAsync());
         Assert.Equal(150000m, savedSession.TotalAmount);
         Assert.Equal(150000m, invoice.TotalAmount);
         Assert.Equal(InvoiceStatus.Paid, invoice.Status);
