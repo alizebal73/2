@@ -1423,6 +1423,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("CustomerLoginId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("GameId")
                         .HasColumnType("TEXT");
 
@@ -2105,6 +2108,11 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("GameNetManager.Server.Data.CustomerLogin", "CustomerLogin")
+                        .WithMany()
+                        .HasForeignKey("CustomerLoginId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("GameNetManager.Server.Data.Game", "Game")
                         .WithMany()
