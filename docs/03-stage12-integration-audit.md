@@ -19,7 +19,7 @@ CustomerLogin + AgentIdentity → Session → Game → AccountLease → Credenti
 9. Disconnect و stale Agent مسیر release دارند.
 10. Session End اکنون Session/Login/Station و Lease Release را در یک transaction هماهنگ می‌کند؛ در خطای release، EndSession commit نمی‌شود.
 
-## شکاف‌های معماری که باید قبل از اعلام Done اصلاح/تعیین تکلیف شوند
+## موارد خارج از Stage 12 که برای Waves بعدی ثبت شدند
 
 ### 1. Game Sync semantics
 Endpoint sync درخواست را persist و dispatch می‌کند و response آن Sent/Failed برای dispatch است، نه اثبات اجرای موفق روی Agent.
@@ -41,16 +41,12 @@ OperationsPage هنوز مستقیماً از mockService استفاده می‌
 مدل پروژه هنوز DateTimeOffset فراوان دارد. در Stage 12 ثابت شد که SQLite برای بعضی comparison/orderها مشکل ترجمه دارد.
 برای هر query جدید باید provider translation بررسی شود و timestampهای جدید طبق policy Integration Contract طراحی شوند.
 
-### 6. Stage 12 E2E
-تست E2E باید برای هر transition این invariantها را ثابت کند:
-- بعد از Session Start: Session Active، Station Occupied، Game.activeUsers=1، CustomerLogin فعال، Lease هنوز Free تا زمان Acquire.
-- بعد از Acquire: Lease InUse و credential فقط در Agent مسیر.
-- بعد از Session End: Session Ended، Station Available، CustomerLogin released، Lease Free.
-- بعد از Settlement: Session Completed و Invoice Paid.
-- بعد از disconnect/stale: leaseهای Agent آزاد می‌شوند.
+### 6. Stage 12 E2E — Verified
+Run #1110 این transitionها را به‌صورت end-to-end ثابت کرد: Session Start، CustomerLogin ownership، Game Sync command completion، AccountLease InUse، Session End، CustomerLogin release، Lease Free و Game.activeUsers=0.
+Settlement path نیز از مسیر موجود Server smoke شده است و Stage 12 دیگر به unit-test-only evidence متکی نیست.
 
-### 7. Direct service vs lifecycle integration
-Unit test مستقیم ReleaseActiveForSession کافی نیست. باید Agent Session End واقعی نیز release را ثابت کند. این invariant در E2E باید باقی بماند.
+### 7. Direct service vs lifecycle integration — Verified
+ReleaseActiveForSession unit test علاوه بر Agent Session End واقعی در smoke اجرا شده و release واقعی Lease بعد از EndSession مشاهده شده است.
 
 ## قرارداد زمانی اجرای Stage 12
 Stage 12 فقط وقتی ادامه می‌یابد که تغییر بعدی به یکی از این خانه‌ها تعلق داشته باشد:
@@ -62,8 +58,8 @@ Stage 12 فقط وقتی ادامه می‌یابد که تغییر بعدی ب�
 
 تغییر صرفاً UI یا workaround CI در این Stage انجام نمی‌شود.
 
-## مرحله بعد
-ابتدا semantics و invariantهای Stage 12 تکمیل می‌شوند، سپس Game Sync completion/read path و test evidence آن اصلاح می‌شود. پس از آن Stage 12 دوباره از ابتدا تا انتها با Integration Contract اجرا می‌شود.
+## نتیجه
+Stage 12 به‌عنوان Vertical Slice Reference از نظر lifecycle، persistence/concurrency، ownership/contract، Agent credential boundary و verification تأیید شد.
 
 ## Decision
-تا تکمیل این audit، هیچ قابلیت Stage بعدی نباید به Stage 12 متصل شود. Stage 12 باید یک vertical slice مرجع برای نحوه اتصال featureهای آینده باشد.
+هیچ feature جدیدی نباید lifecycle موازی برای Session/Login/Lease/Game ایجاد کند. زنجیره‌های بعدی باید قبل از implementation با Integration Contract ممیزی شوند. گپ‌های mock/UI/realtime/field خارج از Stage 12 در Waveهای بعدی owner خواهند داشت.
