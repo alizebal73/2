@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace GameNetManager.Server.Data;
@@ -30,54 +31,69 @@ public sealed class AccountPoolService(GameNetDbContext database)
             && !await database.Sessions.AnyAsync(item => item.Id == sessionId.Value, cancellationToken))
             throw new InvalidOperationException("جلسه انتخاب‌شده پیدا نشد.");
 
-        var candidates = await database.AccountPoolEntries
-            .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
-            .Take(50)
-            .ToListAsync(cancellationToken);
-
         var gameIdText = game.Id.ToString();
-        var candidate = candidates
-            .OrderBy(item => item.CreatedAt)
-            .FirstOrDefault(item =>
-                item.AllowedGameIdsCsv
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
 
-        if (candidate is null)
-            return (null, null);
-
-        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-
-        var now = DateTimeOffset.UtcNow;
-        var updated = await database.AccountPoolEntries
-            .Where(item => item.Id == candidate.Id && item.Status == AccountPoolStatus.Free && item.IsActive)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(item => item.Status, AccountPoolStatus.InUse)
-                .SetProperty(item => item.AssignedAgentDeviceId, agentDeviceId)
-                .SetProperty(item => item.UpdatedAt, now), cancellationToken);
-
-        if (updated != 1)
-            return (null, null);
-
-        var lease = new AccountLease
+        for (var attempt = 0; attempt < 2; attempt++)
         {
-            AccountPoolEntryId = candidate.Id,
-            GameId = game.Id,
-            AgentDeviceId = agentDeviceId,
-            CustomerId = customerId,
-            SessionId = sessionId,
-            LeaseToken = AuthorizationService.CreateToken(),
-            LeasedAt = now,
-            State = AccountLeaseState.Active
-        };
+            var candidates = await database.AccountPoolEntries
+                .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
+                .Take(50)
+                .ToListAsync(cancellationToken);
 
-        database.AccountLeases.Add(lease);
-        await database.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            var candidate = candidates
+                .OrderBy(item => item.CreatedAt)
+                .FirstOrDefault(item =>
+                    item.AllowedGameIdsCsv
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
 
-        candidate.Status = AccountPoolStatus.InUse;
-        candidate.AssignedAgentDeviceId = agentDeviceId;
-        return (candidate, lease);
+            if (candidate is null)
+                return (null, null);
+
+            try
+            {
+                await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+                var now = DateTimeOffset.UtcNow;
+                var updated = await database.AccountPoolEntries
+                    .Where(item => item.Id == candidate.Id
+                        && item.Status == AccountPoolStatus.Free
+                        && item.IsActive)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(item => item.Status, AccountPoolStatus.InUse)
+                        .SetProperty(item => item.AssignedAgentDeviceId, agentDeviceId)
+                        .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+                if (updated != 1)
+                    return (null, null);
+
+                var lease = new AccountLease
+                {
+                    AccountPoolEntryId = candidate.Id,
+                    GameId = game.Id,
+                    AgentDeviceId = agentDeviceId,
+                    CustomerId = customerId,
+                    SessionId = sessionId,
+                    LeaseToken = AuthorizationService.CreateToken(),
+                    LeasedAt = now,
+                    State = AccountLeaseState.Active
+                };
+
+                database.AccountLeases.Add(lease);
+                await database.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+
+                candidate.Status = AccountPoolStatus.InUse;
+                candidate.AssignedAgentDeviceId = agentDeviceId;
+                return (candidate, lease);
+            }
+            catch (SqliteException ex) when (attempt == 0 && ex.SqliteErrorCode is 5 or 6)
+            {
+                await Task.Delay(25, cancellationToken);
+            }
+        }
+
+        return (null, null);
     }
 
     public async Task<AccountLease?> ReleaseAsync(Guid leaseId, CancellationToken cancellationToken)
