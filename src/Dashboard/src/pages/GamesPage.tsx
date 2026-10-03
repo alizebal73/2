@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { archiveServerGame, applyServerGames, getServerGames, saveServerGame } from '../services/gameService';
+import { archiveServerGame, getServerGames, saveServerGame } from '../services/gameService';
 import type { GameRecord } from '../types';
 
 type GameFilter = 'all' | 'online' | 'offline' | 'program';
@@ -68,10 +68,6 @@ export function GamesPage() {
     setNotice('بازی حذف شد');
   }
 
-  async function applyGames(gameIds: string[]) {
-    await applyServerGames(gameIds);
-    setNotice(`اعمال ${gameIds.length} بازی به کلاینت‌ها در صف قرار گرفت`);
-  }
 
   return (
     <>
@@ -91,7 +87,7 @@ export function GamesPage() {
       <div className="toolbar game-management-toolbar">
         <div className="search-box"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی بازی…" aria-label="جست‌وجوی بازی" /></div>
         <div className="view-switch">{(Object.keys(filterNames) as GameFilter[]).map(key => <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{filterNames[key]}</button>)}</div>
-        <button type="button" className="btn" onClick={() => void applyGames(games.map(game => game.id))}>📤 اعمال بازی‌ها به همه کلاینت‌ها</button>
+        <button type="button" className="btn" disabled title="همگام‌سازی واقعی بازی با Agent در Stage 12 پیاده‌سازی می‌شود">📤 همگام‌سازی بازی‌ها با کلاینت‌ها — Stage 12</button>
         <button type="button" className="btn primary" onClick={() => setDraft(emptyGame())}>+ بازی جدید</button>
       </div>
 
@@ -119,7 +115,7 @@ export function GamesPage() {
               <div className="info-row"><span>اعمال به</span><strong>{selectedGame.target === 'all' ? 'همه رایانه‌ها' : selectedGame.target === 'zone' ? selectedGame.targetZone : selectedGame.targetStations || 'ایستگاه‌های منتخب'}</strong></div>
               <div className="info-row"><span>کاربران فعال</span><strong>{selectedGame.activeUsers.toLocaleString('fa-IR')}</strong></div>
             </div>
-            <div className="game-detail-actions"><button className="btn primary" onClick={() => setDraft({ ...selectedGame })}>ویرایش تنظیمات</button><button className="btn" onClick={() => void applyGames([selectedGame.id])}>اعمال به کلاینت‌ها</button><button className="btn danger" onClick={() => void deleteGame(selectedGame)}>حذف بازی</button></div>
+            <div className="game-detail-actions"><button className="btn primary" onClick={() => setDraft({ ...selectedGame })}>ویرایش تنظیمات</button><button className="btn" disabled title="همگام‌سازی واقعی بازی با Agent در Stage 12 پیاده‌سازی می‌شود">اعمال به کلاینت‌ها — Stage 12</button><button className="btn danger" onClick={() => void deleteGame(selectedGame)}>حذف بازی</button></div>
           </> : <div className="games-empty">بازی‌ای برای نمایش انتخاب نشده است.</div>}
         </section>
       </div>
