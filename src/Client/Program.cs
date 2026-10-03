@@ -537,6 +537,19 @@ static async Task RunTestSessionFlowAsync(
                 started.SessionId,
                 cancellationToken);
             Console.WriteLine($"AGENT_GAME_ACCOUNT_OK:{credential.LeaseId}:{credential.GameId}:{credential.Platform}:{credential.Login}");
+
+            var handshakeFile = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_ACCOUNT_HANDSHAKE_FILE");
+            if (!string.IsNullOrWhiteSpace(handshakeFile))
+            {
+                var handshakeDeadline = DateTime.UtcNow.AddSeconds(30);
+                while (!File.Exists(handshakeFile) && DateTime.UtcNow < handshakeDeadline)
+                    await Task.Delay(100, cancellationToken);
+
+                if (!File.Exists(handshakeFile))
+                    throw new InvalidOperationException("تأیید وضعیت InUse برای Account Lease از سمت smoke timeout شد.");
+
+                try { File.Delete(handshakeFile); } catch { }
+            }
         }
 
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
