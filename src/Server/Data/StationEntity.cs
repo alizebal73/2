@@ -7,6 +7,7 @@ public sealed class Station : BaseEntity
     public string Type { get; set; } = string.Empty;
     public decimal RatePerHour { get; set; }
     public StationState State { get; set; } = StationState.Available;
+    public string NetworkRoute { get; set; } = "internet1";
     public bool IsActive { get; set; } = true;
 
     public Guid StationTypeId { get; set; }
