@@ -42,34 +42,10 @@ public partial class Stage12SessionLeaseCredential : Migration
             name: "IX_Sessions_GameId",
             table: "Sessions",
             column: "GameId");
-
-        migrationBuilder.AddForeignKey(
-            name: "FK_Sessions_AgentDevices_AgentDeviceId",
-            table: "Sessions",
-            column: "AgentDeviceId",
-            principalTable: "AgentDevices",
-            principalColumn: "Id",
-            onDelete: ReferentialAction.SetNull);
-
-        migrationBuilder.AddForeignKey(
-            name: "FK_Sessions_Games_GameId",
-            table: "Sessions",
-            column: "GameId",
-            principalTable: "Games",
-            principalColumn: "Id",
-            onDelete: ReferentialAction.SetNull);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropForeignKey(
-            name: "FK_Sessions_AgentDevices_AgentDeviceId",
-            table: "Sessions");
-
-        migrationBuilder.DropForeignKey(
-            name: "FK_Sessions_Games_GameId",
-            table: "Sessions");
-
         migrationBuilder.DropIndex(name: "IX_Sessions_AgentDeviceId", table: "Sessions");
         migrationBuilder.DropIndex(name: "IX_Sessions_GameId", table: "Sessions");
         migrationBuilder.DropColumn(name: "SecretCiphertext", table: "AccountPoolEntries");
