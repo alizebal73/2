@@ -1429,6 +1429,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("AgentDeviceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("AppUserId")
                         .HasColumnType("TEXT");
 
@@ -1436,6 +1439,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("CustomerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("GameId")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset?>("EndAt")
