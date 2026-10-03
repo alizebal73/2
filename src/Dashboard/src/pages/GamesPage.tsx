@@ -80,11 +80,13 @@ export function GamesPage() {
 
       const pendingCommands = result.commands.filter(item => item.status === 'Sent');
       if (pendingCommands.length === 0) {
-        const failed = result.commands.filter(item => item.status === 'Failed').length;
+        const failed = result.commands.filter(item =>
+          item.status === 'Failed' || item.status === 'RolledBack'
+        ).length;
         setNotice(
           failed === 0
-            ? `همگام‌سازی «${game.name}» با موفقیت ارسال و تکمیل شد`
-            : `همگام‌سازی ارسال شد؛ ${failed.toLocaleString('fa-IR')} Agent خطا داشت`
+            ? `همگام‌سازی «${game.name}» تکمیل شده است`
+            : `همگام‌سازی ارسال شد؛ ${failed.toLocaleString('fa-IR')} Agent به نتیجه موفق نرسیدند`
         );
         return;
       }
@@ -102,18 +104,18 @@ export function GamesPage() {
           remaining.map(command => getAgentCommand(command.commandId)),
         );
 
-        const failed = statuses.filter(item => item.status === 'Failed');
-        if (failed.length > 0) {
+        const unsuccessful = statuses.filter(
+          item => item.status === 'Failed' || item.status === 'RolledBack',
+        );
+        if (unsuccessful.length > 0) {
           setNotice(
-            `همگام‌سازی ارسال شد؛ ${failed.length.toLocaleString('fa-IR')} Agent موفق نبودند.`
+            `همگام‌سازی ارسال شد؛ ${unsuccessful.length.toLocaleString('fa-IR')} Agent به نتیجه موفق نرسیدند.`
           );
           return;
         }
 
         remaining = statuses.filter(item =>
           item.status !== 'Succeeded'
-          && item.status !== 'Failed'
-          && item.status !== 'RolledBack'
         ).map(item => ({
           agentId: item.agentDeviceId,
           deviceId: '',
