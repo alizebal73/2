@@ -25,6 +25,7 @@ var dataDirectory = Environment.GetEnvironmentVariable("GAMENET_AGENT_DATA_DIR")
 var testSessionFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_SESSION_FLOW"), "1", StringComparison.Ordinal);
 var testSessionCustomerId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_CUSTOMER_ID");
 var testSessionLoginId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_LOGIN_ID");
+var testSessionGameId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_GAME_ID");
 
 if (string.IsNullOrWhiteSpace(dataDirectory))
     dataDirectory = Path.Combine(
@@ -238,6 +239,7 @@ try
                     connection,
                     testCustomerId,
                     testLoginId,
+                    Guid.TryParse(testSessionGameId, out var testGameId) ? testGameId : null,
                     shutdown.Token);
             }
         });
@@ -426,6 +428,7 @@ static async Task RunTestSessionFlowAsync(
     HubConnection connection,
     Guid customerId,
     Guid customerLoginId,
+    Guid? gameId,
     CancellationToken cancellationToken)
 {
     try
@@ -442,6 +445,19 @@ static async Task RunTestSessionFlowAsync(
 
         Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
         Console.WriteLine($"AGENT_SESSION_START_OK:{started.SessionId}");
+
+        if (started.LeaseId.HasValue && !string.IsNullOrWhiteSpace(started.LeaseToken))
+        {
+            var credential = await connection.InvokeAsync<AgentGameAccountCredentialDto>(
+                "GetGameAccountCredential",
+                new GameAccountCredentialRequest(started.LeaseId.Value, started.LeaseToken),
+                cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(credential.Secret))
+                throw new InvalidOperationException("Agent credential response was empty.");
+
+            Console.WriteLine($"AGENT_GAME_ACCOUNT_CREDENTIAL_OK:{credential.LeaseId}:{credential.AccountTitle}");
+        }
 
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
 
