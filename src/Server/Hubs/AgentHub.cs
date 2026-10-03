@@ -439,13 +439,14 @@ public sealed class AgentHub(
         if (device.IsLocked)
             throw new HubException("دستگاه قفل است و شروع جلسه ممکن نیست.");
 
-        if (request.GameId is null || request.GameId == Guid.Empty)
-            throw new HubException("بازی جلسه مشخص نشده است.");
-
-        var game = await database.Games
-            .FirstOrDefaultAsync(item => item.Id == request.GameId.Value && item.IsActive, Context.ConnectionAborted);
-        if (game is null)
-            throw new HubException("بازی جلسه پیدا نشد.");
+        Game? game = null;
+        if (request.GameId.HasValue && request.GameId.Value != Guid.Empty)
+        {
+            game = await database.Games
+                .FirstOrDefaultAsync(item => item.Id == request.GameId.Value && item.IsActive, Context.ConnectionAborted);
+            if (game is null)
+                throw new HubException("بازی جلسه پیدا نشد.");
+        }
 
         var customer = await database.Customers
             .FirstOrDefaultAsync(item => item.Id == request.CustomerId, Context.ConnectionAborted);
@@ -514,28 +515,31 @@ public sealed class AgentHub(
         await transaction.CommitAsync(Context.ConnectionAborted);
 
         (AccountPoolEntry Account, AccountLease Lease)? allocation = null;
-        try
+        if (game is not null)
         {
-            allocation = await accountPool.AllocateForOperationalSessionAsync(session.Id, Context.ConnectionAborted);
-        }
-        catch (InvalidOperationException exception)
-        {
-            session.State = SessionState.Cancelled;
-            session.EndAt = DateTimeOffset.UtcNow;
-            station.State = StationState.Available;
-            database.AuditLogs.Add(new AuditLog
+            try
             {
-                Action = "AgentSessionAccountAllocationFailed",
-                EntityName = "Session",
-                EntityId = session.Id.ToString(),
-                Details = exception.Message
-            });
-            await database.SaveChangesAsync(Context.ConnectionAborted);
-            throw new HubException(exception.Message);
-        }
+                allocation = await accountPool.AllocateForOperationalSessionAsync(session.Id, Context.ConnectionAborted);
+            }
+            catch (InvalidOperationException exception)
+            {
+                session.State = SessionState.Cancelled;
+                session.EndAt = DateTimeOffset.UtcNow;
+                station.State = StationState.Available;
+                database.AuditLogs.Add(new AuditLog
+                {
+                    Action = "AgentSessionAccountAllocationFailed",
+                    EntityName = "Session",
+                    EntityId = session.Id.ToString(),
+                    Details = exception.Message
+                });
+                await database.SaveChangesAsync(Context.ConnectionAborted);
+                throw new HubException(exception.Message);
+            }
 
-        if (allocation is null)
-            throw new HubException("برای این بازی اکانت آزاد و سازگار پیدا نشد.");
+            if (allocation is null)
+                throw new HubException("برای این بازی اکانت آزاد و سازگار پیدا نشد.");
+        }
 
         await dashboardHub.Clients.All.SendAsync(
             "AgentSessionChanged",
@@ -553,9 +557,9 @@ public sealed class AgentHub(
             session.Id,
             station.Id,
             customer.Id,
-            game.Id,
-            allocation.Value.Lease.Id,
-            allocation.Value.Lease.LeaseToken,
+            game?.Id,
+            allocation?.Lease.Id,
+            allocation?.Lease.LeaseToken,
             session.StartAt);
     }
 
