@@ -14,7 +14,7 @@ namespace GameNetManager.Server.Data.Migrations
     [Migration("20261004010000_ActiveSessionOwnershipGuards")]
     partial class ActiveSessionOwnershipGuards
     {
-protected override void BuildModel(ModelBuilder modelBuilder)
+protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
