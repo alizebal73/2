@@ -61,6 +61,9 @@ export async function getManagedStations(): Promise<StationManagementRecord[]> {
     ratePerHour: row.ratePerHour,
     status: row.isActive && row.state !== 'Offline' ? 'active' : 'off',
     note: row.networkRoute,
+    stationTypeId: row.stationTypeId,
+    tariffId: row.tariffId,
+    networkRoute: row.networkRoute,
   }));
 }
 
@@ -75,7 +78,7 @@ export async function saveManagedStation(
     stationTypeId: references.stationTypeId,
     tariffId: references.tariffId ?? null,
     ratePerHour: form.ratePerHour,
-    networkRoute: form.note || 'internet1',
+    networkRoute: form.networkRoute || form.note || 'internet1',
     isActive: form.status !== 'off',
   };
   const row = await json<ServerStation>(
