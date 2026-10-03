@@ -261,6 +261,8 @@ public sealed class AccountPoolService(
             .Include(item => item.AccountPoolEntry)
             .Include(item => item.Session)
                 .ThenInclude(item => item.CustomerLogin)
+            .Include(item => item.Session)
+                .ThenInclude(item => item.AgentDevice)
             .FirstOrDefaultAsync(
                 item => item.Id == leaseId
                     && item.AgentDeviceId == agentDeviceId
