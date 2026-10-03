@@ -375,6 +375,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<Guid?>("AgentDeviceId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("AgentDeviceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("AppUserId")
                         .HasColumnType("TEXT");
 
@@ -602,6 +605,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("CustomerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("GameId")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsActive")
@@ -851,8 +857,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.HasIndex("CustomerId");
 
-                    b.HasIndex("CredentialAccessExpiresAt");
-
                     b.HasIndex("GameId");
 
                     b.ToTable("GameAccounts");
@@ -916,6 +920,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.HasIndex("AgentDeviceId");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("CredentialAccessExpiresAt");
 
                     b.HasIndex("GameId");
 
@@ -1480,9 +1486,13 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.HasKey("Id");
 
+                    b.HasIndex("AgentDeviceId");
+
                     b.HasIndex("AppUserId");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("GameId");
 
                     b.HasIndex("StationId");
 
@@ -2092,9 +2102,19 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
             modelBuilder.Entity("GameNetManager.Server.Data.Session", b =>
                 {
+                    b.HasOne("GameNetManager.Server.Data.AgentDevice", "AgentDevice")
+                        .WithMany()
+                        .HasForeignKey("AgentDeviceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
                         .WithMany("Sessions")
                         .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("GameNetManager.Server.Data.Game", "Game")
+                        .WithMany()
+                        .HasForeignKey("GameId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("GameNetManager.Server.Data.Customer", "Customer")
