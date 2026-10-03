@@ -372,6 +372,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasMaxLength(80)
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("AgentDeviceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("AppUserId")
                         .HasColumnType("TEXT");
 
@@ -409,6 +412,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("GameId")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("CustomerId")
@@ -845,6 +851,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.HasIndex("CustomerId");
 
+                    b.HasIndex("CredentialAccessExpiresAt");
+
                     b.HasIndex("GameId");
 
                     b.ToTable("GameAccounts");
@@ -869,6 +877,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("GameId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("CredentialAccessExpiresAt")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("LeasedAt")
@@ -955,6 +966,10 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.Property<string>("SecretHash")
                         .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SecretCiphertext")
+                        .HasMaxLength(2000)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Status")
@@ -1076,6 +1091,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("AgentDeviceId");
 
                     b.HasIndex("AppUserId");
 
@@ -1390,6 +1407,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.HasIndex("ClientId");
 
                     b.HasIndex("CustomerId");
+
+                    b.HasIndex("GameId");
 
                     b.HasIndex("StationId");
 
