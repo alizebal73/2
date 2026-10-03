@@ -404,7 +404,10 @@ jobs:
                 Write-Host '--- Update state after rollback command failure ---'
                 $updateStatePath = Join-Path $agentData 'update-active.json'
                 if (Test-Path $updateStatePath) { Get-Content $updateStatePath }
-                throw 'Stage 10 rollback command did not complete successfully.'
+                $rollbackObservedStatus = if ($null -eq $rollbackStatus) { '<null>' } else { [string]$rollbackStatus.status }
+                $rollbackObservedSucceeded = if ($null -eq $rollbackStatus) { '<null>' } else { [string]$rollbackStatus.succeeded }
+                $rollbackObservedResult = if ($null -eq $rollbackStatus -or $null -eq $rollbackStatus.resultMessage) { '<null>' } else { [string]$rollbackStatus.resultMessage }
+                throw "Stage 10 rollback command did not complete successfully. Completed=$rollbackCompleted Status=$rollbackObservedStatus Succeeded=$rollbackObservedSucceeded Result=$rollbackObservedResult"
               }
 
               $rollbackReady = $false
