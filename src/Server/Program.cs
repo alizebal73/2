@@ -4484,6 +4484,9 @@ app.MapGet("/api/sessions/active", async (HttpContext context,
         session.customerName,
         session.customerCode,
         session.username,
+        session.gameId,
+        session.gameName,
+        session.agentDeviceId,
         session.startedAt,
         buffetTotal = buffetTotals.TryGetValue(session.id, out var total) ? total : 0m
     }));
