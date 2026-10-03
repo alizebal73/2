@@ -41,11 +41,12 @@ public sealed class AccountPoolService(GameNetDbContext database)
                     && item.IsActive
                     && item.AllowedGameIdsCsv != null
                     && item.AllowedGameIdsCsv.Contains(gameIdText))
-                .OrderBy(item => item.CreatedAt)
-                .ThenBy(item => item.Id)
                 .ToListAsync(cancellationToken);
 
-            var candidate = candidates.FirstOrDefault(item =>
+            var candidate = candidates
+                .OrderBy(item => item.CreatedAt)
+                .ThenBy(item => item.Id)
+                .FirstOrDefault(item =>
                 item.AllowedGameIdsCsv
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
