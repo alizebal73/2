@@ -1400,7 +1400,9 @@ modelBuilder.Entity("GameNetManager.Server.Data.Reservation", b =>
 
         b.HasIndex("CustomerId");
 
-        b.HasIndex("StationId");
+        b.HasIndex("StationId")
+            .IsUnique()
+            .HasFilter("State = 'Active'");
 
         b.HasIndex("TariffId");
 
@@ -1485,7 +1487,9 @@ modelBuilder.Entity("GameNetManager.Server.Data.Session", b =>
 
         b.HasIndex("CustomerId");
 
-        b.HasIndex("CustomerLoginId");
+        b.HasIndex("CustomerLoginId")
+            .IsUnique()
+            .HasFilter("CustomerLoginId IS NOT NULL AND State = 'Active'");
 
         b.HasIndex("GameId");
 
