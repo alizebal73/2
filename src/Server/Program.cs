@@ -18,6 +18,7 @@ builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
+builder.Services.AddScoped<ReportingService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
@@ -4016,6 +4017,181 @@ app.MapPost("/api/shifts/{shiftId:guid}/expenses", async (HttpContext context,
         expense.CreatedAt));
 })
 .WithName("CreateShiftExpense");
+
+app.MapGet("/api/reports/summary", async (
+    HttpContext context,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    ReportingService reporting,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context, database, cancellationToken, "reports.view", "finance.view");
+    if (auth.Error is not null) return auth.Error;
+
+    var end = to ?? DateTimeOffset.UtcNow;
+    var start = from ?? end.Date;
+    try
+    {
+        return Results.Ok(await reporting.GetSummaryAsync(start, end, cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_report_range", message = exception.Message });
+    }
+}).WithName("GetReportSummary");
+
+app.MapGet("/api/reports/stations", async (
+    HttpContext context,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    ReportingService reporting,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context, database, cancellationToken, "reports.view", "finance.view");
+    if (auth.Error is not null) return auth.Error;
+
+    var end = to ?? DateTimeOffset.UtcNow;
+    var start = from ?? end.Date;
+    try
+    {
+        return Results.Ok(await reporting.GetStationPerformanceAsync(start, end, cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_report_range", message = exception.Message });
+    }
+}).WithName("GetStationReport");
+
+app.MapGet("/api/reports/heatmap", async (
+    HttpContext context,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    ReportingService reporting,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context, database, cancellationToken, "reports.view", "finance.view");
+    if (auth.Error is not null) return auth.Error;
+
+    var end = to ?? DateTimeOffset.UtcNow;
+    var start = from ?? end.Date;
+    try
+    {
+        return Results.Ok(await reporting.GetHeatmapAsync(start, end, cancellationToken));
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_report_range", message = exception.Message });
+    }
+}).WithName("GetReportHeatmap");
+
+app.MapGet("/api/reports/audit", async (
+    HttpContext context,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    string? action,
+    string? entityName,
+    Guid? appUserId,
+    string? search,
+    int? limit,
+    ReportingService reporting,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "audit.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var filter = new AuditExplorerFilterDto(
+        from,
+        to,
+        action,
+        entityName,
+        appUserId,
+        search,
+        Math.Clamp(limit ?? 200, 1, 1000));
+
+    return Results.Ok(await reporting.GetAuditAsync(filter, cancellationToken));
+}).WithName("GetAuditExplorer");
+
+app.MapGet("/api/reports/audit/actions", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "audit.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var values = await database.AuditLogs
+        .AsNoTracking()
+        .Select(item => item.Action)
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(values.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(item => item).ToList());
+}).WithName("GetAuditActions");
+
+app.MapGet("/api/reports/export/finance.csv", async (
+    HttpContext context,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "reports.export", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var start = from ?? DateTimeOffset.UtcNow.Date;
+    var end = to ?? DateTimeOffset.UtcNow;
+
+    var invoices = await database.Invoices
+        .AsNoTracking()
+        .Where(item => item.Status == InvoiceStatus.Paid)
+        .Include(item => item.Items)
+        .ToListAsync(cancellationToken);
+    var payments = await database.InvoicePayments
+        .AsNoTracking()
+        .ToListAsync(cancellationToken);
+    var expenses = await database.Expenses
+        .AsNoTracking()
+        .ToListAsync(cancellationToken);
+
+    var lines = new List<string> { "\"تاریخ\",\"نوع\",\"شرح\",\"مبلغ\",\"روش پرداخت\"" };
+    foreach (var invoice in invoices.Where(item => item.IssuedAt >= start && item.IssuedAt <= end))
+    {
+        var methods = payments.Where(item => item.InvoiceId == invoice.Id)
+            .Select(item => item.Method)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+        var method = string.Join("+", methods);
+        var description = invoice.Items.OrderBy(item => item.Id).Select(item => item.Description).FirstOrDefault() ?? "فاکتور";
+        lines.Add(string.Join(",", new[]
+        {
+            $"\"{invoice.IssuedAt:O}\"",
+            "\"درآمد\"",
+            $"\"{description.Replace("\"", "\"\"")}\"",
+            invoice.TotalAmount.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            $"\"{method}\""
+        }));
+    }
+
+    foreach (var expense in expenses.Where(item => item.CreatedAt >= start && item.CreatedAt <= end))
+    {
+        lines.Add(string.Join(",", new[]
+        {
+            $"\"{expense.CreatedAt:O}\"",
+            "\"هزینه\"",
+            $"\"{(expense.Description ?? expense.Category).Replace("\"", "\"\"")}\"",
+            (-expense.Amount).ToString(System.Globalization.CultureInfo.InvariantCulture),
+            "\"expense\""
+        }));
+    }
+
+    var bytes = Encoding.UTF8.GetBytes("﻿" + string.Join("\r\n", lines));
+    return Results.File(bytes, "text/csv; charset=utf-8", $"gamenet-finance-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.csv");
+}).WithName("ExportFinanceReport");
 
 app.MapGet("/api/finance/summary", async (HttpContext context,
     DateTimeOffset? from,
