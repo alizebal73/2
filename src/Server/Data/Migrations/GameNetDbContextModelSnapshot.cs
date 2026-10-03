@@ -877,6 +877,10 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<DateTimeOffset?>("ReleasedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ReleaseReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("LeaseToken")
                         .IsRequired()
                         .HasMaxLength(120)
