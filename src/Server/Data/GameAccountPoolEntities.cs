@@ -20,6 +20,7 @@ public sealed class AccountPoolEntry : BaseEntity
     public required string Platform { get; set; }
     public string? Login { get; set; }
     public string? SecretHash { get; set; }
+    public string? SecretCiphertext { get; set; }
     public string Owner { get; set; } = "مجموعه";
     public DateTimeOffset? ExpiresAt { get; set; }
     public string AllowedGameIdsCsv { get; set; } = string.Empty;
@@ -45,6 +46,7 @@ public sealed class AccountLease : BaseEntity
     public required string LeaseToken { get; set; }
     public DateTimeOffset LeasedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? ReleasedAt { get; set; }
+    public DateTimeOffset? CredentialAccessExpiresAt { get; set; }
     public string? ReleaseReason { get; set; }
     public AccountLeaseState State { get; set; } = AccountLeaseState.Active;
 }
