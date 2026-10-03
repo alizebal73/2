@@ -2336,7 +2336,8 @@ app.MapGet("/api/dashboard", async (HttpContext context,
             active?.PausedAt,
             active?.PausedMinutes ?? 0,
             active?.TimeAdjustmentMinutes ?? 0,
-            active?.PrepaidAmount ?? 0m);
+            active?.PrepaidAmount ?? 0m,
+            station.NetworkRoute);
     }).ToList();
 
     return Results.Ok(new DashboardSnapshotDto(dtos.Count, dtos, now));
