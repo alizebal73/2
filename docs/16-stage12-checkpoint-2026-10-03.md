@@ -79,11 +79,11 @@ Stage 13 یا Wave بعدی فقط بعد از re-entry audit اختصاصی ه�
 - Snapshot و migration باید همزمان با مدل به‌روز شوند؛ relationship بدون navigation metadata نیز gap است.
 
 ### Exact latest state
-- Latest head at checkpoint write: `533e8812a0627edd9dc1ce46be9d362ad3a6089d`
+- Latest head at checkpoint write: `533c256f604f244d0e63fa0cd62ddbe2adb754da`
 - PR #19 is open and non-draft.
-- CI Run #1094 is executing on self-hosted runner `Server`.
-- در آخرین مشاهده: Restore موفق، Build موفق و Test در حال اجرا بوده است.
-- Stage 12 تا سبز شدن Run #1094 روی همین SHA و عبور تمام smokeهای Stage 12 Done اعلام نمی‌شود.
+- CI Run #1117 targets the latest head on the self-hosted runner `Server`, but is currently pending.
+- اجرای قدیمی #1113 هنوز روی runner `Server` در وضعیت `in_progress` و بدون step ثبت‌شده مانده و عملاً runner را اشغال کرده است؛ Runهای #1116 و #1117 برای headهای جدید به همین علت صف/لغو شده‌اند.
+- Stage 12 تا سبز شدن اجرای مربوط به exact head `533c256f...` و عبور تمام smokeهای Stage 12 Done اعلام نمی‌شود.
 
 ### بعد از سبز شدن CI
 1. exact-SHA evidence ثبت شود.
