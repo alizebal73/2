@@ -440,7 +440,8 @@ static async Task RunTestSessionFlowAsync(
                 customerLoginId,
                 Guid.NewGuid(),
                 1m,
-                1),
+                1,
+                gameId),
             cancellationToken);
 
         Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
