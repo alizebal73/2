@@ -20,6 +20,7 @@ builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
 builder.Services.AddScoped<ReportingService>();
 builder.Services.AddScoped<ReservationService>();
+builder.Services.AddScoped<OperationsService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
@@ -63,6 +64,89 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
 app.MapGet("/api/server-info", (IWebHostEnvironment environment) =>
     Results.Ok(new ServerInfoDto("GameNet Manager", environment.EnvironmentName, DateTimeOffset.UtcNow)))
     .WithName("GetServerInfo");
+app.MapGet("/api/stations", async (
+    HttpContext context,
+    OperationsService operations,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context, database, cancellationToken,
+        "operations.view", "session.start", "session.manage");
+    if (auth.Error is not null) return auth.Error;
+    return Results.Ok(await operations.ListStationsAsync(cancellationToken));
+}).WithName("ListStations");
+
+app.MapPost("/api/stations", async (
+    StationWriteRequest request,
+    HttpContext context,
+    OperationsService operations,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context, database, "station.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    try
+    {
+        return Results.Ok(await operations.SaveStationAsync(null, request, auth.User!.Id, cancellationToken));
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { code = "station_reference_not_found", message = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "station_conflict", message = exception.Message });
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_station", message = exception.Message });
+    }
+}).WithName("CreateStation");
+
+app.MapPut("/api/stations/{stationId:guid}", async (
+    Guid stationId,
+    StationWriteRequest request,
+    HttpContext context,
+    OperationsService operations,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context, database, "station.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    try
+    {
+        return Results.Ok(await operations.SaveStationAsync(stationId, request, auth.User!.Id, cancellationToken));
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { code = "station_reference_not_found", message = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "station_conflict", message = exception.Message });
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_station", message = exception.Message });
+    }
+}).WithName("UpdateStation");
+
+app.MapGet("/api/operations/health", async (
+    HttpContext context,
+    OperationsService operations,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context, database, "operations.view", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    return Results.Ok(await operations.GetHealthAsync(cancellationToken));
+}).WithName("GetOperationsHealth");
+
+
 
 app.MapGet("/api/games", async (
     HttpContext context,
