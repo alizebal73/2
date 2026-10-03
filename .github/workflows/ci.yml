@@ -861,6 +861,7 @@ jobs:
               $sessionStartVerified = $false
               $gameSyncVerified = $false
               $gameSyncCommandVerified = $false
+              $gameAccountVerified = $false
               $endedSessionId = $null
 
               $syncAccepted = $false
@@ -938,13 +939,14 @@ jobs:
                     Write-Host 'Stage 9 Agent Session End login ownership guard passed.'
                   }
 
-                  if ($log -match 'AGENT_GAME_ACCOUNT_OK:([0-9a-fA-F-]+):([0-9a-fA-F-]+):([^:]+):(.+)') {
+                  if (-not $gameAccountVerified -and $log -match 'AGENT_GAME_ACCOUNT_OK:([0-9a-fA-F-]+):([0-9a-fA-F-]+):([^:]+):(.+)') {
                     $gameLeaseId = $Matches[1]
                     $gameLeaseGameId = $Matches[2]
                     if ($gameLeaseGameId -ne $stage12Game.id) { throw "Stage 12 Agent received a credential for an unexpected GameId: $gameLeaseGameId" }
                     $accountRows = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
                     $inUseAccount = @($accountRows | Where-Object { $_.id -eq $stage12Account.id })[0]
                     if (-not $inUseAccount -or $inUseAccount.status -ne 'InUse') { throw 'Stage 12 Account Pool entry did not become InUse after Agent acquisition.' }
+                    $gameAccountVerified = $true
                     New-Item -ItemType File -Path $stage12AccountHandshakeFile -Force | Out-Null
                     Write-Host ("Stage 12 Agent Game account acquisition passed: leaseId={0}; gameId={1}; status={2}" -f $gameLeaseId, $gameLeaseGameId, $inUseAccount.status)
                   }
@@ -961,7 +963,7 @@ jobs:
               $sessionDuplicateGuardVerified = $log -match 'AGENT_SESSION_DUPLICATE_GUARD_OK'
               $sessionEndLoginGuardVerified = $log -match 'AGENT_SESSION_END_LOGIN_GUARD_OK'
 
-              if (-not $gameSyncVerified -or -not $gameSyncCommandVerified -or -not $sessionStartVerified -or -not $sessionDuplicateGuardVerified -or -not $sessionEndLoginGuardVerified -or -not $sessionFlowCompleted) {
+              if (-not $gameSyncVerified -or -not $gameSyncCommandVerified -or -not $sessionStartVerified -or -not $gameAccountVerified -or -not $sessionDuplicateGuardVerified -or -not $sessionEndLoginGuardVerified -or -not $sessionFlowCompleted) {
                 Write-Host '--- Stage 9 Session Agent stdout ---'
                 if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
                 Write-Host '--- Stage 9 Session Agent stderr ---'
