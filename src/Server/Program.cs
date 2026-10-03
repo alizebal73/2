@@ -290,7 +290,7 @@ app.MapPost("/api/account-pool", async (
         Details = "ثبت اکانت استخر · " + account.Title
     });
     await database.SaveChangesAsync(cancellationToken);
-    return Results.Ok(account.Id);
+    return Results.Ok(new { id = account.Id });
 }).WithName("CreateAccountPoolEntry");
 
 app.MapPut("/api/account-pool/{accountId:guid}", async (
