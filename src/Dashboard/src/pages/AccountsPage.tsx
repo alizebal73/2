@@ -5,6 +5,8 @@ import {
   createServerAccount,
   getServerAccountPool,
   getServerLeases,
+  getServerAccountPoolHealth,
+  getServerLeaseHistory,
   releaseServerLease,
   unlockServerAccount,
 } from '../services/accountPoolService';
@@ -16,6 +18,8 @@ export function AccountsPage() {
   const [accounts, setAccounts] = useState<AccountRecord[]>([]);
   const [games, setGames] = useState<GameRecord[]>([]);
   const [leases, setLeases] = useState<Array<{ leaseId: string; accountTitle: string; platform: string; gameId: string; assignedClient?: string | null }>>([]);
+  const [health, setHealth] = useState<Awaited<ReturnType<typeof getServerAccountPoolHealth>> | null>(null);
+  const [history, setHistory] = useState<Awaited<ReturnType<typeof getServerLeaseHistory>>>([]);
   const [filter, setFilter] = useState<Platform>('all');
   const [draft, setDraft] = useState<AccountRecord | null>(null);
   const [allowedGameNames, setAllowedGameNames] = useState('');
@@ -30,10 +34,15 @@ export function AccountsPage() {
         getServerAccountPool(),
         getServerGames(),
         getServerLeases(),
+        getServerAccountPoolHealth(),
+        getServerLeaseHistory(200),
       ]);
+
       setAccounts(nextAccounts);
       setGames(nextGames);
       setLeases(nextLeases);
+      setHealth(nextHealth);
+      setHistory(nextHistory);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'دریافت اطلاعات استخر اکانت‌ها ناموفق بود');
     }
@@ -148,10 +157,13 @@ export function AccountsPage() {
       </div>
 
       <div className="summary-grid">
+        <div className="summary-card"><div className="label">کل</div><div className="value">{health?.total ?? accounts.length}</div></div>
         <div className="summary-card"><div className="label">آزاد</div><div className="value green">{accounts.filter(item => item.status === 'free').length}</div></div>
         <div className="summary-card"><div className="label">در استفاده</div><div className="value blue">{accounts.filter(item => item.status === 'in-use').length}</div></div>
         <div className="summary-card"><div className="label">قفل‌شده</div><div className="value red">{accounts.filter(item => item.status === 'locked').length}</div></div>
-        <div className="summary-card"><div className="label">Lease فعال</div><div className="value orange">{leases.length}</div></div>
+        <div className="summary-card"><div className="label">Lease فعال</div><div className="value orange">{health?.activeLeases ?? leases.length}</div></div>
+        <div className="summary-card"><div className="label">در آستانه انقضا</div><div className="value">{health?.expiringLeases ?? 0}</div></div>
+        <div className="summary-card"><div className="label">بدون Secret</div><div className="value red">{health?.missingCredential ?? 0}</div></div>
       </div>
 
       <div className="toolbar">
@@ -216,6 +228,15 @@ export function AccountsPage() {
           })()}
         </section>
       </div>
+
+      <section className="operation-section">
+        <div className="page-header compact"><div><p>Server-authoritative</p><h2>تاریخچه Lease</h2></div></div>
+        <div className="table-wrap">
+          <table><thead><tr><th>اکانت</th><th>بازی</th><th>کلاینت</th><th>شروع</th><th>پایان</th><th>وضعیت</th><th>دلیل آزادسازی</th></tr></thead>
+          <tbody>{history.map(item => <tr key={item.leaseId}><td>{item.accountTitle}</td><td>{item.gameName}</td><td>{item.assignedClient || '—'}</td><td>{new Date(item.leasedAt).toLocaleString('fa-IR')}</td><td>{item.releasedAt ? new Date(item.releasedAt).toLocaleString('fa-IR') : 'فعال'}</td><td>{item.state}</td><td>{item.releaseReason || '—'}</td></tr>)}</tbody>
+          </table>
+        </div>
+      </section>
 
       {leases.length > 0 && <section className="operation-section">
         <div className="page-header compact"><div><p>Server-authoritative</p><h2>Leaseهای فعال</h2></div></div>
