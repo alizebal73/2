@@ -86,6 +86,3 @@ export async function archiveServerGame(id: string) {
   if (!response.ok) throw new Error(await readError(response, 'غیرفعال‌سازی بازی انجام نشد'));
 }
 
-export async function applyServerGames(gameIds: string[]) {
-  return { gameIds, queuedAt: new Date().toISOString() };
-}
