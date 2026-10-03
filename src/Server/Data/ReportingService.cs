@@ -126,14 +126,6 @@ public sealed class ReportingService(GameNetDbContext database)
                 .Select(item => (item.SessionId, item.TotalAmount, item.IssuedAt))
                 .ToList();
 
-        var revenueByCustomer = sessions
-            .GroupJoin(
-                paid.GroupBy(item => sessions.FirstOrDefault(s => s.Id == item.SessionId)?.CustomerId ?? Guid.Empty),
-                session => session.CustomerId,
-                group => group.Key,
-                (session, group) => new { session, revenue = group.Sum(item => item.Sum(x => x.Amount)) })
-            .ToList();
-
         var customerIds = sessions.Select(item => item.CustomerId).Distinct().ToList();
         var customers = await database.Customers
             .AsNoTracking()
@@ -212,7 +204,7 @@ public sealed class ReportingService(GameNetDbContext database)
                     .Where(item => group.Any(shift => shift.Id == item.ShiftId))
                     .Sum(item => item.Amount);
                 var hours = group.Sum(item =>
-                    Math.Max(0, (item.CloseAt ?? to - item.OpenAt).TotalHours));
+                    Math.Max(0, ((item.CloseAt ?? to) - item.OpenAt).TotalHours));
 
                 return new OperatorPerformanceDto(
                     group.Key.AppUserId,
