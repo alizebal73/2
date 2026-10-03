@@ -28,14 +28,18 @@ public sealed class AccountPoolService(
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var now = DateTime.UtcNow;
+            // SQLite cannot translate DateTimeOffset ordering. Keep the server-side filter
+            // authoritative, then apply the deterministic CreatedAt ordering in memory.
+            // The account pool is intentionally bounded operational data; this preserves the
+            // allocation policy without weakening the atomic claim below.
             var candidates = await database.AccountPoolEntries.AsNoTracking()
                 .Where(item => item.Status == AccountPoolStatus.Free
                     && item.IsActive
                     && (!item.ExpiresAt.HasValue || item.ExpiresAt.Value > now))
-                .OrderBy(item => item.CreatedAt)
                 .ToListAsync(cancellationToken);
 
             var candidate = candidates
+                .OrderBy(item => item.CreatedAt)
                 .FirstOrDefault(item =>
                     item.AllowedGameIdsCsv
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
