@@ -730,11 +730,13 @@ Stage 11 implementation has now been applied to `main` in the repository `alizeb
 
 ## 6) Stage 12 handoff
 
-After Stage 11 CI is green, start Stage 12 from the exact green main head. First audit the implemented Stage 11 against the product roadmap before adding behavior.
+Stage 11 software scope is complete. Before writing Stage 12 code, use the exact latest green `main` head as the baseline and re-read `docs/14-stage11-game-account-pool.md` plus `docs/15-stage12-handoff-2026-10-03.md`.
 
-Expected Stage 12 dependency review:
-1. Connect AccountLease to the real Session/Agent lifecycle where required.
-2. Decide and implement the secure credential-delivery boundary for Agent use; do not expose Secret/SecretHash through Dashboard APIs.
-3. Ensure release happens automatically on the authoritative lifecycle event where appropriate, not only through manual Dashboard release.
-4. Review Game active-user/status data so it becomes real operational data rather than a placeholder.
-5. Keep `GameAccount` legacy model isolated unless a migration is explicitly designed and tested.
+Stage 12 dependency review:
+1. Connect `AccountLease` to the authoritative Session/Agent lifecycle and define the state transitions.
+2. Define the secure credential-delivery boundary: Server owns the secret; Agent receives it only through an authenticated, short-lived, Lease-bound path; Dashboard never receives it.
+3. Move Lease release to the authoritative lifecycle event while retaining manual operator release for recovery.
+4. Replace Game `activeUsers=0` placeholder data with authoritative Session/Agent data.
+5. Define real Game Apply/Sync against Agent capabilities; never restore a fake queued/success response.
+6. Keep `GameAccount` completely isolated from the new Account Pool domain.
+7. Add lifecycle/concurrency regression coverage before automatic allocation/release is enabled in the Client path.

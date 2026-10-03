@@ -22,7 +22,7 @@
 
 ## وضعیت فعلی پروژه
 
-- **Product Completion:** مرحله اصلی ۵ — Customer & VIP Domain — جاری است؛ مراحل ۳ و ۴ بسته شده‌اند و تغییرات جدید فقط بعد از CI سبز و ثبت در roadmap معتبرند.
+- **Product Completion:** Stage 11 — Games & Accounts — نرم‌افزاری بسته شده است؛ Stage 12 فقط از آخرین head سبز CI شروع می‌شود.
 
 - **مرحله ۱A — Foundation:** ✅ پیاده‌سازی شده: Solution .NET 10، Server، Dashboard React/TypeScript، Client SignalR، Shared DTO، SQLite/EF Core و migration اولیه.
 - **مرحله ۱B — UI/Behavior Migration:** ✅ پیاده‌سازی و ممیزی استاتیک انجام شد؛ تمام منوهای اصلی، ۱۰ صفحه، راست‌کلیک Dashboard/Client، مودال‌های اصلی، Flow سرعت F1 و F4-F8، هات‌کی‌های قابل‌تغییر، گزارش/فیلتر/بازه شمسی، شیفت و ماتریس دسترسی، Backup/Restore، تنظیمات، Account Pool، Client Shell و PINهای دمو به React منتقل شده‌اند.
