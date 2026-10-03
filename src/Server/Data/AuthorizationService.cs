@@ -32,7 +32,10 @@ public static class AuthorizationService
             ["approval.decide"] = "تأیید/رد عملیات حساس",
             ["payroll.view"] = "مشاهده اطلاعات حقوق و حساب پرسنلی",
             ["payroll.manage"] = "ثبت و مدیریت حقوق و حساب پرسنلی",
-            ["audit.view"] = "مشاهده Audit"
+            ["audit.view"] = "مشاهده Audit",
+            ["reservation.manage"] = "مدیریت رزرو و صف انتظار",
+            ["operations.view"] = "مشاهده سلامت و وضعیت عملیاتی",
+            ["backup.manage"] = "پشتیبان‌گیری و بازیابی"
         };
 
     public static async Task<AppUser?> ResolveUserAsync(
