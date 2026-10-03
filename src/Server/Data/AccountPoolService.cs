@@ -102,6 +102,7 @@ public sealed class AccountPoolService(GameNetDbContext database)
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
         var lease = await database.AccountLeases
+            .AsNoTracking()
             .FirstOrDefaultAsync(item => item.Id == leaseId, cancellationToken);
 
         if (lease is null || lease.State != AccountLeaseState.Active)
