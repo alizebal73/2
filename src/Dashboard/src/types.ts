@@ -325,6 +325,9 @@ export type StationManagementRecord = {
   status: 'active' | 'reserved' | 'off';
   ip?: string;
   note?: string;
+  stationTypeId?: string;
+  tariffId?: string | null;
+  networkRoute?: string;
 };
 
 export type ReservationRecord = {
