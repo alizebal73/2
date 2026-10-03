@@ -38,3 +38,16 @@ public sealed class AgentDevice : BaseEntity
     public DateTimeOffset? LifecycleStateChangedAt { get; set; }
     public bool IsActive { get; set; } = true;
 }
+
+
+public sealed class AgentProcessTelemetry : BaseEntity
+{
+    public Guid AgentDeviceId { get; set; }
+    public AgentDevice AgentDevice { get; set; } = default!;
+    public Guid? GameId { get; set; }
+    public Game? Game { get; set; }
+    public required string ProcessName { get; set; }
+    public int ProcessId { get; set; }
+    public DateTimeOffset ObservedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? StartedAt { get; set; }
+}
