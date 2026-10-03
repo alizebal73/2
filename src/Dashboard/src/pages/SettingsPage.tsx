@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PageKey, PageLockMap } from '../types';
 import { hashPin, protectedPageLabels, readPageLocks, writePageLocks } from '../services/securityService';
+import { createBackup, downloadBackupUrl, getBackupSettings, listBackups, prepareRestore, saveBackupSettings, type BackupFile, type BackupSettings } from '../services/backupService';
 
 type AppSettings = {
   viewMode:'v-card'|'v-compact'|'v-list';
@@ -17,10 +18,14 @@ export function SettingsPage(){
  const [settings,setSettings]=useState<AppSettings>(()=>read('gamenet-settings-v1',defaults));
  const [hotkeys,setHotkeys]=useState<Record<string,string>>(()=>read('gamenet-hotkeys-v1',hotkeyDefaults));
  const [notice,setNotice]=useState('');
+ const [backupFiles,setBackupFiles]=useState<BackupFile[]>([]);
+ const [serverBackup,setServerBackup]=useState<BackupSettings>({enabled:true,hour:'04:00',keep:30,targetDirectory:'App_Data/Backups'});
+ const [backupBusy,setBackupBusy]=useState(false);
  const [pageLocks,setPageLocks]=useState<PageLockMap>(()=>readPageLocks());
  const [lockPins,setLockPins]=useState<Record<string,string>>({});
  useEffect(()=>{localStorage.setItem('gamenet-settings-v1',JSON.stringify(settings));window.dispatchEvent(new CustomEvent('gamenet-settings-changed',{detail:settings}))},[settings]);
  useEffect(()=>{localStorage.setItem('gamenet-hotkeys-v1',JSON.stringify(hotkeys));window.dispatchEvent(new CustomEvent('gamenet-hotkeys-changed',{detail:hotkeys}))},[hotkeys]);
+ useEffect(()=>{void Promise.all([getBackupSettings(),listBackups()]).then(([settings,files])=>{setServerBackup(settings);setBackupFiles(files)}).catch(error=>setNotice(error instanceof Error?error.message:'دریافت Backupهای سرور انجام نشد'))},[]);
  function update<K extends keyof AppSettings>(key:K,value:AppSettings[K]){setSettings(current=>({...current,[key]:value}))}
  function changeHotkey(key:string){const next=window.prompt('کلید جدید را وارد کنید',hotkeys[key]);if(next?.trim())setHotkeys(current=>({...current,[key]:next.trim()}))}
  function reset(){setSettings(defaults);setHotkeys(hotkeyDefaults);setNotice('تنظیمات به حالت پیش‌فرض بازگشت')}
@@ -63,16 +68,20 @@ export function SettingsPage(){
    </section>
    <section className="card-panel" style={{padding:14}}><h3>🧾 رفتار جلسه</h3><label>حالت پیش‌فرض<select value={settings.sessionMode} onChange={e=>update('sessionMode',e.target.value as AppSettings['sessionMode'])}><option value="settle">تسویه بعد از بازی</option><option value="prepaid">پیش‌پرداخت</option></select></label><label>سقف تخفیف آزاد اپراتور<input type="number" value={settings.operatorDiscount} onChange={e=>update('operatorDiscount',Number(e.target.value))}/></label></section>
    <section className="card-panel" style={{padding:14}}>
-    <h3>💾 داده و پشتیبان‌گیری</h3>
-    <label className="setting-item"><span><b>بکاپ خودکار</b><small>تا زمان آماده‌شدن سرویس Backup سرور، این گزینه اجرایی نیست.</small></span><input type="checkbox" checked={false} disabled /></label>
-    <label>ساعت بکاپ<input type="time" value={settings.backupHour} disabled /></label>
-    <label>تعداد نسخه<input type="number" min="1" value={settings.backupKeep} disabled /></label>
-    <label>مقصد<input value={settings.backupTarget} disabled /></label>
+    <h3>💾 داده و پشتیبان‌گیری واقعی</h3>
+    <label className="setting-item"><span><b>بکاپ خودکار Server</b><small>مسیر، زمان و نگهداری در Server ذخیره می‌شود.</small></span><input type="checkbox" checked={serverBackup.enabled} onChange={e=>setServerBackup(v=>({...v,enabled:e.target.checked}))}/></label>
+    <label>ساعت بکاپ<input type="time" value={serverBackup.hour} onChange={e=>setServerBackup(v=>({...v,hour:e.target.value}))}/></label>
+    <label>تعداد نسخه<input type="number" min="1" value={serverBackup.keep} onChange={e=>setServerBackup(v=>({...v,keep:Math.max(1,Number(e.target.value))}))}/></label>
+    <label>مقصد Server<input value={serverBackup.targetDirectory} onChange={e=>setServerBackup(v=>({...v,targetDirectory:e.target.value}))}/></label>
     <div className="modal-actions">
-      <button className="btn primary" disabled title="پشتیبان واقعی Server-side هنوز در Release Gate پیاده‌سازی نشده است">📦 بکاپ دستی الان</button>
-      <button className="btn" disabled title="بازیابی واقعی Server-side هنوز در Release Gate پیاده‌سازی نشده است">♻️ بازیابی از نسخه</button>
+      <button className="btn primary" disabled={backupBusy} onClick={async()=>{setBackupBusy(true);try{const file=await createBackup();setBackupFiles(v=>[file,...v.filter(x=>x.fileName!==file.fileName)]);setNotice('Backup واقعی ساخته و اعتبارسنجی شد')}catch(error){setNotice(error instanceof Error?error.message:'ساخت Backup انجام نشد')}finally{setBackupBusy(false)}}}>📦 بکاپ دستی الان</button>
+      <button className="btn" disabled={backupBusy} onClick={async()=>{setBackupBusy(true);try{const saved=await saveBackupSettings(serverBackup);setServerBackup(saved);setNotice('تنظیمات Backup روی Server ذخیره شد')}catch(error){setNotice(error instanceof Error?error.message:'ذخیره تنظیمات Backup انجام نشد')}finally{setBackupBusy(false)}}}>ذخیره تنظیمات Backup</button>
     </div>
-    <small className="security-footnote">پشتیبان واقعی باید شامل دیتابیس و DataProtection Keys باشد و قبل از Migration قابل‌بازیابی تست شود؛ این کنترل‌ها تا آماده‌شدن مسیر سروری عمداً غیرفعال‌اند.</small>
+    <div className="table-wrap" style={{marginTop:12}}><table><thead><tr><th>نسخه</th><th>زمان</th><th>حجم</th><th>Migration</th><th>عملیات</th></tr></thead><tbody>
+      {backupFiles.map(file=><tr key={file.fileName}><td>{file.productVersion}</td><td>{new Date(file.createdAt).toLocaleString('fa-IR')}</td><td>{Math.round(file.sizeBytes/1024)} KB</td><td>{file.appliedMigrations.length}</td><td><button className="btn" onClick={async()=>{try{await verifyBackup(file.fileName);setNotice('Backup معتبر است')}catch(error){setNotice(error instanceof Error?error.message:'Backup نامعتبر است')}}}>بررسی</button><a className="btn" href={downloadBackupUrl(file.fileName)}>دریافت</a><button className="btn danger" onClick={async()=>{if(!window.confirm('این Backup برای راه‌اندازی بعدی آماده شود؟'))return;try{const result=await prepareRestore(file.fileName);setNotice(result.message+' سپس Server را Restart کنید.')}catch(error){setNotice(error instanceof Error?error.message:'آماده‌سازی بازیابی انجام نشد')}}}>آماده‌سازی Restore</button></td></tr>)}
+      {backupFiles.length===0&&<tr><td colSpan={5}>هنوز Backup معتبر روی Server ثبت نشده است.</td></tr>}
+    </tbody></table></div>
+    <small className="security-footnote">Backup شامل دیتابیس و کلیدهای DataProtection است؛ Restore بعد از اعتبارسنجی برای راه‌اندازی بعدی آماده می‌شود تا جایگزینی دیتابیس وسط اجرای Server اتفاق نیفتد.</small>
    </section>
    <section className="card-panel" style={{padding:14}}><h3>👥 حقوق و شیفت</h3><label>روش محاسبه حقوق پیش‌فرض<select value={settings.payrollMode ?? 'hourly'} onChange={e=>update('payrollMode',e.target.value as AppSettings['payrollMode'])}><option value="hourly">ساعتی</option><option value="monthly">ماهانه</option></select></label><label>رفتار اختلاف صندوق<select value={settings.shortagePolicy ?? 'approval'} onChange={e=>update('shortagePolicy',e.target.value as AppSettings['shortagePolicy'])}><option value="approval">نیازمند تأیید</option><option value="payroll">قابل انتقال به حقوق</option><option value="expense">ثبت به‌عنوان هزینه/کسری</option></select></label><label className="setting-item"><span>کسر خودکار از حقوق</span><input type="checkbox" checked={Boolean(settings.autoPayrollDeduction)} onChange={e=>update('autoPayrollDeduction',e.target.checked)}/></label></section>
    <section className="card-panel" style={{padding:14}}><h3>🛠 مدیریت بازی‌ها و کلاینت‌ها</h3><button className="btn" onClick={()=>window.dispatchEvent(new CustomEvent('gamenet-navigate',{detail:'games'}))}>🎮 صفحه بازی‌ها</button><button className="btn" onClick={()=>window.dispatchEvent(new CustomEvent('gamenet-navigate',{detail:'client-shell'}))}>🖧 صفحه کلاینت‌ها</button></section>
