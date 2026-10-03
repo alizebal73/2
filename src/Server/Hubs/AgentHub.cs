@@ -726,11 +726,49 @@ public sealed class AgentHub(
         if (string.IsNullOrWhiteSpace(connectionId))
             return null;
 
-        return await database.AgentDevices
+        Guid? deviceId = null;
+        if (Context.Items.TryGetValue(AgentDeviceContextKey, out var rawDeviceId) && rawDeviceId is Guid storedDeviceId)
+            deviceId = storedDeviceId;
+
+        if (!deviceId.HasValue)
+        {
+            var resolved = await ResolveDeviceAsync(Context, cancellationToken);
+            if (resolved is null || !resolved.IsActive)
+                return null;
+
+            deviceId = resolved.Id;
+            Context.Items[AgentDeviceContextKey] = resolved.Id;
+        }
+
+        var device = await database.AgentDevices
             .Include(item => item.Station)
             .FirstOrDefaultAsync(
-                item => item.ConnectionId == connectionId && item.IsActive,
+                item => item.Id == deviceId.Value && item.IsActive,
                 cancellationToken);
+
+        if (device is null)
+            return null;
+
+        if (!string.Equals(device.ConnectionId, connectionId, StringComparison.Ordinal))
+        {
+            var now = DateTimeOffset.UtcNow;
+            device.ConnectionId = connectionId;
+            device.IsOnline = true;
+            device.LastSeenAt = now;
+            device.ConnectedAt ??= now;
+            device.LifecycleState = ClientLifecycleStates.Running;
+            device.LifecycleStateChangedAt = now;
+            device.LastHealthyAt = now;
+            await database.SaveChangesAsync(cancellationToken);
+
+            logger.LogInformation(
+                "Rebound Agent connection after reconnect. DeviceId={DeviceId}, PreviousConnectionId={PreviousConnectionId}, ConnectionId={ConnectionId}",
+                device.DeviceId,
+                device.ConnectionId,
+                connectionId);
+        }
+
+        return device;
     }
 
     private async Task RedeliverPendingCommandsAsync(
