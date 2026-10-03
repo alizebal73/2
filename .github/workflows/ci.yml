@@ -827,6 +827,12 @@ jobs:
             } | ConvertTo-Json)
             if (-not $stage12Account.id) { throw 'Stage 12 Account Pool create smoke failed.' }
 
+            $preAcquireAccounts = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+            $preAcquireAccount = @($preAcquireAccounts | Where-Object { $_.id -eq $stage12Account.id })[0]
+            if (-not $preAcquireAccount -or $preAcquireAccount.status -ne 'Free' -or $preAcquireAccount.PSObject.Properties.Name -contains 'secret') {
+              throw 'Stage 12 Account Pool pre-acquire state or secret boundary is invalid.'
+            }
+
             $customerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
               usernameOrCode = $stage9Customer.username
               password = 'Stage9Smoke123!'
