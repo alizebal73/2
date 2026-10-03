@@ -419,10 +419,6 @@ public sealed class AgentHub(
             });
 
             await database.SaveChangesAsync(Context.ConnectionAborted);
-            await accountPool.ReleaseActiveForSessionAsync(
-                activeSession.Id,
-                "آزادسازی خودکار با خروج و قفل Agent",
-                Context.ConnectionAborted);
 
             await dashboardHub.Clients.All.SendAsync(
                 "AgentSessionChanged",
@@ -450,6 +446,15 @@ public sealed class AgentHub(
 
         await database.SaveChangesAsync(Context.ConnectionAborted);
         await transaction.CommitAsync(Context.ConnectionAborted);
+
+        if (activeSession is not null)
+        {
+            await accountPool.ReleaseActiveForSessionAsync(
+                activeSession.Id,
+                "آزادسازی خودکار با خروج و قفل Agent",
+                Context.ConnectionAborted);
+        }
+
         await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
     }
 
@@ -541,6 +546,7 @@ public sealed class AgentHub(
 
         await database.SaveChangesAsync(Context.ConnectionAborted);
         await transaction.CommitAsync(Context.ConnectionAborted);
+
         await accountPool.ReleaseActiveForSessionAsync(
             session.Id,
             "آزادسازی خودکار با پایان Session",
@@ -613,6 +619,11 @@ public sealed class AgentHub(
                 login.LoggedOutAt = session.EndAt ?? now;
                 await database.SaveChangesAsync(Context.ConnectionAborted);
             }
+
+            await accountPool.ReleaseActiveForSessionAsync(
+                session.Id,
+                "آزادسازی خودکار با پایان Session",
+                Context.ConnectionAborted);
 
             return new AgentSessionEndResponse(
                 session.Id,
