@@ -945,7 +945,7 @@ jobs:
             $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $stage9Customer.id
             $env:GAMENET_AGENT_TEST_LOGIN_ID = $stage12CustomerAuth.loginId
             $env:GAMENET_AGENT_TEST_GAME_ID = $stage12Game.id
-            $env:GAMENET_AGENT_TEST_HOLD_SECONDS = '8'
+            $env:GAMENET_AGENT_TEST_HOLD_SECONDS = '20'
 
             $stage12AgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
               'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
@@ -993,6 +993,10 @@ jobs:
                       Write-Host '--- Stage 12 active Session payload ---'
                       $activeStage12 | ConvertTo-Json -Depth 8
                       Write-Host ("Stage 12 expected gameId={0}; expected agentDeviceId={1}; SessionId={2}" -f $stage12Game.id, $stage12DeviceId, $stage12SessionId)
+                      Write-Host '--- Stage 12 Agent stdout at active-session mismatch ---'
+                      if (Test-Path $stage12Stdout) { Get-Content $stage12Stdout }
+                      Write-Host '--- Stage 12 Agent stderr at active-session mismatch ---'
+                      if (Test-Path $stage12Stderr) { Get-Content $stage12Stderr }
                       throw 'Stage 12 active Session did not persist authoritative Game/Agent references.'
                     }
                   }
