@@ -37,16 +37,19 @@ public sealed class AccountPoolService(GameNetDbContext database)
         {
             var candidates = await database.AccountPoolEntries
                 .AsNoTracking()
-                .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
-                .Take(50)
+                .Where(item => item.Status == AccountPoolStatus.Free
+                    && item.IsActive
+                    && item.AllowedGameIdsCsv != null
+                    && item.AllowedGameIdsCsv.Contains(gameIdText))
                 .ToListAsync(cancellationToken);
 
             var candidate = candidates
                 .OrderBy(item => item.CreatedAt)
+                .ThenBy(item => item.Id)
                 .FirstOrDefault(item =>
-                    item.AllowedGameIdsCsv
-                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                        .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
+                item.AllowedGameIdsCsv
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Contains(gameIdText, StringComparer.OrdinalIgnoreCase));
 
             if (candidate is null)
                 return (null, null);
@@ -66,7 +69,7 @@ public sealed class AccountPoolService(GameNetDbContext database)
                         .SetProperty(item => item.UpdatedAt, now), cancellationToken);
 
                 if (updated != 1)
-                    return (null, null);
+                    continue;
 
                 var lease = new AccountLease
                 {

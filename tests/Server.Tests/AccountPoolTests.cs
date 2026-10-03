@@ -70,6 +70,60 @@ public sealed class AccountPoolTests
         }
     }
 
+
+    [Fact]
+    public async Task Allocate_IgnoresIncompatibleFreeAccountsBeforeCompatibleEntry()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        Guid gameId;
+        await using (var setup = CreateContext(connection))
+        {
+            await setup.Database.EnsureCreatedAsync();
+            var game = new Game { Name = "Beyond Window Game", IsActive = true };
+            setup.Games.Add(game);
+            await setup.SaveChangesAsync();
+            gameId = game.Id;
+
+            for (var index = 0; index < 60; index++)
+            {
+                setup.AccountPoolEntries.Add(new AccountPoolEntry
+                {
+                    Title = $"Incompatible-{index:00}",
+                    Platform = "Steam",
+                    AllowedGameIdsCsv = Guid.NewGuid().ToString(),
+                    Status = AccountPoolStatus.Free,
+                    IsActive = true
+                });
+            }
+
+            setup.AccountPoolEntries.Add(new AccountPoolEntry
+            {
+                Title = "Compatible-61",
+                Platform = "Steam",
+                AllowedGameIdsCsv = gameId.ToString(),
+                Status = AccountPoolStatus.Free,
+                IsActive = true
+            });
+
+            await setup.SaveChangesAsync();
+        }
+
+        await using var allocationContext = CreateContext(connection);
+        var service = new AccountPoolService(allocationContext);
+        var (account, lease) = await service.AllocateAsync(
+            gameId,
+            null,
+            null,
+            null,
+            CancellationToken.None);
+
+        Assert.NotNull(account);
+        Assert.NotNull(lease);
+        Assert.Equal("Compatible-61", account!.Title);
+    }
+
     [Fact]
     public async Task ConcurrentAllocation_CannotLeaseTheSamePoolEntryTwice()
     {
