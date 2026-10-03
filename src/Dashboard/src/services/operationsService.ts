@@ -114,6 +114,24 @@ export async function getReservations(): Promise<ReservationRecord[]> {
   }));
 }
 
+export type OperationsHealth = {
+  generatedAt: string;
+  stationsTotal: number;
+  stationsAvailable: number;
+  stationsOccupied: number;
+  stationsMaintenance: number;
+  stationsOffline: number;
+  agentsTotal: number;
+  agentsOnline: number;
+  activeSessions: number;
+  activeLeases: number;
+  networkRoutes: Record<string, number>;
+};
+
+export async function getOperationsHealth(): Promise<OperationsHealth> {
+  return json<OperationsHealth>('/api/operations/health');
+}
+
 export type ServerEvent = {
   id: string;
   name: string;
@@ -143,6 +161,14 @@ export async function transitionEvent(id: string, action: string) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action }),
+  });
+}
+
+export async function addEventParticipant(eventId: string, customerId: string, seed: number) {
+  return json('/api/events/' + eventId + '/participants', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ customerId, seed }),
   });
 }
 
