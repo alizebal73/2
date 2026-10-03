@@ -42,3 +42,7 @@
 
 ## Stage 12
 پس از سبز شدن Stage 11، مرحله بعد باید فقط از همین head ادامه پیدا کند و ابتدا وابستگی‌های باقی‌مانده Game/Account را دوباره بررسی کند؛ مخصوصاً اتصال Lease به Session/Agent و مسیر واقعی credential delivery، بدون شکستن `GameAccount` قدیمی.
+
+## Verification
+
+Final product verification anchor: the preceding main commit `d5322604d7819acdebc86ae4d179adae92390f2a` contains the Stage 11 implementation and Dashboard build fixes. The next CI run is expected to validate that product source before Stage 11 is marked Done.
