@@ -621,7 +621,8 @@ static async Task<int?> SendHeartbeatAsync(
                 lockScreen.IsLocked,
                 state.LifecycleState,
                 state.PendingUpdateVersion,
-                state.LastUpdateError));
+                state.LastUpdateError,
+                await GetRunningGameProcessesAsync(state.DataDirectory, cancellationToken)));
 
         Console.WriteLine($"Heartbeat موفق؛ زمان سرور: {response.ServerUtcNow:HH:mm:ss}.");
         return response.HeartbeatIntervalSeconds;
@@ -632,6 +633,89 @@ static async Task<int?> SendHeartbeatAsync(
         Console.WriteLine($"Heartbeat ارسال نشد؛ وضعیت اتصال دوباره بررسی می‌شود. {exception.Message}");
         return null;
     }
+}
+
+static async Task<IReadOnlyList<AgentProcessTelemetryDto>> GetRunningGameProcessesAsync(
+    string dataDirectory,
+    CancellationToken cancellationToken)
+{
+    var result = new List<AgentProcessTelemetryDto>();
+    var gamesDirectory = Path.Combine(dataDirectory, "games");
+    if (!Directory.Exists(gamesDirectory))
+        return result;
+
+    foreach (var manifestFile in Directory.EnumerateFiles(gamesDirectory, "*.json", SearchOption.TopDirectoryOnly))
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        AgentGameApplyCommandPayload? manifest = null;
+        try
+        {
+            var json = await File.ReadAllTextAsync(manifestFile, cancellationToken);
+            manifest = JsonSerializer.Deserialize<AgentGameApplyCommandPayload>(json);
+        }
+        catch
+        {
+            continue;
+        }
+
+        if (manifest is null || manifest.GameId == Guid.Empty || string.IsNullOrWhiteSpace(manifest.Executable))
+            continue;
+
+        var executableName = Path.GetFileNameWithoutExtension(manifest.Executable);
+        if (string.IsNullOrWhiteSpace(executableName))
+            continue;
+
+        Process[] processes;
+        try
+        {
+            processes = Process.GetProcessesByName(executableName);
+        }
+        catch
+        {
+            continue;
+        }
+
+        foreach (var process in processes)
+        {
+            try
+            {
+                if (process.HasExited)
+                    continue;
+
+                DateTimeOffset? startedAt = null;
+                try
+                {
+                    startedAt = process.StartTime.ToUniversalTime();
+                }
+                catch
+                {
+                    // Some protected processes do not expose StartTime.
+                }
+
+                result.Add(new AgentProcessTelemetryDto(
+                    manifest.GameId,
+                    process.ProcessName,
+                    process.Id,
+                    DateTimeOffset.UtcNow,
+                    startedAt));
+            }
+            catch
+            {
+                // Process may exit between enumeration and inspection.
+            }
+            finally
+            {
+                process.Dispose();
+            }
+        }
+    }
+
+    return result
+        .GroupBy(item => new { item.GameId, item.ProcessId, item.ProcessName })
+        .Select(group => group.First())
+        .Take(100)
+        .ToList();
 }
 
 static async Task<AgentState> LoadStateAsync(string path)
