@@ -4,6 +4,7 @@ import type { AppUserRecord } from '../types';
 import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createShiftExpense } from '../services/financeService';
 import { getCurrentShift } from '../services/shiftService';
 import { getServerBuffetProfit } from '../services/buffetService';
+import { exportFinanceReport, getAuditReport, getHeatmapReport, getReportSummary, getStationReport } from '../services/reportService';
 import type { BuffetProfitReport } from '../types';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
@@ -46,6 +47,11 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
   const [financeError, setFinanceError] = useState('');
   const [buffetProfit, setBuffetProfit] = useState<BuffetProfitReport | null>(null);
   const [buffetProfitError, setBuffetProfitError] = useState('');
+  const [reportSummary, setReportSummary] = useState<Awaited<ReturnType<typeof getReportSummary>> | null>(null);
+  const [stationReport, setStationReport] = useState<Awaited<ReturnType<typeof getStationReport>>>([]);
+  const [heatmap, setHeatmap] = useState<Awaited<ReturnType<typeof getHeatmapReport>>>([]);
+  const [auditRows, setAuditRows] = useState<Awaited<ReturnType<typeof getAuditReport>>>([]);
+  const [reportDataError, setReportDataError] = useState('');
 
   useEffect(() => {
     setFinanceError('');
@@ -89,6 +95,36 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
       .then(setBuffetProfit)
       .catch(error => setBuffetProfitError(error instanceof Error ? error.message : 'گزارش سود بوفه دریافت نشد'));
   }, [reportCategory, period, range]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const start = range
+      ? new Date(range.start)
+      : period === 'month' ? new Date(now - 30 * 86400000)
+      : period === 'sixMonths' ? new Date(now - 180 * 86400000)
+      : period === 'year' ? new Date(now - 365 * 86400000)
+      : new Date(now - 6 * 86400000);
+    const end = range ? new Date(range.end) : new Date(now);
+
+    setReportDataError('');
+    void Promise.all([
+      getReportSummary(start, end),
+      getStationReport(start, end),
+      getHeatmapReport(start, end),
+    ]).then(([summary, stations, heat]) => {
+      setReportSummary(summary);
+      setStationReport(stations);
+      setHeatmap(heat);
+    }).catch(error => {
+      setReportDataError(error instanceof Error ? error.message : 'دریافت گزارش‌های سرور انجام نشد');
+    });
+
+    if (reportCategory === 'audit') {
+      void getAuditReport({ from: start, to: end, limit: 200 })
+        .then(setAuditRows)
+        .catch(error => setReportDataError(error instanceof Error ? error.message : 'دریافت Audit انجام نشد'));
+    }
+  }, [period, range, reportCategory]);
 
   const visibleRows = useMemo(() => {
     const now = Date.now();
@@ -171,12 +207,16 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
     setRange({ start: startMs, end: endMs }); setPeriod('custom'); setNotice('بازه گزارش اعمال شد');
   }
 
-  function exportCsv() {
-    const lines = [['تاریخ','ایستگاه','زمان','بوفه','پکیج','مبلغ','روش پرداخت','اپراتور'],
-      ...visibleRows.map(row => [new Date(row.closedAt).toLocaleString('fa-IR'), row.station, row.timeAmount, row.buffet, row.packageAmount, row.amount, row.method, row.operator]),
-      ...visibleExpenses.map(row => [new Date(row.createdAt).toLocaleString('fa-IR'), 'هزینه: ' + row.title, 0, 0, 0, -row.amount, 'expense', row.operator])];
-    const csv = lines.map(line => line.map(value => '"' + String(value).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })); link.download = 'gamenet-report.csv'; link.click(); URL.revokeObjectURL(link.href);
+  async function exportCsv() {
+    try {
+      const now = Date.now();
+      const start = range ? new Date(range.start) : period === 'month' ? new Date(now - 30 * 86400000) : period === 'sixMonths' ? new Date(now - 180 * 86400000) : period === 'year' ? new Date(now - 365 * 86400000) : new Date(now - 6 * 86400000);
+      const end = range ? new Date(range.end) : new Date(now);
+      await exportFinanceReport(start, end);
+      setNotice('خروجی گزارش از Server دریافت شد');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'خروجی گزارش انجام نشد');
+    }
   }
 
   async function registerExpense() {
@@ -253,7 +293,34 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
           </tr>
         )}
       </tbody></table></div></>}
-    </> : <section className="report-placeholder"><strong>{({sessions:'جلسات و ایستگاه‌ها',customers:'مشتری و VIP',users:'کاربران و شیفت',audit:'Audit'} as Record<string,string>)[reportCategory]}</strong><span>ساختار این گزارش آماده شده است؛ اتصال منبع داده این دامنه باید قبل از نمایش عدد انجام شود.</span></section>}
+    </> : reportCategory === 'sessions' ? <>
+      {reportDataError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت گزارش جلسه کامل نشد</strong><span>{reportDataError}</span></div></div>}
+      {reportSummary && <div className="summary-grid">
+        <div className="summary-card"><div className="label">جلسات</div><div className="value blue">{reportSummary.sessions}</div></div>
+        <div className="summary-card"><div className="label">مشتری یکتا</div><div className="value purple">{reportSummary.customersServed}</div></div>
+        <div className="summary-card"><div className="label">درآمد</div><div className="value green">{money(reportSummary.revenue)} تومان</div></div>
+      </div>}
+      <div className="report-grid">
+        <div className="chart-box"><h3>عملکرد ایستگاه‌ها</h3>{stationReport.slice(0,12).map(row => <div className="info-row" key={row.stationId}><span>{row.stationName} · {row.sessionCount} جلسه</span><strong>{money(row.revenue)} ت</strong></div>)}</div>
+        <div className="chart-box"><h3>اوج استفاده</h3>{heatmap.slice().sort((a,b)=>b.sessionCount-a.sessionCount).slice(0,12).map(row => <div className="info-row" key={row.dayOfWeek + '-' + row.hour}><span>روز {row.dayOfWeek} · ساعت {row.hour}</span><strong>{row.sessionCount} جلسه</strong></div>)}</div>
+      </div>
+      <div className="table-wrap"><table className="data-table"><thead><tr><th>ایستگاه</th><th>زون</th><th>جلسه</th><th>زمان</th><th>درآمد</th><th>میانگین</th></tr></thead><tbody>{stationReport.map(row => <tr key={row.stationId}><td>{row.stationName}</td><td>{row.zone}</td><td>{row.sessionCount}</td><td>{Math.round(row.billableMinutes)} دقیقه</td><td>{money(row.revenue)} ت</td><td>{money(row.averageSessionRevenue)} ت</td></tr>)}</tbody></table></div>
+    </> : reportCategory === 'customers' ? <>
+      <section className="report-placeholder"><strong>مشتری و VIP</strong><span>اطلاعات پایه مشتریان در مسیر Server/API موجود است؛ گزارش دوره‌ای اختصاصی مشتری/VIP در موج بعدی دامنه مشتری تکمیل می‌شود.</span></section>
+    </> : reportCategory === 'users' ? <>
+      <section className="report-placeholder"><strong>کاربران و شیفت</strong><span>شیفت و حقوق منبع سرور دارند؛ نمای تجمیعی این دسته بعد از اتصال scopeهای دقیق کاربر در همین موج ادامه می‌یابد.</span></section>
+    </> : <>
+      <section className="card-panel" style={{ margin: '0 22px 14px', padding: 14 }}>
+        <h3>Audit Explorer</h3>
+        <input placeholder="جست‌وجوی عملیات، موجودیت یا جزئیات…" onChange={e => {
+          const now = Date.now();
+          const start = range ? new Date(range.start) : new Date(now - 7 * 86400000);
+          const end = range ? new Date(range.end) : new Date(now);
+          void getAuditReport({ from: start, to: end, search: e.target.value.trim(), limit: 200 }).then(setAuditRows).catch(error => setReportDataError(error instanceof Error ? error.message : 'دریافت Audit انجام نشد'));
+        }} />
+        <div style={{ marginTop: 12 }}>{auditRows.map(item => <div className="list-row" key={item.id}><span>{new Date(item.createdAt).toLocaleString('fa-IR')} · <b>{item.operatorName}</b> · {item.action} · {item.entityName}</span><small>{item.details || ''}</small></div>)}</div>
+      </section>
+    </>}
 
     {notice && <div className="operation-toast">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
   </>;
