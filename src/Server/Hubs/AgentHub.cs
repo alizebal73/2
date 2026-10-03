@@ -9,7 +9,8 @@ public sealed class AgentHub(
     GameNetDbContext database,
     IConfiguration configuration,
     IHubContext<DashboardHub> dashboardHub,
-    ILogger<AgentHub> logger) : Hub
+    ILogger<AgentHub> logger,
+    AccountPoolService accountPool) : Hub
 {
     private const string AgentDeviceContextKey = "GameNet.AgentDeviceId";
     public override async Task OnConnectedAsync()
@@ -75,6 +76,15 @@ public sealed class AgentHub(
 
             if (disconnected > 0)
             {
+                var activeLeases = await database.AccountLeases
+                    .AsNoTracking()
+                    .Where(item => item.AgentDeviceId == deviceId && item.State == AccountLeaseState.Active)
+                    .Select(item => item.Id)
+                    .ToListAsync(CancellationToken.None);
+
+                foreach (var leaseId in activeLeases)
+                    await accountPool.ReleaseAsync(leaseId, "قطع ارتباط Agent", CancellationToken.None);
+
                 var device = await database.AgentDevices
                     .AsNoTracking()
                     .Include(item => item.Station)
@@ -84,6 +94,9 @@ public sealed class AgentHub(
                 {
                     if (device.LockOnDisconnect)
                         logger.LogWarning("Agent {DeviceId} disconnected; LockOnDisconnect policy locked the device.", device.DeviceId);
+
+                    if (activeLeases.Count > 0)
+                        logger.LogInformation("Released {Count} active Game account lease(s) after Agent disconnect. DeviceId={DeviceId}", activeLeases.Count, device.DeviceId);
 
                     await BroadcastStatusAsync(device, now, CancellationToken.None);
                 }
@@ -426,6 +439,14 @@ public sealed class AgentHub(
         if (device.IsLocked)
             throw new HubException("دستگاه قفل است و شروع جلسه ممکن نیست.");
 
+        if (request.GameId is null || request.GameId == Guid.Empty)
+            throw new HubException("بازی جلسه مشخص نشده است.");
+
+        var game = await database.Games
+            .FirstOrDefaultAsync(item => item.Id == request.GameId.Value && item.IsActive, Context.ConnectionAborted);
+        if (game is null)
+            throw new HubException("بازی جلسه پیدا نشد.");
+
         var customer = await database.Customers
             .FirstOrDefaultAsync(item => item.Id == request.CustomerId, Context.ConnectionAborted);
         if (customer is null)
@@ -468,6 +489,8 @@ public sealed class AgentHub(
             StationId = station.Id,
             TariffId = station.TariffId,
             AppUserId = null,
+            AgentDeviceId = device.Id,
+            GameId = game.Id,
             StartAt = DateTimeOffset.UtcNow,
             State = SessionState.Active,
             TotalAmount = 0m,
@@ -490,6 +513,30 @@ public sealed class AgentHub(
         await database.SaveChangesAsync(Context.ConnectionAborted);
         await transaction.CommitAsync(Context.ConnectionAborted);
 
+        (AccountPoolEntry Account, AccountLease Lease)? allocation = null;
+        try
+        {
+            allocation = await accountPool.AllocateForOperationalSessionAsync(session.Id, Context.ConnectionAborted);
+        }
+        catch (InvalidOperationException exception)
+        {
+            session.State = SessionState.Cancelled;
+            session.EndAt = DateTimeOffset.UtcNow;
+            station.State = StationState.Available;
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "AgentSessionAccountAllocationFailed",
+                EntityName = "Session",
+                EntityId = session.Id.ToString(),
+                Details = exception.Message
+            });
+            await database.SaveChangesAsync(Context.ConnectionAborted);
+            throw new HubException(exception.Message);
+        }
+
+        if (allocation is null)
+            throw new HubException("برای این بازی اکانت آزاد و سازگار پیدا نشد.");
+
         await dashboardHub.Clients.All.SendAsync(
             "AgentSessionChanged",
             new
@@ -506,6 +553,9 @@ public sealed class AgentHub(
             session.Id,
             station.Id,
             customer.Id,
+            game.Id,
+            allocation.Value.Lease.Id,
+            allocation.Value.Lease.LeaseToken,
             session.StartAt);
     }
 
@@ -565,6 +615,17 @@ public sealed class AgentHub(
                 session.State.ToString());
         }
 
+        var activeLeaseIds = await database.AccountLeases
+            .AsNoTracking()
+            .Where(item => item.SessionId == session.Id
+                && item.AgentDeviceId == device.Id
+                && item.State == AccountLeaseState.Active)
+            .Select(item => item.Id)
+            .ToListAsync(Context.ConnectionAborted);
+
+        foreach (var leaseId in activeLeaseIds)
+            await accountPool.ReleaseAsync(leaseId, "پایان جلسه", Context.ConnectionAborted);
+
         await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
 
         session.EndAt = now;
@@ -605,6 +666,25 @@ public sealed class AgentHub(
             session.StationId,
             now,
             session.State.ToString());
+    }
+
+    public async Task<AgentGameAccountCredentialDto?> GetGameAccountCredential(
+        GameAccountCredentialRequest request)
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        var credential = await accountPool.GetCredentialAsync(
+            request.LeaseId,
+            request.LeaseToken,
+            device.Id,
+            Context.ConnectionAborted);
+
+        if (credential is null)
+            throw new HubException("دسترسی اکانت این Lease معتبر یا فعال نیست.");
+
+        return credential;
     }
 
     private async Task<AgentDevice?> ResolveDeviceAsync(
