@@ -781,6 +781,11 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasMaxLength(60)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Trailer")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset?>("UpdatedAt")
                         .IsConcurrencyToken()
                         .HasColumnType("TEXT");
