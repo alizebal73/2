@@ -245,3 +245,4 @@ public sealed class AccountPoolTests
             Assert.Equal("Stage12 test release", lease.ReleaseReason);
         }
     }
+}
