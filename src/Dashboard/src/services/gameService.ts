@@ -86,3 +86,24 @@ export async function archiveServerGame(id: string) {
   if (!response.ok) throw new Error(await readError(response, 'غیرفعال‌سازی بازی انجام نشد'));
 }
 
+
+
+export type GameSyncResult = {
+  gameId: string;
+  targetedAgents: number;
+  commands: Array<{
+    agentId: string;
+    deviceId: string;
+    commandId: string;
+    status: 'Sent' | 'Failed';
+  }>;
+};
+
+export async function syncServerGame(gameId: string): Promise<GameSyncResult> {
+  const response = await fetch('/api/games/' + gameId + '/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) throw new Error(await readError(response, 'همگام‌سازی بازی با Agentها انجام نشد'));
+  return await response.json() as GameSyncResult;
+}
