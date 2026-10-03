@@ -42,6 +42,7 @@ function mapAccount(row: AccountDto): AccountRecord {
   return {
     id: row.id,
     title: row.title,
+    login: row.login || '',
     platform: platform(row.platform),
     status: status(row.status),
     owner: row.owner,
@@ -58,12 +59,12 @@ export async function getServerAccountPool(): Promise<AccountRecord[]> {
   return (await response.json() as AccountDto[]).map(mapAccount);
 }
 
-export async function saveServerAccount(account: AccountRecord, allowedGameIds: string[] = []) {
+export async function saveServerAccount(account: AccountRecord, allowedGameIds: string[] = [], secret?: string) {
   const payload = {
     title: account.title,
     platform: account.platform,
-    login: null,
-    secret: null,
+    login: account.login || null,
+    secret: secret || null,
     owner: account.owner,
     expiresAt: account.expiresAt || null,
     allowedGameIds,
@@ -83,6 +84,7 @@ export async function createServerAccount(input: {
   platform: AccountRecord['platform'];
   owner: string;
   allowedGameIds: string[];
+  login?: string;
   secret?: string;
 }) {
   const response = await fetch('/api/account-pool', {
@@ -91,7 +93,7 @@ export async function createServerAccount(input: {
     body: JSON.stringify({
       title: input.title,
       platform: input.platform,
-      login: null,
+      login: input.login || null,
       secret: input.secret || null,
       owner: input.owner || 'مجموعه',
       expiresAt: null,
