@@ -32,7 +32,7 @@ import type {
   ProductRecord,
 } from '../types';
 
-type Tab = 'stations' | 'reservations' | 'inventory' | 'vip' | 'expenses' | 'audit' | 'invoices';
+type Tab = 'stations' | 'reservations' | 'events' | 'inventory' | 'vip' | 'expenses' | 'audit' | 'invoices';
 
 const money = (value: number) => new Intl.NumberFormat('fa-IR').format(value);
 const dt = (value: string) => new Date(value).toLocaleString('fa-IR', { dateStyle: 'short', timeStyle: 'short' });
@@ -48,6 +48,8 @@ export function OperationsPage() {
   const [invoices, setInvoices] = useState<ManagementInvoiceRecord[]>([]);
   const [waitlist, setWaitlist] = useState<Array<{ id: string; customerCode: string; customerName: string; stationType: string; createdAt: string; status: 'waiting' | 'assigned' }>>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
+  const [events, setEvents] = useState<Awaited<ReturnType<typeof getEvents>>>([]);
+  const [eventForm, setEventForm] = useState({ name: '', kind: 'tournament', minutes: '180', maxParticipants: '16', note: '' });
   const [notice, setNotice] = useState('');
   const [stationFilter, setStationFilter] = useState('');
   const [auditFilter, setAuditFilter] = useState('');
@@ -73,7 +75,7 @@ export function OperationsPage() {
   });
 
   async function loadAll() {
-    const [s, r, p, v, e, a, i, w, cst] = await Promise.all([
+    const [s, r, p, v, e, a, i, w, cst, castEvents] = await Promise.all([
       getManagedStations(),
       getReservations(),
       getServerProducts(),
@@ -83,6 +85,7 @@ export function OperationsPage() {
       getManagementInvoices(),
       getWaitlist(),
       getServerCustomers(),
+      getEvents(),
     ]);
     setStations(s);
     setReservations(r);
@@ -93,6 +96,7 @@ export function OperationsPage() {
     setInvoices(i);
     setWaitlist(w);
     setCustomers(cst);
+    setEvents(castEvents);
     setReservation(current => ({
       ...current,
       stationId: current.stationId === 'station-4' ? (s.find(item => item.status !== 'off')?.id || current.stationId) : current.stationId,
@@ -109,6 +113,21 @@ export function OperationsPage() {
     () => audits.filter(item => !auditFilter || item.operator.includes(auditFilter) || item.action.includes(auditFilter) || item.target.includes(auditFilter)),
     [audits, auditFilter],
   );
+
+  async function saveEvent() {
+    if (!eventForm.name.trim()) return;
+    await createEvent({
+      name: eventForm.name,
+      kind: eventForm.kind,
+      startAt: new Date(Date.now() + 60 * 60000).toISOString(),
+      durationMinutes: Number(eventForm.minutes) || 180,
+      maxParticipants: Math.max(0, Number(eventForm.maxParticipants) || 0),
+      notes: eventForm.note,
+    });
+    setEventForm({ name: '', kind: 'tournament', minutes: '180', maxParticipants: '16', note: '' });
+    await loadAll();
+    setNotice('Event روی سرور ثبت شد');
+  }
 
   async function saveStation() {
     if (!stationForm.name.trim() || stationForm.ratePerHour <= 0) return;
@@ -238,6 +257,7 @@ export function OperationsPage() {
   const tabs: Array<[Tab, string]> = [
     ['stations', '🖥 ایستگاه‌ها'],
     ['reservations', '📅 رزرو و صف'],
+    ['events', '🏆 Event / Tournament'],
     ['inventory', '📦 کالا و انبار'],
     ['vip', '⭐ پکیج VIP'],
     ['expenses', '💳 هزینه‌ها'],
@@ -311,6 +331,30 @@ export function OperationsPage() {
             {reservations.map(item => <div className="list-row" key={item.id}><span>{item.stationName} · {item.customerName} ({item.customerCode}) · {dt(item.reservedAt)} · {item.durationMinutes} دقیقه · {item.status}</span>{item.status !== 'cancelled' && <button className="btn danger" onClick={async () => { await transitionReservation(item.id, 'cancel'); await loadAll(); setNotice('رزرو لغو شد'); }}>لغو</button>}</div>)}
           </section>
         </div>
+      )}
+
+      {tab === 'events' && (
+        <section className="card-panel" style={{ margin: '0 22px 14px', padding: 14 }}>
+          <h3>Event / Tournament Mode</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'end', marginBottom: 14 }}>
+            <label>نام Event<input value={eventForm.name} onChange={e => setEventForm(v => ({ ...v, name: e.target.value }))} placeholder="مسابقات EA FC" /></label>
+            <label>نوع<select value={eventForm.kind} onChange={e => setEventForm(v => ({ ...v, kind: e.target.value }))}><option value="tournament">Tournament</option><option value="event">Event</option><option value="league">League</option></select></label>
+            <label>مدت (دقیقه)<input type="number" value={eventForm.minutes} onChange={e => setEventForm(v => ({ ...v, minutes: e.target.value }))} /></label>
+            <label>ظرفیت<input type="number" min="0" value={eventForm.maxParticipants} onChange={e => setEventForm(v => ({ ...v, maxParticipants: e.target.value }))} /></label>
+            <button className="btn primary" onClick={() => void saveEvent()}>ثبت Event</button>
+          </div>
+          <div className="table-wrap"><table><thead><tr><th>نام</th><th>نوع</th><th>شروع</th><th>ظرفیت</th><th>ثبت‌نام</th><th>وضعیت</th><th>عملیات</th></tr></thead><tbody>
+            {events.map(event => <tr key={event.id}>
+              <td>{event.name}</td><td>{event.kind}</td><td>{dt(event.startAt)}</td><td>{event.maxParticipants || 'آزاد'}</td><td>{event.participantCount}</td><td>{event.status}</td>
+              <td>
+                {event.status === 'Scheduled' && <button className="btn" onClick={async()=>{await transitionEvent(event.id,'start');await loadAll();setNotice('Event شروع شد')}}>شروع</button>}
+                {event.status === 'Running' && <button className="btn" onClick={async()=>{await transitionEvent(event.id,'complete');await loadAll();setNotice('Event تکمیل شد')}}>اتمام</button>}
+                {event.status !== 'Completed' && event.status !== 'Cancelled' && <button className="btn danger" onClick={async()=>{await transitionEvent(event.id,'cancel');await loadAll();setNotice('Event لغو شد')}}>لغو</button>}
+              </td>
+            </tr>)}
+            {events.length === 0 && <tr><td colSpan={7}>Event فعالی ثبت نشده است.</td></tr>}
+          </tbody></table></div>
+        </section>
       )}
 
       {tab === 'inventory' && (
