@@ -853,13 +853,17 @@ jobs:
               $sessionFlowCompleted = $false
               $sessionStartVerified = $false
               $gameSyncVerified = $false
+              $gameSyncCommandVerified = $false
               $endedSessionId = $null
 
               $syncAccepted = $false
+              $syncCommandIds = @()
               for ($syncAttempt = 0; $syncAttempt -lt 20; $syncAttempt++) {
                 try {
                   $syncResult = Invoke-RestMethod -Uri "$baseUrl/api/games/$($stage12Game.id)/sync" -Method Post -WebSession $adminSession
                   if ([int]$syncResult.targetedAgents -lt 1) { throw 'Stage 12 Game sync returned no targeted online Agent.' }
+                  $syncCommandIds = @($syncResult.commands | Where-Object { $_.status -eq 'Sent' } | Select-Object -ExpandProperty commandId)
+                  if ($syncCommandIds.Count -lt 1) { throw 'Stage 12 Game sync returned no persisted Agent command IDs.' }
                   $syncAccepted = $true
                   break
                 } catch {
@@ -868,10 +872,25 @@ jobs:
                 }
               }
               if (-not $syncAccepted) { throw 'Stage 12 real Game sync request did not reach an online Agent.' }
+
               for ($i = 0; $i -lt 30; $i++) {
                 if ($sessionAgentProcess.HasExited) { break }
                 if (Test-Path $sessionAgentStdout) {
                   $log = Get-Content $sessionAgentStdout -Raw
+
+                  if (-not $gameSyncCommandVerified) {
+                    $commandStates = @()
+                    foreach ($commandId in $syncCommandIds) {
+                      $commandStates += Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$commandId" -Method Get -WebSession $adminSession
+                    }
+                    if (@($commandStates | Where-Object { $_.status -eq 'Failed' }).Count -gt 0) {
+                      throw 'Stage 12 Game Sync AgentCommand reported Failed.'
+                    }
+                    if ($commandStates.Count -eq $syncCommandIds.Count -and @($commandStates | Where-Object { $_.status -eq 'Succeeded' }).Count -eq $syncCommandIds.Count) {
+                      $gameSyncCommandVerified = $true
+                      Write-Host 'Stage 12 Game Sync AgentCommand lifecycle reached Succeeded.'
+                    }
+                  }
 
                   if (-not $gameSyncVerified -and $log -match 'CLIENT_GAME_APPLIED:([0-9a-fA-F]+)') {
                     $syncedGameId = $Matches[1]
@@ -929,7 +948,7 @@ jobs:
               $sessionDuplicateGuardVerified = $log -match 'AGENT_SESSION_DUPLICATE_GUARD_OK'
               $sessionEndLoginGuardVerified = $log -match 'AGENT_SESSION_END_LOGIN_GUARD_OK'
 
-              if (-not $gameSyncVerified -or -not $sessionStartVerified -or -not $sessionDuplicateGuardVerified -or -not $sessionEndLoginGuardVerified -or -not $sessionFlowCompleted) {
+              if (-not $gameSyncVerified -or -not $gameSyncCommandVerified -or -not $sessionStartVerified -or -not $sessionDuplicateGuardVerified -or -not $sessionEndLoginGuardVerified -or -not $sessionFlowCompleted) {
                 Write-Host '--- Stage 9 Session Agent stdout ---'
                 if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
                 Write-Host '--- Stage 9 Session Agent stderr ---'
