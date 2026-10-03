@@ -536,13 +536,33 @@ app.MapPost("/api/agent/register", async (
 
     if (request.StationId.HasValue)
     {
-        var stationAlreadyAssigned = await database.AgentDevices.AnyAsync(
-            item => item.DeviceId != deviceId
+        var assignedDevices = await database.AgentDevices
+            .Where(item => item.DeviceId != deviceId
                 && item.StationId == request.StationId.Value
-                && item.IsActive,
-            cancellationToken);
-        if (stationAlreadyAssigned)
-            return Results.Conflict(new { code = "station_agent_already_assigned", message = "این ایستگاه قبلاً به یک Agent فعال متصل شده است." });
+                && item.IsActive)
+            .ToListAsync(cancellationToken);
+
+        if (assignedDevices.Any(item => item.IsOnline))
+            return Results.Conflict(new { code = "station_agent_already_assigned", message = "این ایستگاه در حال حاضر به یک Agent آنلاین متصل است." });
+
+        foreach (var previousDevice in assignedDevices)
+        {
+            previousDevice.IsActive = false;
+            previousDevice.IsOnline = false;
+            previousDevice.ConnectionId = null;
+            previousDevice.ConnectedAt = null;
+            previousDevice.LifecycleState = ClientLifecycleStates.Degraded;
+            previousDevice.LifecycleStateChangedAt = DateTimeOffset.UtcNow;
+            previousDevice.AgentTokenHash = null;
+
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "AgentStationOwnershipTransferred",
+                EntityName = "AgentDevice",
+                EntityId = previousDevice.Id.ToString(),
+                Details = $"انتقال مالکیت ایستگاه {request.StationId.Value} به Agent {deviceId}"
+            });
+        }
     }
 
     var device = await database.AgentDevices
