@@ -916,7 +916,7 @@ jobs:
               status = 'Free'
             } | ConvertTo-Json)
 
-            $stage12DeviceId = "ci-stage9-session-agent"
+            $stage12DeviceId = "ci-stage12-agent-$stage9SmokeId"
             $stage12CustomerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
               usernameOrCode = $stage9Customer.username
               password = 'Stage9Smoke123!'
