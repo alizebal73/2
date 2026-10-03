@@ -172,3 +172,10 @@ partial class AccountLeaseReleaseReason
 partial class Stage12SessionLeaseCredential
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261003131500_AccountPoolExpiryUtc")]
+partial class AccountPoolExpiryUtc
+{
+}
