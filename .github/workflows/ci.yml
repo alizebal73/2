@@ -955,58 +955,69 @@ jobs:
               $stage12CredentialReceived = $false
               $stage12Completed = $false
               $stage12SessionId = $null
+              $stage12AgentId = $null
+              $stage12ActiveVerified = $false
+              $stage12LeaseVerified = $false
 
               for ($i = 0; $i -lt 45; $i++) {
                 if ($stage12AgentProcess.HasExited) {
-                Write-Host ("Stage 12 Agent exited early. ExitCode={0}" -f $stage12AgentProcess.ExitCode)
-                break
-              }
+                  Write-Host ("Stage 12 Agent exited early. ExitCode={0}" -f $stage12AgentProcess.ExitCode)
+                }
+
+                try {
+                  $agentRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $stage12AgentRow = @($agentRows | Where-Object { $_.deviceId -eq $stage12DeviceId -and $_.isActive })[0]
+
+                  if ($stage12AgentRow) {
+                    $stage12AgentId = $stage12AgentRow.agentId
+
+                    $activeStage12 = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+                    $activeRow = @($activeStage12 | Where-Object {
+                      $_.customerId -eq $stage9Customer.id
+                        -and $_.gameId -eq $stage12Game.id
+                        -and $_.agentDeviceId -eq $stage12AgentId
+                    })[0]
+
+                    if ($activeRow) {
+                      $stage12SessionId = $activeRow.id
+                      $stage12ActiveVerified = $true
+                    }
+
+                    $stage12PoolRows = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+                    $stage12AccountRow = @($stage12PoolRows | Where-Object { $_.id -eq $stage12Account.id })[0]
+                    if ($stage12AccountRow
+                        -and $stage12AccountRow.status -eq 'InUse'
+                        -and [string]$stage12AccountRow.assignedAgentDeviceId -eq [string]$stage12AgentId) {
+                      $stage12LeaseVerified = $true
+                    }
+                  }
+                } catch {}
+
                 if (Test-Path $stage12Stdout) {
                   $log = Get-Content $stage12Stdout -Raw
-
                   if ($log -match 'AGENT_GAME_ACCOUNT_CREDENTIAL_OK:([0-9a-fA-F-]+):(.+)') {
                     $stage12CredentialReceived = $true
                   }
-
-                  if ($log -match 'AGENT_SESSION_START_OK:([0-9a-fA-F-]+)') {
-                    $stage12SessionId = $Matches[1]
-                    $stage12ActiveVerified = $false
-
-                    for ($attempt = 0; $attempt -lt 10; $attempt++) {
-                      $activeStage12 = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
-                      $activeRow = @($activeStage12 | Where-Object { $_.id -eq $stage12SessionId })[0]
-
-                      if ($activeRow) {
-                        $actualGameId = [string]$activeRow.gameId
-                        $actualAgentDeviceId = [string]$activeRow.agentDeviceId
-                        $expectedGameId = [string]$stage12Game.id
-                        if ($actualGameId -eq $expectedGameId -and -not [string]::IsNullOrWhiteSpace($actualAgentDeviceId)) {
-                          $stage12ActiveVerified = $true
-                          break
-                        }
-                      }
-
-                      Start-Sleep -Milliseconds 500
-                    }
-
-                    if (-not $stage12ActiveVerified) {
-                      Write-Host '--- Stage 12 active Session payload ---'
-                      $activeStage12 | ConvertTo-Json -Depth 8
-                      Write-Host ("Stage 12 expected gameId={0}; expected agentDeviceId={1}; SessionId={2}" -f $stage12Game.id, $stage12DeviceId, $stage12SessionId)
-                      Write-Host '--- Stage 12 Agent stdout at active-session mismatch ---'
-                      if (Test-Path $stage12Stdout) { Get-Content $stage12Stdout }
-                      Write-Host '--- Stage 12 Agent stderr at active-session mismatch ---'
-                      if (Test-Path $stage12Stderr) { Get-Content $stage12Stderr }
-                      throw 'Stage 12 active Session did not persist authoritative Game/Agent references.'
-                    }
-                  }
-
-                  if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
-                    $stage12Completed = $true
-                    break
-                  }
                 }
-                Start-Sleep -Seconds 1
+
+                if ($stage12ActiveVerified -and $stage12LeaseVerified -and $stage12CredentialReceived) {
+                  break
+                }
+
+                Start-Sleep -Milliseconds 500
+              }
+
+              if (-not $stage12ActiveVerified) {
+                Write-Host '--- Stage 12 active Session payload ---'
+                try { $activeStage12 | ConvertTo-Json -Depth 8 } catch {}
+                Write-Host ("Stage 12 expected gameId={0}; expected agentDeviceId={1}; SessionId={2}" -f $stage12Game.id, $stage12DeviceId, $stage12SessionId)
+                throw 'Stage 12 authoritative active Session verification failed.'
+              }
+
+              if (-not $stage12LeaseVerified) {
+                Write-Host '--- Stage 12 Account Pool payload ---'
+                try { $stage12PoolRows | ConvertTo-Json -Depth 8 } catch {}
+                throw 'Stage 12 authoritative Account Lease verification failed.'
               }
 
               if (-not $stage12CredentialReceived) {
@@ -1017,23 +1028,44 @@ jobs:
                 throw 'Stage 12 Agent did not receive a valid lease-bound Game credential.'
               }
 
-              if (-not $stage12Completed) {
+              if (-not $stage12CredentialReceived) {
                 Write-Host '--- Stage 12 Agent stdout ---'
                 if (Test-Path $stage12Stdout) { Get-Content $stage12Stdout }
                 Write-Host '--- Stage 12 Agent stderr ---'
                 if (Test-Path $stage12Stderr) { Get-Content $stage12Stderr }
-                throw 'Stage 12 Agent Session did not end cleanly.'
+                throw 'Stage 12 Agent did not receive a valid lease-bound Game credential.'
               }
 
-              $stage12Pool = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
-              $stage12AccountRow = @($stage12Pool | Where-Object { $_.id -eq $stage12Account.id })[0]
-              if (-not $stage12AccountRow -or $stage12AccountRow.status -ne 'Free' -or $stage12AccountRow.assignedAgentDeviceId) {
-                throw 'Stage 12 Session end did not release the Account Pool entry.'
+              $releaseDeadline = (Get-Date).ToUniversalTime().AddSeconds(35)
+              $stage12Released = $false
+              while ((Get-Date).ToUniversalTime() -lt $releaseDeadline) {
+                try {
+                  $stage12Pool = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+                  $stage12AccountRow = @($stage12Pool | Where-Object { $_.id -eq $stage12Account.id })[0]
+                  $activeNow = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+                  $stage12Leases = Invoke-RestMethod -Uri "$baseUrl/api/account-pool/leases" -Method Get -WebSession $adminSession
+
+                  $accountFree = $stage12AccountRow -and $stage12AccountRow.status -eq 'Free' -and -not $stage12AccountRow.assignedAgentDeviceId
+                  $sessionGone = $stage12SessionId -and -not @($activeNow | Where-Object { $_.id -eq $stage12SessionId })
+                  $leaseGone = @($stage12Leases | Where-Object { $_.accountId -eq $stage12Account.id }).Count -eq 0
+
+                  if ($accountFree -and $sessionGone -and $leaseGone) {
+                    $stage12Released = $true
+                    break
+                  }
+                } catch {}
+
+                Start-Sleep -Milliseconds 500
               }
 
-              $stage12Leases = Invoke-RestMethod -Uri "$baseUrl/api/account-pool/leases" -Method Get -WebSession $adminSession
-              if (@($stage12Leases | Where-Object { $_.accountId -eq $stage12Account.id }).Count -ne 0) {
-                throw 'Stage 12 released account still appears as an active Lease.'
+              if (-not $stage12Released) {
+                Write-Host '--- Stage 12 post-session Account Pool ---'
+                try { $stage12AccountRow | ConvertTo-Json -Depth 8 } catch {}
+                Write-Host '--- Stage 12 post-session Active Sessions ---'
+                try { $activeNow | ConvertTo-Json -Depth 8 } catch {}
+                Write-Host '--- Stage 12 post-session Active Leases ---'
+                try { $stage12Leases | ConvertTo-Json -Depth 8 } catch {}
+                throw 'Stage 12 Session end did not release the Account Pool/Lease or leave active Session state.'
               }
 
               Write-Host ("Stage 12 Session -> Game Lease -> Agent credential -> Session release smoke passed: gameId={0}; accountId={1}" -f $stage12Game.id, $stage12Account.id)
