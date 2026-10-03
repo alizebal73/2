@@ -20,6 +20,7 @@ public sealed class AccountPoolEntry : BaseEntity
     public required string Platform { get; set; }
     public string? Login { get; set; }
     public string? SecretHash { get; set; }
+    public string? SecretCiphertext { get; set; }
     public string Owner { get; set; } = "مجموعه";
     public DateTimeOffset? ExpiresAt { get; set; }
     public string AllowedGameIdsCsv { get; set; } = string.Empty;
