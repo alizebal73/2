@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { archiveServerGame, getServerGames, saveServerGame, syncServerGame } from '../services/gameService';
+import { getAgentCommand } from '../services/agentService';
 import type { GameRecord } from '../types';
 
 type GameFilter = 'all' | 'online' | 'offline' | 'program';
@@ -76,12 +77,58 @@ export function GamesPage() {
 
     try {
       const result = await syncServerGame(game.id);
-      const failed = result.commands.filter(item => item.status === 'Failed').length;
+
+      const pendingCommands = result.commands.filter(item => item.status === 'Sent');
+      if (pendingCommands.length === 0) {
+        const failed = result.commands.filter(item => item.status === 'Failed').length;
+        setNotice(
+          failed === 0
+            ? `همگام‌سازی «${game.name}» با موفقیت ارسال و تکمیل شد`
+            : `همگام‌سازی ارسال شد؛ ${failed.toLocaleString('fa-IR')} Agent خطا داشت`
+        );
+        return;
+      }
+
       setNotice(
-        failed === 0
-          ? `همگام‌سازی «${game.name}» برای ${result.targetedAgents.toLocaleString('fa-IR')} Agent ارسال شد`
-          : `همگام‌سازی ارسال شد؛ ${failed.toLocaleString('fa-IR')} Agent خطا داشت`
+        `درخواست همگام‌سازی «${game.name}» ثبت شد؛ در حال تأیید ${pendingCommands.length.toLocaleString('fa-IR')} Agent…`
       );
+
+      const deadline = Date.now() + 15000;
+      let remaining = pendingCommands;
+
+      while (remaining.length > 0 && Date.now() < deadline) {
+        await new Promise(resolve => window.setTimeout(resolve, 500));
+        const statuses = await Promise.all(
+          remaining.map(command => getAgentCommand(command.commandId)),
+        );
+
+        const failed = statuses.filter(item => item.status === 'Failed');
+        if (failed.length > 0) {
+          setNotice(
+            `همگام‌سازی ارسال شد؛ ${failed.length.toLocaleString('fa-IR')} Agent موفق نبودند.`
+          );
+          return;
+        }
+
+        remaining = statuses.filter(item =>
+          item.status !== 'Succeeded'
+          && item.status !== 'Failed'
+          && item.status !== 'RolledBack'
+        ).map(item => ({
+          agentId: item.agentDeviceId,
+          deviceId: '',
+          commandId: item.commandId,
+          status: 'Sent' as const,
+        }));
+      }
+
+      if (remaining.length === 0) {
+        setNotice(`همگام‌سازی «${game.name}» روی Agentهای هدف تکمیل شد`);
+      } else {
+        setNotice(
+          `درخواست همگام‌سازی «${game.name}» ثبت شد؛ وضعیت نهایی بعضی Agentها هنوز تأیید نشده است.`
+        );
+      }
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'همگام‌سازی بازی ناموفق بود');
     }
