@@ -43,6 +43,28 @@ jobs:
       - name: Test .NET
         run: dotnet test GameNetManager.sln --no-build --configuration Release
 
+      - name: Validate EF model snapshot
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet tool install --global dotnet-ef --version 10.0.12 --ignore-failed-sources
+          $env:PATH = "$env:USERPROFILE\\.dotnet\\tools;$env:PATH"
+          $probeDir = Join-Path $env:RUNNER_TEMP 'gamenet-ef-model-probe'
+          Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $probeDir -Force | Out-Null
+          dotnet ef migrations add Stage12ModelProbe --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --output-dir $probeDir --no-build --context GameNetDbContext
+          $migrationFiles = Get-ChildItem $probeDir -File -ErrorAction SilentlyContinue
+          if ($migrationFiles.Count -gt 0) {
+            Write-Host 'EF generated model changes:'
+            git diff -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+            if (Test-Path $probeDir) { Get-ChildItem $probeDir -File | ForEach-Object { Get-Content $_.FullName } }
+            git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+            Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+            throw 'EF model snapshot has pending changes.'
+          }
+          git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+          Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+
       - name: Server startup and migration smoke
         shell: pwsh
         run: |
