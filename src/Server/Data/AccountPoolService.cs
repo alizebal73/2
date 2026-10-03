@@ -27,9 +27,11 @@ public sealed class AccountPoolService(
 
         for (var attempt = 0; attempt < 2; attempt++)
         {
+            var now = DateTimeOffset.UtcNow;
             var candidates = await database.AccountPoolEntries.AsNoTracking()
-                .Where(item => item.Status == AccountPoolStatus.Free && item.IsActive)
-                .Take(50)
+                .Where(item => item.Status == AccountPoolStatus.Free
+                    && item.IsActive
+                    && (!item.ExpiresAt.HasValue || item.ExpiresAt > now))
                 .ToListAsync(cancellationToken);
 
             var candidate = candidates
@@ -44,8 +46,6 @@ public sealed class AccountPoolService(
             try
             {
                 await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-                var now = DateTimeOffset.UtcNow;
-
                 var updated = await database.AccountPoolEntries
                     .Where(item => item.Id == candidate.Id
                         && item.Status == AccountPoolStatus.Free
