@@ -372,12 +372,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasMaxLength(80)
                         .HasColumnType("TEXT");
 
-                    b.Property<Guid?>("AgentDeviceId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("AgentDeviceId")
-                        .HasColumnType("TEXT");
-
                     b.Property<Guid?>("AppUserId")
                         .HasColumnType("TEXT");
 
@@ -415,9 +409,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("GameId")
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("CustomerId")
@@ -605,9 +596,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("CustomerId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("GameId")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsActive")
@@ -1098,8 +1086,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AgentDeviceId");
-
                     b.HasIndex("AppUserId");
 
                     b.HasIndex("CustomerId");
@@ -1413,8 +1399,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.HasIndex("ClientId");
 
                     b.HasIndex("CustomerId");
-
-                    b.HasIndex("GameId");
 
                     b.HasIndex("StationId");
 
