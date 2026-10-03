@@ -719,6 +719,21 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ConnectionType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Cover")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Executable")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Genre")
                         .HasMaxLength(80)
                         .HasColumnType("TEXT");
@@ -726,7 +741,54 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("LaunchArgs")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Path")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Target")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetStations")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetSystem")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetZone")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
@@ -788,6 +850,135 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.HasIndex("GameId");
 
                     b.ToTable("GameAccounts");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AccountLease", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("AccountPoolEntryId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AgentDeviceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("CustomerId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("GameId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("LeasedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ReleasedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LeaseToken")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("SessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountPoolEntryId", "State");
+
+                    b.HasIndex("AgentDeviceId");
+
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("GameId");
+
+                    b.HasIndex("LeaseToken")
+                        .IsUnique();
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("AccountLeases");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AccountPoolEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("AssignedAgentDeviceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AllowedGameIdsCsv")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Login")
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Owner")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SecretHash")
+                        .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AssignedAgentDeviceId");
+
+                    b.HasIndex("Status", "IsActive");
+
+                    b.HasIndex("Title")
+                        .IsUnique();
+
+                    b.ToTable("AccountPoolEntries");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.InventoryTransaction", b =>
@@ -1697,6 +1888,58 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Navigation("Customer");
 
                     b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AccountLease", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AccountPoolEntry", "AccountPoolEntry")
+                        .WithMany("Leases")
+                        .HasForeignKey("AccountPoolEntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GameNetManager.Server.Data.AgentDevice", "AgentDevice")
+                        .WithMany()
+                        .HasForeignKey("AgentDeviceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("GameNetManager.Server.Data.Customer", "Customer")
+                        .WithMany()
+                        .HasForeignKey("CustomerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("GameNetManager.Server.Data.Game", "Game")
+                        .WithMany("AccountLeases")
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("GameNetManager.Server.Data.Session", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AccountPoolEntry");
+
+                    b.Navigation("AgentDevice");
+
+                    b.Navigation("Customer");
+
+                    b.Navigation("Game");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AccountPoolEntry", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AgentDevice", "AssignedAgentDevice")
+                        .WithMany()
+                        .HasForeignKey("AssignedAgentDeviceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AssignedAgentDevice");
+
+                    b.Navigation("Leases");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.InventoryTransaction", b =>
