@@ -37,10 +37,13 @@ public sealed class AgentPresenceMonitor(
             {
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
+                var accountPool = scope.ServiceProvider.GetRequiredService<AccountPoolService>();
                 var now = DateTimeOffset.UtcNow;
                 var cutoff = now.AddSeconds(-offlineAfter);
                 var commandCutoff = now.AddSeconds(-commandTimeoutSeconds);
 
+                // SQLite does not translate DateTimeOffset comparisons reliably.
+                // Materialize the bounded Agent set, then apply stale-time comparison in memory.
                 var onlineDevices = await database.AgentDevices
                     .Where(item => item.IsActive
                         && item.IsOnline
@@ -114,6 +117,13 @@ public sealed class AgentPresenceMonitor(
 
                         if (device is null)
                             continue;
+
+                        var releasedLeases = await accountPool.ReleaseActiveForAgentAsync(
+                            device.Id,
+                            "آزادسازی خودکار به دلیل stale شدن heartbeat Agent",
+                            stoppingToken);
+                        if (releasedLeases > 0)
+                            logger.LogWarning("Stale Agent {DeviceId}; released {LeaseCount} active account lease(s).", device.DeviceId, releasedLeases);
 
                         if (device.LockOnDisconnect && device.IsLocked)
                         {

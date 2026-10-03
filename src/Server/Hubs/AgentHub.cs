@@ -9,9 +9,12 @@ public sealed class AgentHub(
     GameNetDbContext database,
     IConfiguration configuration,
     IHubContext<DashboardHub> dashboardHub,
-    ILogger<AgentHub> logger) : Hub
+    ILogger<AgentHub> logger,
+    AccountPoolService accountPool) : Hub
 {
     private const string AgentDeviceContextKey = "GameNet.AgentDeviceId";
+
+    public static string DeviceGroup(Guid deviceId) => $"agent-device:{deviceId:N}";
     public override async Task OnConnectedAsync()
     {
         var device = await ResolveDeviceAsync(Context, Context.ConnectionAborted);
@@ -21,7 +24,32 @@ public sealed class AgentHub(
             return;
         }
 
+        // Authentication is established here, but the device is not marked online
+        // until the client explicitly confirms the bidirectional SignalR connection.
+        // This prevents REST callers from racing a not-yet-ready server-to-client channel.
         Context.Items[AgentDeviceContextKey] = device.Id;
+        await Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            DeviceGroup(device.Id),
+            Context.ConnectionAborted);
+
+        await base.OnConnectedAsync();
+    }
+
+    public async Task<AgentReadyDto> ConfirmConnection()
+    {
+        var device = await ResolveDeviceAsync(Context, Context.ConnectionAborted);
+        if (device is null || !device.IsActive)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        Context.Items[AgentDeviceContextKey] = device.Id;
+
+        // Re-add the active connection to the durable per-device group from inside
+        // the already-established bidirectional hub channel.
+        await Groups.AddToGroupAsync(
+            Context.ConnectionId,
+            DeviceGroup(device.Id),
+            Context.ConnectionAborted);
 
         var now = DateTimeOffset.UtcNow;
         device.IsOnline = true;
@@ -35,20 +63,16 @@ public sealed class AgentHub(
         device.LastUpdateError = null;
         await database.SaveChangesAsync(Context.ConnectionAborted);
 
-        await Clients.Caller.SendAsync(
-            "AgentReady",
-            new AgentReadyDto(
-                device.Id,
-                device.DeviceId,
-                now,
-                HeartbeatIntervalSeconds(),
-                device.IsLocked,
-                device.KioskEnabled,
-                device.LockOnDisconnect),
-            Context.ConnectionAborted);
-
         await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
-        await base.OnConnectedAsync();
+
+        return new AgentReadyDto(
+            device.Id,
+            device.DeviceId,
+            now,
+            HeartbeatIntervalSeconds(),
+            device.IsLocked,
+            device.KioskEnabled,
+            device.LockOnDisconnect);
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
@@ -84,6 +108,13 @@ public sealed class AgentHub(
                 {
                     if (device.LockOnDisconnect)
                         logger.LogWarning("Agent {DeviceId} disconnected; LockOnDisconnect policy locked the device.", device.DeviceId);
+
+                    var releasedLeases = await accountPool.ReleaseActiveForAgentAsync(
+                        device.Id,
+                        "آزادسازی خودکار به دلیل قطع ارتباط Agent",
+                        CancellationToken.None);
+                    if (releasedLeases > 0)
+                        logger.LogWarning("Agent {DeviceId} disconnected; released {LeaseCount} active account lease(s).", device.DeviceId, releasedLeases);
 
                     await BroadcastStatusAsync(device, now, CancellationToken.None);
                 }
@@ -122,6 +153,13 @@ public sealed class AgentHub(
 
             if (!device.IsActive)
                 throw new HubException("دستگاه غیرفعال است.");
+
+            // Heartbeat is also a group-healing path. Any transient group loss is
+            // repaired from the currently authenticated SignalR connection.
+            await Groups.AddToGroupAsync(
+                Context.ConnectionId,
+                DeviceGroup(device.Id),
+                Context.ConnectionAborted);
 
             var now = DateTimeOffset.UtcNow;
             device.IsOnline = true;
@@ -248,8 +286,7 @@ public sealed class AgentHub(
                                         || item.Status == "AwaitingHealth"))
                                 || (item.CommandType != AgentCommandTypes.Update
                                     && item.CommandType != AgentCommandTypes.Rollback
-                                    && item.Status == "Sent"
-                                    && item.AgentConnectionId == Context.ConnectionId)
+                                    && item.Status == "Sent")
                             ))
                     ),
                 Context.ConnectionAborted);
@@ -341,6 +378,29 @@ public sealed class AgentHub(
             Context.ConnectionAborted);
     }
 
+    public async Task<AgentGameAccountCredentialDto> AcquireGameAccount(Guid sessionId)
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        try
+        {
+            var credential = await accountPool.AcquireCredentialForOperationalSessionAsync(
+                sessionId,
+                device.Id,
+                Context.ConnectionAborted);
+            if (credential is null)
+                throw new HubException("اکانت آزاد و سازگار برای بازی این جلسه وجود ندارد.");
+
+            return credential;
+        }
+        catch (InvalidOperationException exception)
+        {
+            throw new HubException(exception.Message);
+        }
+    }
+
     public async Task AgentLogoutAndLock()
     {
         var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
@@ -354,7 +414,9 @@ public sealed class AgentHub(
             ? await database.Sessions
                 .Include(item => item.Station)
                 .FirstOrDefaultAsync(
-                    item => item.StationId == device.StationId.Value && item.State == SessionState.Active,
+                    item => item.StationId == device.StationId.Value
+                        && item.AgentDeviceId == device.Id
+                        && item.State == SessionState.Active,
                     Context.ConnectionAborted)
             : null;
 
@@ -364,14 +426,31 @@ public sealed class AgentHub(
             activeSession.State = SessionState.Ended;
             activeSession.Station.State = StationState.Available;
 
-            var logins = await database.CustomerLogins
-                .Where(item => item.IsActive && item.ClientKey == device.DeviceId)
-                .ToListAsync(Context.ConnectionAborted);
-
-            foreach (var login in logins)
+            CustomerLogin? sessionLogin = null;
+            if (activeSession.CustomerLoginId.HasValue)
             {
-                login.IsActive = false;
-                login.LoggedOutAt = now;
+                sessionLogin = await database.CustomerLogins
+                    .FirstOrDefaultAsync(
+                        item => item.Id == activeSession.CustomerLoginId.Value
+                            && item.CustomerId == activeSession.CustomerId
+                            && item.ClientKey == device.DeviceId,
+                        Context.ConnectionAborted);
+            }
+            else
+            {
+                // Legacy sessions created before CustomerLoginId was introduced.
+                sessionLogin = await database.CustomerLogins
+                    .FirstOrDefaultAsync(
+                        item => item.CustomerId == activeSession.CustomerId
+                            && item.ClientKey == device.DeviceId
+                            && item.IsActive,
+                        Context.ConnectionAborted);
+            }
+
+            if (sessionLogin is not null && sessionLogin.IsActive)
+            {
+                sessionLogin.IsActive = false;
+                sessionLogin.LoggedOutAt = now;
             }
 
             database.AuditLogs.Add(new AuditLog
@@ -382,19 +461,12 @@ public sealed class AgentHub(
                 Details = $"خروج کاربر و قفل دستگاه · Agent {device.DeviceId}"
             });
 
-            await database.SaveChangesAsync(Context.ConnectionAborted);
-
-            await dashboardHub.Clients.All.SendAsync(
-                "AgentSessionChanged",
-                new
-                {
-                    sessionId = activeSession.Id,
-                    stationId = activeSession.StationId,
-                    customerId = activeSession.CustomerId,
-                    state = "Ended",
-                    changedAt = now
-                },
+            await accountPool.ReleaseActiveForSessionWithinTransactionAsync(
+                activeSession.Id,
+                "آزادسازی خودکار با خروج و قفل Agent",
                 Context.ConnectionAborted);
+
+            await database.SaveChangesAsync(Context.ConnectionAborted);
         }
 
         device.IsLocked = true;
@@ -410,6 +482,22 @@ public sealed class AgentHub(
 
         await database.SaveChangesAsync(Context.ConnectionAborted);
         await transaction.CommitAsync(Context.ConnectionAborted);
+
+        if (activeSession is not null)
+        {
+            await dashboardHub.Clients.All.SendAsync(
+                "AgentSessionChanged",
+                new
+                {
+                    sessionId = activeSession.Id,
+                    stationId = activeSession.StationId,
+                    customerId = activeSession.CustomerId,
+                    state = "Ended",
+                    changedAt = now
+                },
+                Context.ConnectionAborted);
+        }
+
         await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
     }
 
@@ -441,6 +529,21 @@ public sealed class AgentHub(
         if (login is null)
             throw new HubException("ورود معتبر مشتری برای این دستگاه پیدا نشد.");
 
+        if (await database.Sessions.AnyAsync(
+                item => item.CustomerLoginId == login.Id && item.State == SessionState.Active,
+                Context.ConnectionAborted))
+            throw new HubException("این ورود مشتری از قبل یک Session فعال دارد.");
+
+        Game? game = null;
+        if (request.GameId.HasValue)
+        {
+            game = await database.Games.FirstOrDefaultAsync(
+                item => item.Id == request.GameId.Value && item.IsActive,
+                Context.ConnectionAborted);
+            if (game is null)
+                throw new HubException("بازی انتخاب‌شده پیدا نشد یا غیرفعال است.");
+        }
+
         var station = await database.Stations
             .Include(item => item.Tariff)
             .FirstOrDefaultAsync(item => item.Id == device.StationId.Value, Context.ConnectionAborted);
@@ -465,12 +568,15 @@ public sealed class AgentHub(
         var session = new Session
         {
             CustomerId = customer.Id,
+            CustomerLoginId = login.Id,
             StationId = station.Id,
             TariffId = station.TariffId,
             AppUserId = null,
             StartAt = DateTimeOffset.UtcNow,
             State = SessionState.Active,
             TotalAmount = 0m,
+            GameId = game?.Id,
+            AgentDeviceId = device.Id,
             // Customer/Agent cannot override the price. Server tariff is authoritative.
             HourlyRateOverride = null,
             Persons = persons
@@ -521,16 +627,21 @@ public sealed class AgentHub(
 
         var session = await database.Sessions
             .Include(item => item.Station)
+            .Include(item => item.CustomerLogin)
             .FirstOrDefaultAsync(item => item.Id == request.SessionId, Context.ConnectionAborted);
 
         if (session is null)
             throw new HubException("جلسه پیدا نشد.");
 
+        if (session.AgentDeviceId != device.Id)
+            throw new HubException("این Session متعلق به Agent درخواست‌کننده نیست.");
         if (session.StationId != device.StationId.Value)
             throw new HubException("این جلسه متعلق به ایستگاه Agent نیست.");
 
         if (!request.CustomerLoginId.HasValue)
             throw new HubException("شناسهٔ ورود مشتری برای پایان جلسه الزامی است.");
+        if (!session.CustomerLoginId.HasValue || session.CustomerLoginId.Value != request.CustomerLoginId.Value)
+            throw new HubException("ورود مشتری ثبت‌شده برای این Session با درخواست پایان جلسه یکسان نیست.");
 
         var login = await database.CustomerLogins.FirstOrDefaultAsync(
             item => item.Id == request.CustomerLoginId.Value
@@ -557,6 +668,11 @@ public sealed class AgentHub(
                 login.LoggedOutAt = session.EndAt ?? now;
                 await database.SaveChangesAsync(Context.ConnectionAborted);
             }
+
+            await accountPool.ReleaseActiveForSessionAsync(
+                session.Id,
+                "آزادسازی خودکار با پایان Session",
+                Context.ConnectionAborted);
 
             return new AgentSessionEndResponse(
                 session.Id,
@@ -587,6 +703,13 @@ public sealed class AgentHub(
 
         await database.SaveChangesAsync(Context.ConnectionAborted);
         await transaction.CommitAsync(Context.ConnectionAborted);
+
+        // Lease release is part of the same transaction as the terminal
+        // Session transition, so EndSession cannot commit with an InUse lease.
+        await accountPool.ReleaseActiveForSessionWithinTransactionAsync(
+            session.Id,
+            "آزادسازی خودکار با پایان Session",
+            Context.ConnectionAborted);
 
         await dashboardHub.Clients.All.SendAsync(
             "AgentSessionChanged",

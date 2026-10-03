@@ -315,8 +315,14 @@ public sealed class Session : BaseEntity
 {
     public Guid CustomerId { get; set; }
     public Customer Customer { get; set; } = default!;
+    public Guid? CustomerLoginId { get; set; }
+    public CustomerLogin? CustomerLogin { get; set; }
     public Guid StationId { get; set; }
     public Station Station { get; set; } = default!;
+    public Guid? AgentDeviceId { get; set; }
+    public AgentDevice? AgentDevice { get; set; }
+    public Guid? GameId { get; set; }
+    public Game? Game { get; set; }
     public Guid? TariffId { get; set; }
     public Tariff? Tariff { get; set; }
     public Guid? AppUserId { get; set; }

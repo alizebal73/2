@@ -25,6 +25,8 @@ var dataDirectory = Environment.GetEnvironmentVariable("GAMENET_AGENT_DATA_DIR")
 var testSessionFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_SESSION_FLOW"), "1", StringComparison.Ordinal);
 var testSessionCustomerId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_CUSTOMER_ID");
 var testSessionLoginId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_LOGIN_ID");
+var testGameIdText = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_GAME_ID");
+var testGameAccountFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW"), "1", StringComparison.Ordinal);
 
 if (string.IsNullOrWhiteSpace(dataDirectory))
     dataDirectory = Path.Combine(
@@ -123,6 +125,7 @@ try
                 command,
                 lockScreen,
                 updateManager,
+                dataDirectory,
                 agentVersion,
                 shutdown.Token);
 
@@ -199,49 +202,6 @@ try
             return Task.CompletedTask;
         });
 
-        connection.On<AgentReadyDto>("AgentReady", async ready =>
-        {
-            kioskEnabled = ready.KioskEnabled;
-            lockOnDisconnect = ready.LockOnDisconnect;
-
-            if (ready.IsLocked)
-                await lockScreen.LockAsync(shutdown.Token);
-            else
-                await lockScreen.UnlockAsync();
-
-            state = state with
-            {
-                LifecycleState = ClientLifecycleStates.Running,
-                LastUpdateError = null,
-                LastHealthyAt = DateTimeOffset.UtcNow
-            };
-            await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
-            await SaveStateAsync(statePath, state);
-
-            state = await FinalizePendingLifecycleCommandAsync(
-                connection,
-                state,
-                agentVersion,
-                shutdown.Token);
-            await SaveStateAsync(statePath, state);
-
-            Console.WriteLine(
-                $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}; Kiosk={kioskEnabled}; LockOnDisconnect={lockOnDisconnect}");
-
-            if (!testSessionFlowCompleted
-                && testSessionFlow
-                && Guid.TryParse(testSessionCustomerId, out var testCustomerId)
-                && Guid.TryParse(testSessionLoginId, out var testLoginId))
-            {
-                testSessionFlowCompleted = true;
-                _ = RunTestSessionFlowAsync(
-                    connection,
-                    testCustomerId,
-                    testLoginId,
-                    shutdown.Token);
-            }
-        });
-
         connection.Reconnecting += error =>
         {
             Console.WriteLine(
@@ -254,22 +214,46 @@ try
             state = state with { LifecycleState = ClientLifecycleStates.Recovering };
             await SaveStateAsync(statePath, state);
             Console.WriteLine($"Agent دوباره متصل شد ({connectionId}).");
-            var heartbeat = await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, state, shutdown.Token);
-            if (heartbeat.HasValue)
+
+            try
             {
-                state = state with
-                {
-                    LifecycleState = ClientLifecycleStates.Running,
-                    LastUpdateError = null,
-                    LastHealthyAt = DateTimeOffset.UtcNow
-                };
-                await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
-                state = await FinalizePendingLifecycleCommandAsync(
-                    connection,
-                    state,
-                    agentVersion,
+                var readyAfterReconnect = await connection.InvokeAsync<AgentReadyDto>(
+                    "ConfirmConnection",
                     shutdown.Token);
-                await SaveStateAsync(statePath, state);
+                var readyResult = await ApplyAgentReadyAsync(
+                    connection,
+                    readyAfterReconnect,
+                    state,
+                    testSessionFlowCompleted,
+                    lockScreen,
+                    updateManager,
+                    statePath,
+                    agentVersion,
+                    testSessionCustomerId,
+                    testSessionLoginId,
+                    testGameIdText,
+                    testSessionFlow,
+                    testGameAccountFlow,
+                    shutdown.Token);
+                state = readyResult.State;
+                testSessionFlowCompleted = readyResult.TestSessionFlowCompleted;
+                kioskEnabled = readyResult.KioskEnabled;
+                lockOnDisconnect = readyResult.LockOnDisconnect;
+
+                _ = await SendHeartbeatAsync(
+                    connection,
+                    agentVersion,
+                    osVersion,
+                    lockScreen,
+                    state,
+                    shutdown.Token);
+            }
+            catch (Exception exception) when (
+                exception is HubException
+                    or HttpRequestException
+                    or InvalidOperationException)
+            {
+                Console.WriteLine($"تأیید اتصال مجدد Agent انجام نشد: {exception.Message}");
             }
         };
 
@@ -296,7 +280,31 @@ try
         try
         {
             await connection.StartAsync(shutdown.Token);
-            Console.WriteLine($"Agent GameNet روی {hubUrl} فعال شد.");
+
+            var ready = await connection.InvokeAsync<AgentReadyDto>(
+                "ConfirmConnection",
+                shutdown.Token);
+            var readyResult = await ApplyAgentReadyAsync(
+                connection,
+                ready,
+                state,
+                testSessionFlowCompleted,
+                lockScreen,
+                updateManager,
+                statePath,
+                agentVersion,
+                testSessionCustomerId,
+                testSessionLoginId,
+                testGameIdText,
+                testSessionFlow,
+                testGameAccountFlow,
+                shutdown.Token);
+            state = readyResult.State;
+            testSessionFlowCompleted = readyResult.TestSessionFlowCompleted;
+            kioskEnabled = readyResult.KioskEnabled;
+            lockOnDisconnect = readyResult.LockOnDisconnect;
+
+            Console.WriteLine($"Agent GameNet روی {hubUrl} فعال و اتصال دوطرفه تأیید شد.");
 
             while (!shutdown.IsCancellationRequested
                 && connection.State != HubConnectionState.Disconnected)
@@ -422,10 +430,69 @@ static async Task<AgentState> RegisterAgentAsync(
     return state with { AgentToken = registration.AgentToken };
 }
 
+static async Task<(AgentState State, bool TestSessionFlowCompleted, bool KioskEnabled, bool LockOnDisconnect)> ApplyAgentReadyAsync(
+    HubConnection connection,
+    AgentReadyDto ready,
+    AgentState state,
+    bool testSessionFlowCompleted,
+    AgentLockScreenController lockScreen,
+    ClientUpdateManager updateManager,
+    string statePath,
+    string agentVersion,
+    string? testSessionCustomerId,
+    string? testSessionLoginId,
+    string? testGameIdText,
+    bool testSessionFlow,
+    bool testGameAccountFlow,
+    CancellationToken cancellationToken)
+{
+    if (ready.IsLocked)
+        await lockScreen.LockAsync(cancellationToken);
+    else
+        await lockScreen.UnlockAsync();
+
+    state = state with
+    {
+        LifecycleState = ClientLifecycleStates.Running,
+        LastUpdateError = null,
+        LastHealthyAt = DateTimeOffset.UtcNow
+    };
+
+    await updateManager.MarkHealthyAsync(agentVersion, cancellationToken);
+    state = await FinalizePendingLifecycleCommandAsync(
+        connection,
+        state,
+        agentVersion,
+        cancellationToken);
+    await SaveStateAsync(statePath, state);
+
+    Console.WriteLine(
+        $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}; Kiosk={ready.KioskEnabled}; LockOnDisconnect={ready.LockOnDisconnect}");
+
+    if (!testSessionFlowCompleted
+        && testSessionFlow
+        && Guid.TryParse(testSessionCustomerId, out var testCustomerId)
+        && Guid.TryParse(testSessionLoginId, out var testLoginId))
+    {
+        testSessionFlowCompleted = true;
+        _ = RunTestSessionFlowAsync(
+            connection,
+            testCustomerId,
+            testLoginId,
+            Guid.TryParse(testGameIdText, out var testGameId) ? testGameId : null,
+            testGameAccountFlow,
+            cancellationToken);
+    }
+
+    return (state, testSessionFlowCompleted, ready.KioskEnabled, ready.LockOnDisconnect);
+}
+
 static async Task RunTestSessionFlowAsync(
     HubConnection connection,
     Guid customerId,
     Guid customerLoginId,
+    Guid? gameId,
+    bool testGameAccountFlow,
     CancellationToken cancellationToken)
 {
     try
@@ -435,13 +502,55 @@ static async Task RunTestSessionFlowAsync(
             new AgentSessionStartRequest(
                 customerId,
                 customerLoginId,
-                Guid.NewGuid(),
-                1m,
-                1),
+                null,
+                null,
+                1,
+                gameId),
             cancellationToken);
 
         Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
         Console.WriteLine($"AGENT_SESSION_START_OK:{started.SessionId}");
+
+        try
+        {
+            await connection.InvokeAsync<AgentSessionStartResponse>(
+                "StartSession",
+                new AgentSessionStartRequest(
+                    customerId,
+                    customerLoginId,
+                    null,
+                    null,
+                    1,
+                    gameId),
+                cancellationToken);
+            throw new InvalidOperationException("Duplicate Agent session start unexpectedly succeeded.");
+        }
+        catch (HubException)
+        {
+            Console.WriteLine("AGENT_SESSION_DUPLICATE_GUARD_OK");
+        }
+
+        if (testGameAccountFlow && gameId.HasValue)
+        {
+            var credential = await connection.InvokeAsync<AgentGameAccountCredentialDto>(
+                "AcquireGameAccount",
+                started.SessionId,
+                cancellationToken);
+            Console.WriteLine($"AGENT_GAME_ACCOUNT_OK:{credential.LeaseId}:{credential.GameId}:{credential.Platform}:{credential.Login}");
+
+            var handshakeFile = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_ACCOUNT_HANDSHAKE_FILE");
+            if (!string.IsNullOrWhiteSpace(handshakeFile))
+            {
+                var handshakeDeadline = DateTime.UtcNow.AddSeconds(30);
+                while (!File.Exists(handshakeFile) && DateTime.UtcNow < handshakeDeadline)
+                    await Task.Delay(100, cancellationToken);
+
+                if (!File.Exists(handshakeFile))
+                    throw new InvalidOperationException("تأیید وضعیت InUse برای Account Lease از سمت smoke timeout شد.");
+
+                try { File.Delete(handshakeFile); } catch { }
+            }
+        }
 
         await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
 
@@ -456,6 +565,19 @@ static async Task RunTestSessionFlowAsync(
         catch (HubException)
         {
             Console.WriteLine("AGENT_SESSION_END_AUTH_GUARD_OK");
+        }
+
+        try
+        {
+            await connection.InvokeAsync<AgentSessionEndResponse>(
+                "EndSession",
+                new AgentSessionEndRequest(started.SessionId, Guid.NewGuid()),
+                cancellationToken);
+            throw new InvalidOperationException("Agent session end with a different CustomerLoginId unexpectedly succeeded.");
+        }
+        catch (HubException)
+        {
+            Console.WriteLine("AGENT_SESSION_END_LOGIN_GUARD_OK");
         }
 
         var ended = await connection.InvokeAsync<AgentSessionEndResponse>(
@@ -608,6 +730,7 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
     AgentCommandEnvelope command,
     AgentLockScreenController lockScreen,
     ClientUpdateManager updateManager,
+    string dataDirectory,
     string agentVersion,
     CancellationToken cancellationToken)
 {
@@ -695,6 +818,18 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 Console.WriteLine($"CLIENT_ROLLBACK_REQUESTED:{rollbackVersion}");
                 break;
 
+            case AgentCommandTypes.ApplyGame:
+            {
+                var payload = JsonSerializer.Deserialize<AgentGameApplyCommandPayload>(
+                    command.PayloadJson ?? string.Empty)
+                    ?? throw new JsonException("دادهٔ همگام‌سازی بازی معتبر نیست.");
+
+                await ApplyGameManifestAsync(dataDirectory, payload, cancellationToken);
+                Console.WriteLine($"CLIENT_GAME_APPLIED:{payload.GameId:N}");
+                message = $"تنظیمات بازی «{payload.Name}» روی Agent ثبت شد.";
+                break;
+            }
+
             default:
                 success = false;
                 message = "فرمان Agent ناشناخته است.";
@@ -757,6 +892,40 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         restartVersion,
         restartVersion is not null,
         awaitingFinalResult);
+}
+
+static async Task ApplyGameManifestAsync(
+    string dataDirectory,
+    AgentGameApplyCommandPayload payload,
+    CancellationToken cancellationToken)
+{
+    if (payload.GameId == Guid.Empty)
+        throw new InvalidOperationException("شناسهٔ بازی معتبر نیست.");
+    if (string.IsNullOrWhiteSpace(payload.Name))
+        throw new InvalidOperationException("نام بازی خالی است.");
+    if (string.IsNullOrWhiteSpace(payload.Executable))
+        throw new InvalidOperationException("فایل اجرایی بازی مشخص نشده است.");
+
+    var gamesDirectory = Path.Combine(dataDirectory, "games");
+    Directory.CreateDirectory(gamesDirectory);
+
+    var targetPath = Path.Combine(gamesDirectory, payload.GameId.ToString("N") + ".json");
+    var temporaryPath = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+    var json = JsonSerializer.Serialize(
+        payload,
+        new JsonSerializerOptions { WriteIndented = true });
+
+    await File.WriteAllTextAsync(temporaryPath, json, Encoding.UTF8, cancellationToken);
+
+    try
+    {
+        File.Move(temporaryPath, targetPath, overwrite: true);
+    }
+    catch
+    {
+        try { File.Delete(temporaryPath); } catch { }
+        throw;
+    }
 }
 
 static async Task<AgentState> FinalizePendingLifecycleCommandAsync(

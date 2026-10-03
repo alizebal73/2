@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using GameNetManager.Server.Data;
 using GameNetManager.Server.Hubs;
 using Microsoft.AspNetCore.SignalR;
@@ -16,6 +17,7 @@ builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
+builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
@@ -23,6 +25,13 @@ var databasePath = Path.IsPathRooted(databaseFile)
     ? databaseFile
     : Path.Combine(builder.Environment.ContentRootPath, databaseFile);
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+
+var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+Directory.CreateDirectory(dataProtectionKeysPath);
+builder.Services
+    .AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+    .SetApplicationName("GameNetManager");
 builder.Services.AddDbContext<GameNetDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
 
@@ -70,7 +79,7 @@ app.MapGet("/api/games", async (
             item.Version,
             item.Genre,
             item.Status,
-            0,
+            database.Sessions.Count(session => session.GameId == item.Id && session.State == SessionState.Active),
             item.Path,
             item.Executable,
             item.Cover,
@@ -131,7 +140,11 @@ app.MapPost("/api/games", async (
     });
     await database.SaveChangesAsync(cancellationToken);
 
-    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, 0,
+    var activeUsers = await database.Sessions.CountAsync(
+        item => item.GameId == game.Id && item.State == SessionState.Active,
+        cancellationToken);
+
+    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, activeUsers,
         game.Path, game.Executable, game.Cover, game.Trailer, game.LaunchArgs, game.ConnectionType,
         game.IsActive, game.TargetSystem, game.Target, game.TargetZone, game.TargetStations));
 }).WithName("CreateGame");
@@ -178,7 +191,11 @@ app.MapPut("/api/games/{gameId:guid}", async (
     });
     await database.SaveChangesAsync(cancellationToken);
 
-    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, 0,
+    var activeUsers = await database.Sessions.CountAsync(
+        item => item.GameId == game.Id && item.State == SessionState.Active,
+        cancellationToken);
+
+    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, activeUsers,
         game.Path, game.Executable, game.Cover, game.Trailer, game.LaunchArgs, game.ConnectionType,
         game.IsActive, game.TargetSystem, game.Target, game.TargetZone, game.TargetStations));
 }).WithName("UpdateGame");
@@ -212,6 +229,130 @@ app.MapDelete("/api/games/{gameId:guid}", async (
     return Results.Ok(new { archived = true });
 }).WithName("ArchiveGame");
 
+app.MapPost("/api/games/{gameId:guid}/sync", async (
+    Guid gameId,
+    HttpContext context,
+    GameNetDbContext database,
+    IHubContext<AgentHub> agentHub,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "game.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var game = await database.Games
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == gameId && item.IsActive, cancellationToken);
+    if (game is null)
+        return Results.NotFound(new { code = "game_not_found", message = "بازی فعال پیدا نشد." });
+
+    var agents = await database.AgentDevices
+        .Include(item => item.Station)
+        .Where(item => item.IsActive
+            && item.IsOnline
+            && item.ConnectionId != null)
+        .ToListAsync(cancellationToken);
+
+    var targetedAgents = agents.Where(device =>
+        game.Target switch
+        {
+            "zone" => device.Station != null
+                && string.Equals(device.Station.Zone, game.TargetZone, StringComparison.OrdinalIgnoreCase),
+            "stations" => !string.IsNullOrWhiteSpace(game.TargetStations)
+                && game.TargetStations
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Any(target => string.Equals(target, device.DeviceId, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(target, device.Station?.Name, StringComparison.OrdinalIgnoreCase)),
+            _ => true
+        }).ToList();
+
+    if (targetedAgents.Count == 0)
+        return Results.Conflict(new
+        {
+            code = "no_target_agents_online",
+            message = "برای این بازی هیچ Agent آنلاین و واجد شرایطی برای همگام‌سازی وجود ندارد."
+        });
+
+    var payload = System.Text.Json.JsonSerializer.Serialize(new AgentGameApplyCommandPayload(
+        game.Id,
+        game.Name,
+        game.Version,
+        game.Path,
+        game.Executable,
+        game.LaunchArgs,
+        game.ConnectionType,
+        game.TargetSystem,
+        game.Target,
+        game.TargetZone,
+        game.TargetStations,
+        game.IsActive));
+
+    var results = new List<object>();
+    foreach (var device in targetedAgents)
+    {
+        var command = new AgentCommand
+        {
+            AgentDeviceId = device.Id,
+            RequestedByAppUserId = auth.User!.Id,
+            CommandType = AgentCommandTypes.ApplyGame,
+            PayloadJson = payload,
+            Status = "Sent",
+            RequestedAt = DateTimeOffset.UtcNow,
+            SentAt = DateTimeOffset.UtcNow,
+            AgentConnectionId = device.ConnectionId
+        };
+
+        database.AgentCommands.Add(command);
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "GameSyncRequested",
+            EntityName = "Game",
+            EntityId = game.Id.ToString(),
+            AppUserId = auth.User.Id,
+            Details = $"همگام‌سازی بازی {game.Name} برای Agent {device.DeviceId}"
+        });
+        await database.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
+                "AgentCommand",
+                new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
+                cancellationToken);
+
+            results.Add(new
+            {
+                agentId = device.Id,
+                deviceId = device.DeviceId,
+                commandId = command.Id,
+                status = "Sent"
+            });
+        }
+        catch
+        {
+            command.Status = "Failed";
+            command.Succeeded = false;
+            command.CompletedAt = DateTimeOffset.UtcNow;
+            command.ResultMessage = "ارسال همگام‌سازی بازی به Agent انجام نشد.";
+            await database.SaveChangesAsync(CancellationToken.None);
+
+            results.Add(new
+            {
+                agentId = device.Id,
+                deviceId = device.DeviceId,
+                commandId = command.Id,
+                status = "Failed"
+            });
+        }
+    }
+
+    return Results.Ok(new
+    {
+        gameId = game.Id,
+        targetedAgents = targetedAgents.Count,
+        commands = results
+    });
+}).WithName("SyncGameToAgents");
+
 app.MapGet("/api/account-pool", async (
     HttpContext context,
     GameNetDbContext database,
@@ -235,7 +376,9 @@ app.MapGet("/api/account-pool", async (
         item.Platform,
         item.Login,
         item.Owner,
-        item.ExpiresAt,
+        item.ExpiresAt.HasValue
+            ? new DateTimeOffset(DateTime.SpecifyKind(item.ExpiresAt.Value, DateTimeKind.Utc))
+            : null,
         item.AllowedGameIdsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(id => Guid.TryParse(id, out var guid) && gameMap.TryGetValue(guid, out var name) ? name : null)
             .Where(name => name is not null)
@@ -252,6 +395,7 @@ app.MapPost("/api/account-pool", async (
     SaveAccountPoolEntryRequest request,
     HttpContext context,
     GameNetDbContext database,
+    GameCredentialProtectionService credentialProtection,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
@@ -273,8 +417,9 @@ app.MapPost("/api/account-pool", async (
         Platform = request.Platform.Trim(),
         Login = request.Login?.Trim(),
         SecretHash = string.IsNullOrWhiteSpace(request.Secret) ? null : PasswordSecurity.Hash(request.Secret),
+        SecretCiphertext = string.IsNullOrWhiteSpace(request.Secret) ? null : credentialProtection.Protect(request.Secret),
         Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim(),
-        ExpiresAt = request.ExpiresAt,
+        ExpiresAt = request.ExpiresAt?.UtcDateTime,
         AllowedGameIdsCsv = string.Join(",", gameIds),
         Status = Enum.TryParse<AccountPoolStatus>(request.Status, true, out var status) ? status : AccountPoolStatus.Free,
         IsActive = true
@@ -298,6 +443,7 @@ app.MapPut("/api/account-pool/{accountId:guid}", async (
     SaveAccountPoolEntryRequest request,
     HttpContext context,
     GameNetDbContext database,
+    GameCredentialProtectionService credentialProtection,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
@@ -318,9 +464,12 @@ app.MapPut("/api/account-pool/{accountId:guid}", async (
     account.Platform = request.Platform.Trim();
     account.Login = request.Login?.Trim();
     if (!string.IsNullOrWhiteSpace(request.Secret))
+    {
         account.SecretHash = PasswordSecurity.Hash(request.Secret);
+        account.SecretCiphertext = credentialProtection.Protect(request.Secret);
+    }
     account.Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim();
-    account.ExpiresAt = request.ExpiresAt;
+    account.ExpiresAt = request.ExpiresAt?.UtcDateTime;
     account.AllowedGameIdsCsv = string.Join(",", gameIds);
     if (Enum.TryParse<AccountPoolStatus>(request.Status, true, out var status))
         account.Status = status;
@@ -457,13 +606,12 @@ app.MapGet("/api/account-pool/leases", async (
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var leases = await database.AccountLeases
+    var leases = (await database.AccountLeases
         .AsNoTracking()
         .Include(item => item.AccountPoolEntry)
         .Include(item => item.Game)
         .Include(item => item.AgentDevice)
         .Where(item => item.State == AccountLeaseState.Active)
-        .OrderByDescending(item => item.LeasedAt)
         .Select(item => new AccountLeaseDto(
             item.Id,
             item.AccountPoolEntryId,
@@ -474,7 +622,9 @@ app.MapGet("/api/account-pool/leases", async (
             item.AgentDevice == null ? null : item.AgentDevice.Name,
             item.LeasedAt,
             item.State.ToString()))
-        .ToListAsync(cancellationToken);
+        .ToListAsync(cancellationToken))
+        .OrderByDescending(item => item.LeasedAt)
+        .ToList();
 
     return Results.Ok(leases);
 }).WithName("GetActiveAccountLeases");
@@ -617,7 +767,7 @@ app.MapPut("/api/agent/devices/{deviceId:guid}/policy", async (
 
     if (!string.IsNullOrWhiteSpace(device.ConnectionId))
     {
-        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
             "AgentPolicyChanged",
             new AgentPolicyDto(device.Id, device.KioskEnabled, device.LockOnDisconnect),
             cancellationToken);
@@ -840,7 +990,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/update", async (
 
     try
     {
-        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
@@ -912,7 +1062,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/rollback", async (
 
     try
     {
-        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
@@ -997,7 +1147,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
 
     try
     {
-        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
@@ -2652,11 +2802,10 @@ app.MapGet("/api/customer-auth/state", async (
         .FirstOrDefaultAsync(item => item.DeviceId == normalizedClientKey && item.IsActive, cancellationToken);
 
     var session = device?.StationId is Guid stationId
-        ? await database.Sessions
+        ? (await database.Sessions
             .Where(item => item.CustomerId == customerId
                 && item.StationId == stationId
                 && (item.State == SessionState.Active || item.State == SessionState.Ended))
-            .OrderByDescending(item => item.StartAt)
             .Select(item => new
             {
                 id = item.Id,
@@ -2665,7 +2814,9 @@ app.MapGet("/api/customer-auth/state", async (
                 endAt = item.EndAt,
                 stationName = item.Station.Name
             })
-            .FirstOrDefaultAsync(cancellationToken)
+            .ToListAsync(cancellationToken))
+            .OrderByDescending(item => item.startAt)
+            .FirstOrDefault()
         : null;
 
     return Results.Ok(new
@@ -3877,15 +4028,22 @@ app.MapGet("/api/finance/summary", async (HttpContext context,
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
-    var revenue = await database.Invoices
+    // SQLite cannot translate DateTimeOffset comparison. Time filtering is therefore
+    // performed after materializing this bounded reporting data.
+    var paidInvoices = await database.Invoices
         .AsNoTracking()
-        .Where(item => item.Status == InvoiceStatus.Paid && item.IssuedAt >= start && item.IssuedAt <= end)
-        .SumAsync(item => (decimal?)item.TotalAmount, cancellationToken) ?? 0m;
+        .Where(item => item.Status == InvoiceStatus.Paid)
+        .ToListAsync(cancellationToken);
+    var revenue = paidInvoices
+        .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
+        .Sum(item => item.TotalAmount);
 
-    var expense = await database.Expenses
+    var expenses = await database.Expenses
         .AsNoTracking()
+        .ToListAsync(cancellationToken);
+    var expense = expenses
         .Where(item => item.CreatedAt >= start && item.CreatedAt <= end)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        .Sum(item => item.Amount);
 
     return Results.Ok(new FinanceSummaryDto(
         start,
@@ -3910,9 +4068,10 @@ app.MapGet("/api/finance/transactions", async (HttpContext context,
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
-    var invoices = await database.Invoices
+    var invoices = (await database.Invoices
         .AsNoTracking()
         .Include(item => item.Items)
+        .ToListAsync(cancellationToken))
         .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
         .OrderByDescending(item => item.IssuedAt)
         .Take(500)
@@ -3927,7 +4086,7 @@ app.MapGet("/api/finance/transactions", async (HttpContext context,
                 .Select(child => child.Description)
                 .FirstOrDefault() ?? "فاکتور"
         })
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     var invoiceIds = invoices.Select(item => item.Id).ToList();
     var payments = await database.InvoicePayments
@@ -3971,11 +4130,13 @@ app.MapGet("/api/shifts/current", async (HttpContext context,
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var shift = await database.Shifts
+    var shift = (await database.Shifts
         .AsNoTracking()
         .Include(item => item.AppUser)
+        .Where(item => item.CloseAt == null)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.OpenAt)
-        .FirstOrDefaultAsync(item => item.CloseAt == null, cancellationToken);
+        .FirstOrDefault();
 
     if (shift is null)
         return Results.Ok<ShiftSnapshotDto?>(null);
@@ -3991,12 +4152,13 @@ app.MapGet("/api/shifts/history", async (HttpContext context,
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var shifts = await database.Shifts
+    var shifts = (await database.Shifts
         .AsNoTracking()
         .Include(item => item.AppUser)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.OpenAt)
         .Take(30)
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     var result = new List<ShiftSnapshotDto>(shifts.Count);
     foreach (var shift in shifts)
@@ -4074,13 +4236,15 @@ app.MapPost("/api/shifts/{shiftId:guid}/close", async (
         return Results.Conflict(new { code = "shift_closed", message = "این شیفت قبلاً بسته شده است." });
 
     var now = DateTimeOffset.UtcNow;
-    var cashSales = await database.InvoicePayments
+    var cashPayments = await database.InvoicePayments
         .Where(item => item.Method == "cash"
             && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null
-            && item.Invoice.PaidAt >= shift.OpenAt
+            && item.Invoice.PaidAt != null)
+        .ToListAsync(cancellationToken);
+    var cashSales = cashPayments
+        .Where(item => item.Invoice.PaidAt >= shift.OpenAt
             && item.Invoice.PaidAt <= now)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        .Sum(item => item.Amount);
 
     var expenseTotal = await database.Expenses
         .Where(item => item.ShiftId == shift.Id)
@@ -4701,13 +4865,15 @@ static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
 {
     var end = shift.CloseAt ?? DateTimeOffset.UtcNow;
 
-    var cashSales = await database.InvoicePayments
+    var cashPayments = await database.InvoicePayments
         .Where(item => item.Method == "cash"
             && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null
-            && item.Invoice.PaidAt >= shift.OpenAt
+            && item.Invoice.PaidAt != null)
+        .ToListAsync(cancellationToken);
+    var cashSales = cashPayments
+        .Where(item => item.Invoice.PaidAt >= shift.OpenAt
             && item.Invoice.PaidAt <= end)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        .Sum(item => item.Amount);
 
     var expenseTotal = await database.Expenses
         .Where(item => item.ShiftId == shift.Id)

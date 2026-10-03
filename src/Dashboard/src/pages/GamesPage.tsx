@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { archiveServerGame, getServerGames, saveServerGame } from '../services/gameService';
+import { archiveServerGame, getServerGames, saveServerGame, syncServerGame } from '../services/gameService';
+import { getAgentCommand } from '../services/agentService';
 import type { GameRecord } from '../types';
 
 type GameFilter = 'all' | 'online' | 'offline' | 'program';
@@ -68,6 +69,71 @@ export function GamesPage() {
     setNotice('بازی حذف شد');
   }
 
+  async function syncGame(game: GameRecord | null) {
+    if (!game?.id) {
+      setNotice('ابتدا یک بازی را انتخاب کنید');
+      return;
+    }
+
+    try {
+      const result = await syncServerGame(game.id);
+
+      const pendingCommands = result.commands.filter(item => item.status === 'Sent');
+      if (pendingCommands.length === 0) {
+        const failed = result.commands.filter(item => item.status === 'Failed').length;
+        setNotice(
+          failed === 0
+            ? `همگام‌سازی «${game.name}» تکمیل شده است`
+            : `همگام‌سازی ارسال شد؛ ${failed.toLocaleString('fa-IR')} Agent به نتیجه موفق نرسیدند`
+        );
+        return;
+      }
+
+      setNotice(
+        `درخواست همگام‌سازی «${game.name}» ثبت شد؛ در حال تأیید ${pendingCommands.length.toLocaleString('fa-IR')} Agent…`
+      );
+
+      const deadline = Date.now() + 15000;
+      let remaining = pendingCommands;
+
+      while (remaining.length > 0 && Date.now() < deadline) {
+        await new Promise(resolve => window.setTimeout(resolve, 500));
+        const statuses = await Promise.all(
+          remaining.map(command => getAgentCommand(command.commandId)),
+        );
+
+        const unsuccessful = statuses.filter(
+          item => item.status === 'Failed' || item.status === 'RolledBack',
+        );
+        if (unsuccessful.length > 0) {
+          setNotice(
+            `همگام‌سازی ارسال شد؛ ${unsuccessful.length.toLocaleString('fa-IR')} Agent به نتیجه موفق نرسیدند.`
+          );
+          return;
+        }
+
+        remaining = statuses.filter(item =>
+          item.status !== 'Succeeded'
+        ).map(item => ({
+          agentId: item.agentDeviceId,
+          deviceId: '',
+          commandId: item.commandId,
+          status: 'Sent' as const,
+        }));
+      }
+
+      if (remaining.length === 0) {
+        setNotice(`همگام‌سازی «${game.name}» روی Agentهای هدف تکمیل شد`);
+      } else {
+        setNotice(
+          `درخواست همگام‌سازی «${game.name}» ثبت شد؛ وضعیت نهایی بعضی Agentها هنوز تأیید نشده است.`
+        );
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'همگام‌سازی بازی ناموفق بود');
+    }
+  }
+
 
   return (
     <>
@@ -87,7 +153,7 @@ export function GamesPage() {
       <div className="toolbar game-management-toolbar">
         <div className="search-box"><input value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی بازی…" aria-label="جست‌وجوی بازی" /></div>
         <div className="view-switch">{(Object.keys(filterNames) as GameFilter[]).map(key => <button key={key} className={filter === key ? 'active' : ''} onClick={() => setFilter(key)}>{filterNames[key]}</button>)}</div>
-        <button type="button" className="btn" disabled title="همگام‌سازی واقعی بازی با Agent در Stage 12 پیاده‌سازی می‌شود">📤 همگام‌سازی بازی‌ها با کلاینت‌ها — Stage 12</button>
+        <button type="button" className="btn" onClick={() => void syncGame(selectedGame)}>📤 همگام‌سازی بازی انتخاب‌شده</button>
         <button type="button" className="btn primary" onClick={() => setDraft(emptyGame())}>+ بازی جدید</button>
       </div>
 
@@ -115,7 +181,7 @@ export function GamesPage() {
               <div className="info-row"><span>اعمال به</span><strong>{selectedGame.target === 'all' ? 'همه رایانه‌ها' : selectedGame.target === 'zone' ? selectedGame.targetZone : selectedGame.targetStations || 'ایستگاه‌های منتخب'}</strong></div>
               <div className="info-row"><span>کاربران فعال</span><strong>{selectedGame.activeUsers.toLocaleString('fa-IR')}</strong></div>
             </div>
-            <div className="game-detail-actions"><button className="btn primary" onClick={() => setDraft({ ...selectedGame })}>ویرایش تنظیمات</button><button className="btn" disabled title="همگام‌سازی واقعی بازی با Agent در Stage 12 پیاده‌سازی می‌شود">اعمال به کلاینت‌ها — Stage 12</button><button className="btn danger" onClick={() => void deleteGame(selectedGame)}>حذف بازی</button></div>
+            <div className="game-detail-actions"><button className="btn primary" onClick={() => setDraft({ ...selectedGame })}>ویرایش تنظیمات</button><button className="btn" onClick={() => void syncGame(selectedGame)}>اعمال به کلاینت‌ها</button><button className="btn danger" onClick={() => void deleteGame(selectedGame)}>حذف بازی</button></div>
           </> : <div className="games-empty">بازی‌ای برای نمایش انتخاب نشده است.</div>}
         </section>
       </div>
