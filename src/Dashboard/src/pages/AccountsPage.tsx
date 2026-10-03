@@ -4,7 +4,6 @@ import {
   allocateServerAccount,
   createServerAccount,
   getServerAccountPool,
-  saveServerAccount,
   getServerLeases,
   releaseServerLease,
   unlockServerAccount,
@@ -80,11 +79,21 @@ export function AccountsPage() {
           secret,
         });
       } else {
-        await saveServerAccount(
-          draft,
-          allowedGameIds,
-          secret || undefined,
-        );
+        const response = await fetch('/api/account-pool/' + draft.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: draft.title,
+            platform: draft.platform,
+            login: draft.login || null,
+            secret: secret || null,
+            owner: draft.owner,
+            expiresAt: null,
+            allowedGameIds,
+            status: draft.status === 'in-use' ? 'InUse' : draft.status === 'locked' ? 'Locked' : 'Free',
+          }),
+        });
+        if (!response.ok) throw new Error('ویرایش اکانت در سرور انجام نشد');
       }
       setDraft(null);
       setSecret('');
