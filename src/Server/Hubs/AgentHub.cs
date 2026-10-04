@@ -536,13 +536,12 @@ public sealed class AgentHub(
             .Include(item => item.Tariff)
             .FirstAsync(item => item.Id == station.Id, Context.ConnectionAborted);
 
+        var now = DateTimeOffset.UtcNow;
         var pricing = await pricingService.GetPricingAsync(
             customer.Id,
             station.Id,
-            DateTimeOffset.UtcNow,
+            now,
             Context.ConnectionAborted);
-
-        var now = DateTimeOffset.UtcNow;
 
         var session = new Session
         {
