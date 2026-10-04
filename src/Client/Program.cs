@@ -958,8 +958,11 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
     }
 
     var awaitingFinalResult = success
-        && restartVersion is not null
-        && command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback;
+        && (
+            command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback
+            && restartVersion is not null
+            || command.CommandType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown
+        );
 
     try
     {
@@ -1048,8 +1051,50 @@ static async Task<AgentState> FinalizePendingLifecycleCommandAsync(
     string agentVersion,
     CancellationToken cancellationToken)
 {
-    if (!state.PendingCommandId.HasValue
-        || string.IsNullOrWhiteSpace(state.PendingCommandTargetVersion)
+    if (!state.PendingCommandId.HasValue)
+        return state;
+
+    var pendingType = state.PendingCommandType?.Trim().ToLowerInvariant();
+    if (pendingType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown)
+    {
+        var powerMessage = pendingType == AgentCommandTypes.Restart
+            ? "راه‌اندازی مجدد سیستم پس از بازگشت Agent سالم تأیید شد."
+            : "خاموش/روشن‌شدن سیستم پس از بازگشت Agent سالم تأیید شد.";
+
+        try
+        {
+            await connection.InvokeAsync(
+                "AcknowledgeCommand",
+                new AgentCommandAcknowledgement(
+                    state.PendingCommandId.Value,
+                    true,
+                    powerMessage,
+                    DateTimeOffset.UtcNow,
+                    Final: true,
+                    FinalStatus: "Succeeded"),
+                cancellationToken);
+        }
+        catch (Exception exception) when (
+            exception is HubException
+                or HttpRequestException
+                or InvalidOperationException
+                or ObjectDisposedException)
+        {
+            Console.WriteLine($"نتیجه نهایی فرمان توان ارسال نشد: {exception.Message}");
+            return state;
+        }
+
+        return state with
+        {
+            PendingCommandId = null,
+            PendingCommandType = null,
+            PendingCommandTargetVersion = null,
+            PendingCommandOutcome = null,
+            LastUpdateError = null
+        };
+    }
+
+    if (string.IsNullOrWhiteSpace(state.PendingCommandTargetVersion)
         || !string.Equals(state.PendingCommandTargetVersion, agentVersion, StringComparison.OrdinalIgnoreCase))
         return state;
 
