@@ -15,17 +15,20 @@ public sealed class EventService(GameNetDbContext database)
             .Include(item => item.Participants)
             .AsQueryable();
 
-        if (from.HasValue)
-            query = query.Where(item => item.EndAt >= from.Value);
-        if (to.HasValue)
-            query = query.Where(item => item.StartAt <= to.Value);
-
+        // SQLite stores these timestamps as TEXT and does not reliably translate
+        // DateTimeOffset range/order expressions. Load the bounded Event set first,
+        // then apply the time window deterministically in CLR/UTC.
         var rows = await query
-            .OrderBy(item => item.StartAt)
-            .Take(500)
+            .Take(1000)
             .ToListAsync(cancellationToken);
 
-        return rows.Select(ToDto).ToList();
+        return rows
+            .Where(item => (!from.HasValue || item.EndAt >= from.Value)
+                && (!to.HasValue || item.StartAt <= to.Value))
+            .OrderBy(item => item.StartAt)
+            .Take(500)
+            .Select(ToDto)
+            .ToList();
     }
 
     public async Task<EventDto> CreateAsync(
@@ -57,14 +60,16 @@ public sealed class EventService(GameNetDbContext database)
         if (writerGate != 1)
             throw new KeyNotFoundException("اپراتور ایجادکننده Event پیدا نشد.");
 
-        var eventConflictQuery = database.Events
-            .AsNoTracking()
-            .Where(item => item.Status != EventStatus.Cancelled)
-            .Where(item => item.Status != EventStatus.Completed)
-            .Where(item => item.StartAt < end && item.EndAt > start);
+        var eventCandidates = kind.Equals("tournament", StringComparison.OrdinalIgnoreCase)
+            ? await database.Events
+                .AsNoTracking()
+                .Where(item => item.Status != EventStatus.Cancelled)
+                .Where(item => item.Status != EventStatus.Completed)
+                .ToListAsync(cancellationToken)
+            : [];
 
         var hasConflict = kind.Equals("tournament", StringComparison.OrdinalIgnoreCase)
-            && await eventConflictQuery.AnyAsync(cancellationToken);
+            && eventCandidates.Any(item => item.StartAt < end && item.EndAt > start);
 
         if (hasConflict)
             throw new InvalidOperationException("Event دیگری در این بازه فعال است.");
