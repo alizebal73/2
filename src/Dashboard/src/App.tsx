@@ -293,7 +293,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
       <div className="page-shell">
         <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={dashboardSnapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={requestNavigation} role={role} user={user} /></div>
         <div hidden={activePage !== 'games'}><GamesPage /></div>
-        <div hidden={activePage !== 'client-shell'}><ClientShellPage /></div>
+        <div hidden={activePage !== 'client-shell'}><ClientShellPage canPower={hasPermission(user, 'client.power')} /></div>
         <div hidden={activePage !== 'customers'}><CustomersPage user={user} /></div>
         <div hidden={activePage !== 'tariffs'}><TariffsPage /></div>
         <div hidden={activePage !== 'accounts'}><AccountsPage /></div>
