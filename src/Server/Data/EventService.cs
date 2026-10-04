@@ -57,14 +57,14 @@ public sealed class EventService(GameNetDbContext database)
         if (writerGate != 1)
             throw new KeyNotFoundException("اپراتور ایجادکننده Event پیدا نشد.");
 
+        var eventConflictQuery = database.Events
+            .AsNoTracking()
+            .Where(item => item.Status != EventStatus.Cancelled)
+            .Where(item => item.Status != EventStatus.Completed)
+            .Where(item => item.StartAt < end && item.EndAt > start);
+
         var hasConflict = kind.Equals("tournament", StringComparison.OrdinalIgnoreCase)
-            && await database.Events
-                .AsNoTracking()
-                .AnyAsync(item => item.Status != EventStatus.Cancelled
-                    && item.Status != EventStatus.Completed
-                    && item.StartAt < end
-                    && item.EndAt > start,
-                    cancellationToken);
+            && await eventConflictQuery.AnyAsync(cancellationToken);
 
         if (hasConflict)
             throw new InvalidOperationException("Event دیگری در این بازه فعال است.");
