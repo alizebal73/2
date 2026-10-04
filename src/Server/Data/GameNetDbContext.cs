@@ -561,6 +561,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         var session = modelBuilder.Entity<Session>();
         session.HasKey(item => item.Id);
         session.Property(item => item.TotalAmount).HasColumnType("decimal(18,2)");
+        session.Property(item => item.HourlyRateSnapshot).HasColumnType("decimal(18,2)");
         session.Property(item => item.HourlyRateOverride).HasColumnType("decimal(18,2)");
         session.Property(item => item.PausedMinutes).IsRequired();
         session.Property(item => item.TimeAdjustmentMinutes).IsRequired();
