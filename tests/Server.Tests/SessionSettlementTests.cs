@@ -46,13 +46,17 @@ public sealed class SessionSettlementTests : IDisposable
             Tariff = tariff,
             IsActive = true
         };
+        var startAt = DateTimeOffset.UtcNow.AddHours(-2);
         var session = new Session
         {
             Customer = customer,
             Station = station,
             Tariff = tariff,
             AppUser = user,
-            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            StartAt = startAt,
+            EndAt = startAt.AddHours(1),
+            HourlyRateOverride = 150000m,
+            HourlyRateSnapshot = 95000m,
             State = SessionState.Active
         };
 
@@ -247,12 +251,16 @@ public sealed class SessionSettlementTests : IDisposable
             CostPrice = 20000m,
             StockQuantity = 2
         };
+        var startAt = DateTimeOffset.UtcNow.AddHours(-2);
         var session = new Session
         {
             Customer = customer,
             Station = station,
             Tariff = tariff,
-            StartAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+            StartAt = startAt,
+            EndAt = startAt.AddMinutes(30),
+            HourlyRateOverride = 200000m,
+            HourlyRateSnapshot = 95000m,
             State = SessionState.Active
         };
         var draft = new Invoice
