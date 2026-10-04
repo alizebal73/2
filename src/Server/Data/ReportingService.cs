@@ -263,22 +263,19 @@ public sealed class ReportingService(GameNetDbContext database)
         if (filter.AppUserId.HasValue)
             query = query.Where(item => item.AppUserId == filter.AppUserId.Value);
 
-        var rows = await query
-            .OrderByDescending(item => item.CreatedAt)
-            .Take(Math.Clamp(filter.Limit * 5, 1, 5000))
-            .ToListAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var pattern = $"%{search}%";
+            query = query.Where(item =>
+                EF.Functions.Like(item.Action, pattern)
+                || EF.Functions.Like(item.EntityName, pattern)
+                || (item.EntityId != null && EF.Functions.Like(item.EntityId, pattern))
+                || (item.Details != null && EF.Functions.Like(item.Details, pattern)));
+        }
 
-        return rows
-            .Where(item => (!from.HasValue || item.CreatedAt >= from.Value)
-                && (!to.HasValue || item.CreatedAt <= to.Value)
-                && (string.IsNullOrWhiteSpace(action) || string.Equals(item.Action, action, StringComparison.OrdinalIgnoreCase))
-                && (string.IsNullOrWhiteSpace(entity) || string.Equals(item.EntityName, entity, StringComparison.OrdinalIgnoreCase))
-                && (!filter.AppUserId.HasValue || item.AppUserId == filter.AppUserId.Value)
-                && (string.IsNullOrWhiteSpace(search)
-                    || (item.Details?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
-                    || item.Action.Contains(search, StringComparison.OrdinalIgnoreCase)
-                    || item.EntityName.Contains(search, StringComparison.OrdinalIgnoreCase)
-                    || item.EntityId?.Contains(search, StringComparison.OrdinalIgnoreCase) == true))
+        return await query
+            .OrderByDescending(item => item.CreatedAt)
+            .Take(Math.Clamp(filter.Limit, 1, 1000))
             .Select(item => new AuditExplorerDto(
                 item.Id,
                 item.CreatedAt,
@@ -288,8 +285,7 @@ public sealed class ReportingService(GameNetDbContext database)
                 item.EntityName,
                 item.EntityId,
                 item.Details))
-            .Take(Math.Clamp(filter.Limit, 1, 1000))
-            .ToList();
+            .ToListAsync(cancellationToken);
     }
 
     private async Task<List<Invoice>> LoadInvoicesInRangeAsync(
