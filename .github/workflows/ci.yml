@@ -1482,16 +1482,28 @@ jobs:
               throw 'Buffet session sale did not create a draft invoice correctly.'
             }
 
+            # Freeze the authoritative session clock before preview/settlement.
+            Invoke-RestMethod -Uri "$baseUrl/api/sessions/$($startedSession.sessionId)/pause" -Method Post -WebSession $adminSession | Out-Null
+
+            $sessionSettlementPreview = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$($startedSession.sessionId)/settlement-preview" -Method Get -WebSession $adminSession
+            if ($sessionSettlementPreview.sessionId -ne $startedSession.sessionId) {
+              throw 'Stage 7 settlement preview returned a different SessionId.'
+            }
+
+            $sessionSettlementTotal = [decimal]$sessionSettlementPreview.totalAmount
+            if ($sessionSettlementTotal -lt 30000) {
+              throw "Stage 7 settlement preview did not include the 30000 تومان buffet draft: total=$sessionSettlementTotal"
+            }
+
             $sessionSettlement = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$($startedSession.sessionId)/settle" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
-              totalAmount = 60000
-              parts = @(@{ method = 'cash'; amount = 60000 })
-              timeAmount = 30000
+              totalAmount = $sessionSettlementTotal
+              parts = @(@{ method = 'cash'; amount = $sessionSettlementTotal })
               discountAmount = 0
               prepaidAmount = 0
             } | ConvertTo-Json)
 
-            if ($sessionSettlement.invoiceId -ne $sessionSale.invoiceId -or [int]$sessionSettlement.totalAmount -ne 60000 -or $sessionSettlement.invoiceStatus -ne 'Paid') {
-              throw 'Session settlement did not finalize the buffet draft invoice.'
+            if ($sessionSettlement.invoiceId -ne $sessionSale.invoiceId -or [decimal]$sessionSettlement.totalAmount -ne $sessionSettlementTotal -or $sessionSettlement.invoiceStatus -ne 'Paid') {
+              throw 'Session settlement did not finalize the buffet draft invoice using the authoritative server total.'
             }
 
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
