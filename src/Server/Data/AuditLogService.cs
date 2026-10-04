@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace GameNetManager.Server.Data;
 
 public sealed record AuditLogQuery(
