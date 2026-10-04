@@ -1679,7 +1679,7 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.HasIndex("CloseAt")
                         .IsUnique()
-                        .HasFilter(""CloseAt" IS NULL");
+                        .HasFilter("\"CloseAt\" IS NULL");
 
                     b.ToTable("Shifts");
                 });
