@@ -49,9 +49,14 @@ public sealed class OperationsService(GameNetDbContext database)
         if (!stationTypeExists)
             throw new KeyNotFoundException("نوع ایستگاه پیدا نشد.");
 
-        if (request.TariffId.HasValue
-            && !await database.Tariffs.AnyAsync(item => item.Id == request.TariffId.Value && item.IsActive, cancellationToken))
-            throw new KeyNotFoundException("تعرفه معتبر پیدا نشد.");
+        Tariff? selectedTariff = null;
+        if (request.TariffId.HasValue)
+        {
+            selectedTariff = await database.Tariffs
+                .FirstOrDefaultAsync(item => item.Id == request.TariffId.Value && item.IsActive, cancellationToken);
+            if (selectedTariff is null)
+                throw new KeyNotFoundException("تعرفه معتبر پیدا نشد.");
+        }
 
         Station station;
         var action = "StationCreate";
@@ -86,7 +91,7 @@ public sealed class OperationsService(GameNetDbContext database)
         station.Type = type;
         station.StationTypeId = request.StationTypeId;
         station.TariffId = request.TariffId;
-        station.RatePerHour = request.RatePerHour;
+        station.RatePerHour = selectedTariff?.HourlyRate ?? request.RatePerHour;
         station.NetworkRoute = network;
         station.IsActive = request.IsActive;
         if (!request.IsActive && station.State == StationState.Available)
