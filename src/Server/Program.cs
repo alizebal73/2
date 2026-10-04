@@ -3413,11 +3413,23 @@ app.MapPost("/api/buffet/sales", async (
     var writerStamp = DateTimeOffset.UtcNow;
     if (saleProductIds.Count > 0)
     {
-        await database.Products
-            .Where(item => saleProductIds.Contains(item.Id) && item.IsActive)
-            .OrderBy(item => item.Id)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(item => item.UpdatedAt, writerStamp), cancellationToken);
+        try
+        {
+            await database.Products
+                .Where(item => saleProductIds.Contains(item.Id) && item.IsActive)
+                .OrderBy(item => item.Id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.UpdatedAt, writerStamp), cancellationToken);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            return Results.Conflict(new
+            {
+                code = "inventory_busy",
+                message = "هم‌زمانی فروش موجودی رخ داد؛ عملیات بدون تغییر متوقف شد. دوباره تلاش کنید."
+            });
+        }
     }
 
     Session? session = null;
