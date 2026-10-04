@@ -11,7 +11,7 @@ function isFinal(status: string) {
   return ['Succeeded', 'Failed', 'RolledBack'].includes(status);
 }
 
-export function ClientShellPage() {
+export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
   const [agents, setAgents] = useState<AgentStatusDto[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -267,8 +267,8 @@ export function ClientShellPage() {
           <button onClick={() => void runCommand(menuAgent, 'unlock')}>🔓 بازکردن Agent</button>
           <button onClick={() => void runCommand(menuAgent, 'logout-lock')}>🚪 خروج مشتری و قفل</button>
           <button onClick={() => void loginCustomer(menuAgent)}>🔑 ورود مشتری</button>
-          <button onClick={() => void runCommand(menuAgent, 'restart')}>🔄 Restart Windows</button>
-          <button onClick={() => void runCommand(menuAgent, 'shutdown')}>⛔ Shutdown Windows</button>
+          {canPower && <button onClick={() => void runCommand(menuAgent, 'restart')}>🔄 Restart Windows</button>}
+          {canPower && <button onClick={() => void runCommand(menuAgent, 'shutdown')}>⛔ Shutdown Windows</button>}
           <button onClick={() => void runCommand(menuAgent, 'update')}>⬆ Update Agent</button>
           <button onClick={() => void runCommand(menuAgent, 'rollback')}>↩ Rollback Agent</button>
           <button onClick={() => openSettings(menuAgent)}>⚙ Policy و تنظیمات</button>
