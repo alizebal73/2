@@ -113,7 +113,7 @@ test('dashboard exposes real Audit Explorer', async ({ page }) => {
     body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
   }));
 
-  await page.route('**/api/audit?**', route => {
+  await page.route('**/api/audit*', route => {
     const url = new URL(route.request().url());
     const action = url.searchParams.get('action');
     const allRows = [
