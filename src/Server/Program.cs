@@ -5043,10 +5043,9 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
             {
                 case Microsoft.EntityFrameworkCore.Migrations.Operations.DropIndexOperation dropIndex:
                     logger.LogCritical(
-                        "EF DIAGNOSTIC DESIGN DROP INDEX: Table={Table}; Name={Name}; Columns={Columns}",
+                        "EF DIAGNOSTIC DESIGN DROP INDEX: Table={Table}; Name={Name}",
                         dropIndex.Table,
-                        dropIndex.Name,
-                        string.Join(",", dropIndex.Columns));
+                        dropIndex.Name);
                     break;
 
                 case Microsoft.EntityFrameworkCore.Migrations.Operations.CreateIndexOperation createIndex:
