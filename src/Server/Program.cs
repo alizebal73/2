@@ -3419,13 +3419,27 @@ app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     Guid customerId,
     CustomerLoginRequest request,
     CustomerLoginService loginService,
+    GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var clientKey = request.ClientKey?.Trim();
+    if (string.IsNullOrWhiteSpace(clientKey))
+        return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
+
+    var agent = await database.AgentDevices
+        .FirstOrDefaultAsync(item => item.DeviceId == clientKey && item.IsActive, cancellationToken);
+    if (agent is null)
+        return Results.NotFound(new { code = "agent_not_found", message = "Agent فعال با این شناسه پیدا نشد." });
+    if (!agent.IsOnline)
+        return Results.Conflict(new { code = "agent_offline", message = "Agent برای ورود مشتری آنلاین نیست." });
+    if (!agent.StationId.HasValue)
+        return Results.Conflict(new { code = "agent_unassigned", message = "Agent هنوز به ایستگاه تخصیص داده نشده است." });
+
     try
     {
         return Results.Ok(await loginService.AcquireAsync(
             customerId,
-            request.ClientKey ?? string.Empty,
+            clientKey,
             cancellationToken));
     }
     catch (ArgumentException exception)
