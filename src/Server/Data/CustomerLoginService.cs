@@ -101,6 +101,7 @@ public sealed class CustomerLoginService(GameNetDbContext database)
         }
 
         throw new InvalidOperationException("ورود هم‌زمان مشتری انجام نشد.");
+    }
 
     private static async Task TryRollbackAsync(
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction)
@@ -117,7 +118,6 @@ public sealed class CustomerLoginService(GameNetDbContext database)
         catch (ObjectDisposedException)
         {
         }
-    }
     }
 
     public async Task<(Guid LoginId, int ActiveCount)> ReleaseAsync(
