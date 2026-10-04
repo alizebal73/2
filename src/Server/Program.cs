@@ -247,6 +247,7 @@ app.MapDelete("/api/tariffs/{tariffId:guid}", async (
 app.MapGet("/api/games", async (
     HttpContext context,
     GameNetDbContext database,
+    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "game.manage", cancellationToken);
@@ -275,6 +276,17 @@ app.MapGet("/api/games", async (
             item.TargetZone,
             item.TargetStations))
         .ToListAsync(cancellationToken);
+
+    var activeGameSessions = await database.Sessions
+        .AsNoTracking()
+        .Where(session => session.State == SessionState.Active && session.GameId.HasValue)
+        .Select(session => new { session.Id, session.GameId, session.State })
+        .ToListAsync(cancellationToken);
+
+    logger.LogWarning(
+        "GAME ACTIVE DIAGNOSTIC: games={Games}; activeSessions={Sessions}",
+        games.Select(game => $"{game.Id}:{game.ActiveUsers}").ToArray(),
+        activeGameSessions.Select(session => $"{session.Id}:{session.GameId}:{session.State}").ToArray());
 
     return Results.Ok(games);
 }).WithName("GetGames");
