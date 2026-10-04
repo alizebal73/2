@@ -18,23 +18,25 @@ public sealed class ReservationService(GameNetDbContext database)
             .Include(item => item.Station)
             .AsQueryable();
 
-        if (from.HasValue)
-            query = query.Where(item => item.EndAt >= from.Value);
-        if (to.HasValue)
-            query = query.Where(item => item.StartAt <= to.Value);
         if (status.HasValue)
             query = query.Where(item => item.Status == status.Value);
         if (kind.HasValue)
             query = query.Where(item => item.Kind == kind.Value);
 
+        // Keep SQLite DateTimeOffset filtering/order in CLR after a bounded read.
         var rows = await query
+            .Take(2000)
+            .ToListAsync(cancellationToken);
+
+        return rows
+            .Where(item => (!from.HasValue || item.EndAt >= from.Value)
+                && (!to.HasValue || item.StartAt <= to.Value))
             .OrderBy(item => item.StartAt)
             .ThenByDescending(item => item.Priority)
             .ThenBy(item => item.CreatedAt)
             .Take(1000)
-            .ToListAsync(cancellationToken);
-
-        return rows.Select(ToDto).ToList();
+            .Select(ToDto)
+            .ToList();
     }
 
     public async Task<ReservationDto> CreateAsync(
@@ -77,16 +79,17 @@ public sealed class ReservationService(GameNetDbContext database)
             if (station.State is StationState.Offline or StationState.Maintenance)
                 throw new InvalidOperationException("این ایستگاه قابل رزرو نیست.");
 
-            var conflictQuery = database.Reservations
+            var conflictCandidates = await database.Reservations
                 .AsNoTracking()
                 .Where(item => item.StationId == station.Id)
                 .Where(item => item.Kind == ReservationKind.Reservation)
                 .Where(item => item.Status == ReservationStatus.Pending
                     || item.Status == ReservationStatus.Confirmed
                     || item.Status == ReservationStatus.CheckedIn)
-                .Where(item => item.StartAt < end && item.EndAt > start);
+                .ToListAsync(cancellationToken);
 
-            var hasConflict = await conflictQuery.AnyAsync(cancellationToken);
+            var hasConflict = conflictCandidates.Any(
+                item => item.StartAt < end && item.EndAt > start);
 
             if (hasConflict)
                 throw new InvalidOperationException("این ایستگاه در این بازه قبلاً رزرو شده است.");
@@ -226,7 +229,7 @@ public sealed class ReservationService(GameNetDbContext database)
         if (stationLock != 1)
             throw new KeyNotFoundException("ایستگاه مقصد پیدا نشد.");
 
-        var conflictQuery = database.Reservations
+        var conflictCandidates = await database.Reservations
             .AsNoTracking()
             .Where(item => item.Id != reservation.Id)
             .Where(item => item.StationId == reservation.StationId)
@@ -234,10 +237,11 @@ public sealed class ReservationService(GameNetDbContext database)
             .Where(item => item.Status == ReservationStatus.Pending
                 || item.Status == ReservationStatus.Confirmed
                 || item.Status == ReservationStatus.CheckedIn)
-            .Where(item => item.StartAt < reservation.EndAt
-                && item.EndAt > reservation.StartAt);
+            .ToListAsync(cancellationToken);
 
-        var hasConflict = await conflictQuery.AnyAsync(cancellationToken);
+        var hasConflict = conflictCandidates.Any(
+            item => item.StartAt < reservation.EndAt
+                && item.EndAt > reservation.StartAt);
 
         if (hasConflict)
             throw new InvalidOperationException("ایستگاه مقصد در این بازه رزرو شده است.");
