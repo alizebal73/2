@@ -60,7 +60,8 @@ public sealed class AccountPoolService(
                         .SetProperty(item => item.AssignedAgentDeviceId, agentDeviceId)
                         .SetProperty(item => item.UpdatedAt, now), cancellationToken);
 
-                if (updated != 1) return (null, null);
+                if (updated != 1)
+                    continue;
 
                 var lease = new AccountLease
                 {
