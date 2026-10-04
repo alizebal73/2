@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using GameNetManager.Client;
-using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -132,6 +131,7 @@ try
 
             if (outcome.AwaitingFinalResult)
             {
+                var isPowerCommand = command.CommandType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown;
                 state = state with
                 {
                     LifecycleState = command.CommandType == AgentCommandTypes.Update
@@ -143,7 +143,7 @@ try
                     LastUpdateError = null,
                     PendingCommandId = command.CommandId,
                     PendingCommandType = command.CommandType,
-                    PendingCommandTargetVersion = outcome.RestartVersion,
+                    PendingCommandTargetVersion = isPowerCommand ? agentVersion : outcome.RestartVersion,
                     PendingCommandOutcome = null
                 };
                 await SaveStateAsync(statePath, state);
@@ -729,25 +729,13 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
             case AgentCommandTypes.Restart:
                 Console.WriteLine($"CLIENT_RESTART_REQUESTED:{command.CommandId}");
                 message = "راه‌اندازی مجدد ویندوز درخواست شد.";
-                _ = Process.Start(new ProcessStartInfo
-                {
-                    FileName = "shutdown.exe",
-                    Arguments = "/r /t 5 /d p:4:1",
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                });
+                ScheduleSystemPowerAction("/r /t 5 /d p:4:1");
                 break;
 
             case AgentCommandTypes.Shutdown:
                 Console.WriteLine($"CLIENT_SHUTDOWN_REQUESTED:{command.CommandId}");
                 message = "خاموش کردن ویندوز درخواست شد.";
-                _ = Process.Start(new ProcessStartInfo
-                {
-                    FileName = "shutdown.exe",
-                    Arguments = "/s /t 5 /d p:4:1",
-                    CreateNoWindow = true,
-                    UseShellExecute = false
-                });
+                ScheduleSystemPowerAction("/s /t 5 /d p:4:1");
                 break;
 
             default:
@@ -778,9 +766,9 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         Console.WriteLine($"اجرای فرمان Agent ناموفق بود: {message}");
     }
 
-    var awaitingFinalResult = success
-        && restartVersion is not null
-        && command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback;
+    var awaitingFinalResult = success && (
+        (restartVersion is not null && command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback)
+        || command.CommandType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown);
 
     try
     {
@@ -812,6 +800,20 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         restartVersion,
         restartVersion is not null,
         awaitingFinalResult);
+}
+
+static void ScheduleSystemPowerAction(string arguments)
+{
+    var process = Process.Start(new ProcessStartInfo
+    {
+        FileName = "shutdown.exe",
+        Arguments = arguments,
+        CreateNoWindow = true,
+        UseShellExecute = false
+    });
+
+    if (process is null)
+        throw new InvalidOperationException("فرمان راه‌اندازی/خاموش کردن ویندوز اجرا نشد.");
 }
 
 static async Task ApplyGameManifestAsync(
@@ -854,9 +856,14 @@ static async Task<AgentState> FinalizePendingLifecycleCommandAsync(
     string agentVersion,
     CancellationToken cancellationToken)
 {
-    if (!state.PendingCommandId.HasValue
-        || string.IsNullOrWhiteSpace(state.PendingCommandTargetVersion)
-        || !string.Equals(state.PendingCommandTargetVersion, agentVersion, StringComparison.OrdinalIgnoreCase))
+    if (!state.PendingCommandId.HasValue)
+        return state;
+
+    var pendingType = state.PendingCommandType?.Trim().ToLowerInvariant();
+    var isPowerCommand = pendingType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown;
+    if (!isPowerCommand
+        && (string.IsNullOrWhiteSpace(state.PendingCommandTargetVersion)
+            || !string.Equals(state.PendingCommandTargetVersion, agentVersion, StringComparison.OrdinalIgnoreCase)))
         return state;
 
     var outcome = state.PendingCommandOutcome?.Trim();
@@ -866,12 +873,16 @@ static async Task<AgentState> FinalizePendingLifecycleCommandAsync(
         ? "RolledBack"
         : success ? "Succeeded" : "Failed";
 
-    var message = finalStatus switch
-    {
-        "Succeeded" => $"نسخه {agentVersion} پس از راه‌اندازی مجدد کنترل‌شده سالم تأیید شد.",
-        "RolledBack" => $"نسخه {agentVersion} پس از شکست Update به نسخه سالم قبلی Rollback شد.",
-        _ => state.LastUpdateError ?? "فرمان چرخه عمر Client پس از راه‌اندازی مجدد ناموفق بود."
-    };
+    var message = isPowerCommand
+        ? (success
+            ? (pendingType == AgentCommandTypes.Restart ? "راه‌اندازی مجدد ویندوز با بازگشت سالم Agent تأیید شد." : "فرمان خاموش/راه‌اندازی مجدد چرخه ویندوز نهایی شد.")
+            : state.LastUpdateError ?? "فرمان توان ویندوز ناموفق بود.")
+        : finalStatus switch
+        {
+            "Succeeded" => $"نسخه {agentVersion} پس از راه‌اندازی مجدد کنترل‌شده سالم تأیید شد.",
+            "RolledBack" => $"نسخه {agentVersion} پس از شکست Update به نسخه سالم قبلی Rollback شد.",
+            _ => state.LastUpdateError ?? "فرمان چرخه عمر Client پس از راه‌اندازی مجدد ناموفق بود."
+        };
 
     try
     {
