@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using GameNetManager.Client;
 using System.Diagnostics;
 using System.Net.Http.Json;
@@ -724,6 +725,30 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 message = $"تنظیمات بازی «{payload.Name}» روی Agent ثبت شد.";
                 break;
             }
+
+            case AgentCommandTypes.Restart:
+                Console.WriteLine($"CLIENT_RESTART_REQUESTED:{command.CommandId}");
+                message = "راه‌اندازی مجدد ویندوز درخواست شد.";
+                _ = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "shutdown.exe",
+                    Arguments = "/r /t 5 /d p:4:1",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                });
+                break;
+
+            case AgentCommandTypes.Shutdown:
+                Console.WriteLine($"CLIENT_SHUTDOWN_REQUESTED:{command.CommandId}");
+                message = "خاموش کردن ویندوز درخواست شد.";
+                _ = Process.Start(new ProcessStartInfo
+                {
+                    FileName = "shutdown.exe",
+                    Arguments = "/s /t 5 /d p:4:1",
+                    CreateNoWindow = true,
+                    UseShellExecute = false
+                });
+                break;
 
             default:
                 success = false;
