@@ -1423,6 +1423,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("CustomerLoginId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("GameId")
                         .HasColumnType("TEXT");
 
@@ -1480,9 +1483,15 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.HasIndex("CustomerId");
 
+                    b.HasIndex("CustomerLoginId")
+                        .IsUnique()
+                        .HasFilter("CustomerLoginId IS NOT NULL AND State = 'Active'");
+
                     b.HasIndex("GameId");
 
-                    b.HasIndex("StationId");
+                    b.HasIndex("StationId")
+                        .IsUnique()
+                        .HasFilter("State = 'Active'");
 
                     b.HasIndex("TariffId");
 
@@ -1906,6 +1915,8 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.Navigation("Customer");
 
+                    b.Navigation("CustomerLogin");
+
                     b.Navigation("Game");
                 });
 
@@ -2105,6 +2116,11 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                         .HasForeignKey("CustomerId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("GameNetManager.Server.Data.CustomerLogin", "CustomerLogin")
+                        .WithMany()
+                        .HasForeignKey("CustomerLoginId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("GameNetManager.Server.Data.Game", "Game")
                         .WithMany()
