@@ -4505,18 +4505,26 @@ app.MapPost("/api/sessions", async (
         return Results.Conflict(new { code = "station_not_available", message = "این ایستگاه دیگر آزاد نیست." });
 
     var station = await database.Stations
+        .Include(item => item.Tariff)
         .FirstAsync(item => item.Id == request.StationId, cancellationToken);
+
+    var pricing = await pricingService.GetPricingAsync(
+        customer.Id,
+        station.Id,
+        now,
+        cancellationToken);
 
     var session = new Session
     {
-        CustomerId = request.CustomerId,
+        CustomerId = customer.Id,
         StationId = request.StationId,
-        TariffId = request.TariffId,
+        TariffId = station.TariffId,
         AppUserId = auth.User!.Id,
         StartAt = now,
         State = SessionState.Active,
         TotalAmount = 0m,
-        HourlyRateOverride = request.HourlyRateOverride > 0 ? request.HourlyRateOverride : null,
+        HourlyRateSnapshot = pricing.HourlyRate,
+        HourlyRateOverride = null,
         Persons = Math.Max(1, request.Persons ?? 1)
     };
 
