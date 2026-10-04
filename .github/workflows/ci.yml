@@ -952,16 +952,27 @@ jobs:
                 throw 'Agent-driven Session Start/End smoke did not complete.'
               }
 
+              $settlementPreview = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$endedSessionId/settlement-preview" -Method Get -WebSession $adminSession
+              if ($settlementPreview.sessionId -ne $endedSessionId) {
+                throw 'Settlement preview returned a different SessionId.'
+              }
+              if ([decimal]$settlementPreview.timeAmount -lt 0 -or [decimal]$settlementPreview.totalAmount -lt 0) {
+                throw 'Settlement preview returned an invalid negative amount.'
+              }
+
+              $settlementTotal = [decimal]$settlementPreview.totalAmount
               $endedSession = Invoke-RestMethod -Uri "$baseUrl/api/sessions/$endedSessionId/settle" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
-                totalAmount = 1000
-                parts = @(@{ method = 'cash'; amount = 1000 })
-                timeAmount = 1000
+                totalAmount = $settlementTotal
+                parts = @(@{ method = 'cash'; amount = $settlementTotal })
                 discountAmount = 0
                 prepaidAmount = 0
               } | ConvertTo-Json)
 
               if (-not $endedSession.invoiceId -or $endedSession.invoiceStatus -ne 'Paid') {
                 throw 'Ended Agent session could not be settled through the existing server settlement path.'
+              }
+              if ([decimal]$endedSession.totalAmount -ne $settlementTotal) {
+                throw "Server settlement total diverged from its own preview: preview=$settlementTotal; settled=$($endedSession.totalAmount)"
               }
 
               Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}" -f $endedSessionId, $sessionStation.id)
