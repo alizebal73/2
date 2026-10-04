@@ -5015,55 +5015,6 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
 
     try
     {
-        var migrationsAssembly = database.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrationsAssembly>();
-        var migrationsModelDiffer = database.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrationsModelDiffer>();
-        var modelRuntimeInitializer = database.GetService<Microsoft.EntityFrameworkCore.Infrastructure.IModelRuntimeInitializer>();
-        var designTimeModel = database.GetService<Microsoft.EntityFrameworkCore.Metadata.IDesignTimeModel>().Model;
-        var snapshotModel = migrationsAssembly.ModelSnapshot?.Model;
-        if (snapshotModel is Microsoft.EntityFrameworkCore.Metadata.IMutableModel mutableSnapshot)
-            snapshotModel = mutableSnapshot.FinalizeModel();
-        if (snapshotModel is not null)
-            snapshotModel = modelRuntimeInitializer.Initialize(snapshotModel);
-
-        var snapshotToDesignTime = snapshotModel is null
-            ? []
-            : migrationsModelDiffer.GetDifferences(
-                snapshotModel.GetRelationalModel(),
-                designTimeModel.GetRelationalModel());
-        var pendingModelChanges = database.Database.HasPendingModelChanges();
-
-        logger.LogCritical(
-            "EF DIAGNOSTIC: HasPendingModelChanges={Pending}; SnapshotToDesignTime={DesignCount}",
-            pendingModelChanges,
-            snapshotToDesignTime.Count);
-
-        foreach (var operation in snapshotToDesignTime)
-        {
-            switch (operation)
-            {
-                case Microsoft.EntityFrameworkCore.Migrations.Operations.DropIndexOperation dropIndex:
-                    logger.LogCritical(
-                        "EF DIAGNOSTIC DESIGN DROP INDEX: Table={Table}; Name={Name}",
-                        dropIndex.Table,
-                        dropIndex.Name);
-                    break;
-
-                case Microsoft.EntityFrameworkCore.Migrations.Operations.CreateIndexOperation createIndex:
-                    logger.LogCritical(
-                        "EF DIAGNOSTIC DESIGN CREATE INDEX: Table={Table}; Name={Name}; Columns={Columns}; Unique={Unique}; Filter={Filter}",
-                        createIndex.Table,
-                        createIndex.Name,
-                        string.Join(",", createIndex.Columns),
-                        createIndex.IsUnique,
-                        createIndex.Filter);
-                    break;
-
-                default:
-                    logger.LogCritical("EF DIAGNOSTIC DESIGN: {Operation}", operation);
-                    break;
-            }
-        }
-
         await database.Database.MigrateAsync();
         await DatabaseSeeder.SeedAsync(database, environment.IsDevelopment());
     }
