@@ -1472,8 +1472,8 @@ app.MapGet("/api/audit", async (
     string? action,
     string? entityName,
     string? search,
-    int page,
-    int pageSize,
+    int page = 1,
+    int pageSize = 50,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(
