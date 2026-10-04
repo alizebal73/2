@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { mockService } from '../services/mockService';
 import type { PageKey, PageLockMap } from '../types';
 import { hashPin, protectedPageLabels, readPageLocks, writePageLocks } from '../services/securityService';
 
@@ -24,8 +23,6 @@ export function SettingsPage(){
  useEffect(()=>{localStorage.setItem('gamenet-hotkeys-v1',JSON.stringify(hotkeys));window.dispatchEvent(new CustomEvent('gamenet-hotkeys-changed',{detail:hotkeys}))},[hotkeys]);
  function update<K extends keyof AppSettings>(key:K,value:AppSettings[K]){setSettings(current=>({...current,[key]:value}))}
  function changeHotkey(key:string){const next=window.prompt('کلید جدید را وارد کنید',hotkeys[key]);if(next?.trim())setHotkeys(current=>({...current,[key]:next.trim()}))}
- function backupNow(){void mockService.createBackup().then(payload=>{const blob=new Blob([JSON.stringify({settings,hotkeys,payload},null,2)],{type:'application/json'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='gamenet-backup.json';link.click();URL.revokeObjectURL(link.href);setNotice('نسخه پشتیبان ایجاد شد')})}
- function restoreBackup(){const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{try{const file=input.files?.[0];if(!file) return;const backup=JSON.parse((await file.text()).replace(/^\\uFEFF/,''));if(!backup.payload)throw new Error('invalid');await mockService.restoreBackup(backup.payload);if(backup.settings)setSettings(backup.settings);if(backup.hotkeys)setHotkeys(backup.hotkeys);setNotice('پشتیبان بازیابی شد؛ یکبار صفحه را تازه‌سازی کنید')}catch{setNotice('فایل پشتیبان معتبر نیست')}};input.click()}
  function reset(){setSettings(defaults);setHotkeys(hotkeyDefaults);setNotice('تنظیمات به حالت پیش‌فرض بازگشت')}
  async function saveSectionLocks(){
   const next: PageLockMap = {};
@@ -65,7 +62,18 @@ export function SettingsPage(){
     <small className="security-footnote">این قفل در حال حاضر لایهٔ UX است؛ در نسخه نهایی Permission و Server Command نیز باید همین دسترسی را کنترل کنند.</small>
    </section>
    <section className="card-panel" style={{padding:14}}><h3>🧾 رفتار جلسه</h3><label>حالت پیش‌فرض<select value={settings.sessionMode} onChange={e=>update('sessionMode',e.target.value as AppSettings['sessionMode'])}><option value="settle">تسویه بعد از بازی</option><option value="prepaid">پیش‌پرداخت</option></select></label><label>سقف تخفیف آزاد اپراتور<input type="number" value={settings.operatorDiscount} onChange={e=>update('operatorDiscount',Number(e.target.value))}/></label></section>
-   <section className="card-panel" style={{padding:14}}><h3>💾 داده و پشتیبان‌گیری</h3><label>بکاپ خودکار<input type="checkbox" checked={settings.backupAuto} onChange={e=>update('backupAuto',e.target.checked)}/></label><label>ساعت بکاپ<input type="time" value={settings.backupHour} onChange={e=>update('backupHour',e.target.value)}/></label><label>تعداد نسخه<input type="number" min="1" value={settings.backupKeep} onChange={e=>update('backupKeep',Number(e.target.value))}/></label><label>مقصد<input value={settings.backupTarget} onChange={e=>update('backupTarget',e.target.value)}/></label><div className="modal-actions"><button className="btn primary" onClick={backupNow}>📦 بکاپ دستی الان</button><button className="btn" onClick={restoreBackup}>♻️ بازیابی از نسخه</button></div></section>
+   <section className="card-panel" style={{padding:14}}>
+    <h3>💾 داده و پشتیبان‌گیری</h3>
+    <label className="setting-item"><span><b>بکاپ خودکار</b><small>تا زمان آماده‌شدن سرویس Backup سرور، این گزینه اجرایی نیست.</small></span><input type="checkbox" checked={false} disabled /></label>
+    <label>ساعت بکاپ<input type="time" value={settings.backupHour} disabled /></label>
+    <label>تعداد نسخه<input type="number" min="1" value={settings.backupKeep} disabled /></label>
+    <label>مقصد<input value={settings.backupTarget} disabled /></label>
+    <div className="modal-actions">
+      <button className="btn primary" disabled title="پشتیبان واقعی Server-side هنوز در Release Gate پیاده‌سازی نشده است">📦 بکاپ دستی الان</button>
+      <button className="btn" disabled title="بازیابی واقعی Server-side هنوز در Release Gate پیاده‌سازی نشده است">♻️ بازیابی از نسخه</button>
+    </div>
+    <small className="security-footnote">پشتیبان واقعی باید شامل دیتابیس و DataProtection Keys باشد و قبل از Migration قابل‌بازیابی تست شود؛ این کنترل‌ها تا آماده‌شدن مسیر سروری عمداً غیرفعال‌اند.</small>
+   </section>
    <section className="card-panel" style={{padding:14}}><h3>👥 حقوق و شیفت</h3><label>روش محاسبه حقوق پیش‌فرض<select value={settings.payrollMode ?? 'hourly'} onChange={e=>update('payrollMode',e.target.value as AppSettings['payrollMode'])}><option value="hourly">ساعتی</option><option value="monthly">ماهانه</option></select></label><label>رفتار اختلاف صندوق<select value={settings.shortagePolicy ?? 'approval'} onChange={e=>update('shortagePolicy',e.target.value as AppSettings['shortagePolicy'])}><option value="approval">نیازمند تأیید</option><option value="payroll">قابل انتقال به حقوق</option><option value="expense">ثبت به‌عنوان هزینه/کسری</option></select></label><label className="setting-item"><span>کسر خودکار از حقوق</span><input type="checkbox" checked={Boolean(settings.autoPayrollDeduction)} onChange={e=>update('autoPayrollDeduction',e.target.checked)}/></label></section>
    <section className="card-panel" style={{padding:14}}><h3>🛠 مدیریت بازی‌ها و کلاینت‌ها</h3><button className="btn" onClick={()=>window.dispatchEvent(new CustomEvent('gamenet-navigate',{detail:'games'}))}>🎮 صفحه بازی‌ها</button><button className="btn" onClick={()=>window.dispatchEvent(new CustomEvent('gamenet-navigate',{detail:'client-shell'}))}>🖧 صفحه کلاینت‌ها</button></section>
    <section className="card-panel" style={{padding:14}}><h3>🌐 شبکه</h3><label>DNS پیش‌فرض<input value={settings.dns} onChange={e=>update('dns',e.target.value)}/></label><label>آدرس سرور<input className="ltr" value={settings.serverAddress} onChange={e=>update('serverAddress',e.target.value)}/></label><div className="setting-item"><span>تعداد صندوق هم‌زمان</span><b>نامحدود</b></div></section>

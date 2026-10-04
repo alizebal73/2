@@ -4,12 +4,13 @@ namespace GameNetManager.Server.Data;
 
 public static class DatabaseSeeder
 {
-    public static async Task SeedAsync(GameNetDbContext database, CancellationToken cancellationToken = default)
+    public static async Task SeedAsync(GameNetDbContext database, bool includeDemoData, CancellationToken cancellationToken = default)
     {
         if (await database.Stations.AnyAsync(cancellationToken))
         {
-            await EnsureAuthorizationSeedAsync(database, cancellationToken);
-            await EnsureCustomerProfilesAsync(database, cancellationToken);
+            await EnsureAuthorizationSeedAsync(database, includeDemoData, cancellationToken);
+            if (includeDemoData)
+                await EnsureCustomerProfilesAsync(database, cancellationToken);
             return;
         }
 
@@ -45,53 +46,58 @@ public static class DatabaseSeeder
         };
         database.VipPackages.Add(vipPackage);
 
-        var product = new Product
-        {
-            Name = "Energy Drink",
-            Category = "Beverage",
-            UnitPrice = 25000m,
-            CostPrice = 15000m,
-            StockQuantity = 40,
-            IsActive = true
-        };
-        database.Products.Add(product);
-
         var adminUser = new AppUser
         {
             FullName = "System Administrator",
             UserName = "admin",
             Email = "admin@gamenet.local",
-            PasswordHash = PasswordSecurity.Hash(GetAdminPassword()),
+            PasswordHash = PasswordSecurity.Hash(GetAdminPassword(includeDemoData)),
             Role = "Admin",
             IsActive = true
         };
         database.AppUsers.Add(adminUser);
 
-        var customer = new Customer
-        {
-            Code = "1050",
-            Username = "reza_hs",
-            FullName = "رضا محمدی",
-            Phone = "09123456789",
-            Email = "reza@gamenet.local",
-            IsVip = true,
-            VipTier = "gold",
-            VipPackage = vipPackage,
-            VipActivatedAt = vipActivatedAt,
-            VipExpiresAt = vipActivatedAt.AddDays(vipPackage.DurationDays),
-            Balance = 450000m,
-            Notes = "Gold VIP"
-        };
-        database.Customers.Add(customer);
-
         await database.SaveChangesAsync(cancellationToken);
-        await EnsureAuthorizationSeedAsync(database, cancellationToken);
-        await EnsureCustomerProfilesAsync(database, cancellationToken);
+        await EnsureAuthorizationSeedAsync(database, includeDemoData, cancellationToken);
 
-        CreateStations(database, consoleType, hourlyTariff, "PS5", 10, "Zone A", "Console");
-        CreateStations(database, consoleType, hourlyTariff, "PS4", 6, "Zone A", "Console");
-        CreateStations(database, pcType, hourlyTariff, "PC", 40, "Zone B", "PC");
-        CreateStations(database, tableType, hourlyTariff, "Table", 5, "Zone C", "Table");
+        if (includeDemoData)
+        {
+            var product = new Product
+            {
+                Name = "Energy Drink",
+                Category = "Beverage",
+                UnitPrice = 25000m,
+                CostPrice = 15000m,
+                StockQuantity = 40,
+                IsActive = true
+            };
+            database.Products.Add(product);
+
+            var customer = new Customer
+            {
+                Code = "1050",
+                Username = "reza_hs",
+                FullName = "رضا محمدی",
+                Phone = "09123456789",
+                Email = "reza@gamenet.local",
+                IsVip = true,
+                VipTier = "gold",
+                VipPackage = vipPackage,
+                VipActivatedAt = vipActivatedAt,
+                VipExpiresAt = vipActivatedAt.AddDays(vipPackage.DurationDays),
+                Balance = 450000m,
+                Notes = "Gold VIP"
+            };
+            database.Customers.Add(customer);
+
+            await database.SaveChangesAsync(cancellationToken);
+            await EnsureCustomerProfilesAsync(database, cancellationToken);
+
+            CreateStations(database, consoleType, hourlyTariff, "PS5", 10, "Zone A", "Console");
+            CreateStations(database, consoleType, hourlyTariff, "PS4", 6, "Zone A", "Console");
+            CreateStations(database, pcType, hourlyTariff, "PC", 40, "Zone B", "PC");
+            CreateStations(database, tableType, hourlyTariff, "Table", 5, "Zone C", "Table");
+        }
 
         database.AuditLogs.Add(new AuditLog
         {
@@ -105,7 +111,7 @@ public static class DatabaseSeeder
         await database.SaveChangesAsync(cancellationToken);
     }
 
-    private static async Task EnsureAuthorizationSeedAsync(GameNetDbContext database, CancellationToken cancellationToken)
+    private static async Task EnsureAuthorizationSeedAsync(GameNetDbContext database, bool includeDemoData, CancellationToken cancellationToken)
     {
         foreach (var item in AuthorizationService.PermissionCatalog)
         {
@@ -128,7 +134,7 @@ public static class DatabaseSeeder
                 FullName = "مدیر سیستم",
                 UserName = "admin",
                 Email = "admin@gamenet.local",
-                PasswordHash = PasswordSecurity.Hash(GetAdminPassword()),
+                PasswordHash = PasswordSecurity.Hash(GetAdminPassword(includeDemoData)),
                 Role = "Admin",
                 IsActive = true
             };
@@ -136,14 +142,21 @@ public static class DatabaseSeeder
         }
         else if (PasswordSecurity.Verify("Admin123!", admin.PasswordHash) || string.Equals(admin.PasswordHash, "hash", StringComparison.Ordinal))
         {
-            admin.PasswordHash = PasswordSecurity.Hash(GetAdminPassword());
+            admin.PasswordHash = PasswordSecurity.Hash(GetAdminPassword(includeDemoData));
         }
 
         await database.SaveChangesAsync(cancellationToken);
     }
 
-    private static string GetAdminPassword()
-        => Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD") ?? "123456";
+    private static string GetAdminPassword(bool includeDemoData)
+    {
+        var configured = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD");
+        if (!string.IsNullOrWhiteSpace(configured))
+            return configured;
+        if (includeDemoData)
+            return "123456";
+        throw new InvalidOperationException("Production startup requires GAMENET_ADMIN_PASSWORD; default credentials are disabled.");
+    }
 
     private static void CreateStations(GameNetDbContext database, StationType stationType, Tariff tariff, string prefix, int count, string zone, string type)
     {

@@ -1,5 +1,5 @@
-using GameNetManager.Client;
 using System.Diagnostics;
+using GameNetManager.Client;
 using System.Net.Http.Json;
 using System.Reflection;
 using System.Security.Cryptography;
@@ -25,6 +25,13 @@ var dataDirectory = Environment.GetEnvironmentVariable("GAMENET_AGENT_DATA_DIR")
 var testSessionFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_SESSION_FLOW"), "1", StringComparison.Ordinal);
 var testSessionCustomerId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_CUSTOMER_ID");
 var testSessionLoginId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_LOGIN_ID");
+var testGameIdText = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_GAME_ID");
+var testGameAccountFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW"), "1", StringComparison.Ordinal);
+var testSessionHoldSeconds = int.TryParse(
+    Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_SESSION_HOLD_SECONDS"),
+    out var parsedTestSessionHoldSeconds)
+    ? Math.Clamp(parsedTestSessionHoldSeconds, 0, 30)
+    : 1;
 
 if (string.IsNullOrWhiteSpace(dataDirectory))
     dataDirectory = Path.Combine(
@@ -123,11 +130,13 @@ try
                 command,
                 lockScreen,
                 updateManager,
+                dataDirectory,
                 agentVersion,
                 shutdown.Token);
 
             if (outcome.AwaitingFinalResult)
             {
+                var isPowerCommand = command.CommandType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown;
                 state = state with
                 {
                     LifecycleState = command.CommandType == AgentCommandTypes.Update
@@ -139,7 +148,7 @@ try
                     LastUpdateError = null,
                     PendingCommandId = command.CommandId,
                     PendingCommandType = command.CommandType,
-                    PendingCommandTargetVersion = outcome.RestartVersion,
+                    PendingCommandTargetVersion = isPowerCommand ? agentVersion : outcome.RestartVersion,
                     PendingCommandOutcome = null
                 };
                 await SaveStateAsync(statePath, state);
@@ -199,7 +208,7 @@ try
             return Task.CompletedTask;
         });
 
-        connection.On<AgentReadyDto>("AgentReady", async ready =>
+        async Task HandleAgentReadyAsync(AgentReadyDto ready)
         {
             kioskEnabled = ready.KioskEnabled;
             lockOnDisconnect = ready.LockOnDisconnect;
@@ -231,16 +240,21 @@ try
             if (!testSessionFlowCompleted
                 && testSessionFlow
                 && Guid.TryParse(testSessionCustomerId, out var testCustomerId)
-                && Guid.TryParse(testSessionLoginId, out var testLoginId))
+                && Guid.TryParse(testSessionLoginId, out var testCustomerLoginId))
             {
                 testSessionFlowCompleted = true;
                 _ = RunTestSessionFlowAsync(
                     connection,
                     testCustomerId,
-                    testLoginId,
+                    testCustomerLoginId,
+                    Guid.TryParse(testGameIdText, out var testGameId) ? testGameId : null,
+                    testGameAccountFlow,
+                    testSessionHoldSeconds,
                     shutdown.Token);
             }
-        });
+        }
+
+        connection.On<AgentReadyDto>("AgentReady", HandleAgentReadyAsync);
 
         connection.Reconnecting += error =>
         {
@@ -254,21 +268,28 @@ try
             state = state with { LifecycleState = ClientLifecycleStates.Recovering };
             await SaveStateAsync(statePath, state);
             Console.WriteLine($"Agent دوباره متصل شد ({connectionId}).");
-            var heartbeat = await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, state, shutdown.Token);
+
+            var ready = await connection.InvokeAsync<AgentReadyDto>(
+                "ConfirmConnection",
+                shutdown.Token);
+            await HandleAgentReadyAsync(ready);
+
+            var heartbeat = await SendHeartbeatAsync(
+                connection,
+                agentVersion,
+                osVersion,
+                lockScreen,
+                state,
+                shutdown.Token);
             if (heartbeat.HasValue)
             {
+                await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
                 state = state with
                 {
                     LifecycleState = ClientLifecycleStates.Running,
                     LastUpdateError = null,
                     LastHealthyAt = DateTimeOffset.UtcNow
                 };
-                await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
-                state = await FinalizePendingLifecycleCommandAsync(
-                    connection,
-                    state,
-                    agentVersion,
-                    shutdown.Token);
                 await SaveStateAsync(statePath, state);
             }
         };
@@ -296,7 +317,13 @@ try
         try
         {
             await connection.StartAsync(shutdown.Token);
-            Console.WriteLine($"Agent GameNet روی {hubUrl} فعال شد.");
+
+            var initialReady = await connection.InvokeAsync<AgentReadyDto>(
+                "ConfirmConnection",
+                shutdown.Token);
+            await HandleAgentReadyAsync(initialReady);
+
+            Console.WriteLine($"Agent GameNet روی {hubUrl} فعال و تأیید شد.");
 
             while (!shutdown.IsCancellationRequested
                 && connection.State != HubConnectionState.Disconnected)
@@ -426,6 +453,9 @@ static async Task RunTestSessionFlowAsync(
     HubConnection connection,
     Guid customerId,
     Guid customerLoginId,
+    Guid? gameId,
+    bool testGameAccountFlow,
+    int testSessionHoldSeconds,
     CancellationToken cancellationToken)
 {
     try
@@ -437,13 +467,25 @@ static async Task RunTestSessionFlowAsync(
                 customerLoginId,
                 Guid.NewGuid(),
                 1m,
-                1),
+                1,
+                gameId),
             cancellationToken);
 
         Console.WriteLine($"Agent session start موفق؛ SessionId={started.SessionId}.");
         Console.WriteLine($"AGENT_SESSION_START_OK:{started.SessionId}");
 
-        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        if (testGameAccountFlow && gameId.HasValue)
+        {
+            var credential = await connection.InvokeAsync<AgentGameAccountCredentialDto>(
+                "AcquireGameAccount",
+                started.SessionId,
+                cancellationToken);
+            Console.WriteLine($"AGENT_GAME_ACCOUNT_OK:{credential.LeaseId}:{credential.GameId}:{credential.Platform}:{credential.Login}");
+        }
+
+        await Task.Delay(
+            TimeSpan.FromSeconds(testSessionHoldSeconds),
+            cancellationToken);
 
         try
         {
@@ -608,6 +650,7 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
     AgentCommandEnvelope command,
     AgentLockScreenController lockScreen,
     ClientUpdateManager updateManager,
+    string dataDirectory,
     string agentVersion,
     CancellationToken cancellationToken)
 {
@@ -695,6 +738,30 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 Console.WriteLine($"CLIENT_ROLLBACK_REQUESTED:{rollbackVersion}");
                 break;
 
+            case AgentCommandTypes.ApplyGame:
+            {
+                var payload = JsonSerializer.Deserialize<AgentGameApplyCommandPayload>(
+                    command.PayloadJson ?? string.Empty)
+                    ?? throw new JsonException("دادهٔ همگام‌سازی بازی معتبر نیست.");
+
+                await ApplyGameManifestAsync(dataDirectory, payload, cancellationToken);
+                Console.WriteLine($"CLIENT_GAME_APPLIED:{payload.GameId:N}");
+                message = $"تنظیمات بازی «{payload.Name}» روی Agent ثبت شد.";
+                break;
+            }
+
+            case AgentCommandTypes.Restart:
+                Console.WriteLine($"CLIENT_RESTART_REQUESTED:{command.CommandId}");
+                message = "راه‌اندازی مجدد ویندوز درخواست شد.";
+                ScheduleSystemPowerAction("/r /t 5 /d p:4:1");
+                break;
+
+            case AgentCommandTypes.Shutdown:
+                Console.WriteLine($"CLIENT_SHUTDOWN_REQUESTED:{command.CommandId}");
+                message = "خاموش کردن ویندوز درخواست شد.";
+                ScheduleSystemPowerAction("/s /t 5 /d p:4:1");
+                break;
+
             default:
                 success = false;
                 message = "فرمان Agent ناشناخته است.";
@@ -723,9 +790,9 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         Console.WriteLine($"اجرای فرمان Agent ناموفق بود: {message}");
     }
 
-    var awaitingFinalResult = success
-        && restartVersion is not null
-        && command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback;
+    var awaitingFinalResult = success && (
+        (restartVersion is not null && command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback)
+        || command.CommandType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown);
 
     try
     {
@@ -759,15 +826,68 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         awaitingFinalResult);
 }
 
+static void ScheduleSystemPowerAction(string arguments)
+{
+    var process = Process.Start(new ProcessStartInfo
+    {
+        FileName = "shutdown.exe",
+        Arguments = arguments,
+        CreateNoWindow = true,
+        UseShellExecute = false
+    });
+
+    if (process is null)
+        throw new InvalidOperationException("فرمان راه‌اندازی/خاموش کردن ویندوز اجرا نشد.");
+}
+
+static async Task ApplyGameManifestAsync(
+    string dataDirectory,
+    AgentGameApplyCommandPayload payload,
+    CancellationToken cancellationToken)
+{
+    if (payload.GameId == Guid.Empty)
+        throw new InvalidOperationException("شناسهٔ بازی معتبر نیست.");
+    if (string.IsNullOrWhiteSpace(payload.Name))
+        throw new InvalidOperationException("نام بازی خالی است.");
+    if (string.IsNullOrWhiteSpace(payload.Executable))
+        throw new InvalidOperationException("فایل اجرایی بازی مشخص نشده است.");
+
+    var gamesDirectory = Path.Combine(dataDirectory, "games");
+    Directory.CreateDirectory(gamesDirectory);
+
+    var targetPath = Path.Combine(gamesDirectory, payload.GameId.ToString("N") + ".json");
+    var temporaryPath = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+    var json = JsonSerializer.Serialize(
+        payload,
+        new JsonSerializerOptions { WriteIndented = true });
+
+    await File.WriteAllTextAsync(temporaryPath, json, Encoding.UTF8, cancellationToken);
+
+    try
+    {
+        File.Move(temporaryPath, targetPath, overwrite: true);
+    }
+    catch
+    {
+        try { File.Delete(temporaryPath); } catch { }
+        throw;
+    }
+}
+
 static async Task<AgentState> FinalizePendingLifecycleCommandAsync(
     HubConnection connection,
     AgentState state,
     string agentVersion,
     CancellationToken cancellationToken)
 {
-    if (!state.PendingCommandId.HasValue
-        || string.IsNullOrWhiteSpace(state.PendingCommandTargetVersion)
-        || !string.Equals(state.PendingCommandTargetVersion, agentVersion, StringComparison.OrdinalIgnoreCase))
+    if (!state.PendingCommandId.HasValue)
+        return state;
+
+    var pendingType = state.PendingCommandType?.Trim().ToLowerInvariant();
+    var isPowerCommand = pendingType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown;
+    if (!isPowerCommand
+        && (string.IsNullOrWhiteSpace(state.PendingCommandTargetVersion)
+            || !string.Equals(state.PendingCommandTargetVersion, agentVersion, StringComparison.OrdinalIgnoreCase)))
         return state;
 
     var outcome = state.PendingCommandOutcome?.Trim();
@@ -777,12 +897,16 @@ static async Task<AgentState> FinalizePendingLifecycleCommandAsync(
         ? "RolledBack"
         : success ? "Succeeded" : "Failed";
 
-    var message = finalStatus switch
-    {
-        "Succeeded" => $"نسخه {agentVersion} پس از راه‌اندازی مجدد کنترل‌شده سالم تأیید شد.",
-        "RolledBack" => $"نسخه {agentVersion} پس از شکست Update به نسخه سالم قبلی Rollback شد.",
-        _ => state.LastUpdateError ?? "فرمان چرخه عمر Client پس از راه‌اندازی مجدد ناموفق بود."
-    };
+    var message = isPowerCommand
+        ? (success
+            ? (pendingType == AgentCommandTypes.Restart ? "راه‌اندازی مجدد ویندوز با بازگشت سالم Agent تأیید شد." : "فرمان خاموش/راه‌اندازی مجدد چرخه ویندوز نهایی شد.")
+            : state.LastUpdateError ?? "فرمان توان ویندوز ناموفق بود.")
+        : finalStatus switch
+        {
+            "Succeeded" => $"نسخه {agentVersion} پس از راه‌اندازی مجدد کنترل‌شده سالم تأیید شد.",
+            "RolledBack" => $"نسخه {agentVersion} پس از شکست Update به نسخه سالم قبلی Rollback شد.",
+            _ => state.LastUpdateError ?? "فرمان چرخه عمر Client پس از راه‌اندازی مجدد ناموفق بود."
+        };
 
     try
     {

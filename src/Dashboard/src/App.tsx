@@ -22,9 +22,8 @@ import type { AppUserRecord } from './types';
 import { SectionLockDialog } from './components/SectionLockDialog';
 import { readPageLocks } from './services/securityService';
 import type { PageLockMap } from './types';
-import type { AgentStatusDto, DashboardSnapshotDto, PageKey, ServerInfoDto, StationDto } from './types';
+import type { AgentStatusDto, DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
-import { mockService } from './services/mockService';
 import { getAgentStatuses } from './services/agentService';
 
 type HubState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
@@ -200,33 +199,6 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
         setApiState('offline');
         setError('ارتباط با سرور برقرار نشد');
 
-        // Development-only visual fallback: keep the UI browsable while
-        // the real Server is unavailable. Production never uses mock data.
-        if (import.meta.env.DEV) {
-          try {
-            const managedStations = await mockService.getManagedStations();
-            const previewStations: StationDto[] = managedStations.map((station) => ({
-              id: station.id,
-              name: station.name,
-              zone: station.zone,
-              type: station.type,
-              ratePerHour: station.ratePerHour,
-              state: station.status === 'off'
-                ? 'off'
-                : station.status === 'reserved'
-                  ? 'reserved'
-                  : 'free',
-            }));
-
-            setSnapshot({
-              totalStations: previewStations.length,
-              stations: previewStations,
-              generatedAt: new Date().toISOString(),
-            });
-          } catch {
-            setSnapshot(null);
-          }
-        }
       }
     };
 
@@ -320,7 +292,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
       <div className="page-shell">
         <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={dashboardSnapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={requestNavigation} role={role} user={user} /></div>
         <div hidden={activePage !== 'games'}><GamesPage /></div>
-        <div hidden={activePage !== 'client-shell'}><ClientShellPage /></div>
+        <div hidden={activePage !== 'client-shell'}><ClientShellPage canPower={hasPermission(user, 'client.power')} /></div>
         <div hidden={activePage !== 'customers'}><CustomersPage user={user} /></div>
         <div hidden={activePage !== 'tariffs'}><TariffsPage /></div>
         <div hidden={activePage !== 'accounts'}><AccountsPage /></div>

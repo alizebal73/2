@@ -55,5 +55,69 @@ public sealed class ConcurrencyTests : IDisposable
         }
     }
 
+
+
+    [Fact]
+    public async Task ActiveSessionsCannotShareCustomerLoginOrStation()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "TestPC" };
+        var station = new Station
+        {
+            Name = "SESSION-01",
+            Zone = "Test",
+            Type = "PC",
+            StationType = type,
+            State = StationState.Occupied,
+            IsActive = true
+        };
+        var customer = new Customer
+        {
+            FullName = "مشتری Session",
+            Code = "SESSION-CUSTOMER",
+            Username = "session-customer",
+            ConcurrentLoginLimit = 1,
+            VipTier = "none"
+        };
+        var login = new CustomerLogin
+        {
+            Customer = customer,
+            ClientKey = "agent-session",
+            IsActive = true
+        };
+
+        db.Stations.Add(station);
+        db.Customers.Add(customer);
+        db.CustomerLogins.Add(login);
+        await db.SaveChangesAsync();
+
+        db.Sessions.Add(new Session
+        {
+            CustomerId = customer.Id,
+            CustomerLoginId = login.Id,
+            StationId = station.Id,
+            StartAt = DateTimeOffset.UtcNow,
+            State = SessionState.Active
+        });
+        await db.SaveChangesAsync();
+
+        db.Sessions.Add(new Session
+        {
+            CustomerId = customer.Id,
+            CustomerLoginId = login.Id,
+            StationId = station.Id,
+            StartAt = DateTimeOffset.UtcNow.AddSeconds(1),
+            State = SessionState.Active
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+    }
+
     public void Dispose() => _connection.Dispose();
 }

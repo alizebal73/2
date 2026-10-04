@@ -165,3 +165,31 @@ partial class Stage11GameAccountPool
 partial class AccountLeaseReleaseReason
 {
 }
+
+    
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261003120000_Stage12SessionLeaseCredential")]
+partial class Stage12SessionLeaseCredential
+{
+}
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261003131500_AccountPoolExpiryUtc")]
+partial class AccountPoolExpiryUtc
+{
+}
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261005010000_ActiveSessionOwnershipGuards")]
+partial class ActiveSessionOwnershipGuards
+{
+}
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261005020000_SessionHourlyRateSnapshot")]
+partial class SessionHourlyRateSnapshot
+{
+}

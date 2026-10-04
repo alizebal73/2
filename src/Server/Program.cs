@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.DataProtection;
 using GameNetManager.Server.Data;
 using GameNetManager.Server.Hubs;
 using Microsoft.AspNetCore.SignalR;
 using GameNetManager.Shared.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -16,6 +18,9 @@ builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
+builder.Services.AddScoped<CustomerLoginService>();
+builder.Services.AddScoped<SessionPricingService>();
+builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
 var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
@@ -23,6 +28,13 @@ var databasePath = Path.IsPathRooted(databaseFile)
     ? databaseFile
     : Path.Combine(builder.Environment.ContentRootPath, databaseFile);
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
+
+var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+Directory.CreateDirectory(dataProtectionKeysPath);
+builder.Services
+    .AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+    .SetApplicationName("GameNetManager");
 builder.Services.AddDbContext<GameNetDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
 
@@ -52,6 +64,186 @@ app.MapGet("/api/server-info", (IWebHostEnvironment environment) =>
     Results.Ok(new ServerInfoDto("GameNet Manager", environment.EnvironmentName, DateTimeOffset.UtcNow)))
     .WithName("GetServerInfo");
 
+app.MapGet("/api/tariffs", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context,
+        database,
+        cancellationToken,
+        "tariff.view",
+        "tariff.manage",
+        "session.start",
+        "session.manage");
+    if (auth.Error is not null) return auth.Error;
+
+    var tariffs = await database.Tariffs
+        .AsNoTracking()
+        .OrderBy(item => item.Name)
+        .Select(item => new TariffDto(
+            item.Id,
+            item.Name,
+            item.Description,
+            item.HourlyRate,
+            item.DailyRate,
+            item.IsActive))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(tariffs);
+}).WithName("ListTariffs");
+
+app.MapPost("/api/tariffs", async (
+    SaveTariffRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "tariff.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var name = request.Name?.Trim();
+    if (string.IsNullOrWhiteSpace(name))
+        return Results.BadRequest(new { code = "tariff_name_required", message = "نام تعرفه الزامی است." });
+    if (request.HourlyRate < 0 || request.DailyRate < 0)
+        return Results.BadRequest(new { code = "tariff_amount_invalid", message = "مبلغ تعرفه نمی‌تواند منفی باشد." });
+
+    if (await database.Tariffs.AnyAsync(item => item.Name == name, cancellationToken))
+        return Results.Conflict(new { code = "tariff_exists", message = "تعرفه‌ای با این نام از قبل وجود دارد." });
+
+    var tariff = new Tariff
+    {
+        Name = name,
+        Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+        HourlyRate = request.HourlyRate,
+        DailyRate = request.DailyRate,
+        IsActive = request.IsActive
+    };
+
+    database.Tariffs.Add(tariff);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "TariffCreated",
+        EntityName = "Tariff",
+        EntityId = tariff.Id.ToString(),
+        Details = "ایجاد تعرفه · " + tariff.Name,
+        AppUserId = auth.User!.Id
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new TariffDto(
+        tariff.Id,
+        tariff.Name,
+        tariff.Description,
+        tariff.HourlyRate,
+        tariff.DailyRate,
+        tariff.IsActive));
+}).WithName("CreateTariff");
+
+app.MapPut("/api/tariffs/{tariffId:guid}", async (
+    Guid tariffId,
+    SaveTariffRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "tariff.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var tariff = await database.Tariffs.FirstOrDefaultAsync(item => item.Id == tariffId, cancellationToken);
+    if (tariff is null)
+        return Results.NotFound(new { code = "tariff_not_found", message = "تعرفه پیدا نشد." });
+
+    var name = request.Name?.Trim();
+    if (string.IsNullOrWhiteSpace(name))
+        return Results.BadRequest(new { code = "tariff_name_required", message = "نام تعرفه الزامی است." });
+    if (request.HourlyRate < 0 || request.DailyRate < 0)
+        return Results.BadRequest(new { code = "tariff_amount_invalid", message = "مبلغ تعرفه نمی‌تواند منفی باشد." });
+
+    if (await database.Tariffs.AnyAsync(
+            item => item.Id != tariffId && item.Name == name,
+            cancellationToken))
+        return Results.Conflict(new { code = "tariff_exists", message = "تعرفه‌ای با این نام از قبل وجود دارد." });
+
+    tariff.Name = name;
+    tariff.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+    tariff.HourlyRate = request.HourlyRate;
+    tariff.DailyRate = request.DailyRate;
+    tariff.IsActive = request.IsActive;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "TariffUpdated",
+        EntityName = "Tariff",
+        EntityId = tariff.Id.ToString(),
+        Details = "ویرایش تعرفه · " + tariff.Name,
+        AppUserId = auth.User!.Id
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new TariffDto(
+        tariff.Id,
+        tariff.Name,
+        tariff.Description,
+        tariff.HourlyRate,
+        tariff.DailyRate,
+        tariff.IsActive));
+}).WithName("UpdateTariff");
+
+app.MapDelete("/api/tariffs/{tariffId:guid}", async (
+    Guid tariffId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "tariff.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var tariff = await database.Tariffs.FirstOrDefaultAsync(item => item.Id == tariffId, cancellationToken);
+    if (tariff is null)
+        return Results.NotFound(new { code = "tariff_not_found", message = "تعرفه پیدا نشد." });
+
+    var assignedStations = await database.Stations
+        .Where(item => item.IsActive && item.TariffId == tariffId)
+        .Select(item => item.Name)
+        .Take(10)
+        .ToListAsync(cancellationToken);
+
+    if (assignedStations.Count > 0)
+        return Results.Conflict(new
+        {
+            code = "tariff_in_use",
+            message = "این تعرفه به ایستگاه فعال متصل است؛ ابتدا ایستگاه‌ها را به تعرفه دیگری منتقل کنید.",
+            stations = assignedStations
+        });
+
+    tariff.IsActive = false;
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "TariffArchived",
+        EntityName = "Tariff",
+        EntityId = tariff.Id.ToString(),
+        Details = "غیرفعال‌سازی تعرفه · " + tariff.Name,
+        AppUserId = auth.User!.Id
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new { archived = true });
+}).WithName("ArchiveTariff");
+
 app.MapGet("/api/games", async (
     HttpContext context,
     GameNetDbContext database,
@@ -64,13 +256,13 @@ app.MapGet("/api/games", async (
         .AsNoTracking()
         .Where(item => item.IsActive)
         .OrderBy(item => item.Name)
-        .Select(item => new GameRecordDto(
+        .Select(item => new
+        {
             item.Id,
             item.Name,
             item.Version,
             item.Genre,
             item.Status,
-            0,
             item.Path,
             item.Executable,
             item.Cover,
@@ -81,10 +273,38 @@ app.MapGet("/api/games", async (
             item.TargetSystem,
             item.Target,
             item.TargetZone,
-            item.TargetStations))
+            item.TargetStations
+        })
         .ToListAsync(cancellationToken);
 
-    return Results.Ok(games);
+    var activeGameIds = await database.Sessions
+        .AsNoTracking()
+        .Where(session => session.State == SessionState.Active && session.GameId.HasValue)
+        .Select(session => session.GameId!.Value)
+        .ToListAsync(cancellationToken);
+
+    var activeUserCounts = activeGameIds
+        .GroupBy(gameId => gameId)
+        .ToDictionary(group => group.Key, group => group.Count());
+
+    return Results.Ok(games.Select(item => new GameRecordDto(
+        item.Id,
+        item.Name,
+        item.Version,
+        item.Genre,
+        item.Status,
+        activeUserCounts.TryGetValue(item.Id, out var activeUsers) ? activeUsers : 0,
+        item.Path,
+        item.Executable,
+        item.Cover,
+        item.Trailer,
+        item.LaunchArgs,
+        item.ConnectionType,
+        item.IsActive,
+        item.TargetSystem,
+        item.Target,
+        item.TargetZone,
+        item.TargetStations)));
 }).WithName("GetGames");
 
 app.MapPost("/api/games", async (
@@ -131,7 +351,11 @@ app.MapPost("/api/games", async (
     });
     await database.SaveChangesAsync(cancellationToken);
 
-    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, 0,
+    var activeUsers = await database.Sessions.CountAsync(
+        item => item.GameId == game.Id && item.State == SessionState.Active,
+        cancellationToken);
+
+    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, activeUsers,
         game.Path, game.Executable, game.Cover, game.Trailer, game.LaunchArgs, game.ConnectionType,
         game.IsActive, game.TargetSystem, game.Target, game.TargetZone, game.TargetStations));
 }).WithName("CreateGame");
@@ -178,7 +402,11 @@ app.MapPut("/api/games/{gameId:guid}", async (
     });
     await database.SaveChangesAsync(cancellationToken);
 
-    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, 0,
+    var activeUsers = await database.Sessions.CountAsync(
+        item => item.GameId == game.Id && item.State == SessionState.Active,
+        cancellationToken);
+
+    return Results.Ok(new GameRecordDto(game.Id, game.Name, game.Version, game.Genre, game.Status, activeUsers,
         game.Path, game.Executable, game.Cover, game.Trailer, game.LaunchArgs, game.ConnectionType,
         game.IsActive, game.TargetSystem, game.Target, game.TargetZone, game.TargetStations));
 }).WithName("UpdateGame");
@@ -212,6 +440,130 @@ app.MapDelete("/api/games/{gameId:guid}", async (
     return Results.Ok(new { archived = true });
 }).WithName("ArchiveGame");
 
+app.MapPost("/api/games/{gameId:guid}/sync", async (
+    Guid gameId,
+    HttpContext context,
+    GameNetDbContext database,
+    IHubContext<AgentHub> agentHub,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "game.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var game = await database.Games
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == gameId && item.IsActive, cancellationToken);
+    if (game is null)
+        return Results.NotFound(new { code = "game_not_found", message = "بازی فعال پیدا نشد." });
+
+    var agents = await database.AgentDevices
+        .Include(item => item.Station)
+        .Where(item => item.IsActive
+            && item.IsOnline
+            && item.ConnectionId != null)
+        .ToListAsync(cancellationToken);
+
+    var targetedAgents = agents.Where(device =>
+        game.Target switch
+        {
+            "zone" => device.Station != null
+                && string.Equals(device.Station.Zone, game.TargetZone, StringComparison.OrdinalIgnoreCase),
+            "stations" => !string.IsNullOrWhiteSpace(game.TargetStations)
+                && game.TargetStations
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Any(target => string.Equals(target, device.DeviceId, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(target, device.Station?.Name, StringComparison.OrdinalIgnoreCase)),
+            _ => true
+        }).ToList();
+
+    if (targetedAgents.Count == 0)
+        return Results.Conflict(new
+        {
+            code = "no_target_agents_online",
+            message = "برای این بازی هیچ Agent آنلاین و واجد شرایطی برای همگام‌سازی وجود ندارد."
+        });
+
+    var payload = System.Text.Json.JsonSerializer.Serialize(new AgentGameApplyCommandPayload(
+        game.Id,
+        game.Name,
+        game.Version,
+        game.Path,
+        game.Executable,
+        game.LaunchArgs,
+        game.ConnectionType,
+        game.TargetSystem,
+        game.Target,
+        game.TargetZone,
+        game.TargetStations,
+        game.IsActive));
+
+    var results = new List<object>();
+    foreach (var device in targetedAgents)
+    {
+        var command = new AgentCommand
+        {
+            AgentDeviceId = device.Id,
+            RequestedByAppUserId = auth.User!.Id,
+            CommandType = AgentCommandTypes.ApplyGame,
+            PayloadJson = payload,
+            Status = "Sent",
+            RequestedAt = DateTimeOffset.UtcNow,
+            SentAt = DateTimeOffset.UtcNow,
+            AgentConnectionId = device.ConnectionId
+        };
+
+        database.AgentCommands.Add(command);
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "GameSyncRequested",
+            EntityName = "Game",
+            EntityId = game.Id.ToString(),
+            AppUserId = auth.User.Id,
+            Details = $"همگام‌سازی بازی {game.Name} برای Agent {device.DeviceId}"
+        });
+        await database.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
+                "AgentCommand",
+                new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
+                cancellationToken);
+
+            results.Add(new
+            {
+                agentId = device.Id,
+                deviceId = device.DeviceId,
+                commandId = command.Id,
+                status = "Sent"
+            });
+        }
+        catch
+        {
+            command.Status = "Failed";
+            command.Succeeded = false;
+            command.CompletedAt = DateTimeOffset.UtcNow;
+            command.ResultMessage = "ارسال همگام‌سازی بازی به Agent انجام نشد.";
+            await database.SaveChangesAsync(CancellationToken.None);
+
+            results.Add(new
+            {
+                agentId = device.Id,
+                deviceId = device.DeviceId,
+                commandId = command.Id,
+                status = "Failed"
+            });
+        }
+    }
+
+    return Results.Ok(new
+    {
+        gameId = game.Id,
+        targetedAgents = targetedAgents.Count,
+        commands = results
+    });
+}).WithName("SyncGameToAgents");
+
 app.MapGet("/api/account-pool", async (
     HttpContext context,
     GameNetDbContext database,
@@ -235,7 +587,9 @@ app.MapGet("/api/account-pool", async (
         item.Platform,
         item.Login,
         item.Owner,
-        item.ExpiresAt,
+        item.ExpiresAt.HasValue
+            ? new DateTimeOffset(DateTime.SpecifyKind(item.ExpiresAt.Value, DateTimeKind.Utc))
+            : null,
         item.AllowedGameIdsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(id => Guid.TryParse(id, out var guid) && gameMap.TryGetValue(guid, out var name) ? name : null)
             .Where(name => name is not null)
@@ -252,6 +606,7 @@ app.MapPost("/api/account-pool", async (
     SaveAccountPoolEntryRequest request,
     HttpContext context,
     GameNetDbContext database,
+    GameCredentialProtectionService credentialProtection,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
@@ -273,8 +628,9 @@ app.MapPost("/api/account-pool", async (
         Platform = request.Platform.Trim(),
         Login = request.Login?.Trim(),
         SecretHash = string.IsNullOrWhiteSpace(request.Secret) ? null : PasswordSecurity.Hash(request.Secret),
+        SecretCiphertext = string.IsNullOrWhiteSpace(request.Secret) ? null : credentialProtection.Protect(request.Secret),
         Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim(),
-        ExpiresAt = request.ExpiresAt,
+        ExpiresAt = request.ExpiresAt?.UtcDateTime,
         AllowedGameIdsCsv = string.Join(",", gameIds),
         Status = Enum.TryParse<AccountPoolStatus>(request.Status, true, out var status) ? status : AccountPoolStatus.Free,
         IsActive = true
@@ -298,6 +654,7 @@ app.MapPut("/api/account-pool/{accountId:guid}", async (
     SaveAccountPoolEntryRequest request,
     HttpContext context,
     GameNetDbContext database,
+    GameCredentialProtectionService credentialProtection,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
@@ -318,9 +675,12 @@ app.MapPut("/api/account-pool/{accountId:guid}", async (
     account.Platform = request.Platform.Trim();
     account.Login = request.Login?.Trim();
     if (!string.IsNullOrWhiteSpace(request.Secret))
+    {
         account.SecretHash = PasswordSecurity.Hash(request.Secret);
+        account.SecretCiphertext = credentialProtection.Protect(request.Secret);
+    }
     account.Owner = string.IsNullOrWhiteSpace(request.Owner) ? "مجموعه" : request.Owner.Trim();
-    account.ExpiresAt = request.ExpiresAt;
+    account.ExpiresAt = request.ExpiresAt?.UtcDateTime;
     account.AllowedGameIdsCsv = string.Join(",", gameIds);
     if (Enum.TryParse<AccountPoolStatus>(request.Status, true, out var status))
         account.Status = status;
@@ -617,7 +977,7 @@ app.MapPut("/api/agent/devices/{deviceId:guid}/policy", async (
 
     if (!string.IsNullOrWhiteSpace(device.ConnectionId))
     {
-        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
             "AgentPolicyChanged",
             new AgentPolicyDto(device.Id, device.KioskEnabled, device.LockOnDisconnect),
             cancellationToken);
@@ -840,7 +1200,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/update", async (
 
     try
     {
-        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
@@ -912,7 +1272,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/rollback", async (
 
     try
     {
-        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
@@ -948,16 +1308,19 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
     IHubContext<AgentHub> agentHub,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(
-        context,
-        database,
-        "client.control",
-        cancellationToken);
-    if (auth.Error is not null) return auth.Error;
-
     var commandType = request.CommandType?.Trim().ToLowerInvariant();
     if (!AgentCommandTypes.IsSupported(commandType))
         return Results.BadRequest(new { code = "unsupported_agent_command", message = "فرمان Agent پشتیبانی نمی‌شود." });
+
+    var requiredPermission = commandType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown
+        ? "client.power"
+        : "client.control";
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        requiredPermission,
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
 
     var device = await database.AgentDevices
         .FirstOrDefaultAsync(item => item.Id == deviceId && item.IsActive, cancellationToken);
@@ -997,7 +1360,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
 
     try
     {
-        await agentHub.Clients.Client(device.ConnectionId).SendAsync(
+        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
@@ -2524,6 +2887,7 @@ app.MapGet("/api/client/identity", async (
 
 app.MapPost("/api/customer-auth/login", async (
     CustomerLoginAuthRequest request,
+    CustomerLoginService customerLoginService,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
@@ -2539,72 +2903,37 @@ app.MapPost("/api/customer-auth/login", async (
     if (customer is null || string.IsNullOrWhiteSpace(customer.PasswordHash) || !VerifyPassword(request.Password, customer.PasswordHash))
         return Results.Unauthorized();
 
-    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-    var active = await database.CustomerLogins
-        .Where(item => item.CustomerId == customer.Id && item.IsActive)
-        .ToListAsync(cancellationToken);
-
-    var existing = active.FirstOrDefault(item => item.ClientKey == clientKey);
-    if (existing is not null)
+    try
     {
+        var result = await customerLoginService.AcquireAsync(customer.Id, clientKey!, cancellationToken);
         return Results.Ok(new
         {
             authenticated = true,
             customerId = customer.Id,
             username = customer.Username,
             fullName = customer.FullName,
-            loginId = existing.Id,
-            activeCount = active.Count,
-            limit = customer.ConcurrentLoginLimit,
+            loginId = result.LoginId,
+            activeCount = result.ActiveCount,
+            limit = Math.Max(1, customer.ConcurrentLoginLimit),
             balance = customer.Balance,
             freeMoney = customer.FreeMoney,
             freeTimeMinutes = customer.FreeTimeMinutes,
             vipTier = customer.VipTier
         });
     }
-
-    if (active.Count >= Math.Max(1, customer.ConcurrentLoginLimit))
+    catch (InvalidOperationException ex) when (ex.Message.StartsWith("CONCURRENT_LOGIN_LIMIT:", StringComparison.Ordinal))
+    {
+        var parts = ex.Message.Split(':');
+        var activeCount = parts.Length > 1 && int.TryParse(parts[1], out var parsedActive) ? parsedActive : 0;
+        var limit = parts.Length > 2 && int.TryParse(parts[2], out var parsedLimit) ? parsedLimit : Math.Max(1, customer.ConcurrentLoginLimit);
         return Results.Conflict(new
         {
             code = "concurrent_login_limit",
             message = "تعداد ورود هم‌زمان این مشتری به سقف مجاز رسیده است.",
-            activeCount = active.Count,
-            limit = customer.ConcurrentLoginLimit
+            activeCount,
+            limit
         });
-
-    var login = new CustomerLogin
-    {
-        CustomerId = customer.Id,
-        ClientKey = clientKey,
-        LoggedInAt = DateTimeOffset.UtcNow,
-        IsActive = true
-    };
-    database.CustomerLogins.Add(login);
-    database.AuditLogs.Add(new AuditLog
-    {
-        Action = "CustomerAuthenticated",
-        EntityName = "CustomerLogin",
-        EntityId = login.Id.ToString(),
-        Details = "ورود با رمز · دستگاه " + clientKey
-    });
-
-    await database.SaveChangesAsync(cancellationToken);
-    await transaction.CommitAsync(cancellationToken);
-
-    return Results.Ok(new
-    {
-        authenticated = true,
-        customerId = customer.Id,
-        username = customer.Username,
-        fullName = customer.FullName,
-        loginId = login.Id,
-        activeCount = active.Count + 1,
-        limit = customer.ConcurrentLoginLimit,
-        balance = customer.Balance,
-        freeMoney = customer.FreeMoney,
-        freeTimeMinutes = customer.FreeTimeMinutes,
-        vipTier = customer.VipTier
-    });
+    }
 })
 .WithName("CustomerAuthenticate");
 
@@ -2687,10 +3016,11 @@ app.MapGet("/api/customer-auth/state", async (
 app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     Guid customerId,
     CustomerLoginRequest request,
+    CustomerLoginService customerLoginService,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
 
@@ -2698,65 +3028,45 @@ app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     if (string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
 
-    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-    var active = await database.CustomerLogins
-        .Where(item => item.CustomerId == customerId && item.IsActive)
-        .ToListAsync(cancellationToken);
-
-    var existing = active.FirstOrDefault(item => item.ClientKey == clientKey);
-    if (existing is not null)
-        return Results.Ok(new ConcurrentLoginResultDto(true, existing.Id, active.Count, customer.ConcurrentLoginLimit));
-
-    if (active.Count >= Math.Max(1, customer.ConcurrentLoginLimit))
-        return Results.Conflict(new { code = "concurrent_login_limit", message = "تعداد ورود هم‌زمان این مشتری به سقف مجاز رسیده است.", activeCount = active.Count, limit = customer.ConcurrentLoginLimit });
-
-    var login = new CustomerLogin
+    try
     {
-        CustomerId = customerId,
-        ClientKey = clientKey,
-        LoggedInAt = DateTimeOffset.UtcNow,
-        IsActive = true
-    };
-
-    database.CustomerLogins.Add(login);
-    database.AuditLogs.Add(new AuditLog
+        var result = await customerLoginService.AcquireAsync(customerId, clientKey, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (InvalidOperationException ex) when (ex.Message.StartsWith("CONCURRENT_LOGIN_LIMIT:", StringComparison.Ordinal))
     {
-        Action = "CustomerLoginAcquire",
-        EntityName = "CustomerLogin",
-        EntityId = login.Id.ToString(),
-        Details = "ورود مشتری · دستگاه " + clientKey
-    });
-
-    await database.SaveChangesAsync(cancellationToken);
-    await transaction.CommitAsync(cancellationToken);
-
-    return Results.Ok(new ConcurrentLoginResultDto(true, login.Id, active.Count + 1, customer.ConcurrentLoginLimit));
+        var parts = ex.Message.Split(':');
+        var activeCount = parts.Length > 1 && int.TryParse(parts[1], out var parsedActive) ? parsedActive : 0;
+        var limit = parts.Length > 2 && int.TryParse(parts[2], out var parsedLimit) ? parsedLimit : Math.Max(1, customer.ConcurrentLoginLimit);
+        return Results.Conflict(new { code = "concurrent_login_limit", message = "تعداد ورود هم‌زمان این مشتری به سقف مجاز رسیده است.", activeCount, limit });
+    }
 })
 .WithName("AcquireCustomerLogin");
 
 app.MapPost("/api/customers/{customerId:guid}/login-release", async (
     Guid customerId,
-    CustomerLoginReleaseRequest request,
+    CustomerLoginRequest request,
+    CustomerLoginService customerLoginService,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var login = await database.CustomerLogins.FirstOrDefaultAsync(item => item.CustomerId == customerId && item.IsActive && item.ClientKey == request.ClientKey, cancellationToken);
-    if (login is null)
-        return Results.NotFound(new { code = "login_not_found", message = "ورود فعال برای این دستگاه پیدا نشد." });
+    var clientKey = request.ClientKey?.Trim();
+    if (string.IsNullOrWhiteSpace(clientKey))
+        return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
 
-    login.IsActive = false;
-    login.LoggedOutAt = DateTimeOffset.UtcNow;
-    database.AuditLogs.Add(new AuditLog
+    var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
+
+    try
     {
-        Action = "CustomerLoginRelease",
-        EntityName = "CustomerLogin",
-        EntityId = login.Id.ToString(),
-        Details = "خروج مشتری · دستگاه " + request.ClientKey
-    });
-
-    await database.SaveChangesAsync(cancellationToken);
-    var activeCount = await database.CustomerLogins.CountAsync(item => item.CustomerId == customerId && item.IsActive, cancellationToken);
-    return Results.Ok(new { released = true, activeCount });
+        var result = await customerLoginService.ReleaseAsync(customerId, clientKey, cancellationToken);
+        return Results.Ok(new { released = true, loginId = result.LoginId, activeCount = result.ActiveCount });
+    }
+    catch (KeyNotFoundException ex)
+    {
+        return Results.NotFound(new { code = "login_not_found", message = ex.Message });
+    }
 })
 .WithName("ReleaseCustomerLogin");
 
@@ -2884,51 +3194,84 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         && string.IsNullOrWhiteSpace(request.Notes))
         return Results.BadRequest(new { code = "missing_inventory_reason", message = "دلیل ضایعات یا مرجوعی را وارد کنید." });
 
-    var product = await database.Products.FirstOrDefaultAsync(item => item.Id == productId && item.IsActive, cancellationToken);
-    if (product is null)
-        return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
-
-    if (direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
-        return Results.Conflict(new { code = "insufficient_stock", message = "موجودی برای این خروج کافی نیست." });
-
-    var unitCost = request.UnitCost ?? product.CostPrice;
     if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase)
         && (!request.UnitCost.HasValue || request.UnitCost.Value <= 0))
         return Results.BadRequest(new { code = "missing_purchase_cost", message = "بهای خرید هر واحد را وارد کنید." });
 
-    var oldStock = product.StockQuantity;
-    var oldCost = product.CostPrice;
-    product.StockQuantity += direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
-    if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase))
+    try
     {
-        var newStock = product.StockQuantity;
-        product.CostPrice = newStock <= 0
-            ? unitCost
-            : ((oldStock * oldCost) + (request.Quantity * unitCost)) / newStock;
+        var now = DateTimeOffset.UtcNow;
+        var locked = await database.Products
+            .Where(item => item.Id == productId && item.IsActive)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+        if (locked != 1)
+            return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
+
+        var product = await database.Products
+            .FirstAsync(item => item.Id == productId && item.IsActive, cancellationToken);
+
+        if (direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
+            return Results.Conflict(new { code = "insufficient_stock", message = "موجودی برای این خروج کافی نیست." });
+
+        var unitCost = request.UnitCost ?? product.CostPrice;
+        var oldStock = product.StockQuantity;
+        var oldCost = product.CostPrice;
+
+        product.StockQuantity += direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
+
+        if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase))
+        {
+            var newStock = product.StockQuantity;
+            product.CostPrice = newStock <= 0
+                ? unitCost
+                : ((oldStock * oldCost) + (request.Quantity * unitCost)) / newStock;
+        }
+
+        database.InventoryTransactions.Add(new InventoryTransaction
+        {
+            ProductId = product.Id,
+            Quantity = request.Quantity,
+            UnitPrice = product.UnitPrice,
+            UnitCost = unitCost,
+            Direction = direction,
+            Kind = kind,
+            AppUserId = auth.User!.Id,
+            Notes = request.Notes
+        });
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = direction == TransactionDirection.In ? "InventoryIncrease" : "InventoryDecrease",
+            EntityName = "Product",
+            EntityId = product.Id.ToString(),
+            Details = kind + " · " + request.Quantity.ToString() + " · " + (request.Notes ?? ""),
+            AppUserId = auth.User!.Id
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            id = product.Id,
+            stock = product.StockQuantity,
+            lowStock = product.StockQuantity <= product.MinimumStock,
+            kind
+        });
     }
-
-    database.InventoryTransactions.Add(new InventoryTransaction
+    catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
     {
-        ProductId = product.Id,
-        Quantity = request.Quantity,
-        UnitPrice = product.UnitPrice,
-        UnitCost = unitCost,
-        Direction = direction,
-        Kind = kind,
-        AppUserId = auth.User!.Id,
-        Notes = request.Notes
-    });
-    database.AuditLogs.Add(new AuditLog
-    {
-        Action = direction == TransactionDirection.In ? "InventoryIncrease" : "InventoryDecrease",
-        EntityName = "Product",
-        EntityId = product.Id.ToString(),
-        Details = kind + " · " + request.Quantity.ToString() + " · " + (request.Notes ?? ""),
-        AppUserId = auth.User!.Id
-    });
-    await database.SaveChangesAsync(cancellationToken);
-    return Results.Ok(new { id = product.Id, stock = product.StockQuantity, lowStock = product.StockQuantity <= product.MinimumStock, kind });
+        await transaction.RollbackAsync(CancellationToken.None);
+        return Results.Conflict(new
+        {
+            code = "inventory_busy",
+            message = "هم‌زمانی ثبت موجودی رخ داد؛ عملیات بدون تغییر داده متوقف شد. دوباره تلاش کنید."
+        });
+    }
 })
 .WithName("AdjustBuffetStock");
  
@@ -3090,6 +3433,35 @@ app.MapPost("/api/buffet/sales", async (
         return Results.BadRequest(new { code = "invalid_sale_target", message = "نوع مقصد فروش معتبر نیست." });
 
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+    var saleProductIds = request.Items
+        .Select(item => item.ProductId)
+        .Distinct()
+        .OrderBy(item => item)
+        .ToList();
+
+    var writerStamp = DateTimeOffset.UtcNow;
+    if (saleProductIds.Count > 0)
+    {
+        try
+        {
+            await database.Products
+                .Where(item => saleProductIds.Contains(item.Id) && item.IsActive)
+                .OrderBy(item => item.Id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.UpdatedAt, writerStamp), cancellationToken);
+        }
+        catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+            return Results.Conflict(new
+            {
+                code = "inventory_busy",
+                message = "هم‌زمانی فروش موجودی رخ داد؛ عملیات بدون تغییر متوقف شد. دوباره تلاش کنید."
+            });
+        }
+    }
+
     Session? session = null;
     Invoice? invoice = null;
 
@@ -3123,7 +3495,7 @@ app.MapPost("/api/buffet/sales", async (
         }
     }
 
-    var ids = request.Items.Select(item => item.ProductId).Distinct().ToList();
+    var ids = saleProductIds;
     var products = await database.Products.Where(item => ids.Contains(item.Id) && item.IsActive).ToListAsync(cancellationToken);
     var byId = products.ToDictionary(item => item.Id);
 
@@ -4131,68 +4503,67 @@ app.MapPost("/api/sessions", async (
     StartSessionRequest request,
     HttpContext context,
     GameNetDbContext database,
+    SessionPricingService pricingService,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.start", cancellationToken);
     if (auth.Error is not null) return auth.Error;
     request = request with { AppUserId = auth.User!.Id };
 
-    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-
     if (request.CustomerId == Guid.Empty || request.StationId == Guid.Empty)
-    {
         return Results.BadRequest(new { code = "invalid_session_reference", message = "مشتری و ایستگاه معتبر نیستند." });
-    }
 
-    var customerExists = await database.Customers.AnyAsync(item => item.Id == request.CustomerId, cancellationToken);
-    var station = await database.Stations.FirstOrDefaultAsync(item => item.Id == request.StationId, cancellationToken);
-
-    if (!customerExists)
-    {
+    var customer = await database.Customers
+        .Include(item => item.VipPackage)
+        .FirstOrDefaultAsync(item => item.Id == request.CustomerId, cancellationToken);
+    if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
-    }
 
-    if (station is null)
-    {
-        return Results.NotFound(new { code = "station_not_found", message = "ایستگاه پیدا نشد." });
-    }
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    var now = DateTimeOffset.UtcNow;
 
-    if (station.State != StationState.Available)
-    {
+    var claimed = await database.Stations
+        .Where(item => item.Id == request.StationId
+            && item.IsActive
+            && item.State == StationState.Available)
+        .ExecuteUpdateAsync(setters => setters
+            .SetProperty(item => item.State, StationState.Occupied)
+            .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+    if (claimed != 1)
         return Results.Conflict(new { code = "station_not_available", message = "این ایستگاه دیگر آزاد نیست." });
-    }
 
-    if (request.TariffId is not null)
-    {
-        var tariffExists = await database.Tariffs.AnyAsync(item => item.Id == request.TariffId.Value, cancellationToken);
-        if (!tariffExists)
-        {
-            return Results.BadRequest(new { code = "tariff_not_found", message = "تعرفه انتخاب‌شده پیدا نشد." });
-        }
-    }
+    var station = await database.Stations
+        .Include(item => item.Tariff)
+        .FirstAsync(item => item.Id == request.StationId, cancellationToken);
+
+    var pricing = await pricingService.GetPricingAsync(
+        customer.Id,
+        station.Id,
+        now,
+        cancellationToken);
 
     var session = new Session
     {
-        CustomerId = request.CustomerId,
+        CustomerId = customer.Id,
         StationId = request.StationId,
-        TariffId = request.TariffId,
+        TariffId = station.TariffId,
         AppUserId = auth.User!.Id,
-        StartAt = DateTimeOffset.UtcNow,
+        StartAt = now,
         State = SessionState.Active,
         TotalAmount = 0m,
-        HourlyRateOverride = request.HourlyRateOverride > 0 ? request.HourlyRateOverride : null,
+        HourlyRateSnapshot = pricing.HourlyRate,
+        HourlyRateOverride = null,
         Persons = Math.Max(1, request.Persons ?? 1)
     };
 
     database.Sessions.Add(session);
-    station.State = StationState.Occupied;
-
     database.AuditLogs.Add(new AuditLog
     {
         Action = "SessionStart",
         EntityName = "Session",
         EntityId = session.Id.ToString(),
-        Details = "شروع جلسه · ایستگاه " + station.Name,
+        Details = "شروع جلسه · ایستگاه " + station.Name + " · نرخ مرجع " + pricing.HourlyRate.ToString("0.##") + " · تخفیف VIP " + pricing.VipDiscountPercent.ToString("0.##") + "%",
         AppUserId = auth.User!.Id
     });
 
@@ -4495,6 +4866,44 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
 })
 .WithName("TransferSession");
 
+app.MapGet("/api/sessions/{sessionId:guid}/settlement-preview", async (
+    Guid sessionId,
+    int? freeTimeMinutes,
+    decimal? discountAmount,
+    decimal? prepaidAmount,
+    SessionSettlementService settlement,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.settle", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    try
+    {
+        var result = await settlement.PreviewAsync(
+            sessionId,
+            freeTimeMinutes ?? 0,
+            discountAmount ?? 0m,
+            prepaidAmount ?? 0m,
+            cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "settlement_preview_conflict", message = exception.Message });
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_settlement_preview", message = exception.Message });
+    }
+})
+.WithName("PreviewSessionSettlement");
+
 app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
     Guid sessionId,
     SessionSettlementRequest request,
@@ -4668,11 +5077,12 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
 {
     await using var scope = services.CreateAsyncScope();
     var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
+    var environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
 
     try
     {
         await database.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(database);
+        await DatabaseSeeder.SeedAsync(database, environment.IsDevelopment());
     }
     catch (Exception exception) when (IsMigrationRecoveryCandidate(exception))
     {

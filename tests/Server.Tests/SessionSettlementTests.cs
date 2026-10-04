@@ -46,20 +46,23 @@ public sealed class SessionSettlementTests : IDisposable
             Tariff = tariff,
             IsActive = true
         };
+        var sessionStart = DateTimeOffset.UtcNow.AddMinutes(-60);
         var session = new Session
         {
             Customer = customer,
             Station = station,
             Tariff = tariff,
             AppUser = user,
-            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
-            State = SessionState.Active
+            StartAt = sessionStart,
+            EndAt = sessionStart.AddMinutes(60),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 150000m
         };
 
         db.AddRange(type, tariff, customer, user, station, session);
         await db.SaveChangesAsync();
 
-        var service = new SessionSettlementService(db);
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
 
         var result = await service.SettleAsync(
             session.Id,
@@ -128,7 +131,7 @@ public sealed class SessionSettlementTests : IDisposable
         db.AddRange(type, tariff, customer, station, session);
         await db.SaveChangesAsync();
 
-        var service = new SessionSettlementService(db);
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.SettleAsync(
@@ -186,8 +189,9 @@ public sealed class SessionSettlementTests : IDisposable
             Customer = customer,
             Station = station,
             Tariff = tariff,
-            StartAt = DateTimeOffset.UtcNow.AddMinutes(-30),
-            State = SessionState.Active
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 100000m
         };
         var draft = new Invoice
         {
@@ -214,7 +218,7 @@ public sealed class SessionSettlementTests : IDisposable
         await db.DisposeAsync();
 
         await using var settlementDb = new GameNetDbContext(options);
-        var service = new SessionSettlementService(settlementDb);
+        var service = new SessionSettlementService(settlementDb, new SessionPricingService(settlementDb));
         var result = await service.SettleAsync(
             session.Id,
             new SessionSettlementRequest(
