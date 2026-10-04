@@ -289,9 +289,9 @@ public sealed class AccountPoolService(
             .AsNoTracking()
             .Include(item => item.AccountPoolEntry)
             .Include(item => item.Session)
-                .ThenInclude(item => item.CustomerLogin)
+                .ThenInclude(item => item!.CustomerLogin)
             .Include(item => item.Session)
-                .ThenInclude(item => item.AgentDevice)
+                .ThenInclude(item => item!.AgentDevice)
             .FirstOrDefaultAsync(
                 item => item.Id == leaseId
                     && item.AgentDeviceId == agentDeviceId
