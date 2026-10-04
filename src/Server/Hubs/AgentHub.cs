@@ -76,6 +76,60 @@ public sealed class AgentHub(
             device.LockOnDisconnect);
     }
 
+    public async Task<AgentCommandEnvelope?> GetPendingLifecycleCommand()
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null)
+            throw new HubException("دستگاه مجاز نیست.");
+
+        var candidateId = await database.AgentCommands
+            .Where(item => item.AgentDeviceId == device.Id
+                && item.Status == "Sent"
+                && item.AgentConnectionId != Context.ConnectionId
+                && (item.CommandType == AgentCommandTypes.Update
+                    || item.CommandType == AgentCommandTypes.Rollback))
+            .OrderByDescending(item => item.RequestedAt)
+            .Select(item => (Guid?)item.Id)
+            .FirstOrDefaultAsync(Context.ConnectionAborted);
+
+        if (!candidateId.HasValue)
+            return null;
+
+        var claimed = await database.AgentCommands
+            .Where(item => item.Id == candidateId.Value
+                && item.AgentDeviceId == device.Id
+                && item.Status == "Sent"
+                && item.AgentConnectionId != Context.ConnectionId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.AgentConnectionId, Context.ConnectionId),
+                Context.ConnectionAborted);
+
+        if (claimed != 1)
+            return null;
+
+        var command = await database.AgentCommands
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == candidateId.Value, Context.ConnectionAborted);
+
+        if (command is null)
+            return null;
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "AgentCommandRecoveredOnReconnect",
+            EntityName = "AgentCommand",
+            EntityId = command.Id.ToString(),
+            Details = $"فرمان چرخه عمر {command.CommandType} پس از اتصال مجدد Agent برای بازیابی دریافت شد · {device.DeviceId}"
+        });
+        await database.SaveChangesAsync(Context.ConnectionAborted);
+
+        return new AgentCommandEnvelope(
+            command.Id,
+            command.CommandType,
+            command.PayloadJson,
+            command.RequestedAt);
+    }
+
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
         var now = DateTimeOffset.UtcNow;
