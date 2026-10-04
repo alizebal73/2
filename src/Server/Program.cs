@@ -335,6 +335,172 @@ app.MapGet("/api/operations/health", async (
 
 
 
+app.MapGet("/api/tariffs", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context,
+        database,
+        cancellationToken,
+        "tariff.view",
+        "tariff.manage",
+        "session.start",
+        "session.manage");
+    if (auth.Error is not null) return auth.Error;
+
+    var tariffs = await database.Tariffs
+        .AsNoTracking()
+        .OrderBy(item => item.Name)
+        .Select(item => new TariffDto(
+            item.Id,
+            item.Name,
+            item.Description,
+            item.HourlyRate,
+            item.DailyRate,
+            item.IsActive))
+        .ToListAsync(cancellationToken);
+
+    return Results.Ok(tariffs);
+}).WithName("ListTariffs");
+
+app.MapPost("/api/tariffs", async (
+    SaveTariffRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "tariff.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var name = request.Name?.Trim();
+    if (string.IsNullOrWhiteSpace(name))
+        return Results.BadRequest(new { code = "tariff_name_required", message = "نام تعرفه الزامی است." });
+    if (request.HourlyRate < 0 || request.DailyRate < 0)
+        return Results.BadRequest(new { code = "tariff_amount_invalid", message = "مبلغ تعرفه نمی‌تواند منفی باشد." });
+
+    if (await database.Tariffs.AnyAsync(item => item.Name == name, cancellationToken))
+        return Results.Conflict(new { code = "tariff_exists", message = "تعرفه‌ای با این نام از قبل وجود دارد." });
+
+    var tariff = new Tariff
+    {
+        Name = name,
+        Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+        HourlyRate = request.HourlyRate,
+        DailyRate = request.DailyRate,
+        IsActive = request.IsActive
+    };
+
+    database.Tariffs.Add(tariff);
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "TariffCreated",
+        EntityName = "Tariff",
+        EntityId = tariff.Id.ToString(),
+        Details = "ایجاد تعرفه · " + tariff.Name,
+        AppUserId = auth.User!.Id
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new TariffDto(
+        tariff.Id,
+        tariff.Name,
+        tariff.Description,
+        tariff.HourlyRate,
+        tariff.DailyRate,
+        tariff.IsActive));
+}).WithName("CreateTariff");
+
+app.MapPut("/api/tariffs/{tariffId:guid}", async (
+    Guid tariffId,
+    SaveTariffRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "tariff.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var tariff = await database.Tariffs.FirstOrDefaultAsync(item => item.Id == tariffId, cancellationToken);
+    if (tariff is null)
+        return Results.NotFound(new { code = "tariff_not_found", message = "تعرفه پیدا نشد." });
+
+    var name = request.Name?.Trim();
+    if (string.IsNullOrWhiteSpace(name))
+        return Results.BadRequest(new { code = "tariff_name_required", message = "نام تعرفه الزامی است." });
+    if (request.HourlyRate < 0 || request.DailyRate < 0)
+        return Results.BadRequest(new { code = "tariff_amount_invalid", message = "مبلغ تعرفه نمی‌تواند منفی باشد." });
+
+    if (await database.Tariffs.AnyAsync(
+            item => item.Id != tariffId && item.Name == name,
+            cancellationToken))
+        return Results.Conflict(new { code = "tariff_exists", message = "تعرفه‌ای با این نام از قبل وجود دارد." });
+
+    tariff.Name = name;
+    tariff.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+    tariff.HourlyRate = request.HourlyRate;
+    tariff.DailyRate = request.DailyRate;
+    tariff.IsActive = request.IsActive;
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "TariffUpdated",
+        EntityName = "Tariff",
+        EntityId = tariff.Id.ToString(),
+        Details = "ویرایش تعرفه · " + tariff.Name,
+        AppUserId = auth.User!.Id
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new TariffDto(
+        tariff.Id,
+        tariff.Name,
+        tariff.Description,
+        tariff.HourlyRate,
+        tariff.DailyRate,
+        tariff.IsActive));
+}).WithName("UpdateTariff");
+
+app.MapDelete("/api/tariffs/{tariffId:guid}", async (
+    Guid tariffId,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "tariff.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var tariff = await database.Tariffs.FirstOrDefaultAsync(item => item.Id == tariffId, cancellationToken);
+    if (tariff is null)
+        return Results.NotFound(new { code = "tariff_not_found", message = "تعرفه پیدا نشد." });
+
+    tariff.IsActive = false;
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "TariffArchived",
+        EntityName = "Tariff",
+        EntityId = tariff.Id.ToString(),
+        Details = "غیرفعال‌سازی تعرفه · " + tariff.Name,
+        AppUserId = auth.User!.Id
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new { archived = true });
+}).WithName("ArchiveTariff");
+
 app.MapGet("/api/games", async (
     HttpContext context,
     GameNetDbContext database,
