@@ -247,7 +247,6 @@ app.MapDelete("/api/tariffs/{tariffId:guid}", async (
 app.MapGet("/api/games", async (
     HttpContext context,
     GameNetDbContext database,
-    ILogger<Program> logger,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "game.manage", cancellationToken);
@@ -257,13 +256,13 @@ app.MapGet("/api/games", async (
         .AsNoTracking()
         .Where(item => item.IsActive)
         .OrderBy(item => item.Name)
-        .Select(item => new GameRecordDto(
+        .Select(item => new
+        {
             item.Id,
             item.Name,
             item.Version,
             item.Genre,
             item.Status,
-            database.Sessions.Count(session => session.GameId == item.Id && session.State == SessionState.Active),
             item.Path,
             item.Executable,
             item.Cover,
@@ -274,21 +273,39 @@ app.MapGet("/api/games", async (
             item.TargetSystem,
             item.Target,
             item.TargetZone,
-            item.TargetStations))
+            item.TargetStations
+        })
         .ToListAsync(cancellationToken);
 
-    var activeGameSessions = await database.Sessions
+    var activeUserCounts = await database.Sessions
         .AsNoTracking()
         .Where(session => session.State == SessionState.Active && session.GameId.HasValue)
-        .Select(session => new { session.Id, session.GameId, session.State })
-        .ToListAsync(cancellationToken);
+        .GroupBy(session => session.GameId!.Value)
+        .Select(group => new
+        {
+            GameId = group.Key,
+            ActiveUsers = group.Count()
+        })
+        .ToDictionaryAsync(item => item.GameId, item => item.ActiveUsers, cancellationToken);
 
-    logger.LogWarning(
-        "GAME ACTIVE DIAGNOSTIC: games={Games}; activeSessions={Sessions}",
-        games.Select(game => $"{game.Id}:{game.ActiveUsers}").ToArray(),
-        activeGameSessions.Select(session => $"{session.Id}:{session.GameId}:{session.State}").ToArray());
-
-    return Results.Ok(games);
+    return Results.Ok(games.Select(item => new GameRecordDto(
+        item.Id,
+        item.Name,
+        item.Version,
+        item.Genre,
+        item.Status,
+        activeUserCounts.TryGetValue(item.Id, out var activeUsers) ? activeUsers : 0,
+        item.Path,
+        item.Executable,
+        item.Cover,
+        item.Trailer,
+        item.LaunchArgs,
+        item.ConnectionType,
+        item.IsActive,
+        item.TargetSystem,
+        item.Target,
+        item.TargetZone,
+        item.TargetStations)));
 }).WithName("GetGames");
 
 app.MapPost("/api/games", async (
