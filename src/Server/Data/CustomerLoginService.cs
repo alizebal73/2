@@ -110,13 +110,13 @@ public sealed class CustomerLoginService(GameNetDbContext database)
         {
             await transaction.RollbackAsync(CancellationToken.None);
         }
+        catch (ObjectDisposedException)
+        {
+        }
         catch (InvalidOperationException)
         {
             // SQLite can abort a transaction while surfacing SQLITE_BUSY.
             // Rollback is best-effort; preserve the original database exception.
-        }
-        catch (ObjectDisposedException)
-        {
         }
     }
 
