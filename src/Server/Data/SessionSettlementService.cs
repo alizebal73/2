@@ -48,6 +48,18 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
 
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
+        // Serialize concurrent settlement attempts for the same Session on SQLite by
+        // upgrading this transaction to a writer before reading the terminal state.
+        var lockStamp = DateTimeOffset.UtcNow;
+        var locked = await database.Sessions
+            .Where(item => item.Id == sessionId
+                && (item.State == SessionState.Active || item.State == SessionState.Ended))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, lockStamp), cancellationToken);
+
+        if (locked != 1)
+            throw new InvalidOperationException("این جلسه قبلاً بسته یا تسویه شده است.");
+
         var session = await database.Sessions
             .Include(item => item.Customer)
                 .ThenInclude(item => item.VipPackage)
