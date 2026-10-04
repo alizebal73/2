@@ -54,11 +54,10 @@ jobs:
           $env:PATH = "$env:USERPROFILE\\.dotnet\\tools;$env:PATH"
 
           & dotnet ef migrations has-pending-model-changes --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --context GameNetDbContext --verbose
-          if ($LASTEXITCODE -ne 0) {
-            throw 'EF reported pending model changes.'
-          }
+          $efParityExitCode = $LASTEXITCODE
 
-          # Diagnostic scaffold: a non-empty migration proves model/snapshot parity is broken.
+          # Diagnostic scaffold: always run it after the parity check so the exact
+          # model diff is visible when EF reports a mismatch.
           $probeDir = 'src/Server/Data/Migrations/__Stage12ModelProbe'
           Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -78,11 +77,17 @@ jobs:
               Get-Content $probeDesigner.FullName
             }
             git diff -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+            git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+            Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
             throw 'EF model/snapshot parity is not satisfied.'
           }
 
           git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
           Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+
+          if ($efParityExitCode -ne 0) {
+            throw 'EF reported pending model changes and no non-empty probe migration was emitted.'
+          }
 
       - name: Rebuild .NET after EF validation
         shell: pwsh
