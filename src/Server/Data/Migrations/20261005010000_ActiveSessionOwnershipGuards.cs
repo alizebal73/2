@@ -21,13 +21,6 @@ public partial class ActiveSessionOwnershipGuards : Migration
             unique: true,
             filter: "CustomerLoginId IS NOT NULL AND State = 'Active'");
 
-        migrationBuilder.CreateIndex(
-            name: "IX_Sessions_StationId_Active",
-            table: "Sessions",
-            column: "StationId",
-            unique: true,
-            filter: "State = 'Active'");
-
 
         migrationBuilder.AddForeignKey(
             name: "FK_Sessions_CustomerLogins_CustomerLoginId",
