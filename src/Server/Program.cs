@@ -1619,16 +1619,20 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
     IHubContext<AgentHub> agentHub,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(
-        context,
-        database,
-        "client.control",
-        cancellationToken);
-    if (auth.Error is not null) return auth.Error;
-
     var commandType = request.CommandType?.Trim().ToLowerInvariant();
     if (!AgentCommandTypes.IsSupported(commandType))
         return Results.BadRequest(new { code = "unsupported_agent_command", message = "فرمان Agent پشتیبانی نمی‌شود." });
+
+    var requiredPermission = commandType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown
+        ? "client.power"
+        : "client.control";
+
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        requiredPermission,
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
 
     var device = await database.AgentDevices
         .FirstOrDefaultAsync(item => item.Id == deviceId && item.IsActive, cancellationToken);
