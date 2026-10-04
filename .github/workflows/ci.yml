@@ -859,8 +859,20 @@ jobs:
 
                   if (-not $sessionStartVerified -and $log -match 'AGENT_SESSION_START_OK:([0-9a-fA-F-]+)') {
                     $startedSessionId = $Matches[1]
-                    $activeRows = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
-                    if (-not @($activeRows | Where-Object { $_.id -eq $startedSessionId -and $_.stationName -eq $sessionStation.name })) {
+                    $sessionStartRow = $null
+                    for ($sessionStartAttempt = 0; $sessionStartAttempt -lt 10; $sessionStartAttempt++) {
+                      $activeRows = Invoke-RestMethod -Uri "$baseUrl/api/sessions/active" -Method Get -WebSession $adminSession
+                      $sessionStartRow = @($activeRows | Where-Object {
+                        $_.id.ToString().Trim().Equals($startedSessionId, [StringComparison]::OrdinalIgnoreCase) -and
+                        $_.stationName.ToString().Trim().Equals($sessionStation.name.ToString().Trim(), [StringComparison]::Ordinal)
+                      })[0]
+                      if ($sessionStartRow) { break }
+                      Start-Sleep -Milliseconds 250
+                    }
+                    if (-not $sessionStartRow) {
+                      Write-Host '--- Active session rows after Agent Start mismatch ---'
+                      @($activeRows) | ConvertTo-Json -Depth 8
+                      Write-Host ("Expected SessionId={0}; Station={1}" -f $startedSessionId, $sessionStation.name)
                       throw 'Agent Session Start marker appeared but server active-session state did not contain the same SessionId/station.'
                     }
                     $sessionStartVerified = $true
