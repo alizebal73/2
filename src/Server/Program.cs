@@ -5038,7 +5038,32 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
             snapshotToDesignTime.Count);
 
         foreach (var operation in snapshotToDesignTime)
-            logger.LogCritical("EF DIAGNOSTIC DESIGN: {Operation}", operation);
+        {
+            switch (operation)
+            {
+                case Microsoft.EntityFrameworkCore.Migrations.Operations.DropIndexOperation dropIndex:
+                    logger.LogCritical(
+                        "EF DIAGNOSTIC DESIGN DROP INDEX: Table={Table}; Name={Name}; Columns={Columns}",
+                        dropIndex.Table,
+                        dropIndex.Name,
+                        string.Join(",", dropIndex.Columns));
+                    break;
+
+                case Microsoft.EntityFrameworkCore.Migrations.Operations.CreateIndexOperation createIndex:
+                    logger.LogCritical(
+                        "EF DIAGNOSTIC DESIGN CREATE INDEX: Table={Table}; Name={Name}; Columns={Columns}; Unique={Unique}; Filter={Filter}",
+                        createIndex.Table,
+                        createIndex.Name,
+                        string.Join(",", createIndex.Columns),
+                        createIndex.IsUnique,
+                        createIndex.Filter);
+                    break;
+
+                default:
+                    logger.LogCritical("EF DIAGNOSTIC DESIGN: {Operation}", operation);
+                    break;
+            }
+        }
 
         await database.Database.MigrateAsync();
         await DatabaseSeeder.SeedAsync(database, environment.IsDevelopment());
