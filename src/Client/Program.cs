@@ -242,6 +242,7 @@ try
 
                 _ = await SendHeartbeatAsync(
                     connection,
+                    dataDirectory,
                     agentVersion,
                     osVersion,
                     lockScreen,
@@ -311,6 +312,7 @@ try
             {
                 var heartbeatSeconds = await SendHeartbeatAsync(
                     connection,
+                    dataDirectory,
                     agentVersion,
                     osVersion,
                     lockScreen,
@@ -599,6 +601,7 @@ static async Task RunTestSessionFlowAsync(
 
 static async Task<int?> SendHeartbeatAsync(
     HubConnection connection,
+    string dataDirectory,
     string agentVersion,
     string osVersion,
     AgentLockScreenController lockScreen,
