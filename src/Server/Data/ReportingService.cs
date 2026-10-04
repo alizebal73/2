@@ -13,36 +13,20 @@ public sealed class ReportingService(GameNetDbContext database)
         if (to < from)
             throw new ArgumentException("بازه گزارش نامعتبر است.");
 
-        var invoices = await database.Invoices
-            .AsNoTracking()
-            .Where(item => item.Status == InvoiceStatus.Paid)
-            .ToListAsync(cancellationToken);
+        var paidInvoices = await LoadInvoicesInRangeAsync(from, to, cancellationToken);
+        var expenses = await LoadExpensesInRangeAsync(from, to, cancellationToken);
+        var periodSessions = await LoadSessionsInRangeAsync(from, to, cancellationToken);
 
-        var expenses = await database.Expenses
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-
-        var sessions = await database.Sessions
-            .AsNoTracking()
-            .Where(item => item.StartAt <= to)
-            .ToListAsync(cancellationToken);
-
-        var paid = invoices.Where(item => item.IssuedAt >= from && item.IssuedAt <= to).ToList();
-        var expense = expenses
-            .Where(item => item.CreatedAt >= from && item.CreatedAt <= to)
-            .Sum(item => item.Amount);
-        var periodSessions = sessions
-            .Where(item => item.StartAt >= from && item.StartAt <= to)
-            .ToList();
+        var expense = expenses.Sum(item => item.Amount);
 
         return new ReportSummaryDto(
             from,
             to,
-            paid.Sum(item => item.TotalAmount),
+            paidInvoices.Sum(item => item.TotalAmount),
             expense,
-            paid.Sum(item => item.TotalAmount) - expense,
+            paidInvoices.Sum(item => item.TotalAmount) - expense,
             periodSessions.Count,
-            paid.Count,
+            paidInvoices.Count,
             periodSessions.Select(item => item.CustomerId).Distinct().Count());
     }
 
@@ -51,15 +35,11 @@ public sealed class ReportingService(GameNetDbContext database)
         DateTimeOffset to,
         CancellationToken cancellationToken)
     {
-        var sessions = await database.Sessions
-            .AsNoTracking()
-            .Include(item => item.Station)
-            .Where(item => item.StartAt <= to)
-            .ToListAsync(cancellationToken);
-
-        sessions = sessions
-            .Where(item => item.StartAt >= from && item.StartAt <= to)
-            .ToList();
+        var sessions = await LoadSessionsInRangeAsync(
+            from,
+            to,
+            cancellationToken,
+            includeStation: true);
 
         var sessionIds = sessions.Select(item => item.Id).ToList();
         var invoiceRows = sessionIds.Count == 0
@@ -185,24 +165,11 @@ public sealed class ReportingService(GameNetDbContext database)
         DateTimeOffset to,
         CancellationToken cancellationToken)
     {
-        var shifts = await database.Shifts
-            .AsNoTracking()
-            .Include(item => item.AppUser)
-            .ToListAsync(cancellationToken);
-        shifts = shifts
-            .Where(item => item.OpenAt <= to && (item.CloseAt ?? to) >= from)
+        var shifts = await LoadShiftsOverlappingRangeAsync(from, to, cancellationToken);
+        var invoices = (await LoadInvoicesInRangeAsync(from, to, cancellationToken))
+            .Where(item => item.AppUserId.HasValue)
             .ToList();
-
-        var invoices = await database.Invoices
-            .AsNoTracking()
-            .Where(item => item.Status == InvoiceStatus.Paid && item.AppUserId.HasValue)
-            .ToListAsync(cancellationToken);
-        invoices = invoices.Where(item => item.IssuedAt >= from && item.IssuedAt <= to).ToList();
-
-        var expenses = await database.Expenses
-            .AsNoTracking()
-            .ToListAsync(cancellationToken);
-        expenses = expenses.Where(item => item.CreatedAt >= from && item.CreatedAt <= to).ToList();
+        var expenses = await LoadExpensesInRangeAsync(from, to, cancellationToken);
 
         var result = shifts
             .GroupBy(item => new { item.AppUserId, Name = item.AppUser.FullName })
@@ -237,14 +204,7 @@ public sealed class ReportingService(GameNetDbContext database)
         DateTimeOffset to,
         CancellationToken cancellationToken)
     {
-        var sessions = await database.Sessions
-            .AsNoTracking()
-            .Where(item => item.StartAt <= to)
-            .ToListAsync(cancellationToken);
-
-        sessions = sessions
-            .Where(item => item.StartAt >= from && item.StartAt <= to)
-            .ToList();
+        var sessions = await LoadSessionsInRangeAsync(from, to, cancellationToken);
 
         var ids = sessions.Select(item => item.Id).ToList();
         var invoiceRows = ids.Count == 0
@@ -281,18 +241,32 @@ public sealed class ReportingService(GameNetDbContext database)
         AuditExplorerFilterDto filter,
         CancellationToken cancellationToken)
     {
-        var rows = await database.AuditLogs
-            .AsNoTracking()
-            .Include(item => item.AppUser)
-            .OrderByDescending(item => item.CreatedAt)
-            .Take(Math.Clamp(filter.Limit, 1, 1000))
-            .ToListAsync(cancellationToken);
-
         var from = filter.From;
         var to = filter.To;
         var action = filter.Action?.Trim();
         var entity = filter.EntityName?.Trim();
         var search = filter.Search?.Trim();
+
+        var query = database.AuditLogs
+            .AsNoTracking()
+            .Include(item => item.AppUser)
+            .AsQueryable();
+
+        if (from.HasValue)
+            query = query.Where(item => item.CreatedAt >= from.Value);
+        if (to.HasValue)
+            query = query.Where(item => item.CreatedAt <= to.Value);
+        if (!string.IsNullOrWhiteSpace(action))
+            query = query.Where(item => item.Action == action);
+        if (!string.IsNullOrWhiteSpace(entity))
+            query = query.Where(item => item.EntityName == entity);
+        if (filter.AppUserId.HasValue)
+            query = query.Where(item => item.AppUserId == filter.AppUserId.Value);
+
+        var rows = await query
+            .OrderByDescending(item => item.CreatedAt)
+            .Take(Math.Clamp(filter.Limit * 5, 1, 5000))
+            .ToListAsync(cancellationToken);
 
         return rows
             .Where(item => (!from.HasValue || item.CreatedAt >= from.Value)
@@ -315,5 +289,83 @@ public sealed class ReportingService(GameNetDbContext database)
                 item.EntityId,
                 item.Details))
             .ToList();
+    private async Task<List<Invoice>> LoadInvoicesInRangeAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var fromText = from.UtcDateTime.ToString("O");
+        var toText = to.UtcDateTime.ToString("O");
+        return await database.Invoices
+            .FromSqlInterpolated($"""
+                SELECT *
+                FROM "Invoices"
+                WHERE "Status" = 'Paid'
+                  AND datetime("IssuedAt") >= datetime({fromText})
+                  AND datetime("IssuedAt") <= datetime({toText})
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<Expense>> LoadExpensesInRangeAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var fromText = from.UtcDateTime.ToString("O");
+        var toText = to.UtcDateTime.ToString("O");
+        return await database.Expenses
+            .FromSqlInterpolated($"""
+                SELECT *
+                FROM "Expenses"
+                WHERE datetime("CreatedAt") >= datetime({fromText})
+                  AND datetime("CreatedAt") <= datetime({toText})
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<Session>> LoadSessionsInRangeAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken,
+        bool includeStation = false)
+    {
+        var fromText = from.UtcDateTime.ToString("O");
+        var toText = to.UtcDateTime.ToString("O");
+        var query = database.Sessions
+            .FromSqlInterpolated($"""
+                SELECT *
+                FROM "Sessions"
+                WHERE datetime("StartAt") >= datetime({fromText})
+                  AND datetime("StartAt") <= datetime({toText})
+                """)
+            .AsNoTracking();
+
+        if (includeStation)
+            query = query.Include(item => item.Station);
+
+        return await query.ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<Shift>> LoadShiftsOverlappingRangeAsync(
+        DateTimeOffset from,
+        DateTimeOffset to,
+        CancellationToken cancellationToken)
+    {
+        var fromText = from.UtcDateTime.ToString("O");
+        var toText = to.UtcDateTime.ToString("O");
+        return await database.Shifts
+            .FromSqlInterpolated($"""
+                SELECT *
+                FROM "Shifts"
+                WHERE datetime("OpenAt") <= datetime({toText})
+                  AND ("CloseAt" IS NULL OR datetime("CloseAt") >= datetime({fromText}))
+                """)
+            .Include(item => item.AppUser)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
     }
 }
+
