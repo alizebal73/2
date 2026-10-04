@@ -59,7 +59,7 @@ public sealed class SessionSettlementTests : IDisposable
         db.AddRange(type, tariff, customer, user, station, session);
         await db.SaveChangesAsync();
 
-        var service = new SessionSettlementService(db);
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
 
         var result = await service.SettleAsync(
             session.Id,
@@ -140,7 +140,7 @@ public sealed class SessionSettlementTests : IDisposable
         tariff.HourlyRate = 190000m;
         await db.SaveChangesAsync();
 
-        var service = new SessionSettlementService(db);
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
         var result = await service.SettleAsync(
             session.Id,
             new SessionSettlementRequest(
@@ -194,7 +194,7 @@ public sealed class SessionSettlementTests : IDisposable
         db.AddRange(type, tariff, customer, station, session);
         await db.SaveChangesAsync();
 
-        var service = new SessionSettlementService(db);
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.SettleAsync(
