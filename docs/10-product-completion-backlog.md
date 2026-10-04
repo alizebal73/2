@@ -17,7 +17,7 @@
 
 ### وضعیت
 
-- 🟡 **در حال تثبیت** — Stage 13.1 روی شاخه `stage13-reporting-audit` در حال تست است.
+- ✅ **Certified** — Stage 13.1 روی `main` با CI Run #1383 تأیید شده است.
 - Server دارای `AuditLogService` و endpoint واقعی `GET /api/audit` با Permission سروری `audit.view` است.
 - فیلترهای فعلی: بازهٔ زمانی، کاربر، عملیات، دامنه، جست‌وجوی آزاد و صفحه‌بندی.
 - Dashboard بخش Audit را از Mock خارج کرده و از Server دادهٔ واقعی می‌گیرد.
@@ -26,12 +26,12 @@
 
 ### Gate این برش
 
-- ⬜ Build
-- ⬜ .NET Tests
-- ⬜ EF validation
-- ⬜ Server/Migration/Health Smoke + Stage 13 Audit API Smoke
-- ⬜ Dashboard Build/Lint
-- ⬜ Dashboard Browser Smoke
+- ✅ Build
+- ✅ .NET Tests
+- ✅ EF validation
+- ✅ Server/Migration/Health Smoke + Stage 13 Audit API Smoke
+- ✅ Dashboard Build/Lint
+- ✅ Dashboard Browser Smoke
 
 ### مرز بعدی
 
@@ -40,7 +40,7 @@
 - Stage 13.4 — Fine-Grained Permission/Scope + Export
 - Stage 13.5 — Notification/Event Queue
 
-> Stage 13 تا زمانی که همان HEAD شاخه همهٔ Gateهای بالا را سبز نکند Done محسوب نمی‌شود.
+> Stage 13.1 اکنون از نظر نرم‌افزاری Done/Certified است. Stage 13.2 به بعد همچنان مستقل و ناتمام‌اند.
 
 ## آخرین وضعیت تأییدشده — Stage 12 / 2026-10-05
 
