@@ -1,4 +1,5 @@
 name: GameNet Manager CI
+# Exact-head verification remains the release gate for the self-hosted runner.
 on:
   push:
     branches:
