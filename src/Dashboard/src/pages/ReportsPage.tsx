@@ -57,6 +57,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
   const [auditResult, setAuditResult] = useState<AuditLogPage | null>(null);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState('');
+  const [auditRetry, setAuditRetry] = useState(0);
 
   useEffect(() => {
     if (!canViewFinance) return;
@@ -129,7 +130,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
       .then(setAuditResult)
       .catch(error => setAuditError(error instanceof Error ? error.message : 'دریافت سوابق Audit انجام نشد'))
       .finally(() => setAuditLoading(false));
-  }, [reportCategory, period, range, canViewAudit, auditPage, auditOperator, auditAction, auditEntity, auditSearch]);
+  }, [reportCategory, period, range, canViewAudit, auditPage, auditOperator, auditAction, auditEntity, auditSearch, auditRetry]);
 
   const visibleRows = useMemo(() => {
     const now = Date.now();
@@ -306,7 +307,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
       {!canViewAudit
         ? <section className="report-placeholder"><strong>Audit</strong><span>برای مشاهده سوابق Audit دسترسی لازم را ندارید.</span></section>
         : <>
-          {auditError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت سوابق Audit کامل نشد</strong><span>{auditError}</span></div><button type="button" className="btn sm" onClick={() => setAuditPage(page => page)}>تلاش مجدد</button></div>}
+          {auditError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت سوابق Audit کامل نشد</strong><span>{auditError}</span></div><button type="button" className="btn sm" onClick={() => setAuditRetry(value => value + 1)}>تلاش مجدد</button></div>}
           <section className="report-filter-grid report-audit-filter-grid">
             <label>کاربر<input value={auditOperator} onChange={e => { setAuditOperator(e.target.value); setAuditPage(1); }} placeholder="نام یا نام کاربری" /></label>
             <label>عملیات<input value={auditAction} onChange={e => { setAuditAction(e.target.value); setAuditPage(1); }} placeholder="مثلاً TariffUpdated" /></label>
