@@ -13,8 +13,7 @@ public static class DatabaseSeeder
         {
             await EnsureAuthorizationSeedAsync(database, includeDemoData, cancellationToken);
             if (includeDemoData)
-                if (includeDemoData)
-            await EnsureCustomerProfilesAsync(database, cancellationToken);
+                await EnsureCustomerProfilesAsync(database, cancellationToken);
             return;
         }
 
@@ -63,10 +62,10 @@ public static class DatabaseSeeder
 
         await database.SaveChangesAsync(cancellationToken);
         await EnsureAuthorizationSeedAsync(database, includeDemoData, cancellationToken);
-        await EnsureCustomerProfilesAsync(database, cancellationToken);
 
         if (includeDemoData)
         {
+            await EnsureCustomerProfilesAsync(database, cancellationToken);
             var product = new Product
             {
                 Name = "Energy Drink",
