@@ -4344,8 +4344,10 @@ app.MapPost("/api/customers/{customerId:guid}/free-benefits", async (HttpContext
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.wallet", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
-    if (customer is null)
+    var customerExists = await database.Customers
+        .AsNoTracking()
+        .AnyAsync(item => item.Id == customerId, cancellationToken);
+    if (!customerExists)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
 
     var moneyAmount = Math.Max(0m, request.MoneyAmount);
@@ -4360,23 +4362,41 @@ app.MapPost("/api/customers/{customerId:guid}/free-benefits", async (HttpContext
     var description = string.IsNullOrWhiteSpace(request.Description) ? "تنظیم اعتبار رایگان" : request.Description.Trim();
 
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-    if (moneyAmount > 0)
+
+    var customerMutation = database.Customers
+        .Where(item => item.Id == customerId);
+
+    if (mode == "debit")
     {
-        if (mode == "debit" && customer.FreeMoney < moneyAmount)
-            return Results.BadRequest(new { code = "insufficient_free_money", message = "اعتبار مالی رایگان کافی نیست." });
-        customer.FreeMoney = mode == "credit" ? customer.FreeMoney + moneyAmount : customer.FreeMoney - moneyAmount;
+        customerMutation = customerMutation.Where(item =>
+            item.FreeMoney >= moneyAmount
+            && item.FreeTimeMinutes >= minutes);
     }
 
-    if (minutes > 0)
+    var updated = await customerMutation.ExecuteUpdateAsync(setters => setters
+        .SetProperty(item => item.FreeMoney,
+            item => mode == "credit"
+                ? item.FreeMoney + moneyAmount
+                : item.FreeMoney - moneyAmount)
+        .SetProperty(item => item.FreeTimeMinutes,
+            item => mode == "credit"
+                ? item.FreeTimeMinutes + minutes
+                : item.FreeTimeMinutes - minutes)
+        .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+
+    if (updated != 1)
     {
-        if (mode == "debit" && customer.FreeTimeMinutes < minutes)
-            return Results.BadRequest(new { code = "insufficient_free_time", message = "اعتبار زمانی رایگان کافی نیست." });
-        customer.FreeTimeMinutes = mode == "credit" ? customer.FreeTimeMinutes + minutes : customer.FreeTimeMinutes - minutes;
+        await transaction.RollbackAsync(cancellationToken);
+        return Results.BadRequest(new
+        {
+            code = "insufficient_free_benefit",
+            message = "اعتبار رایگان کافی نیست."
+        });
     }
 
     database.BenefitTransactions.Add(new BenefitTransaction
     {
-        CustomerId = customer.Id,
+        CustomerId = customerId,
         Type = moneyAmount > 0
             ? (mode == "credit" ? BenefitTransactionType.FreeMoneyCredit : BenefitTransactionType.FreeMoneyDebit)
             : (mode == "credit" ? BenefitTransactionType.FreeTimeCredit : BenefitTransactionType.FreeTimeDebit),
@@ -4389,7 +4409,7 @@ app.MapPost("/api/customers/{customerId:guid}/free-benefits", async (HttpContext
     {
         Action = "FreeBenefitChange",
         EntityName = "CustomerBenefit",
-        EntityId = customer.Id.ToString(),
+        EntityId = customerId.ToString(),
         Details = (mode == "credit" ? "اعطای اعتبار رایگان" : "کسر اعتبار رایگان")
             + " · " + (moneyAmount > 0 ? moneyAmount.ToString("0.##") + " تومان" : minutes + " دقیقه")
             + " · " + description,
@@ -4399,7 +4419,16 @@ app.MapPost("/api/customers/{customerId:guid}/free-benefits", async (HttpContext
     await database.SaveChangesAsync(cancellationToken);
     await transaction.CommitAsync(cancellationToken);
 
-    return Results.Ok(new FreeBenefitsSnapshotDto(customer.FreeMoney, customer.FreeTimeMinutes, Array.Empty<FreeBenefitTransactionDto>()));
+    var balances = await database.Customers
+        .AsNoTracking()
+        .Where(item => item.Id == customerId)
+        .Select(item => new { item.FreeMoney, item.FreeTimeMinutes })
+        .SingleAsync(cancellationToken);
+
+    return Results.Ok(new FreeBenefitsSnapshotDto(
+        balances.FreeMoney,
+        balances.FreeTimeMinutes,
+        Array.Empty<FreeBenefitTransactionDto>()));
 })
 .WithName("ChangeCustomerFreeBenefits");
 
@@ -4420,13 +4449,14 @@ app.MapGet("/api/customers/{customerId:guid}/wallet-ledger", async (HttpContext 
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
     }
 
-    var transactions = (await database.WalletTransactions
+    const int ledgerLimit = 500;
+    var transactions = await database.WalletTransactions
         .AsNoTracking()
         .Where(item => item.CustomerId == customerId)
-        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.CreatedAt)
         .ThenByDescending(item => item.Id)
-        .ToList();
+        .Take(ledgerLimit)
+        .ToListAsync(cancellationToken);
 
     var running = customer.Balance;
     var result = new List<WalletLedgerEntryDto>(transactions.Count);
