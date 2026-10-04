@@ -16,6 +16,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<SessionSettlementService>();
+builder.Services.AddScoped<CustomerLoginService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
@@ -3251,76 +3252,62 @@ app.MapGet("/api/customer-auth/state", async (
 app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     Guid customerId,
     CustomerLoginRequest request,
-    GameNetDbContext database,
+    CustomerLoginService loginService,
     CancellationToken cancellationToken) =>
 {
-    var customer = await database.Customers.FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
-    if (customer is null)
-        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
-
-    var clientKey = request.ClientKey?.Trim();
-    if (string.IsNullOrWhiteSpace(clientKey))
-        return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
-
-    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-    var active = await database.CustomerLogins
-        .Where(item => item.CustomerId == customerId && item.IsActive)
-        .ToListAsync(cancellationToken);
-
-    var existing = active.FirstOrDefault(item => item.ClientKey == clientKey);
-    if (existing is not null)
-        return Results.Ok(new ConcurrentLoginResultDto(true, existing.Id, active.Count, customer.ConcurrentLoginLimit));
-
-    if (active.Count >= Math.Max(1, customer.ConcurrentLoginLimit))
-        return Results.Conflict(new { code = "concurrent_login_limit", message = "تعداد ورود هم‌زمان این مشتری به سقف مجاز رسیده است.", activeCount = active.Count, limit = customer.ConcurrentLoginLimit });
-
-    var login = new CustomerLogin
+    try
     {
-        CustomerId = customerId,
-        ClientKey = clientKey,
-        LoggedInAt = DateTimeOffset.UtcNow,
-        IsActive = true
-    };
-
-    database.CustomerLogins.Add(login);
-    database.AuditLogs.Add(new AuditLog
+        return Results.Ok(await loginService.AcquireAsync(
+            customerId,
+            request.ClientKey ?? string.Empty,
+            cancellationToken));
+    }
+    catch (ArgumentException exception)
     {
-        Action = "CustomerLoginAcquire",
-        EntityName = "CustomerLogin",
-        EntityId = login.Id.ToString(),
-        Details = "ورود مشتری · دستگاه " + clientKey
-    });
-
-    await database.SaveChangesAsync(cancellationToken);
-    await transaction.CommitAsync(cancellationToken);
-
-    return Results.Ok(new ConcurrentLoginResultDto(true, login.Id, active.Count + 1, customer.ConcurrentLoginLimit));
+        return Results.BadRequest(new { code = "missing_client_key", message = exception.Message });
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { code = "customer_not_found", message = exception.Message });
+    }
+    catch (InvalidOperationException exception) when (exception.Message.StartsWith("CONCURRENT_LOGIN_LIMIT:", StringComparison.Ordinal))
+    {
+        var parts = exception.Message.Split(':');
+        var activeCount = parts.Length > 1 && int.TryParse(parts[1], out var active) ? active : 0;
+        var limit = parts.Length > 2 && int.TryParse(parts[2], out var parsedLimit) ? parsedLimit : 1;
+        return Results.Conflict(new
+        {
+            code = "concurrent_login_limit",
+            message = "تعداد ورود هم‌زمان این مشتری به سقف مجاز رسیده است.",
+            activeCount,
+            limit
+        });
+    }
 })
 .WithName("AcquireCustomerLogin");
 
 app.MapPost("/api/customers/{customerId:guid}/login-release", async (
     Guid customerId,
     CustomerLoginReleaseRequest request,
-    GameNetDbContext database,
+    CustomerLoginService loginService,
     CancellationToken cancellationToken) =>
 {
-    var login = await database.CustomerLogins.FirstOrDefaultAsync(item => item.CustomerId == customerId && item.IsActive && item.ClientKey == request.ClientKey, cancellationToken);
-    if (login is null)
-        return Results.NotFound(new { code = "login_not_found", message = "ورود فعال برای این دستگاه پیدا نشد." });
-
-    login.IsActive = false;
-    login.LoggedOutAt = DateTimeOffset.UtcNow;
-    database.AuditLogs.Add(new AuditLog
+    try
     {
-        Action = "CustomerLoginRelease",
-        EntityName = "CustomerLogin",
-        EntityId = login.Id.ToString(),
-        Details = "خروج مشتری · دستگاه " + request.ClientKey
-    });
-
-    await database.SaveChangesAsync(cancellationToken);
-    var activeCount = await database.CustomerLogins.CountAsync(item => item.CustomerId == customerId && item.IsActive, cancellationToken);
-    return Results.Ok(new { released = true, activeCount });
+        var result = await loginService.ReleaseAsync(
+            customerId,
+            request.ClientKey ?? string.Empty,
+            cancellationToken);
+        return Results.Ok(new { released = true, loginId = result.LoginId, activeCount = result.ActiveCount });
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "missing_client_key", message = exception.Message });
+    }
+    catch (KeyNotFoundException exception)
+    {
+        return Results.NotFound(new { code = "login_not_found", message = exception.Message });
+    }
 })
 .WithName("ReleaseCustomerLogin");
 
@@ -5602,9 +5589,6 @@ public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, stri
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
 public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
 public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);
-public sealed record CustomerLoginRequest(string ClientKey);
-public sealed record CustomerLoginReleaseRequest(string ClientKey);
-public sealed record ConcurrentLoginResultDto(bool Acquired, Guid LoginId, int ActiveCount, int Limit);
 
 public sealed record ShiftSnapshotDto(
     Guid Id,
