@@ -1,79 +1,69 @@
-# Stage 12 — Checkpoint 2026-10-03
+# Stage 12 — Final Certification Checkpoint 2026-10-05
 
 ## Active branch
 
-`stage12-session-lease`
+repair/stages1-12-integrity-20261005
 
 ## Stable main
 
-`main` = `93ba89c9231bd821f45f93ab2aa7b9c25b8cc338`
+main = cc5304a1c6642ce0061a3155f0dbea9a51453067
 
-## Stage 12 baseline
+## Certified branch head
 
-`7d6d6f753ab7741b6ea29a57a3a2beb1b34b348b`
+ae18da81761b82dcea5d11d69934fd47426c7f3d
 
-Stage 12 must not modify `main` directly.
+## Final CI
 
-## Current branch head
+- Run #1369 — success
+- Build ✅
+- .NET Tests ✅
+- EF model validation ✅
+- Server startup / migration / health smoke ✅
+- Stage 8 Agent transport ✅
+- Stage 9 Lock/Kiosk/Session smoke ✅
+- Stage 10 Update/Rollback/Recovery smoke ✅
+- Stage 11 Game/Account Pool smoke ✅
+- Stage 12 real Game Apply/Sync ✅
+- Stage 12 Session → Game → Agent → Account Lease → Credential → Session End → Release ✅
+- Customer/VIP/Concurrent Login smoke ✅
+- Dashboard install/lint/build ✅
+- Dashboard browser smoke: 3/3 ✅
 
-`2c7246494cea64c17695847514897fe569e51237`
+## Certification result
 
-## Current CI
+**Stage 12 — DONE از نظر مهندسی نرم‌افزار.**
 
-Latest final-head CI pair is Run #1042 / #1043 for the exact head above; one is pending and one queued because the workflow has push + pull_request triggers. Previous failures on earlier heads are not the final-head verdict.
+مسیر واقعی تأییدشده:
 
-Current pre-CI status:
-- Agent command transport: implemented with stable per-device SignalR group.
-- Stage 12 Agent Session → Game → Lease → Credential → EndSession/Release smoke: added.
-- Game activeUsers: authoritative from active Sessions.
-- Stale/Disconnect Lease recovery: implemented.
-- Customer authentication smoke restored before the Stage 12 flow.
-- Real Game Apply/Sync contract, server dispatch, Agent manifest persistence and E2E verification added.
-- Expired Free accounts are excluded from allocation with regression coverage.
-- Fake Dashboard Backup/Restore controls disabled; real backup remains a pre-production Stage 15 gate.
-- Canonical roadmap reconciled to the current 15-stage execution map.
+Customer → CustomerLogin → Station → Agent → Session → Game → AccountLease → Credential → Agent → Session End → Lease Release
 
-## What is actually implemented
+- Game Apply/Sync روی Agent مانیفست محلی واقعی ایجاد می‌کند.
+- activeUsers از Sessionهای authoritative محاسبه می‌شود.
+- Account Pool از Free به InUse و پس از پایان Session دوباره به Free برمی‌گردد.
+- Settlement از مسیر موجود Server انجام شد و عدد آن با settlement preview همان Session تطبیق داده شد.
+- Dashboard پس از این تغییرات build و browser smoke را پاس کرد.
 
-- Session can reference Game and AgentDevice.
-- AccountPoolEntry keeps encrypted credential material separately from SecretHash.
-- AccountLease has a short credential-access expiry.
-- Operational Session allocation validates Session + Game + Agent + CustomerLogin.
-- Allocation is atomic and creates a Session-bound Lease.
-- Agent credential retrieval is Lease-token + Agent-bound and denied outside the active window.
-- Session end releases the Lease.
-- Agent disconnect/stale heartbeat releases active Leases.
-- Game active-user count is derived from authoritative active Sessions.
-- Legacy GameAccount remains separate.
-- Dashboard never receives raw account secrets.
-- Stage 12 has an Agent/Session/Lease credential E2E smoke path.
+## Remaining release / production gates
 
-## Current blocker
+- Backup/Restore واقعی دیتابیس + DataProtection Keys
+- Validation فیزیکی روی 2–3 PC واقعی
+- rollout کنترل‌شدهٔ 40+ PC
+- Fine-grained Permission/Scope، Reporting/Audit و Notification Queue در Stage 13
+- Process Detection واقعی در مسیر telemetry آینده
 
-The current branch head is awaiting a completed CI run. The latest final-head runs are pending/queued, so Stage 12 is not yet certified. Do not mark Stage 12 Done until the exact head is green for Build, Tests, EF validation, Server Smoke, and the required Agent/Session/Lease E2E.
+## Recovery rule
 
-The previous Agent ping timeout was treated as a transport race and corrected without weakening the timeout assertion.
-
-## Important recovery rule
-
-If work is interrupted, resume from this file first. Do not infer progress from chat memory.
-
-## Working method
-
-One logical change per checkpoint:
-- inspect
-- implement
-- test
-- commit
-- record SHA/state
-- continue
-
-For long work, do not keep one giant uncommitted sequence. Every major slice must leave a recoverable commit and an updated checkpoint.
+اگر کار قطع شد، از همین checkpoint و commit بالا ادامه بده. وضعیت را از CI/کد بخوان، نه از checkpointهای قدیمی‌تر.
 
 ## Do not do
 
-- Do not edit `main` for Stage 12.
-- Do not weaken CI assertions just to get green.
-- Do not recreate fake Apply/Sync success.
-- Do not replace legacy `GameAccount`.
-- Do not call Stage 12 Done until the same branch SHA has green Build, Tests, EF validation, Server Smoke and required Agent/Session/Lease E2E.
+- main را برای ادامهٔ Stage 12 دستکاری نکن.
+- CI assertionها را برای سبز کردن مصنوعی ضعیف نکن.
+- Real Game Apply/Sync را دوباره fake نکن.
+- Legacy GameAccount را حذف نکن.
+- Gateهای فیزیکی/Production را به‌جای انجام واقعی Done علامت نزن.
+
+## Next software stage
+
+**Stage 13 — Reporting & Audit**
+با محورهای: Report Center، Audit Explorer، Fine-Grained Permission/Scope، Notification/Event Queue و مصرف telemetry واقعی.
