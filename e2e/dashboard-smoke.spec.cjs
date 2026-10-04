@@ -91,6 +91,113 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await expect(page.getByText('وضعیت مالی')).toBeVisible();
 });
 
+test('dashboard exposes real Sessions and Stations report', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-session-report',
+      fullName: 'مدیر گزارش',
+      userName: 'report_admin',
+      email: 'report@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['finance.view']
+    })
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
+  }));
+  await page.route('**/api/finance/**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([])
+  }));
+  await page.route('**/api/shifts/**', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([])
+  }));
+  await page.route('**/api/reports/sessions*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      page: 1,
+      pageSize: 50,
+      total: 2,
+      summary: {
+        sessionCount: 2,
+        billableMinutes: 90,
+        revenue: 80000,
+        averageMinutes: 45,
+        stations: [{
+          stationId: 'pc-01',
+          stationName: 'PC ۰۱',
+          zone: 'pc',
+          sessionCount: 2,
+          billableMinutes: 90,
+          revenue: 80000
+        }]
+      },
+      items: [
+        {
+          id: 'session-report-1',
+          startAt: new Date(Date.now() - 3600000).toISOString(),
+          endAt: new Date(Date.now() - 1800000).toISOString(),
+          state: 'Completed',
+          stationId: 'pc-01',
+          stationName: 'PC ۰۱',
+          zone: 'pc',
+          stationType: 'PC',
+          customerId: 'customer-1',
+          customerName: 'رضا تست',
+          customerCode: 'R001',
+          customerUsername: 'reza_test',
+          appUserId: 'e2e-session-report',
+          operator: 'مدیر گزارش',
+          persons: 1,
+          billableMinutes: 30,
+          totalAmount: 50000
+        },
+        {
+          id: 'session-report-2',
+          startAt: new Date(Date.now() - 7200000).toISOString(),
+          endAt: new Date(Date.now() - 5400000).toISOString(),
+          state: 'Completed',
+          stationId: 'pc-01',
+          stationName: 'PC ۰۱',
+          zone: 'pc',
+          stationType: 'PC',
+          customerId: 'customer-2',
+          customerName: 'علی تست',
+          customerCode: 'A002',
+          customerUsername: 'ali_test',
+          appUserId: 'e2e-session-report',
+          operator: 'مدیر گزارش',
+          persons: 1,
+          billableMinutes: 60,
+          totalAmount: 30000
+        }
+      ]
+    })
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'گزارش‌ها' }).click();
+  await page.getByRole('button', { name: 'جلسات و ایستگاه‌ها' }).click();
+
+  await expect(page.getByTestId('session-report')).toBeVisible();
+  await expect(page.getByTestId('session-report-row')).toHaveCount(2);
+  await expect(page.getByText('درآمد جلسات')).toBeVisible();
+  await expect(page.getByText('۸۰٬۰۰۰ تومان')).toBeVisible();
+  await expect(page.getByTestId('session-report')).toContainText('PC ۰۱');
+  await expect(page.getByTestId('session-report')).toContainText('رضا تست');
+});
+
 test('dashboard exposes real Audit Explorer', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
     status: 200,
