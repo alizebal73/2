@@ -3,7 +3,7 @@ using Microsoft.Extensions.Hosting;
 namespace GameNetManager.Server.Data;
 
 public sealed class BackupScheduler(
-    BackupService backups,
+    IServiceScopeFactory scopeFactory,
     ILogger<BackupScheduler> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -12,6 +12,9 @@ public sealed class BackupScheduler(
         {
             try
             {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var backups = scope.ServiceProvider.GetRequiredService<BackupService>();
+
                 var settings = await backups.GetSettingsAsync(stoppingToken);
                 if (settings.Enabled
                     && TimeOnly.TryParse(settings.Hour, out var targetTime)
