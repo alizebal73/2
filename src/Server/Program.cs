@@ -71,7 +71,7 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 try
 {
     await BackupService.ApplyPendingRestoreAsync(builder.Environment.ContentRootPath, databasePath, logger, CancellationToken.None);
-    await InitializeDatabaseAsync(app.Services, databasePath, logger);
+    await InitializeDatabaseAsync(app.Services, databasePath, logger, app.Environment.IsDevelopment());
     logger.LogInformation("Database ready at {DatabasePath}", databasePath);
 }
 catch (Exception exception)
@@ -5452,7 +5452,11 @@ static CustomerDto ToCustomerDto(Customer customer) => new(
     customer.ConcurrentLoginLimit,
     customer.Notes);
 
-static async Task InitializeDatabaseAsync(IServiceProvider services, string databasePath, ILogger logger)
+static async Task InitializeDatabaseAsync(
+    IServiceProvider services,
+    string databasePath,
+    ILogger logger,
+    bool includeDemoData)
 {
     await using var scope = services.CreateAsyncScope();
     var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
@@ -5460,7 +5464,7 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
     try
     {
         await database.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(database);
+        await DatabaseSeeder.SeedAsync(database, includeDemoData);
     }
     catch (Exception exception) when (IsMigrationRecoveryCandidate(exception))
     {
