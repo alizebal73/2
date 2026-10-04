@@ -1,4 +1,5 @@
 using GameNetManager.Shared.Contracts;
+using GameNetManager.Server.Data;
 
 namespace GameNetManager.Server;
 
