@@ -20,6 +20,7 @@ builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
 builder.Services.AddScoped<CustomerLoginService>();
 builder.Services.AddScoped<SessionPricingService>();
+builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
@@ -1460,6 +1461,44 @@ app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration c
     });
 })
 .WithName("GetReleaseManifest");
+
+app.MapGet("/api/audit", async (
+    HttpContext context,
+    GameNetDbContext database,
+    AuditLogService auditLogs,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    string? @operator,
+    string? action,
+    string? entityName,
+    string? search,
+    CancellationToken cancellationToken,
+    int page = 1,
+    int pageSize = 50) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "audit.view",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    if (page < 1 || pageSize < 1 || pageSize > 200)
+    {
+        return Results.BadRequest(new
+        {
+            code = "audit_paging_invalid",
+            message = "صفحه یا تعداد رکوردهای گزارش معتبر نیست."
+        });
+    }
+
+    var result = await auditLogs.QueryAsync(
+        new AuditLogQuery(from, to, @operator, action, entityName, search, page, pageSize),
+        cancellationToken);
+
+    return Results.Ok(result);
+})
+.WithName("QueryAuditLogs");
 
 app.MapPost("/api/auth/login", async (
     LoginRequest request,

@@ -51,7 +51,7 @@ const pagePermissions: Partial<Record<PageKey, string[]>> = {
   games: ['game.manage'],
   'client-shell': ['client.control'],
   accounts: ['account.manage'],
-  reports: ['finance.view'],
+  reports: ['finance.view', 'audit.view'],
   users: ['user.manage', 'shift.manage', 'payroll.view', 'payroll.manage', 'approval.decide'],
   settings: ['user.manage'],
 };

@@ -12,6 +12,36 @@
 
 
 
+
+## Stage 13 — برش اول واقعی: Audit Explorer — 2026-10-05
+
+### وضعیت
+
+- 🟡 **در حال تثبیت** — Stage 13.1 روی شاخه `stage13-reporting-audit` در حال تست است.
+- Server دارای `AuditLogService` و endpoint واقعی `GET /api/audit` با Permission سروری `audit.view` است.
+- فیلترهای فعلی: بازهٔ زمانی، کاربر، عملیات، دامنه، جست‌وجوی آزاد و صفحه‌بندی.
+- Dashboard بخش Audit را از Mock خارج کرده و از Server دادهٔ واقعی می‌گیرد.
+- کاربری که فقط `audit.view` دارد نیز می‌تواند وارد Reports شود؛ Finance endpointها برای او به‌صورت بی‌دلیل فراخوانی نمی‌شوند.
+- تست واحد Query/Filter/Pagination، Browser Smoke و Server API Smoke برای این برش اضافه شده‌اند.
+
+### Gate این برش
+
+- ⬜ Build
+- ⬜ .NET Tests
+- ⬜ EF validation
+- ⬜ Server/Migration/Health Smoke + Stage 13 Audit API Smoke
+- ⬜ Dashboard Build/Lint
+- ⬜ Dashboard Browser Smoke
+
+### مرز بعدی
+
+- Stage 13.2 — گزارش واقعی جلسات و ایستگاه‌ها
+- Stage 13.3 — گزارش مشتری/VIP و Users/Shift
+- Stage 13.4 — Fine-Grained Permission/Scope + Export
+- Stage 13.5 — Notification/Event Queue
+
+> Stage 13 تا زمانی که همان HEAD شاخه همهٔ Gateهای بالا را سبز نکند Done محسوب نمی‌شود.
+
 ## آخرین وضعیت تأییدشده — Stage 12 / 2026-10-05
 
 این بخش مرجع اجرایی فعلی است و بر وضعیت واقعی HEAD شاخه غلبه دارد.

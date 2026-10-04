@@ -127,6 +127,12 @@ jobs:
             $meBeforeAgent = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($meBeforeAgent.userName -ne 'admin') { throw 'Current operator endpoint failed before Agent smoke.' }
 
+            $auditSmoke = Invoke-RestMethod -Uri "$baseUrl/api/audit?page=1&pageSize=20" -Method Get -WebSession $adminSession
+            if ([int]$auditSmoke.total -lt 1 -or -not @($auditSmoke.items | Where-Object { $_.action -eq 'AppUserLogin' -and $_.entityName -eq 'AppUser' }).Count) {
+              throw 'Stage 13 Audit Explorer API smoke failed to return the authoritative admin login audit event.'
+            }
+            Write-Host ("Stage 13 Audit Explorer API smoke passed: total={0}" -f $auditSmoke.total)
+
             # Stage 11: prove Game and Account Pool are server-backed and allocation is atomic.
             $stage11Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               name = 'CI Stage11 Game'
