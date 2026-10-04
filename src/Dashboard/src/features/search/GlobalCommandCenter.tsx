@@ -9,6 +9,7 @@ import { getAgentStatuses } from '../../services/agentService';
 import type {
   AccountRecord,
   AgentStatusDto,
+  AppUserRecord,
   CustomerRecord,
   GameRecord,
   ManagementInvoiceRecord,
@@ -197,7 +198,15 @@ export function GlobalCommandCenter({ open, stations, onNavigate, onClose }: Pro
           nightHours: '',
           active: item.isActive,
         }));
-        setData(createResults(customers, products, mappedTariffs, games, accounts, agents, users, invoices, stations));
+        const mappedUsers: UserRecord[] = (users as AppUserRecord[]).map(item => ({
+          id: item.id,
+          name: item.fullName,
+          role: item.role.toLowerCase() === 'owner' ? 'owner' : item.role.toLowerCase() === 'admin' || item.role.toLowerCase() === 'manager' ? 'admin' : 'operator',
+          shift: 'سرور',
+          sales: 0,
+          permissions: item.permissions,
+        }));
+        setData(createResults(customers, products, mappedTariffs, games, accounts, agents, mappedUsers, invoices, stations));
       })
       .catch(() => {
         if (!cancelled) setLoadError('اطلاعات جست‌وجو بارگذاری نشد. دوباره تلاش کنید.');
