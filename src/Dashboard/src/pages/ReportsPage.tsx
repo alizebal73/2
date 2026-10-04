@@ -8,6 +8,7 @@ import { getAuditLogs, type AuditLogPage } from '../services/auditService';
 import type { BuffetProfitReport } from '../types';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
+function count(value: number) { return new Intl.NumberFormat('fa-IR').format(value); }
 function parsePersianDate(value: string): Date | null {
   const parts = value.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))).replace(/-/g, '/').split('/').map(Number);
   if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
@@ -247,7 +248,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
   return <>
     {role === 'operator' && <div className="operation-toast" style={{ position:'relative', inset:'auto', margin:'8px 22px' }}>🔒 اپراتور فقط گزارش شیفت خودش را می‌بیند.</div>}
     {canViewFinance && financeError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت اطلاعات مالی کامل نشد</strong><span>{financeError}</span></div><button type="button" className="btn sm" onClick={() => window.location.reload()}>تلاش مجدد</button></div>}
-    <div className="page-header"><div><p>مرکز گزارش</p><h1>گزارش‌ها</h1></div><div className="page-meta"><span>{reportCategory === 'audit' ? (auditResult?.total ?? 0) + ' رویداد Audit' : visibleRows.length + ' تراکنش'}</span><span>{role === 'operator' ? 'شیفت شخصی' : 'گزارش کامل'}</span></div></div>
+    <div className="page-header"><div><p>مرکز گزارش</p><h1>گزارش‌ها</h1></div><div className="page-meta"><span>{reportCategory === 'audit' ? (count(auditResult?.total ?? 0) + ' رویداد Audit') : (count(visibleRows.length) + ' تراکنش')}</span><span>{role === 'operator' ? 'شیفت شخصی' : 'گزارش کامل'}</span></div></div>
 
     <section className="report-center-head">
       <div className="report-categories">
@@ -316,7 +317,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
             <button type="button" className="btn" onClick={() => { setAuditOperator(''); setAuditAction(''); setAuditEntity(''); setAuditSearch(''); setAuditPage(1); }}>پاک کردن فیلتر</button>
           </section>
           <div className="card-panel" style={{ margin: '0 22px 12px', padding: '10px 12px' }}>
-            <div className="page-meta"><span>{auditLoading ? 'در حال دریافت…' : (auditResult?.items.length ?? 0) + ' مورد در این صفحه · ' + (auditResult?.total ?? 0) + ' مورد در بازه'}</span><span>Permission: audit.view</span></div>
+            <div className="page-meta"><span>{auditLoading ? 'در حال دریافت…' : count(auditResult?.items.length ?? 0) + ' مورد در این صفحه · ' + count(auditResult?.total ?? 0) + ' مورد در بازه'}</span><span>Permission: audit.view</span></div>
           </div>
           <div className="table-wrap" data-testid="audit-explorer">
             <table className="data-table">
@@ -335,7 +336,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
           </div>
           <div className="report-pagination">
             <button type="button" className="btn sm" disabled={auditLoading || auditPage <= 1} onClick={() => setAuditPage(page => Math.max(1, page - 1))}>قبلی</button>
-            <span>صفحه {auditPage} از {Math.max(1, Math.ceil((auditResult?.total ?? 0) / (auditResult?.pageSize ?? 50)))}</span>
+            <span>صفحه {count(auditPage)} از {count(Math.max(1, Math.ceil((auditResult?.total ?? 0) / (auditResult?.pageSize ?? 50))))}</span>
             <button type="button" className="btn sm" disabled={auditLoading || auditPage >= Math.max(1, Math.ceil((auditResult?.total ?? 0) / (auditResult?.pageSize ?? 50)))} onClick={() => setAuditPage(page => page + 1)}>بعدی</button>
           </div>
         </>
