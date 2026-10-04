@@ -6,41 +6,39 @@ namespace GameNetManager.Server.Tests;
 
 public sealed class DatabaseSeederTests
 {
-    private static readonly object EnvironmentLock = new();
+    private static readonly SemaphoreSlim EnvironmentGate = new(1, 1);
 
     [Fact]
     public async Task ProductionSeed_DoesNotCreateDemoCustomersProductsOrStations()
     {
-        lock (EnvironmentLock)
+        await EnvironmentGate.WaitAsync();
+        var previous = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD");
+        try
         {
-            var previous = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD");
-            try
-            {
-                Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", "ProductionSeedTest!123");
-                return RunProductionSeedAssertionAsync();
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", previous);
-            }
+            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", "ProductionSeedTest!123");
+            await RunProductionSeedAssertionAsync();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", previous);
+            EnvironmentGate.Release();
         }
     }
 
     [Fact]
     public async Task DemoSeed_CreatesReferenceDemoDataWithoutDuplicateCustomer()
     {
-        lock (EnvironmentLock)
+        await EnvironmentGate.WaitAsync();
+        var previous = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD");
+        try
         {
-            var previous = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD");
-            try
-            {
-                Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", "DemoSeedTest!123");
-                return RunDemoSeedAssertionAsync();
-            }
-            finally
-            {
-                Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", previous);
-            }
+            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", "DemoSeedTest!123");
+            await RunDemoSeedAssertionAsync();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", previous);
+            EnvironmentGate.Release();
         }
     }
 
