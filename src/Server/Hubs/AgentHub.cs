@@ -64,57 +64,6 @@ public sealed class AgentHub(
         device.LastUpdateError = null;
         await database.SaveChangesAsync(Context.ConnectionAborted);
 
-        await database.SaveChangesAsync(Context.ConnectionAborted);
-
-        var pendingLifecycleCommands = await database.AgentCommands
-            .Where(item => item.AgentDeviceId == device.Id
-                && item.Status == "Sent"
-                && item.AgentConnectionId != Context.ConnectionId
-                && (item.CommandType == AgentCommandTypes.Update
-                    || item.CommandType == AgentCommandTypes.Rollback))
-            .OrderByDescending(item => item.RequestedAt)
-            .Take(1)
-            .ToListAsync(Context.ConnectionAborted);
-
-        foreach (var pendingCommand in pendingLifecycleCommands)
-        {
-            pendingCommand.AgentConnectionId = Context.ConnectionId;
-            database.AuditLogs.Add(new AuditLog
-            {
-                Action = "AgentCommandRedispatched",
-                EntityName = "AgentCommand",
-                EntityId = pendingCommand.Id.ToString(),
-                Details = $"فرمان چرخه عمر {pendingCommand.CommandType} پس از اتصال مجدد Agent دوباره تحویل داده شد · {device.DeviceId}"
-            });
-        }
-
-        if (pendingLifecycleCommands.Count > 0)
-            await database.SaveChangesAsync(Context.ConnectionAborted);
-
-        foreach (var pendingCommand in pendingLifecycleCommands)
-        {
-            try
-            {
-                await Clients.Caller.SendAsync(
-                    "AgentCommand",
-                    new AgentCommandEnvelope(
-                        pendingCommand.Id,
-                        pendingCommand.CommandType,
-                        pendingCommand.PayloadJson,
-                        pendingCommand.RequestedAt),
-                    Context.ConnectionAborted);
-            }
-            catch (Exception exception) when (
-                exception is HubException or InvalidOperationException or OperationCanceledException)
-            {
-                logger.LogWarning(
-                    exception,
-                    "Pending lifecycle Agent command {CommandId} could not be redispatched to {DeviceId}.",
-                    pendingCommand.Id,
-                    device.DeviceId);
-            }
-        }
-
         await BroadcastStatusAsync(device, now, Context.ConnectionAborted);
 
         return new AgentReadyDto(
