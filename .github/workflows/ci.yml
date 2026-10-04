@@ -919,7 +919,7 @@ jobs:
 
               if (-not $gameSyncVerified -or -not $gameActiveUsersVerified -or -not $sessionStartVerified -or -not $sessionFlowCompleted) {
                 Write-Host ("Stage 9 smoke flags: GameSync={0}; GameActiveUsers={1}; SessionStart={2}; SessionFlow={3}" -f $gameSyncVerified, $gameActiveUsersVerified, $sessionStartVerified, $sessionFlowCompleted)
-                Write-Host '--- Stage 9 Session Agent stdout ---
+                Write-Host '--- Stage 9 Session Agent stdout ---'
                 if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
                 Write-Host '--- Stage 9 Session Agent stderr ---'
                 if (Test-Path $sessionAgentStderr) { Get-Content $sessionAgentStderr }
