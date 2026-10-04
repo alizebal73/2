@@ -296,3 +296,12 @@ tests/Server.Tests/UnitTest1.cs
 e2e/dashboard-smoke.cjs
 e2e/dashboard-smoke.spec.cjs
 e2e/playwright.config.cjs
+
+
+## ممیزی دوباره روی latest head
+
+- Latest branch head: `7a0f882a000e6cb4fc6be2a9dcce923f49fc1a72`
+- Run #1094 مربوط به head قدیمی `533e8812a0627edd9dc1ce46be9d362ad3a6089d` بود و در Server startup شکست خورد؛ ریشه، snapshot probe ناسازگار برای navigation قدیمی `GameAccount.CustomerLogin` بود.
+- کد فعلی branch snapshot metadata آن navigation اشتباه را ندارد و migrations/designer فعلی با model هم‌راستا شده‌اند.
+- Latest head هنوز run مستقل ندارد؛ بنابراین «کامل بودن نرم‌افزاری» را از «exact-SHA verification» جدا نگه می‌داریم.
+- Stageهای 1 تا 12 در این ممیزی فقط وقتی بسته اعلام می‌شوند که exact latest head از Build/Test/EF/Startup/Dashboard و Agent/Session/Game/Lease smoke عبور کند.
