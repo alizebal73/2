@@ -79,7 +79,12 @@ public sealed class OperationsService(GameNetDbContext database)
         }
         else
         {
-            station = new Station();
+            station = new Station
+            {
+                Name = name,
+                Zone = zone,
+                Type = type
+            };
             database.Stations.Add(station);
         }
 
