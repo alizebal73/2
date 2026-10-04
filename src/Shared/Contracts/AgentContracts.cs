@@ -80,6 +80,8 @@ public static class AgentCommandTypes
     public const string Lock = "lock";
     public const string Unlock = "unlock";
     public const string LogoutLock = "logout-lock";
+    public const string Restart = "restart";
+    public const string Shutdown = "shutdown";
     public const string Update = "update";
     public const string Rollback = "rollback";
     public const string ApplyGame = "apply-game";
