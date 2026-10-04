@@ -9,11 +9,14 @@ public sealed class CustomerLoginServiceTests
     [Fact]
     public async Task ConcurrentAcquireHonorsCustomerLimit()
     {
-        var databaseName = "customer-login-race";
-        await using (var setupConnection = new SqliteConnection($"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5"))
+        var databaseName = $"customer-login-race-{Guid.NewGuid():N}";
+        await using var keeper = new SqliteConnection(
+            $"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5");
+        await keeper.OpenAsync();
+
+        Guid customerId;
+        await using (var setup = CreateContext(keeper))
         {
-            await setupConnection.OpenAsync();
-            await using var setup = CreateContext(setupConnection);
             await setup.Database.EnsureCreatedAsync();
 
             setup.Customers.Add(new Customer
@@ -25,26 +28,19 @@ public sealed class CustomerLoginServiceTests
                 VipTier = "none"
             });
             await setup.SaveChangesAsync();
-        }
-
-        Guid customerId;
-        await using (var readConnection = new SqliteConnection($"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5"))
-        {
-            await readConnection.OpenAsync();
-            await using var read = CreateContext(readConnection);
-            customerId = await read.Customers.Select(item => item.Id).SingleAsync();
+            customerId = await setup.Customers.Select(item => item.Id).SingleAsync();
         }
 
         async Task<object> Acquire(string clientKey)
         {
-            await using var connection = new SqliteConnection($"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5");
+            await using var connection = new SqliteConnection(
+                $"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5");
             await connection.OpenAsync();
             await using var context = CreateContext(connection);
             var service = new CustomerLoginService(context);
             try
             {
-                var result = await service.AcquireAsync(customerId, clientKey, CancellationToken.None);
-                return result;
+                return await service.AcquireAsync(customerId, clientKey, CancellationToken.None);
             }
             catch (InvalidOperationException ex)
             {
