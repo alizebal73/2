@@ -48,12 +48,10 @@ public sealed class AuditLogService
             .AsNoTracking()
             .Include(item => item.AppUser);
 
-        if (query.From is { } from)
-            logs = logs.Where(item => item.CreatedAt >= from);
-
-        if (query.To is { } to)
-            logs = logs.Where(item => item.CreatedAt <= to);
-
+        // SQLite in the current Server provider cannot translate DateTimeOffset
+        // comparisons/orderings. Apply text/entity filters in SQL first, then
+        // apply the authoritative time window and ordering in Server memory,
+        // matching the established finance/buffet reporting pattern.
         if (!string.IsNullOrWhiteSpace(query.Operator))
         {
             var value = query.Operator.Trim();
@@ -88,13 +86,7 @@ public sealed class AuditLogService
                     || item.AppUser.UserName.Contains(value))));
         }
 
-        var total = await logs.CountAsync(cancellationToken);
-
-        var items = await logs
-            .OrderByDescending(item => item.CreatedAt)
-            .ThenByDescending(item => item.Id)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+        var rows = await logs
             .Select(item => new AuditLogRecordDto(
                 item.Id,
                 item.CreatedAt,
@@ -107,6 +99,24 @@ public sealed class AuditLogService
                 item.EntityId,
                 item.Details))
             .ToListAsync(cancellationToken);
+
+        if (query.From is { } from)
+            rows = rows.Where(item => item.CreatedAt >= from).ToList();
+
+        if (query.To is { } to)
+            rows = rows.Where(item => item.CreatedAt <= to).ToList();
+
+        var ordered = rows
+            .OrderByDescending(item => item.CreatedAt)
+            .ThenByDescending(item => item.Id)
+            .ToList();
+
+        var total = ordered.Count;
+
+        var items = ordered
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
 
         return new AuditLogPageDto(page, pageSize, total, items);
     }
