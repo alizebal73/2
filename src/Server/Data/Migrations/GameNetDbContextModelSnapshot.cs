@@ -1537,11 +1537,7 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.HasIndex("Kind", "Status", "Priority", "CreatedAt");
 
-                    b.HasIndex("StationId");
-
-                    b.HasIndex("StationId", "StartAt")
-                        .IsUnique()
-                        .HasFilter("State = 'Active'");
+                    b.HasIndex("StationId", "StartAt");
 
                     b.HasIndex("TariffId");
 
