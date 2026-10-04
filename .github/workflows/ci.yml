@@ -824,6 +824,7 @@ jobs:
               $sessionFlowCompleted = $false
               $sessionStartVerified = $false
               $gameSyncVerified = $false
+              $gameActiveUsersVerified = $false
               $endedSessionId = $null
 
               $syncAccepted = $false
@@ -883,7 +884,7 @@ jobs:
                     Write-Host 'Stage 9 Agent Session End login ownership guard passed.'
                   }
 
-                  if ($log -match 'AGENT_GAME_ACCOUNT_OK:([0-9a-fA-F-]+):([0-9a-fA-F-]+):([^:]+):(.+)') {
+                  if (-not $gameActiveUsersVerified -and $log -match 'AGENT_GAME_ACCOUNT_OK:([0-9a-fA-F-]+):([0-9a-fA-F-]+):([^:]+):(.+)') {
                     $gameLeaseId = $Matches[1]
                     $gameLeaseGameId = $Matches[2]
                     if ($gameLeaseGameId -ne $stage12Game.id) { throw "Stage 12 Agent received a credential for an unexpected GameId: $gameLeaseGameId" }
@@ -894,12 +895,17 @@ jobs:
                       if ($gameRow -and [int]$gameRow.activeUsers -eq 1) { break }
                       Start-Sleep -Milliseconds 500
                     }
-                    if (-not $gameRow -or [int]$gameRow.activeUsers -ne 1) { throw 'Stage 12 Game activeUsers did not become authoritative while the Session was active.' }
+                    if (-not $gameRow -or [int]$gameRow.activeUsers -ne 1) {
+                      Write-Host '--- Stage 12 Game row while Session should be active ---'
+                      if ($gameRow) { $gameRow | ConvertTo-Json -Depth 8 }
+                      throw 'Stage 12 Game activeUsers did not become authoritative while the Session was active.'
+                    }
 
+                    $gameActiveUsersVerified = $true
                     $accountRows = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
                     $inUseAccount = @($accountRows | Where-Object { $_.id -eq $stage12Account.id })[0]
                     if (-not $inUseAccount -or $inUseAccount.status -ne 'InUse') { throw 'Stage 12 Account Pool entry did not become InUse after Agent acquisition.' }
-                    Write-Host ("Stage 12 Agent Game account acquisition passed: leaseId={0}; gameId={1}" -f $gameLeaseId, $gameLeaseGameId)
+                    Write-Host ("Stage 12 Agent Game account + authoritative activeUsers passed: leaseId={0}; gameId={1}; activeUsers={2}" -f $gameLeaseId, $gameLeaseGameId, $gameRow.activeUsers)
                   }
 
                   if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
@@ -911,8 +917,9 @@ jobs:
                 Start-Sleep -Seconds 1
               }
 
-              if (-not $gameSyncVerified -or -not $sessionStartVerified -or -not $sessionFlowCompleted) {
-                Write-Host '--- Stage 9 Session Agent stdout ---'
+              if (-not $gameSyncVerified -or -not $gameActiveUsersVerified -or -not $sessionStartVerified -or -not $sessionFlowCompleted) {
+                Write-Host ("Stage 9 smoke flags: GameSync={0}; GameActiveUsers={1}; SessionStart={2}; SessionFlow={3}" -f $gameSyncVerified, $gameActiveUsersVerified, $sessionStartVerified, $sessionFlowCompleted)
+                Write-Host '--- Stage 9 Session Agent stdout ---
                 if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
                 Write-Host '--- Stage 9 Session Agent stderr ---'
                 if (Test-Path $sessionAgentStderr) { Get-Content $sessionAgentStderr }
