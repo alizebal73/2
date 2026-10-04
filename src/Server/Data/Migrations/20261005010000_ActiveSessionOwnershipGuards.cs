@@ -15,11 +15,16 @@ public partial class ActiveSessionOwnershipGuards : Migration
             nullable: true);
 
         migrationBuilder.CreateIndex(
-            name: "IX_Sessions_CustomerLoginId",
+            name: "IX_Sessions_CustomerLoginId_State",
             table: "Sessions",
-            column: "CustomerLoginId",
+            columns: new[] { "CustomerLoginId", "State" },
             unique: true,
             filter: "CustomerLoginId IS NOT NULL AND State = 'Active'");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_Sessions_StationId",
+            table: "Sessions",
+            column: "StationId");
 
 
         migrationBuilder.AddForeignKey(
@@ -38,7 +43,11 @@ public partial class ActiveSessionOwnershipGuards : Migration
             table: "Sessions");
 
         migrationBuilder.DropIndex(
-            name: "IX_Sessions_CustomerLoginId",
+            name: "IX_Sessions_StationId",
+            table: "Sessions");
+
+        migrationBuilder.DropIndex(
+            name: "IX_Sessions_CustomerLoginId_State",
             table: "Sessions");
 
         migrationBuilder.DropColumn(
