@@ -213,47 +213,6 @@ public sealed class AgentHub(
 
             device.ConnectionId = Context.ConnectionId;
 
-            if (request.RunningProcesses is not null)
-            {
-                var validGameIds = request.RunningProcesses
-                    .Where(item => item.GameId.HasValue)
-                    .Select(item => item.GameId!.Value)
-                    .Distinct()
-                    .ToList();
-
-                var activeGameIds = validGameIds.Count == 0
-                    ? new HashSet<Guid>()
-                    : (await database.Games
-                        .AsNoTracking()
-                        .Where(item => item.IsActive && validGameIds.Contains(item.Id))
-                        .Select(item => item.Id)
-                        .ToListAsync(Context.ConnectionAborted))
-                        .ToHashSet();
-
-                await database.AgentProcessTelemetry
-                    .Where(item => item.AgentDeviceId == device.Id)
-                    .ExecuteDeleteAsync(Context.ConnectionAborted);
-
-                foreach (var process in request.RunningProcesses.Take(100))
-                {
-                    var processName = process.ProcessName?.Trim();
-                    if (string.IsNullOrWhiteSpace(processName) || process.ProcessId <= 0)
-                        continue;
-
-                    database.AgentProcessTelemetry.Add(new AgentProcessTelemetry
-                    {
-                        AgentDeviceId = device.Id,
-                        GameId = process.GameId.HasValue && activeGameIds.Contains(process.GameId.Value)
-                            ? process.GameId
-                            : null,
-                        ProcessName = processName[..Math.Min(260, processName.Length)],
-                        ProcessId = process.ProcessId,
-                        ObservedAt = process.ObservedAt == default ? now : process.ObservedAt,
-                        StartedAt = process.StartedAt
-                    });
-                }
-            }
-
             if (request.IsLocked && !device.IsLocked)
             {
                 device.IsLocked = true;
