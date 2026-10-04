@@ -9,7 +9,7 @@ const navItems: Array<{ key: PageKey; label: string; permissions?: string[] }> =
   { key: 'games', label: 'بازی‌ها', permissions: ['game.manage'] },
   { key: 'client-shell', label: 'کلاینت‌ها', permissions: ['client.control'] },
   { key: 'accounts', label: 'اکانت‌ها', permissions: ['account.manage'] },
-  { key: 'reports', label: 'گزارش‌ها', permissions: ['finance.view'] },
+  { key: 'reports', label: 'گزارش‌ها', permissions: ['finance.view', 'audit.view'] },
   { key: 'users', label: 'کاربران و شیفت', permissions: ['user.manage', 'shift.manage'] },
   { key: 'settings', label: 'تنظیمات', permissions: ['user.manage'] },
 ];
