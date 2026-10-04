@@ -71,3 +71,7 @@ public sealed record CreateVipPackageRequest(
     string? Description);
 
 public sealed record AssignVipPackageRequest(Guid VipPackageId);
+
+public sealed record CustomerLoginRequest(string ClientKey);
+public sealed record CustomerLoginReleaseRequest(string ClientKey);
+public sealed record ConcurrentLoginResultDto(bool Acquired, Guid LoginId, int ActiveCount, int Limit);
