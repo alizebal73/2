@@ -4435,7 +4435,9 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (HttpC
 
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
-    var customer = await database.Customers
+    try
+    {
+        var customer = await database.Customers
         .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
 
     if (customer is null)
