@@ -1,4 +1,4 @@
-# ممیزی سراسری Stage 1 تا 12 — 2026-10-03
+# ممیزی سراسری Stage 1 تا 12 — نهایی‌سازی 2026-10-05
 
 ## نتیجه اجرایی
 
@@ -9,7 +9,7 @@
 - Stage 9: Command/Kiosk و Agent-driven Session Start/End بر مبنای CI تاریخی تثبیت شده است؛ validation فیزیکی 2–3 PC همچنان Gate استقرار است.
 - Stage 10: Update/Rollback/Watchdog/Health با CI تاریخی تثبیت شده است.
 - Stage 11: Game Catalog + Account Pool/Lease از Dashboard Mock خارج شده‌اند. Process Detection صریحاً carry-forward است و تا آماده‌شدن telemetry/process contract نباید جعلی شود.
-- Stage 12: اتصال Session↔Game↔Agent↔Lease↔Credential، release/recovery، activeUsers و Real Game Apply/Sync در حال تکمیل است. این Stage هنوز تا Green شدن head نهایی Done نیست.
+- Stage 12: اتصال Session↔Game↔Agent↔Lease↔Credential، release/recovery، activeUsers و Real Game Apply/Sync روی HEAD نهایی سبز و تأیید شده است؛ Stage 12 از نظر مهندسی نرم‌افزار Done است.
 
 ## اتصال‌های کلیدی
 
@@ -112,6 +112,6 @@ GitHub API در این اتصال اجازهٔ خواندن branch protection ر
 
 ## Stage Gate
 
-Stage 12 فقط وقتی Done است که همان SHA:
-Build → Test → EF validation → Server/Migration Smoke → Agent transport → Game Apply/Sync → Session/Game/Lease/Credential E2E → Dashboard Smoke
-را سبز کند.
+Stage 12 در HEAD نهایی ae18da81761b82dcea5d11d69934fd47426c7f3d با CI Run #1369 این Gate را سبز کرده است:
+Build → Test → EF validation → Server/Migration Smoke → Agent transport → Game Apply/Sync → Session/Game/Lease/Credential E2E → Dashboard Smoke.
+بنابراین Stage 12 از نظر نرم‌افزاری بسته است؛ Gateهای فیزیکی/Production همچنان جدا هستند.
