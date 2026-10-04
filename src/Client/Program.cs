@@ -123,7 +123,7 @@ try
         var kioskEnabled = false;
         var lockOnDisconnect = true;
 
-        connection.On<AgentCommandEnvelope>("AgentCommand", async command =>
+        async Task ProcessAgentCommandAsync(AgentCommandEnvelope command)
         {
             var outcome = await HandleAgentCommandAsync(
                 connection,
@@ -198,7 +198,9 @@ try
                 await LaunchUpdateWatchdogAsync(dataDirectory, outcome.RestartVersion, Environment.ProcessId);
                 shutdown.Cancel();
             }
-        });
+        }
+
+        connection.On<AgentCommandEnvelope>("AgentCommand", ProcessAgentCommandAsync);
 
         connection.On<AgentPolicyDto>("AgentPolicyChanged", policy =>
         {
@@ -233,6 +235,12 @@ try
                 agentVersion,
                 shutdown.Token);
             await SaveStateAsync(statePath, state);
+
+            var pendingLifecycleCommand = await connection.InvokeAsync<AgentCommandEnvelope?>(
+                "GetPendingLifecycleCommand",
+                shutdown.Token);
+            if (pendingLifecycleCommand is not null)
+                await ProcessAgentCommandAsync(pendingLifecycleCommand);
 
             Console.WriteLine(
                 $"Agent متصل شد؛ شناسه سرور: {ready.AgentId}; زمان سرور: {ready.ServerUtcNow:O}; قفل={ready.IsLocked}; Kiosk={kioskEnabled}; LockOnDisconnect={lockOnDisconnect}");
