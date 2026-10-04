@@ -68,7 +68,8 @@ public sealed record CreateVipPackageRequest(
     int TotalMinutes,
     decimal DiscountPercent,
     string OverflowRule,
-    string? Description);
+    string? Description,
+    bool IsActive = true);
 
 public sealed record AssignVipPackageRequest(Guid VipPackageId);
 
