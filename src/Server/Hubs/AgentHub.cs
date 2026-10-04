@@ -327,7 +327,8 @@ public sealed class AgentHub(
                                     && (item.Status == "Sent"
                                         || item.Status == "Accepted"
                                         || item.Status == "AwaitingHealth"))
-                                || (item.CommandType is AgentCommandTypes.Restart or AgentCommandTypes.Shutdown
+                                || ((item.CommandType == AgentCommandTypes.Restart
+                                    || item.CommandType == AgentCommandTypes.Shutdown)
                                     && item.Status == "AwaitingHealth")
                                 || (item.CommandType != AgentCommandTypes.Update
                                     && item.CommandType != AgentCommandTypes.Rollback
