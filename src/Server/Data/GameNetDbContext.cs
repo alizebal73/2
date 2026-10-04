@@ -724,7 +724,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         shift.Property(item => item.Notes).HasMaxLength(500);
         shift.HasIndex(item => item.CloseAt)
             .IsUnique()
-            .HasFilter(""CloseAt" IS NULL");
+            .HasFilter("\"CloseAt\" IS NULL");
         shift.HasOne(item => item.AppUser)
             .WithMany(item => item.Shifts)
             .HasForeignKey(item => item.AppUserId)
