@@ -105,10 +105,10 @@ export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
   const busyCount = agents.filter(agent => agent.stationId && agent.lifecycleState === 'Running').length;
   const pendingCount = agents.filter(agent => agent.pendingUpdateVersion).length;
 
-  async function waitForCommand(commandId: string) {
+  async function waitForCommand(commandId: string, acceptAwaitingHealth = false) {
     for (let attempt = 0; attempt < 30; attempt += 1) {
       const status = await getAgentCommand(commandId);
-      if (isFinal(status.status)) return status;
+      if (isFinal(status.status) || (acceptAwaitingHealth && status.status === 'AwaitingHealth')) return status;
       await new Promise(resolve => window.setTimeout(resolve, 500));
     }
     throw new Error('نتیجه نهایی فرمان Agent در زمان مورد انتظار تأیید نشد.');
@@ -123,7 +123,12 @@ export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
         : type === 'rollback'
           ? await requestAgentRollback(agent.agentId)
           : await sendAgentCommand(agent.agentId, type);
-      const final = await waitForCommand(command.commandId);
+      const powerCommand = type === 'restart' || type === 'shutdown';
+      const final = await waitForCommand(command.commandId, powerCommand);
+      if (powerCommand && final.status === 'AwaitingHealth') {
+        setNotice(final.resultMessage || 'درخواست توان پذیرفته شد؛ تأیید نهایی پس از بازگشت Agent انجام می‌شود.');
+        return;
+      }
       if (final.status !== 'Succeeded') {
         throw new Error(final.resultMessage || 'فرمان Agent موفق نشد.');
       }
