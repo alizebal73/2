@@ -371,12 +371,38 @@ jobs:
               $rollbackCommand = $rollbackCommand | ConvertFrom-Json
               $rollbackCompleted = $false
               $rollbackStatus = $null
+              $rollbackDelivered = $false
               for ($i = 0; $i -lt 120; $i++) {
                 $rollbackStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($rollbackCommand.commandId)" -Method Get -WebSession $adminSession
+
+                if (Test-Path $agentStdout) {
+                  $rollbackLog = Get-Content $agentStdout -Raw
+                  if ($rollbackLog -match "CLIENT_ROLLBACK_REQUESTED:([0-9.]+)") {
+                    $rollbackDelivered = $true
+                  }
+                }
+
                 if ($rollbackStatus.status -in @('Succeeded','Failed')) { $rollbackCompleted = $true; break }
                 Start-Sleep -Milliseconds 500
               }
               if (-not $rollbackCompleted -or $rollbackStatus.status -ne 'Succeeded') {
+                Write-Host ("Stage 10 rollback diagnostics: commandId={0}; status={1}; delivered={2}; result={3}" -f $rollbackCommand.commandId, $rollbackStatus.status, $rollbackDelivered, $rollbackStatus.resultMessage)
+                Write-Host '--- Agent stdout during rollback ---'
+                if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Agent stderr during rollback ---'
+                if (Test-Path $agentStderr) { Get-Content $agentStderr }
+                Write-Host '--- Persisted Agent state during rollback ---'
+                $agentStatePath = Join-Path $agentData 'agent-state.json'
+                if (Test-Path $agentStatePath) { Get-Content $agentStatePath }
+                Write-Host '--- Update state during rollback ---'
+                $updateStatePath = Join-Path $agentData 'update-active.json'
+                if (Test-Path $updateStatePath) { Get-Content $updateStatePath }
+                Write-Host '--- Server Agent row during rollback ---'
+                try {
+                  $rollbackAgentRows = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
+                  $rollbackAgentRow = @($rollbackAgentRows | Where-Object { $_.agentId -eq $agentRow.agentId })[0]
+                  if ($rollbackAgentRow) { $rollbackAgentRow | ConvertTo-Json -Depth 8 }
+                } catch {}
                 throw 'Stage 10 rollback command did not complete successfully.'
               }
 
