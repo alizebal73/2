@@ -18,6 +18,7 @@ builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
 builder.Services.AddScoped<CustomerLoginService>();
+builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
@@ -4473,6 +4474,7 @@ app.MapPost("/api/sessions", async (
     StartSessionRequest request,
     HttpContext context,
     GameNetDbContext database,
+    SessionPricingService pricingService,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.start", cancellationToken);
@@ -4482,13 +4484,11 @@ app.MapPost("/api/sessions", async (
     if (request.CustomerId == Guid.Empty || request.StationId == Guid.Empty)
         return Results.BadRequest(new { code = "invalid_session_reference", message = "مشتری و ایستگاه معتبر نیستند." });
 
-    var customerExists = await database.Customers.AnyAsync(item => item.Id == request.CustomerId, cancellationToken);
-    if (!customerExists)
+    var customer = await database.Customers
+        .Include(item => item.VipPackage)
+        .FirstOrDefaultAsync(item => item.Id == request.CustomerId, cancellationToken);
+    if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
-
-    if (request.TariffId is not null
-        && !await database.Tariffs.AnyAsync(item => item.Id == request.TariffId.Value, cancellationToken))
-        return Results.BadRequest(new { code = "tariff_not_found", message = "تعرفه انتخاب‌شده پیدا نشد." });
 
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
     var now = DateTimeOffset.UtcNow;
@@ -4526,7 +4526,7 @@ app.MapPost("/api/sessions", async (
         Action = "SessionStart",
         EntityName = "Session",
         EntityId = session.Id.ToString(),
-        Details = "شروع جلسه · ایستگاه " + station.Name,
+        Details = "شروع جلسه · ایستگاه " + station.Name + " · نرخ مرجع " + pricing.HourlyRate.ToString("0.##") + " · تخفیف VIP " + pricing.VipDiscountPercent.ToString("0.##") + "%",
         AppUserId = auth.User!.Id
     });
 
