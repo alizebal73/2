@@ -46,14 +46,15 @@ public sealed class SessionSettlementTests : IDisposable
             Tariff = tariff,
             IsActive = true
         };
+        var sessionStart = DateTimeOffset.UtcNow.AddMinutes(-60);
         var session = new Session
         {
             Customer = customer,
             Station = station,
             Tariff = tariff,
             AppUser = user,
-            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
-            EndAt = DateTimeOffset.UtcNow.AddMinutes(0),
+            StartAt = sessionStart,
+            EndAt = sessionStart.AddMinutes(60),
             State = SessionState.Active,
             HourlyRateSnapshot = 150000m
         };
