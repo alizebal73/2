@@ -53,6 +53,7 @@ public sealed class SessionSettlementTests : IDisposable
             Tariff = tariff,
             AppUser = user,
             StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            EndAt = DateTimeOffset.UtcNow.AddMinutes(0),
             State = SessionState.Active,
             HourlyRateSnapshot = 150000m
         };
