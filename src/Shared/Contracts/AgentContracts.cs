@@ -75,9 +75,11 @@ public static class AgentCommandTypes
     public const string Update = "update";
     public const string Rollback = "rollback";
     public const string ApplyGame = "apply-game";
+    public const string Restart = "restart";
+    public const string Shutdown = "shutdown";
 
     public static bool IsSupported(string? commandType)
-        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock or Update or Rollback or ApplyGame;
+        => commandType?.Trim().ToLowerInvariant() is Ping or Lock or Unlock or LogoutLock or Update or Rollback or ApplyGame or Restart or Shutdown;
 }
 
 public sealed record AgentCommandRequest(
