@@ -5014,19 +5014,6 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
 
     try
     {
-        var migrationsAssembly = database.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrationsAssembly>();
-        var modelDiffer = database.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrationsModelDiffer>();
-        var snapshotModel = migrationsAssembly.ModelSnapshot?.Model;
-        if (snapshotModel is not null)
-        {
-            var differences = modelDiffer.GetDifferences(
-                snapshotModel.GetRelationalModel(),
-                database.Model.GetRelationalModel());
-            logger.LogCritical("EF MODEL DIAGNOSTIC: {Count} differences between migration snapshot and runtime model.", differences.Count);
-            foreach (var difference in differences)
-                logger.LogCritical("EF MODEL DIAGNOSTIC: {Operation}", difference);
-        }
-
         await database.Database.MigrateAsync();
         await DatabaseSeeder.SeedAsync(database, environment.IsDevelopment());
     }
