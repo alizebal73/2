@@ -237,7 +237,7 @@ export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
           <article
             key={agent.agentId}
             data-agent-id={agent.agentId}
-            className={\`client-card \${selected.has(agent.agentId) ? 'selected' : ''} \${agent.isOnline ? '' : 'offline'}\`}
+            className={`client-card ${selected.has(agent.agentId) ? 'selected' : ''} ${agent.isOnline ? '' : 'offline'}`}
             onMouseDown={event => {
               if (event.button !== 0) return;
               dragRef.current = { startX: event.clientX, startY: event.clientY, dragging: false };
