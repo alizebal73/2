@@ -248,13 +248,13 @@ export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
           >
             <div className="client-card-head">
               <b>{agent.name}</b>
-              <span className={\`status-pill \${agent.isOnline ? 'online' : 'offline'}\`}>{agent.isOnline ? 'آنلاین' : 'آفلاین'}</span>
+              <span className={`status-pill ${agent.isOnline ? 'online' : 'offline'}`}>{agent.isOnline ? 'آنلاین' : 'آفلاین'}</span>
             </div>
             <div className="meta ltr">{agent.deviceId}</div>
-            <div className="meta">{agent.stationName ? \`ایستگاه: \${agent.stationName}\` : 'بدون ایستگاه'}</div>
+            <div className="meta">{agent.stationName ? `ایستگاه: ${agent.stationName}` : 'بدون ایستگاه'}</div>
             <div className="meta">{agent.lifecycleState} · {agent.agentVersion || 'نسخه نامشخص'}</div>
             <div className="meta">Kiosk: {agent.kioskEnabled ? 'فعال' : 'غیرفعال'} · Lock on disconnect: {agent.lockOnDisconnect ? 'فعال' : 'غیرفعال'}</div>
-            <div className="meta">{agent.lastHealthyAt ? \`آخرین سلامت: \${new Date(agent.lastHealthyAt).toLocaleString('fa-IR')}\` : 'سلامت هنوز ثبت نشده'}</div>
+            <div className="meta">{agent.lastHealthyAt ? `آخرین سلامت: ${new Date(agent.lastHealthyAt).toLocaleString('fa-IR')}` : 'سلامت هنوز ثبت نشده'}</div>
           </article>
         ))}
       </div>
@@ -267,7 +267,7 @@ export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
           style={{ left: Math.max(8, Math.min(context?.x ?? 8, window.innerWidth - 260)), top: Math.max(8, Math.min(context?.y ?? 8, window.innerHeight - 430)) }}
           onClick={event => event.stopPropagation()}
         >
-          <strong>{selectedAgents.length > 1 ? \`\${selectedAgents.length} Agent انتخابی\` : menuAgent.name}</strong>
+          <strong>{selectedAgents.length > 1 ? `${selectedAgents.length} Agent انتخابی` : menuAgent.name}</strong>
           <button onClick={() => void runCommand(menuAgent, 'lock')}>🔒 قفل Agent</button>
           <button onClick={() => void runCommand(menuAgent, 'unlock')}>🔓 بازکردن Agent</button>
           <button onClick={() => void runCommand(menuAgent, 'logout-lock')}>🚪 خروج مشتری و قفل</button>
