@@ -211,6 +211,67 @@ public sealed class ConcurrencyTests : IDisposable
     }
 
     [Fact]
+    public async Task ConcurrentFreeBenefitDebit_CannotOverspend()
+    {
+        await using var connection1 = new SqliteConnection("DataSource=file:free-benefit-concurrency;Mode=Memory;Cache=Shared");
+        await using var connection2 = new SqliteConnection("DataSource=file:free-benefit-concurrency;Mode=Memory;Cache=Shared");
+        await connection1.OpenAsync();
+        await connection2.OpenAsync();
+
+        var options1 = new DbContextOptionsBuilder<GameNetDbContext>().UseSqlite(connection1).Options;
+        var options2 = new DbContextOptionsBuilder<GameNetDbContext>().UseSqlite(connection2).Options;
+
+        Guid customerId;
+        await using (var seed = new GameNetDbContext(options1))
+        {
+            await seed.Database.EnsureCreatedAsync();
+            var customer = new Customer
+            {
+                FullName = "Concurrent Free Benefit",
+                Code = "FREE-BENEFIT-1",
+                Username = "free-benefit-concurrent",
+                ConcurrentLoginLimit = 1,
+                VipTier = "none",
+                FreeMoney = 100m
+            };
+            seed.Customers.Add(customer);
+            await seed.SaveChangesAsync();
+            customerId = customer.Id;
+        }
+
+        async Task<bool> DebitAsync(GameNetDbContext context)
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            var updated = await context.Customers
+                .Where(item => item.Id == customerId && item.FreeMoney >= 100m)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.FreeMoney, item => item.FreeMoney - 100m)
+                    .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow));
+            if (updated != 1)
+            {
+                await transaction.RollbackAsync();
+                return false;
+            }
+
+            await transaction.CommitAsync();
+            return true;
+        }
+
+        var results = await Task.WhenAll(
+            DebitAsync(new GameNetDbContext(options1)),
+            DebitAsync(new GameNetDbContext(options2)));
+
+        Assert.Single(results, result => result);
+        Assert.Single(results, result => !result);
+
+        await using var verify = new GameNetDbContext(options1);
+        Assert.Equal(0m, await verify.Customers
+            .Where(item => item.Id == customerId)
+            .Select(item => item.FreeMoney)
+            .SingleAsync());
+    }
+
+    [Fact]
     public async Task AtomicBuffetStockClaim_CannotOversell()
     {
         await using var connection1 = new SqliteConnection("DataSource=file:buffet-stock-concurrency;Mode=Memory;Cache=Shared");
