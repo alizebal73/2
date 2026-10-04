@@ -5728,4 +5728,195 @@ static bool TryDecodeWalletRefundApprovalTarget(string? value, out WalletRefundA
     return true;
 }
 
+
+static string NormalizeVipTier(string? tier)
+{
+    var value = tier?.Trim().ToLowerInvariant();
+    return value is "silver" or "gold" or "bronze" or "custom" ? value : "none";
+}
+
+static CustomerDto ToCustomerDto(Customer customer) => new(
+    customer.Id,
+    customer.Code,
+    customer.Username,
+    customer.FullName,
+    customer.Alias,
+    customer.NationalId,
+    customer.Phone,
+    customer.Email,
+    customer.VipTier,
+    customer.Balance,
+    customer.FreeMoney,
+    customer.FreeTimeMinutes,
+    customer.ConcurrentLoginLimit,
+    customer.Notes);
+
+static async Task InitializeDatabaseAsync(
+    IServiceProvider services,
+    string databasePath,
+    ILogger logger,
+    bool includeDemoData)
+{
+    await using var scope = services.CreateAsyncScope();
+    var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
+
+    try
+    {
+        await database.Database.MigrateAsync();
+        await DatabaseSeeder.SeedAsync(database, includeDemoData);
+    }
+    catch (Exception exception) when (IsMigrationRecoveryCandidate(exception))
+    {
+        logger.LogCritical(
+            exception,
+            "خطای مهاجرت دیتابیس در {DatabasePath} رخ داد. حذف خودکار دیتابیس غیرفعال است؛ قبل از ادامه، فایل پشتیبان/Recovery بررسی شود.",
+            databasePath);
+
+        throw new InvalidOperationException(
+            "مهاجرت دیتابیس ناموفق بود. برای جلوگیری از از دست رفتن اطلاعات، دیتابیس حذف یا بازسازی خودکار نشد. ابتدا Recovery/Backup را بررسی کنید.",
+            exception);
+    }
+}
+
+static bool IsMigrationRecoveryCandidate(Exception exception)
+{
+    return exception is SqliteException or AggregateException { InnerException: SqliteException }
+        || exception.Message.Contains("FOREIGN KEY constraint failed", StringComparison.OrdinalIgnoreCase)
+        || exception.Message.Contains("SQLite Error 19", StringComparison.OrdinalIgnoreCase);
+}
+
+static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
+    GameNetDbContext database,
+    Shift shift,
+    decimal? countedCashOverride,
+    CancellationToken cancellationToken)
+{
+    var end = shift.CloseAt ?? DateTimeOffset.UtcNow;
+
+    var cashSales = await database.InvoicePayments
+        .Where(item => item.Method == "cash"
+            && item.Invoice.Status == InvoiceStatus.Paid
+            && item.Invoice.PaidAt != null
+            && item.Invoice.PaidAt >= shift.OpenAt
+            && item.Invoice.PaidAt <= end)
+        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+    var expenseTotal = await database.Expenses
+        .Where(item => item.ShiftId == shift.Id)
+        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+    var externalCash = 0m;
+    var expected = shift.CashOpening + cashSales - expenseTotal;
+    var counted = countedCashOverride ?? shift.CashClosing;
+    var difference = counted.HasValue ? counted.Value - expected : 0m;
+
+    return new ShiftSnapshotDto(
+        shift.Id,
+        shift.AppUserId,
+        shift.AppUser?.FullName ?? "کاربر",
+        shift.OpenAt,
+        shift.CloseAt,
+        shift.CashOpening,
+        counted,
+        cashSales,
+        expenseTotal,
+        externalCash,
+        expected,
+        difference,
+        shift.Notes);
+}
+
+static AppUserDto ToAppUserDto(AppUser user)
+    => new(
+        user.Id,
+        user.FullName,
+        user.UserName,
+        user.Email,
+        user.Role,
+        user.IsActive,
+        user.LastLoginAt,
+        user.Permissions.Select(item => item.Permission.Name).OrderBy(name => name).ToArray());
+
+public sealed record LoginRequest(string UserName, string Password);
+public sealed record AppUserDto(Guid Id, string FullName, string UserName, string Email, string Role, bool IsActive, DateTimeOffset? LastLoginAt, IReadOnlyList<string> Permissions);
+public sealed record AppUserWriteRequest(string FullName, string UserName, string Email, string Password, string Role, bool IsActive = true);
+public sealed record PermissionAssignmentRequest(IReadOnlyList<string> PermissionNames);
+public sealed record ApprovalCreateRequest(string Action, string EntityName, string? EntityId, string Reason);
+public sealed record ApprovalOperationRequest(string Reason);
+public sealed record PayrollProfileRequest(
+    string? Phone,
+    string PayType,
+    decimal HourlyRate,
+    decimal MonthlySalary,
+    decimal OvertimeRate,
+    DateTimeOffset? EmploymentStartDate,
+    string? WorkSchedule,
+    string? Notes,
+    bool IsActive = true);
+
+public sealed record PayrollEntryRequest(
+    string Kind,
+    decimal Amount,
+    string Reason,
+    string? PaymentMethod = null,
+    string? ReceiptNumber = null,
+    decimal? EmployeePayableDelta = null,
+    decimal? OwnerReceivableDelta = null);
+
+public sealed record ApprovalDecisionRequest(string? Note);
+public sealed record WalletRefundRequestDto(decimal Amount, string? Reason, Guid? SourceTransactionId);
+public sealed record WalletRefundApprovalTarget(Guid CustomerId, decimal Amount, Guid? SourceTransactionId);
+
+public sealed record StartShiftRequest(
+    string? OperatorName,
+    Guid? AppUserId,
+    decimal CashOpening,
+    string? Note);
+
+public sealed record CloseShiftRequest(
+    decimal CashClosing,
+    decimal ExternalCash,
+    string? Note);
+
+public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId, decimal? HourlyRateOverride, int? Persons);
+public sealed record SessionDetailsRequest(decimal? HourlyRate, int? Persons);
+public sealed record SessionTimeAdjustmentRequest(int Minutes);
+public sealed record SessionTransferRequest(Guid TargetStationId);
+public sealed record SessionTransferResultDto(Guid SessionId, Guid StationId);
+public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, DateTimeOffset StartAt);
+
+public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
+public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
+public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, decimal Revenue, decimal Expense, decimal OperatingProfit);
+public sealed record FinanceTransactionDto(Guid Id, DateTimeOffset ClosedAt, string Description, decimal Amount, string Method, string Status);
+
+public sealed record CustomerDebtRequest(decimal Amount, string? Description, Guid? AppUserId);
+public sealed record CustomerHistoryItemDto(Guid Id, string Type, string Description, decimal Amount, DateTimeOffset CreatedAt, Guid? ReferenceId);
+public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, int MinimumStock = 0, string? Unit = null, Guid? AppUserId = null);
+public sealed record UpdateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int MinimumStock = 0, string? Unit = null, bool IsActive = true, Guid? AppUserId = null);
+public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment", decimal? UnitCost = null);
+public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
+public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId, Guid? SessionId = null);
+public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
+public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
+public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);
+public sealed record CustomerLoginRequest(string ClientKey);
+public sealed record CustomerLoginReleaseRequest(string ClientKey);
+public sealed record ConcurrentLoginResultDto(bool Acquired, Guid LoginId, int ActiveCount, int Limit);
+
+public sealed record ShiftSnapshotDto(
+    Guid Id,
+    Guid AppUserId,
+    string Operator,
+    DateTimeOffset OpenedAt,
+    DateTimeOffset? ClosedAt,
+    decimal CashOpening,
+    decimal? CashClosing,
+    decimal CashSales,
+    decimal Expenses,
+    decimal ExternalCash,
+    decimal ExpectedCash,
+    decimal Difference,
+    string? Note);
+
 public partial class Program { }
