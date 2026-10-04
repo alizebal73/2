@@ -75,7 +75,7 @@ public sealed class AccountPoolTests
     }
 
     [Fact]
-    public async Task ConcurrentAllocation_CannotLeaseTheSamePoolEntryTwice()
+    public async Task ConcurrentAllocation_CannotLeaseTheSamePoolEntryTwice_AndRetriesNextFreeEntry()
     {
         var databaseName = $"stage11-concurrent-{Guid.NewGuid():N}";
         await using var keeper = CreateSharedMemoryConnection(databaseName);
@@ -90,14 +90,23 @@ public sealed class AccountPoolTests
             await setup.SaveChangesAsync();
             gameId = game.Id;
 
-            setup.AccountPoolEntries.Add(new AccountPoolEntry
-            {
-                Title = "Pool-Concurrent",
-                Platform = "Steam",
-                AllowedGameIdsCsv = game.Id.ToString(),
-                Status = AccountPoolStatus.Free,
-                IsActive = true
-            });
+            setup.AccountPoolEntries.AddRange(
+                new AccountPoolEntry
+                {
+                    Title = "Pool-Concurrent-1",
+                    Platform = "Steam",
+                    AllowedGameIdsCsv = game.Id.ToString(),
+                    Status = AccountPoolStatus.Free,
+                    IsActive = true
+                },
+                new AccountPoolEntry
+                {
+                    Title = "Pool-Concurrent-2",
+                    Platform = "Steam",
+                    AllowedGameIdsCsv = game.Id.ToString(),
+                    Status = AccountPoolStatus.Free,
+                    IsActive = true
+                });
             await setup.SaveChangesAsync();
         }
 
@@ -117,8 +126,8 @@ public sealed class AccountPoolTests
         });
 
         var results = await Task.WhenAll(taskA, taskB);
-        Assert.Equal(1, results.Count(result => result.Account is not null && result.Lease is not null));
-        Assert.Equal(1, results.Count(result => result.Account is null && result.Lease is null));
+        Assert.Equal(2, results.Count(result => result.Account is not null && result.Lease is not null));
+        Assert.Equal(2, results.Select(result => result.Lease?.AccountPoolEntryId).Distinct().Count());
     }
 
     [Fact]
