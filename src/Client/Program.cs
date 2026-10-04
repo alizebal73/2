@@ -203,7 +203,7 @@ try
             return Task.CompletedTask;
         });
 
-        connection.On<AgentReadyDto>("AgentReady", async ready =>
+        async Task HandleAgentReadyAsync(AgentReadyDto ready)
         {
             kioskEnabled = ready.KioskEnabled;
             lockOnDisconnect = ready.LockOnDisconnect;
@@ -235,18 +235,20 @@ try
             if (!testSessionFlowCompleted
                 && testSessionFlow
                 && Guid.TryParse(testSessionCustomerId, out var testCustomerId)
-                && Guid.TryParse(testSessionLoginId, out var testLoginId))
+                && Guid.TryParse(testSessionLoginId, out var testCustomerLoginId))
             {
                 testSessionFlowCompleted = true;
                 _ = RunTestSessionFlowAsync(
                     connection,
                     testCustomerId,
-                    testLoginId,
+                    testCustomerLoginId,
                     Guid.TryParse(testGameIdText, out var testGameId) ? testGameId : null,
                     testGameAccountFlow,
                     shutdown.Token);
             }
-        });
+        }
+
+        connection.On<AgentReadyDto>("AgentReady", HandleAgentReadyAsync);
 
         connection.Reconnecting += error =>
         {
@@ -260,17 +262,29 @@ try
             state = state with { LifecycleState = ClientLifecycleStates.Recovering };
             await SaveStateAsync(statePath, state);
             Console.WriteLine($"Agent دوباره متصل شد ({connectionId}).");
-            var heartbeat = await SendHeartbeatAsync(connection, agentVersion, osVersion, lockScreen, state, shutdown.Token);
+
+            var ready = await connection.InvokeAsync<AgentReadyDto>(
+                "ConfirmConnection",
+                shutdown.Token);
+            await HandleAgentReadyAsync(ready);
+
+            var heartbeat = await SendHeartbeatAsync(
+                connection,
+                agentVersion,
+                osVersion,
+                lockScreen,
+                state,
+                shutdown.Token);
             if (heartbeat.HasValue)
             {
+                await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
                 state = state with
                 {
                     LifecycleState = ClientLifecycleStates.Running,
                     LastUpdateError = null,
                     LastHealthyAt = DateTimeOffset.UtcNow
                 };
-                await updateManager.MarkHealthyAsync(agentVersion, shutdown.Token);
-                state = await FinalizePendingLifecycleCommandAsync(
+                await FinalizePendingLifecycleCommandAsync(
                     connection,
                     state,
                     agentVersion,
@@ -302,7 +316,13 @@ try
         try
         {
             await connection.StartAsync(shutdown.Token);
-            Console.WriteLine($"Agent GameNet روی {hubUrl} فعال شد.");
+
+            var initialReady = await connection.InvokeAsync<AgentReadyDto>(
+                "ConfirmConnection",
+                shutdown.Token);
+            await HandleAgentReadyAsync(initialReady);
+
+            Console.WriteLine($"Agent GameNet روی {hubUrl} فعال و تأیید شد.");
 
             while (!shutdown.IsCancellationRequested
                 && connection.State != HubConnectionState.Disconnected)
