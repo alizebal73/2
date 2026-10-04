@@ -306,8 +306,9 @@ public sealed class AccountPoolService(
             || !lease.Session.CustomerLoginId.HasValue
             || lease.Session.CustomerLogin is null
             || !lease.Session.CustomerLogin.IsActive
+            || lease.Session.AgentDevice is null
             || lease.Session.CustomerLogin.Id != lease.Session.CustomerLoginId.Value
-            || lease.Session.CustomerLogin.ClientKey != lease.Session.AgentDevice?.DeviceId
+            || lease.Session.CustomerLogin.ClientKey != lease.Session.AgentDevice.DeviceId
             || lease.GameId != lease.Session.GameId
             || !string.Equals(lease.LeaseToken, leaseToken, StringComparison.Ordinal)
             || !lease.CredentialAccessExpiresAt.HasValue
@@ -315,9 +316,12 @@ public sealed class AccountPoolService(
             || string.IsNullOrWhiteSpace(lease.AccountPoolEntry.SecretCiphertext))
             return null;
 
+        var session = lease.Session;
+        var credentialSecret = lease.AccountPoolEntry.SecretCiphertext!;
+
         try
         {
-            var secret = credentialProtection.Unprotect(lease.AccountPoolEntry.SecretCiphertext);
+            var secret = credentialProtection.Unprotect(credentialSecret);
             return new AgentGameAccountCredentialDto(
                 lease.Id,
                 lease.GameId,
