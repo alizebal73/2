@@ -56,12 +56,14 @@ jobs:
           dotnet ef migrations add Stage12ModelProbe --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --output-dir Data/Migrations/__Stage12ModelProbe --context GameNetDbContext --no-build
           $probeMigration = Get-ChildItem $probeDir -Filter '????????????????_Stage12ModelProbe.cs' -File -ErrorAction SilentlyContinue | Select-Object -First 1
           if ($probeMigration) {
+            Write-Host '===== TEMP EF PROBE: generated migration ====='
+            Get-Content $probeMigration.FullName
+            Write-Host '===== TEMP EF PROBE: generated snapshot diff ====='
+            git diff -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+            Write-Host '===== END TEMP EF PROBE ====='
             $probeText = Get-Content $probeMigration.FullName -Raw
             if ($probeText -match 'migrationBuilder\.(Add|Alter|Drop|Create|Rename|Sql)') {
-              Write-Host 'Unexpected model-diff migration was scaffolded:'
-              git diff -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
-              Write-Host ("===== " + $probeMigration.FullName + " =====")
-              Get-Content $probeMigration.FullName
+              Write-Host 'Unexpected model-diff migration was scaffolded.'
               git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
               Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
               throw 'EF model snapshot has pending changes.'
