@@ -3490,9 +3490,18 @@ app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
 app.MapPost("/api/customers/{customerId:guid}/login-release", async (
     Guid customerId,
     CustomerLoginReleaseRequest request,
+    HttpContext context,
     CustomerLoginService loginService,
+    GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     try
     {
         var result = await loginService.ReleaseAsync(
