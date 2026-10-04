@@ -24,6 +24,7 @@ public sealed class SessionPricingService(GameNetDbContext database)
 
         var station = await database.Stations
             .AsNoTracking()
+            .Include(item => item.Tariff)
             .FirstOrDefaultAsync(item => item.Id == stationId, cancellationToken);
         if (station is null)
             throw new KeyNotFoundException("ایستگاه برای محاسبه تعرفه پیدا نشد.");
@@ -37,9 +38,13 @@ public sealed class SessionPricingService(GameNetDbContext database)
             ? Math.Min(100m, Math.Max(0m, customer.VipPackage!.DiscountPercent))
             : 0m;
 
+        var baseRate = station.Tariff?.IsActive == true
+            ? station.Tariff.HourlyRate
+            : station.RatePerHour;
+
         var hourlyRate = Math.Max(
             0m,
-            Math.Round(station.RatePerHour * (1m - vipDiscount / 100m), 0, MidpointRounding.AwayFromZero));
+            Math.Round(baseRate * (1m - vipDiscount / 100m), 0, MidpointRounding.AwayFromZero));
 
         return new SessionPricingSnapshot(hourlyRate, vipDiscount, vipActive);
     }
