@@ -151,7 +151,7 @@ public sealed class ReportingService(GameNetDbContext database)
                     group.Count(),
                     minutes,
                     revenue,
-                    vipMinutes,
+                    (int)Math.Round(vipMinutes),
                     customer?.Balance ?? 0m,
                     draftDebtRows.Where(item => item.CustomerId == group.Key).Sum(item => item.TotalAmount));
             })
