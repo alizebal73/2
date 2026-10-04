@@ -13,7 +13,7 @@ public sealed record SessionSettlementRequest(
     decimal? DiscountAmount = null,
     decimal? PrepaidAmount = null);
 
-public sealed class SessionSettlementService(GameNetDbContext database)
+public sealed class SessionSettlementService(GameNetDbContext database, SessionPricingService pricingService)
 {
     private static readonly HashSet<string> AllowedMethods = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -48,8 +48,27 @@ public sealed class SessionSettlementService(GameNetDbContext database)
 
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
+        // Serialize concurrent settlement attempts for the same Session on SQLite by
+        // upgrading this transaction to a writer before reading the terminal state.
+        var lockStamp = DateTimeOffset.UtcNow;
+        var locked = await database.Sessions
+            .Where(item => item.Id == sessionId
+                && (item.State == SessionState.Active || item.State == SessionState.Ended))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, lockStamp), cancellationToken);
+
+        if (locked != 1)
+            throw new InvalidOperationException("این جلسه قبلاً بسته یا تسویه شده است.");
+
+        // ExecuteUpdate changes UpdatedAt directly in the database, so any Session
+        // entity already tracked by this scoped DbContext now carries a stale
+        // concurrency token. Clear the tracker before reloading the authoritative
+        // Session graph to make the terminal SaveChanges concurrency-safe.
+        database.ChangeTracker.Clear();
+
         var session = await database.Sessions
             .Include(item => item.Customer)
+                .ThenInclude(item => item.VipPackage)
             .Include(item => item.Station)
             .FirstOrDefaultAsync(item => item.Id == sessionId, cancellationToken);
 
@@ -67,11 +86,30 @@ public sealed class SessionSettlementService(GameNetDbContext database)
             .Where(item => item.Method == "gift")
             .Sum(item => item.Amount);
 
-        var elapsedMinutes = SessionTiming.GetBillableMinutes(session, DateTimeOffset.UtcNow);
+        var now = DateTimeOffset.UtcNow;
+        var elapsedMinutes = SessionTiming.GetBillableMinutes(session, now);
         if (request.FreeTimeMinutes < 0 || request.FreeTimeMinutes > Math.Ceiling(elapsedMinutes))
             throw new InvalidOperationException("دقیقه اعتبار رایگان مصرف‌شده با زمان جلسه سازگار نیست.");
         if (request.TimeAmount is < 0 || request.DiscountAmount is < 0 || request.PrepaidAmount is < 0)
             throw new ArgumentException("جزئیات مبلغ تسویه معتبر نیست.");
+
+        var pricing = await pricingService.GetPricingAsync(
+            session.CustomerId,
+            session.StationId,
+            now,
+            cancellationToken);
+        var authoritativeHourlyRate = session.HourlyRateOverride
+            ?? session.HourlyRateSnapshot
+            ?? pricing.HourlyRate;
+        var authoritativeTimeAmount = SessionPricingService.CalculateTimeAmount(
+            session,
+            authoritativeHourlyRate,
+            request.FreeTimeMinutes,
+            now);
+
+        if (request.TimeAmount.HasValue
+            && Math.Abs(request.TimeAmount.Value - authoritativeTimeAmount) > 0.01m)
+            throw new InvalidOperationException("مبلغ زمان جلسه با محاسبهٔ سرور مطابقت ندارد.");
 
         var invoice = await database.Invoices
             .FirstOrDefaultAsync(item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft, cancellationToken);
@@ -97,7 +135,7 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         var existingBuffetTotal = await database.InvoiceItems
             .Where(item => item.InvoiceId == invoice.Id && item.ProductId.HasValue)
             .SumAsync(item => item.Amount, cancellationToken);
-        var timeAmount = request.TimeAmount ?? Math.Max(0m, request.TotalAmount - existingBuffetTotal);
+        var timeAmount = authoritativeTimeAmount;
         if (timeAmount > 0)
         {
             database.InvoiceItems.Add(new InvoiceItem
@@ -124,6 +162,9 @@ public sealed class SessionSettlementService(GameNetDbContext database)
         }
 
         var prepaidAmount = Math.Max(0m, request.PrepaidAmount ?? 0m);
+        if (prepaidAmount > session.PrepaidAmount)
+            throw new InvalidOperationException("پیش‌پرداخت مصرف‌شده بیشتر از اعتبار ثبت‌شدهٔ جلسه است.");
+
         if (prepaidAmount > 0)
         {
             database.InvoiceItems.Add(new InvoiceItem
@@ -136,22 +177,18 @@ public sealed class SessionSettlementService(GameNetDbContext database)
             });
         }
 
+        var expectedTotal = Math.Max(
+            0m,
+            existingBuffetTotal + timeAmount - discountAmount - prepaidAmount);
+
+        if (Math.Abs(request.TotalAmount - expectedTotal) > 0.01m)
+            throw new InvalidOperationException(
+                $"مبلغ نهایی تسویه با محاسبهٔ سرور مطابقت ندارد. مبلغ معتبر: {expectedTotal:0.##}.");
+
         var itemSubtotal = existingBuffetTotal + timeAmount - discountAmount - prepaidAmount;
-        var roundingAdjustment = request.TotalAmount - itemSubtotal;
-        if (Math.Abs(roundingAdjustment) >= 0.01m)
-        {
-            database.InvoiceItems.Add(new InvoiceItem
-            {
-                InvoiceId = invoice.Id,
-                Description = "تعدیل نهایی تسویه",
-                Quantity = 1,
-                UnitPrice = roundingAdjustment,
-                Amount = roundingAdjustment
-            });
-        }
 
         invoice.AppUserId ??= request.AppUserId;
-        invoice.TotalAmount = request.TotalAmount;
+        invoice.TotalAmount = expectedTotal;
         invoice.Status = InvoiceStatus.Paid;
         invoice.PaidAt = DateTimeOffset.UtcNow;
 
@@ -219,9 +256,14 @@ public sealed class SessionSettlementService(GameNetDbContext database)
             });
         }
 
-        session.TotalAmount = request.TotalAmount;
+        session.TotalAmount = expectedTotal;
         session.EndAt ??= DateTimeOffset.UtcNow;
         session.State = SessionState.Completed;
+        // A completed Session is terminal for the Station too. Keep the
+        // Dashboard/read model derived from the same server-side invariant,
+        // regardless of whether the session arrived here through Agent EndSession
+        // or through an operator settlement path.
+        session.Station.State = StationState.Available;
 
         database.AuditLogs.Add(new AuditLog
         {
