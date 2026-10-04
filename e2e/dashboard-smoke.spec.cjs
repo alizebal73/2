@@ -91,6 +91,72 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await expect(page.getByText('وضعیت مالی')).toBeVisible();
 });
 
+test('dashboard exposes real Audit Explorer', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-audit-operator',
+      fullName: 'اپراتور Audit',
+      userName: 'audit_operator',
+      email: 'audit@gamenet.local',
+      role: 'Operator',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['audit.view']
+    })
+  }));
+
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
+  }));
+
+  await page.route('**/api/audit?**', route => {
+    const url = new URL(route.request().url());
+    const action = url.searchParams.get('action');
+    const allRows = [
+      {
+        id: 'audit-1',
+        createdAt: new Date().toISOString(),
+        appUserId: 'e2e-audit-operator',
+        operator: 'اپراتور Audit',
+        action: 'SessionStarted',
+        entityName: 'Session',
+        entityId: 'session-01',
+        details: 'شروع جلسه PC ۰۱',
+      },
+      {
+        id: 'audit-2',
+        createdAt: new Date(Date.now() - 60000).toISOString(),
+        appUserId: 'e2e-audit-operator',
+        operator: 'اپراتور Audit',
+        action: 'TariffUpdated',
+        entityName: 'Tariff',
+        entityId: 'tariff-01',
+        details: 'ویرایش تعرفه PC',
+      },
+    ];
+    const items = action ? allRows.filter(row => row.action.includes(action)) : allRows;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ page: 1, pageSize: 50, total: items.length, items })
+    });
+  });
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'گزارش‌ها' }).click();
+  await expect(page.getByTestId('audit-explorer')).toBeVisible();
+  await expect(page.getByTestId('audit-row')).toHaveCount(2);
+  await page.getByLabel('عملیات').fill('TariffUpdated');
+  await expect(page.getByTestId('audit-row')).toHaveCount(1);
+  await expect(page.getByTestId('audit-row')).toContainText('TariffUpdated');
+  await expect(page.getByText(/۱ مورد در این صفحه/)).toBeVisible();
+});
+
 test('dashboard exposes operator account management', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
     status: 200,
