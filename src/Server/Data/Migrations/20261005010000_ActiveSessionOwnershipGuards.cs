@@ -28,10 +28,6 @@ public partial class ActiveSessionOwnershipGuards : Migration
             unique: true,
             filter: "State = 'Active'");
 
-        migrationBuilder.CreateIndex(
-            name: "IX_Sessions_CustomerLoginId",
-            table: "Sessions",
-            column: "CustomerLoginId");
 
         migrationBuilder.AddForeignKey(
             name: "FK_Sessions_CustomerLogins_CustomerLoginId",
@@ -46,10 +42,6 @@ public partial class ActiveSessionOwnershipGuards : Migration
     {
         migrationBuilder.DropForeignKey(
             name: "FK_Sessions_CustomerLogins_CustomerLoginId",
-            table: "Sessions");
-
-        migrationBuilder.DropIndex(
-            name: "IX_Sessions_CustomerLoginId",
             table: "Sessions");
 
         migrationBuilder.DropIndex(
