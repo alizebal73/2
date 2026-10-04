@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { mockService } from '../../services/mockService';
 import { getServerGames } from '../../services/gameService';
 import { getServerAccountPool } from '../../services/accountPoolService';
+import { getServerCustomers } from '../../services/customerService';
+import { getManagementInvoices, getServerProducts } from '../../services/operationsService';
+import { getUsers } from '../../services/authService';
+import { getTariffs } from '../../services/tariffService';
+import { getAgentStatuses } from '../../services/agentService';
 import type {
   AccountRecord,
-  ClientRecord,
+  AgentStatusDto,
   CustomerRecord,
   GameRecord,
   ManagementInvoiceRecord,
@@ -66,7 +70,7 @@ function createResults(
   tariffs: TariffRecord[],
   games: GameRecord[],
   accounts: AccountRecord[],
-  clients: ClientRecord[],
+  agents: AgentStatusDto[],
   users: UserRecord[],
   invoices: ManagementInvoiceRecord[],
   stations: StationDto[],
@@ -120,13 +124,13 @@ function createResults(
       page: 'accounts' as PageKey,
       keywords: [item.title, item.platform, item.status, item.owner, item.assignedClient, ...item.allowedGames].join(' '),
     })),
-    ...clients.map(item => ({
-      id: item.id,
+    ...agents.map(item => ({
+      id: item.agentId,
       title: item.name,
-      meta: `کلاینت · ${item.online ? 'آنلاین' : 'آفلاین'} · ${item.ip} · ${item.game || 'بدون بازی'}`,
+      meta: `کلاینت · ${item.isOnline ? 'آنلاین' : 'آفلاین'} · ${item.deviceId} · ${item.lifecycleState}`,
       kind: 'کلاینت',
       page: 'client-shell' as PageKey,
-      keywords: [item.name, item.type, item.version, item.ip, item.dns1, item.dns2, item.systemNumber, item.user, item.game, item.network, item.bootMode].join(' '),
+      keywords: [item.name, item.deviceId, item.stationName, item.agentVersion, item.lifecycleState, item.isLocked ? 'قفل' : 'باز'].filter(Boolean).join(' '),
     })),
     ...users.map(item => ({
       id: item.id,
@@ -170,18 +174,30 @@ export function GlobalCommandCenter({ open, stations, onNavigate, onClose }: Pro
     setLoading(true);
     setLoadError('');
     void Promise.all([
-      mockService.getCustomers(),
-      mockService.getProducts(),
-      mockService.getTariffs(),
+      getServerCustomers(),
+      getServerProducts(),
+      getTariffs(),
       getServerGames(),
       getServerAccountPool(),
-      mockService.getClients(),
-      mockService.getUsers(),
-      mockService.getManagementInvoices(),
+      getAgentStatuses(),
+      getUsers(),
+      getManagementInvoices(),
     ])
-      .then(([customers, products, tariffs, games, accounts, clients, users, invoices]) => {
+      .then(([customers, products, tariffs, games, accounts, agents, users, invoices]) => {
         if (cancelled) return;
-        setData(createResults(customers, products, tariffs, games, accounts, clients, users, invoices, stations));
+        const mappedTariffs: TariffRecord[] = tariffs.map(item => ({
+          id: item.id,
+          title: item.name,
+          stationType: 'PC',
+          tier: 'normal',
+          pricePerHour: item.hourlyRate,
+          daily: item.dailyRate,
+          vipDiscount: 0,
+          nightRate: 0,
+          nightHours: '',
+          active: item.isActive,
+        }));
+        setData(createResults(customers, products, mappedTariffs, games, accounts, agents, users, invoices, stations));
       })
       .catch(() => {
         if (!cancelled) setLoadError('اطلاعات جست‌وجو بارگذاری نشد. دوباره تلاش کنید.');
