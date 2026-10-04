@@ -814,6 +814,7 @@ jobs:
             $env:GAMENET_AGENT_TEST_LOGIN_ID = $customerAuth.loginId
             $env:GAMENET_AGENT_TEST_GAME_ID = $stage12Game.id
             $env:GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW = '1'
+            $env:GAMENET_AGENT_TEST_SESSION_HOLD_SECONDS = '5'
 
             $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
               'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
