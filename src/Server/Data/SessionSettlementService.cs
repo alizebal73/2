@@ -60,6 +60,12 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         if (locked != 1)
             throw new InvalidOperationException("این جلسه قبلاً بسته یا تسویه شده است.");
 
+        // ExecuteUpdate changes UpdatedAt directly in the database, so any Session
+        // entity already tracked by this scoped DbContext now carries a stale
+        // concurrency token. Clear the tracker before reloading the authoritative
+        // Session graph to make the terminal SaveChanges concurrency-safe.
+        database.ChangeTracker.Clear();
+
         var session = await database.Sessions
             .Include(item => item.Customer)
                 .ThenInclude(item => item.VipPackage)
