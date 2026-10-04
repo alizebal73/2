@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { mockService } from '../../services/mockService';
 import { getServerGames } from '../../services/gameService';
 import { getServerAccountPool } from '../../services/accountPoolService';
+import { getServerCustomers } from '../../services/customerService';
+import { getServerProducts } from '../../services/buffetService';
+import { getUsers } from '../../services/authService';
+import { getTariffs } from '../../services/tariffService';
+import { getAgentStatuses } from '../../services/agentService';
 import type {
   AccountRecord,
-  ClientRecord,
+  AgentStatusDto,
+  AppUserRecord,
   CustomerRecord,
   GameRecord,
-  ManagementInvoiceRecord,
   PageKey,
   ProductRecord,
   StationDto,
@@ -66,9 +70,8 @@ function createResults(
   tariffs: TariffRecord[],
   games: GameRecord[],
   accounts: AccountRecord[],
-  clients: ClientRecord[],
+  agents: AgentStatusDto[],
   users: UserRecord[],
-  invoices: ManagementInvoiceRecord[],
   stations: StationDto[],
 ): SearchResult[] {
   return [
@@ -120,13 +123,13 @@ function createResults(
       page: 'accounts' as PageKey,
       keywords: [item.title, item.platform, item.status, item.owner, item.assignedClient, ...item.allowedGames].join(' '),
     })),
-    ...clients.map(item => ({
-      id: item.id,
+    ...agents.map(item => ({
+      id: item.agentId,
       title: item.name,
-      meta: `کلاینت · ${item.online ? 'آنلاین' : 'آفلاین'} · ${item.ip} · ${item.game || 'بدون بازی'}`,
+      meta: `کلاینت · ${item.isOnline ? 'آنلاین' : 'آفلاین'} · ${item.deviceId} · ${item.lifecycleState}`,
       kind: 'کلاینت',
       page: 'client-shell' as PageKey,
-      keywords: [item.name, item.type, item.version, item.ip, item.dns1, item.dns2, item.systemNumber, item.user, item.game, item.network, item.bootMode].join(' '),
+      keywords: [item.name, item.deviceId, item.stationName, item.agentVersion, item.lifecycleState, item.isLocked ? 'قفل' : 'باز'].filter(Boolean).join(' '),
     })),
     ...users.map(item => ({
       id: item.id,
@@ -135,15 +138,7 @@ function createResults(
       kind: 'کاربر',
       page: 'users' as PageKey,
       keywords: [item.name, item.role, item.shift, ...item.permissions].join(' '),
-    })),
-    ...invoices.map(item => ({
-      id: item.id,
-      title: `فاکتور ${item.stationName}`,
-      meta: `فاکتور · مشتری ${item.customerCode || 'مهمان'} · ${new Intl.NumberFormat('fa-IR').format(item.totalAmount)} تومان · ${item.status === 'paid' ? 'پرداخت‌شده' : item.status === 'pending' ? 'در انتظار' : 'باطل'}`,
-      kind: 'فاکتور',
-      page: 'reports' as PageKey,
-      keywords: [item.id, item.stationId, item.stationName, item.customerCode, item.paymentMethod, item.operator, item.status, item.totalAmount].join(' '),
-    })),
+    }))
   ];
 }
 
@@ -170,18 +165,37 @@ export function GlobalCommandCenter({ open, stations, onNavigate, onClose }: Pro
     setLoading(true);
     setLoadError('');
     void Promise.all([
-      mockService.getCustomers(),
-      mockService.getProducts(),
-      mockService.getTariffs(),
+      getServerCustomers(),
+      getServerProducts(),
+      getTariffs(),
       getServerGames(),
       getServerAccountPool(),
-      mockService.getClients(),
-      mockService.getUsers(),
-      mockService.getManagementInvoices(),
+      getAgentStatuses(),
+      getUsers(),
     ])
-      .then(([customers, products, tariffs, games, accounts, clients, users, invoices]) => {
+      .then(([customers, products, tariffs, games, accounts, agents, users]) => {
         if (cancelled) return;
-        setData(createResults(customers, products, tariffs, games, accounts, clients, users, invoices, stations));
+        const mappedTariffs: TariffRecord[] = tariffs.map(item => ({
+          id: item.id,
+          title: item.name,
+          stationType: 'PC',
+          tier: 'normal',
+          pricePerHour: item.hourlyRate,
+          daily: item.dailyRate,
+          vipDiscount: 0,
+          nightRate: 0,
+          nightHours: '',
+          active: item.isActive,
+        }));
+        const mappedUsers: UserRecord[] = (users as AppUserRecord[]).map(item => ({
+          id: item.id,
+          name: item.fullName,
+          role: item.role.toLowerCase() === 'owner' ? 'owner' : item.role.toLowerCase() === 'admin' || item.role.toLowerCase() === 'manager' ? 'admin' : 'operator',
+          shift: 'سرور',
+          sales: 0,
+          permissions: item.permissions,
+        }));
+        setData(createResults(customers, products, mappedTariffs, games, accounts, agents, mappedUsers, stations));
       })
       .catch(() => {
         if (!cancelled) setLoadError('اطلاعات جست‌وجو بارگذاری نشد. دوباره تلاش کنید.');
