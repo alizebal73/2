@@ -133,15 +133,6 @@ jobs:
             }
             Write-Host ("Stage 13 Audit Explorer API smoke passed: total={0}" -f $auditSmoke.total)
 
-            $sessionReportSmoke = Invoke-RestMethod -Uri "$baseUrl/api/reports/sessions?page=1&pageSize=20&state=Completed" -Method Get -WebSession $adminSession
-            if ([int]$sessionReportSmoke.total -lt 1 -or -not @($sessionReportSmoke.items | Where-Object { $_.id -eq $startedSession.sessionId -and $_.state -eq 'Completed' }).Count) {
-              throw 'Stage 13.2 Sessions report smoke did not return the completed smoke session.'
-            }
-            if ([decimal]$sessionReportSmoke.summary.revenue -lt [decimal]$sessionSettlement.totalAmount) {
-              throw 'Stage 13.2 Sessions report summary revenue is lower than the authoritative settled Session amount.'
-            }
-            Write-Host ("Stage 13.2 Sessions & Stations report smoke passed: total={0}; revenue={1}" -f $sessionReportSmoke.total, $sessionReportSmoke.summary.revenue)
-
             # Stage 11: prove Game and Account Pool are server-backed and allocation is atomic.
             $stage11Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               name = 'CI Stage11 Game'
@@ -1523,6 +1514,15 @@ jobs:
             if ($sessionSettlement.invoiceId -ne $sessionSale.invoiceId -or [decimal]$sessionSettlement.totalAmount -ne $sessionSettlementTotal -or $sessionSettlement.invoiceStatus -ne 'Paid') {
               throw 'Session settlement did not finalize the buffet draft invoice using the authoritative server total.'
             }
+
+            $sessionReportSmoke = Invoke-RestMethod -Uri "$baseUrl/api/reports/sessions?page=1&pageSize=20&state=Completed" -Method Get -WebSession $adminSession
+            if ([int]$sessionReportSmoke.total -lt 1 -or -not @($sessionReportSmoke.items | Where-Object { $_.id -eq $startedSession.sessionId -and $_.state -eq 'Completed' }).Count) {
+              throw 'Stage 13.2 Sessions report smoke did not return the completed smoke session.'
+            }
+            if ([decimal]$sessionReportSmoke.summary.revenue -lt [decimal]$sessionSettlement.totalAmount) {
+              throw 'Stage 13.2 Sessions report summary revenue is lower than the authoritative settled Session amount.'
+            }
+            Write-Host ("Stage 13.2 Sessions & Stations report smoke passed: total={0}; revenue={1}" -f $sessionReportSmoke.total, $sessionReportSmoke.summary.revenue)
 
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
               permissionNames = @('finance.manage')
