@@ -4817,11 +4817,12 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
 {
     await using var scope = services.CreateAsyncScope();
     var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
+    var environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
 
     try
     {
         await database.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(database);
+        await DatabaseSeeder.SeedAsync(database, environment.IsDevelopment());
     }
     catch (Exception exception) when (IsMigrationRecoveryCandidate(exception))
     {
