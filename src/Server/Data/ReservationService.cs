@@ -77,16 +77,16 @@ public sealed class ReservationService(GameNetDbContext database)
             if (station.State is StationState.Offline or StationState.Maintenance)
                 throw new InvalidOperationException("این ایستگاه قابل رزرو نیست.");
 
-            var hasConflict = await database.Reservations
+            var conflictQuery = database.Reservations
                 .AsNoTracking()
-                .AnyAsync(item => item.StationId == station.Id
-                    && item.Kind == ReservationKind.Reservation
-                    && (item.Status == ReservationStatus.Pending
-                        || item.Status == ReservationStatus.Confirmed
-                        || item.Status == ReservationStatus.CheckedIn)
-                    && item.StartAt < end
-                    && item.EndAt > start,
-                    cancellationToken);
+                .Where(item => item.StationId == station.Id)
+                .Where(item => item.Kind == ReservationKind.Reservation)
+                .Where(item => item.Status == ReservationStatus.Pending
+                    || item.Status == ReservationStatus.Confirmed
+                    || item.Status == ReservationStatus.CheckedIn)
+                .Where(item => item.StartAt < end && item.EndAt > start);
+
+            var hasConflict = await conflictQuery.AnyAsync(cancellationToken);
 
             if (hasConflict)
                 throw new InvalidOperationException("این ایستگاه در این بازه قبلاً رزرو شده است.");
@@ -226,17 +226,18 @@ public sealed class ReservationService(GameNetDbContext database)
         if (stationLock != 1)
             throw new KeyNotFoundException("ایستگاه مقصد پیدا نشد.");
 
-        var hasConflict = await database.Reservations
+        var conflictQuery = database.Reservations
             .AsNoTracking()
-            .AnyAsync(item => item.Id != reservation.Id
-                && item.StationId == reservation.StationId
-                && item.Kind == ReservationKind.Reservation
-                && (item.Status == ReservationStatus.Pending
-                    || item.Status == ReservationStatus.Confirmed
-                    || item.Status == ReservationStatus.CheckedIn)
-                && item.StartAt < reservation.EndAt
-                && item.EndAt > reservation.StartAt,
-                cancellationToken);
+            .Where(item => item.Id != reservation.Id)
+            .Where(item => item.StationId == reservation.StationId)
+            .Where(item => item.Kind == ReservationKind.Reservation)
+            .Where(item => item.Status == ReservationStatus.Pending
+                || item.Status == ReservationStatus.Confirmed
+                || item.Status == ReservationStatus.CheckedIn)
+            .Where(item => item.StartAt < reservation.EndAt
+                && item.EndAt > reservation.StartAt);
+
+        var hasConflict = await conflictQuery.AnyAsync(cancellationToken);
 
         if (hasConflict)
             throw new InvalidOperationException("ایستگاه مقصد در این بازه رزرو شده است.");
