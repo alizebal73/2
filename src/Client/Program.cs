@@ -284,11 +284,6 @@ try
                     LastUpdateError = null,
                     LastHealthyAt = DateTimeOffset.UtcNow
                 };
-                await FinalizePendingLifecycleCommandAsync(
-                    connection,
-                    state,
-                    agentVersion,
-                    shutdown.Token);
                 await SaveStateAsync(statePath, state);
             }
         };
