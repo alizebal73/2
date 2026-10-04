@@ -10,7 +10,6 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace GameNetManager.Server.Data.Migrations
 {
-    [DbContext(typeof(GameNetDbContext))]
     partial class SessionHourlyRateSnapshot : Migration
     {
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
