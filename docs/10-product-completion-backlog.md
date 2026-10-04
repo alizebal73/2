@@ -17,7 +17,7 @@
 
 ### وضعیت
 
-- 🟡 **در حال تثبیت** — Stage 13.1 روی شاخه `stage13-reporting-audit` در حال تست است.
+- ✅ **Stage 13.1 — Audit Explorer** — روی `main` ادغام و با Run #1380 روی exact-head و سپس Run #1383 روی `main` تأیید شد.
 - Server دارای `AuditLogService` و endpoint واقعی `GET /api/audit` با Permission سروری `audit.view` است.
 - فیلترهای فعلی: بازهٔ زمانی، کاربر، عملیات، دامنه، جست‌وجوی آزاد و صفحه‌بندی.
 - Dashboard بخش Audit را از Mock خارج کرده و از Server دادهٔ واقعی می‌گیرد.
@@ -26,21 +26,21 @@
 
 ### Gate این برش
 
-- ⬜ Build
-- ⬜ .NET Tests
-- ⬜ EF validation
-- ⬜ Server/Migration/Health Smoke + Stage 13 Audit API Smoke
-- ⬜ Dashboard Build/Lint
-- ⬜ Dashboard Browser Smoke
+- ✅ Build
+- ✅ .NET Tests
+- ✅ EF validation
+- ✅ Server/Migration/Health Smoke + Stage 13 Audit API Smoke — Run #1380 / Main Run #1383
+- ✅ Dashboard Build/Lint — Run #1380 / Main Run #1383
+- ✅ Dashboard Browser Smoke — Run #1380 / Main Run #1383
 
 ### مرز بعدی
 
-- Stage 13.2 — گزارش واقعی جلسات و ایستگاه‌ها
-- Stage 13.3 — گزارش مشتری/VIP و Users/Shift
-- Stage 13.4 — Fine-Grained Permission/Scope + Export
-- Stage 13.5 — Notification/Event Queue
+- ⏭️ Stage 13.2 — گزارش واقعی جلسات و ایستگاه‌ها
+- ⏭️ Stage 13.3 — گزارش مشتری/VIP و Users/Shift
+- ⏭️ Stage 13.4 — Fine-Grained Permission/Scope + Export
+- ⏭️ Stage 13.5 — Notification/Event Queue
 
-> Stage 13 تا زمانی که همان HEAD شاخه همهٔ Gateهای بالا را سبز نکند Done محسوب نمی‌شود.
+> Stage 13.1 پس از سبز شدن exact-head و عبور Main از CI Done محسوب می‌شود؛ این قانون برای هر برش بعدی نیز برقرار است.
 
 ## آخرین وضعیت تأییدشده — Stage 12 / 2026-10-05
 
@@ -222,7 +222,7 @@
 14. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
 15. **UI/Deployment Hardening** — Primitiveهای UI، DataTable، Keyboard-first، Desktop Shell، Backup/Recovery، Installer، Canary و انتشار نهایی
 
-**جایگاه فعلی:** Stage 12 از نظر مهندسی نرم‌افزار بسته و با CI Run #1369 روی HEAD کد `ae18da81761b82dcea5d11d69934fd47426c7f3d` تأیید شده است. Stage 1 تا 11 نیز در محدوده‌های ثبت‌شده تثبیت شده‌اند. Gateهای فیزیکی و Production جدا هستند. مرحلهٔ نرم‌افزاری فعال بعدی **Stage 13 — Reporting & Audit** است.
+**جایگاه فعلی:** Stage 12 از نظر مهندسی نرم‌افزار بسته است. Stage 13.1 — Audit Explorer نیز تکمیل و در `main` ادغام شده و Main Run #1383 روی merge commit `24a0654fa6490f415372ab2e7d28f30a0ecfbe89` سبز شده است. مرحلهٔ نرم‌افزاری فعال بعدی **Stage 13.2 — گزارش واقعی جلسات و ایستگاه‌ها** است. Gateهای فیزیکی و Production جدا هستند.
 
 این نقشه مرجع اجرایی فعلی است؛ اسناد تاریخی قبلی شماره‌گذاری قدیمی خود را حفظ می‌کنند، اما برای ادامهٔ توسعه از این جدول استفاده می‌شود.
 ## وضعیت نهایی مرحلهٔ ۷ — Users & Permissions
