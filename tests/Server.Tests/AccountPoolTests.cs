@@ -218,6 +218,7 @@ public sealed class AccountPoolTests
             var session = new Session
             {
                 CustomerId = customer.Id,
+                CustomerLoginId = login.Id,
                 StationId = station.Id,
                 AgentDeviceId = agent.Id,
                 GameId = game.Id,
