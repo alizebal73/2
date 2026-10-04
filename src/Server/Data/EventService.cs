@@ -45,6 +45,18 @@ public sealed class EventService(GameNetDbContext database)
         var start = request.StartAt;
         var end = start.AddMinutes(request.DurationMinutes);
 
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+        // SQLite has one writer. Touch the requesting AppUser before the
+        // overlap check to serialize concurrent Event creation attempts.
+        var writerGate = await database.AppUsers
+            .Where(item => item.Id == appUserId && item.IsActive)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+
+        if (writerGate != 1)
+            throw new KeyNotFoundException("اپراتور ایجادکننده Event پیدا نشد.");
+
         var hasConflict = kind.Equals("tournament", StringComparison.OrdinalIgnoreCase)
             && await database.Events
                 .AsNoTracking()
@@ -80,6 +92,7 @@ public sealed class EventService(GameNetDbContext database)
         });
 
         await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return ToDto(entity);
     }
 
