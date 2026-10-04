@@ -12,6 +12,8 @@ public static class DatabaseSeeder
         if (await database.Stations.AnyAsync(cancellationToken))
         {
             await EnsureAuthorizationSeedAsync(database, includeDemoData, cancellationToken);
+            if (includeDemoData)
+                if (includeDemoData)
             await EnsureCustomerProfilesAsync(database, cancellationToken);
             return;
         }
@@ -156,17 +158,22 @@ public static class DatabaseSeeder
     }
 
     private static string GetAdminPassword(bool includeDemoData)
-{
-    var configured = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD")?.Trim();
-    if (!string.IsNullOrWhiteSpace(configured))
-        return configured;
+    {
+        var configured = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD")?.Trim();
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            if (configured.Length < 12)
+                throw new InvalidOperationException(
+                    "مقدار GAMENET_ADMIN_PASSWORD باید حداقل ۱۲ نویسه باشد.");
+            return configured;
+        }
 
-    if (includeDemoData)
-        return "123456";
+        if (includeDemoData)
+            return "123456";
 
-    throw new InvalidOperationException(
-        "در محیط واقعی مقدار GAMENET_ADMIN_PASSWORD باید قبل از اولین راه‌اندازی تنظیم شده باشد.");
-}
+        throw new InvalidOperationException(
+            "در محیط واقعی مقدار GAMENET_ADMIN_PASSWORD باید قبل از اولین راه‌اندازی تنظیم شده باشد.");
+    }
 
     private static void CreateStations(GameNetDbContext database, StationType stationType, Tariff tariff, string prefix, int count, string zone, string type)
     {
