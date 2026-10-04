@@ -585,26 +585,37 @@ public sealed class AgentHub(
                 throw new HubException("بازی انتخاب‌شده پیدا نشد یا غیرفعال است.");
         }
 
+        var persons = Math.Max(1, request.Persons ?? 1);
+
+        await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
+
+        var now = DateTimeOffset.UtcNow;
+        var claimedStation = await database.Stations
+            .Where(item => item.Id == device.StationId.Value
+                && item.IsActive
+                && item.State == StationState.Available)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.State, StationState.Occupied)
+                .SetProperty(item => item.UpdatedAt, now), Context.ConnectionAborted);
+
+        if (claimedStation != 1)
+            throw new HubException("این ایستگاه دیگر آزاد نیست.");
+
         var station = await database.Stations
             .Include(item => item.Tariff)
             .FirstOrDefaultAsync(item => item.Id == device.StationId.Value, Context.ConnectionAborted);
+
         if (station is null)
             throw new HubException("ایستگاه Agent پیدا نشد.");
-
-        if (station.State != StationState.Available)
-            throw new HubException("این ایستگاه دیگر آزاد نیست.");
 
         if (station.Tariff is null || !station.Tariff.IsActive)
             throw new HubException("تعرفهٔ فعال برای این ایستگاه تنظیم نشده است.");
 
-        var persons = Math.Max(1, request.Persons ?? 1);
         if (station.Type.Equals("PC", StringComparison.OrdinalIgnoreCase)
             || station.Type.Contains("رایانه", StringComparison.OrdinalIgnoreCase))
             persons = 1;
         else if (persons > 4)
             throw new HubException("تعداد نفرات برای این ایستگاه بیش از حد مجاز است.");
-
-        await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
 
         var session = new Session
         {
@@ -613,7 +624,7 @@ public sealed class AgentHub(
             StationId = station.Id,
             TariffId = station.TariffId,
             AppUserId = null,
-            StartAt = DateTimeOffset.UtcNow,
+            StartAt = now,
             State = SessionState.Active,
             TotalAmount = 0m,
             GameId = game?.Id,
@@ -624,7 +635,6 @@ public sealed class AgentHub(
         };
 
         database.Sessions.Add(session);
-        station.State = StationState.Occupied;
 
         database.AuditLogs.Add(new AuditLog
         {
