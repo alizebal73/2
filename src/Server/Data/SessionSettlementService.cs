@@ -13,6 +13,17 @@ public sealed record SessionSettlementRequest(
     decimal? DiscountAmount = null,
     decimal? PrepaidAmount = null);
 
+public sealed record SessionSettlementPreview(
+    Guid SessionId,
+    DateTimeOffset ServerUtcNow,
+    decimal HourlyRate,
+    double BillableMinutes,
+    decimal TimeAmount,
+    decimal BuffetTotal,
+    decimal DiscountAmount,
+    decimal PrepaidAmount,
+    decimal TotalAmount);
+
 public sealed class SessionSettlementService(GameNetDbContext database, SessionPricingService pricingService)
 {
     private static readonly HashSet<string> AllowedMethods = new(StringComparer.OrdinalIgnoreCase)
@@ -22,6 +33,84 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         "wallet",
         "gift"
     };
+
+    public async Task<SessionSettlementPreview> PreviewAsync(
+        Guid sessionId,
+        int freeTimeMinutes = 0,
+        decimal discountAmount = 0m,
+        decimal prepaidAmount = 0m,
+        CancellationToken cancellationToken = default)
+    {
+        if (freeTimeMinutes < 0 || discountAmount < 0 || prepaidAmount < 0)
+            throw new ArgumentException("جزئیات مبلغ تسویه معتبر نیست.");
+
+        var session = await database.Sessions
+            .AsNoTracking()
+            .Include(item => item.Customer)
+                .ThenInclude(item => item.VipPackage)
+            .FirstOrDefaultAsync(
+                item => item.Id == sessionId
+                    && (item.State == SessionState.Active || item.State == SessionState.Ended),
+                cancellationToken);
+
+        if (session is null)
+            throw new KeyNotFoundException("جلسه پیدا نشد.");
+
+        var now = DateTimeOffset.UtcNow;
+        var elapsedMinutes = SessionTiming.GetBillableMinutes(session, now);
+        if (freeTimeMinutes > Math.Ceiling(elapsedMinutes))
+            throw new InvalidOperationException("دقیقه اعتبار رایگان مصرف‌شده با زمان جلسه سازگار نیست.");
+
+        if (freeTimeMinutes > session.Customer.FreeTimeMinutes)
+            throw new InvalidOperationException("اعتبار زمانی رایگان مشتری برای این مصرف کافی نیست.");
+
+        if (prepaidAmount > session.PrepaidAmount)
+            throw new InvalidOperationException("پیش‌پرداخت مصرف‌شده بیشتر از اعتبار ثبت‌شدهٔ جلسه است.");
+
+        var pricing = await pricingService.GetPricingAsync(
+            session.CustomerId,
+            session.StationId,
+            now,
+            cancellationToken);
+
+        var authoritativeHourlyRate = session.HourlyRateOverride
+            ?? session.HourlyRateSnapshot
+            ?? pricing.HourlyRate;
+
+        var authoritativeTimeAmount = SessionPricingService.CalculateTimeAmount(
+            session,
+            authoritativeHourlyRate,
+            freeTimeMinutes,
+            now);
+
+        var invoiceId = await database.Invoices
+            .AsNoTracking()
+            .Where(item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft)
+            .Select(item => (Guid?)item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var buffetTotal = invoiceId.HasValue
+            ? await database.InvoiceItems
+                .AsNoTracking()
+                .Where(item => item.InvoiceId == invoiceId.Value && item.ProductId.HasValue)
+                .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m
+            : 0m;
+
+        var totalAmount = Math.Max(
+            0m,
+            buffetTotal + authoritativeTimeAmount - discountAmount - prepaidAmount);
+
+        return new SessionSettlementPreview(
+            session.Id,
+            now,
+            authoritativeHourlyRate,
+            elapsedMinutes,
+            authoritativeTimeAmount,
+            buffetTotal,
+            discountAmount,
+            prepaidAmount,
+            totalAmount);
+    }
 
     public async Task<SettlementResult> SettleAsync(
         Guid sessionId,
