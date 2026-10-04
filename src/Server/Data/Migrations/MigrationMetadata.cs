@@ -186,3 +186,10 @@ partial class AccountPoolExpiryUtc
 partial class ActiveSessionOwnershipGuards
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261005020000_SessionHourlyRateSnapshot")]
+partial class SessionHourlyRateSnapshot
+{
+}
