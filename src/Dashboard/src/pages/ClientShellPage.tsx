@@ -1,48 +1,63 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ClientRecord } from '../types';
-import { mockService } from '../services/mockService';
-import { acquireCustomerLogin, releaseCustomerLogin } from '../services/customerLoginService';
+import { getAgentCommand, getAgentStatuses, requestAgentRollback, requestAgentUpdate, sendAgentCommand, updateAgentPolicy, type AgentCommandType } from '../services/agentService';
+import { getServerCustomers } from '../services/customerService';
+import { acquireCustomerLogin } from '../services/customerLoginService';
+import type { AgentStatusDto, CustomerRecord } from '../types';
 import { userErrorMessage } from '../utils/userError';
 
-type ContextMenu = { x: number; y: number; client: ClientRecord } | null;
-type ClientSettings = Pick<ClientRecord, 'ip' | 'dns1' | 'dns2' | 'systemNumber' | 'serverAddress' | 'shell' | 'network' | 'bootMode'>;
+type ContextMenu = { x: number; y: number; agent: AgentStatusDto } | null;
 
-export function ClientShellPage() {
-  const [clients, setClients] = useState<ClientRecord[]>([]);
+function isFinal(status: string) {
+  return ['Succeeded', 'Failed', 'RolledBack'].includes(status);
+}
+
+export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
+  const [agents, setAgents] = useState<AgentStatusDto[]>([]);
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [lastIndex, setLastIndex] = useState<number | null>(null);
-  const [selectionRect, setSelectionRect] = useState<{ startX:number; startY:number; endX:number; endY:number } | null>(null);
-  const dragRef = useRef<{ startX:number; startY:number; dragging:boolean; ctrl:boolean } | null>(null);
-  const suppressClickRef = useRef(false);
   const [context, setContext] = useState<ContextMenu>(null);
-  const [settingsTarget, setSettingsTarget] = useState<string[]>([]);
-  const [settings, setSettings] = useState<ClientSettings | null>(null);
+  const [settingsAgent, setSettingsAgent] = useState<AgentStatusDto | null>(null);
+  const [policy, setPolicy] = useState({ kioskEnabled: false, lockOnDisconnect: true });
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState('');
+  const [loading, setLoading] = useState(false);
+  const dragRef = useRef<{ startX: number; startY: number; dragging: boolean } | null>(null);
+  const [selectionRect, setSelectionRect] = useState<{ startX:number; startY:number; endX:number; endY:number } | null>(null);
 
-  useEffect(() => { void mockService.getClients().then(setClients); }, []);
+  async function loadAgents() {
+    try {
+      setAgents(await getAgentStatuses());
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'وضعیت Agentها از سرور دریافت نشد'));
+    }
+  }
+
+  async function loadCustomers() {
+    try {
+      setCustomers(await getServerCustomers());
+    } catch {
+      // Customer lookup is only needed for explicit login action.
+    }
+  }
+
+  useEffect(() => {
+    void loadAgents();
+    const interval = window.setInterval(() => void loadAgents(), 5000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => { void loadCustomers(); }, []);
+
   useEffect(() => {
     const onSelect = (event: Event) => {
-      const name = (event as CustomEvent<string>).detail;
-      if (!name) return;
-      setTimeout(() => {
-        const client = clients.find(item => item.name === name);
-        if (client) openSettings([client.id]);
-      }, 0);
+      const deviceId = (event as CustomEvent<string>).detail;
+      if (!deviceId) return;
+      const agent = agents.find(item => item.deviceId === deviceId || item.name === deviceId);
+      if (agent) openSettings(agent);
     };
     window.addEventListener('gamenet-select-client', onSelect);
     return () => window.removeEventListener('gamenet-select-client', onSelect);
-  }, [clients]);
-
-
-  const visible = useMemo(() => clients.filter(client => client.name.toLowerCase().includes(query.toLowerCase()) || client.ip.includes(query)), [clients, query]);
-  const onlineCount = clients.filter(client => client.online).length;
-  const busyCount = clients.filter(client => client.user).length;
-  const pendingCount = clients.filter(client => client.updatePending).length;
-
-  function updateClients(ids: string[], update: Partial<ClientRecord>) {
-    setClients(current => current.map(client => ids.includes(client.id) ? { ...client, ...update } : client));
-  }
+  }, [agents]);
 
   useEffect(() => {
     const onMove = (event: MouseEvent) => {
@@ -57,20 +72,18 @@ export function ClientShellPage() {
       const drag = dragRef.current;
       if (!drag) return;
       if (drag.dragging && selectionRect) {
-        suppressClickRef.current = true;
         const left = Math.min(selectionRect.startX, selectionRect.endX);
         const right = Math.max(selectionRect.startX, selectionRect.endX);
         const top = Math.min(selectionRect.startY, selectionRect.endY);
         const bottom = Math.max(selectionRect.startY, selectionRect.endY);
-        const ids = Array.from(document.querySelectorAll<HTMLElement>('[data-client-id]'))
+        const ids = Array.from(document.querySelectorAll<HTMLElement>('[data-agent-id]'))
           .filter(node => {
             const rect = node.getBoundingClientRect();
             return rect.right >= left && rect.left <= right && rect.bottom >= top && rect.top <= bottom;
           })
-          .map(node => node.dataset.clientId)
+          .map(node => node.dataset.agentId)
           .filter((id): id is string => Boolean(id));
-        setSelected(current => drag.ctrl ? new Set([...current, ...ids]) : new Set(ids));
-        setLastIndex(null);
+        setSelected(new Set(ids));
       }
       setSelectionRect(null);
       dragRef.current = null;
@@ -80,130 +93,216 @@ export function ClientShellPage() {
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [selectionRect]);
 
-  function selectClient(event: React.MouseEvent, client: ClientRecord, index: number) {
-    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
-    if (event.shiftKey && lastIndex !== null) {
-      const start = Math.min(lastIndex, index);
-      const end = Math.max(lastIndex, index);
-      setSelected(current => new Set([...current, ...visible.slice(start, end + 1).map(item => item.id)]));
-    } else if (event.ctrlKey || event.metaKey) {
+  const visible = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase('fa-IR');
+    return agents.filter(agent => !needle
+      || agent.name.toLocaleLowerCase('fa-IR').includes(needle)
+      || agent.deviceId.toLocaleLowerCase('fa-IR').includes(needle)
+      || (agent.stationName ?? '').toLocaleLowerCase('fa-IR').includes(needle));
+  }, [agents, query]);
+
+  const onlineCount = agents.filter(agent => agent.isOnline).length;
+  const busyCount = agents.filter(agent => agent.stationId && agent.lifecycleState === 'Running').length;
+  const pendingCount = agents.filter(agent => agent.pendingUpdateVersion).length;
+
+  async function waitForCommand(commandId: string, acceptAwaitingHealth = false) {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const status = await getAgentCommand(commandId);
+      if (isFinal(status.status) || (acceptAwaitingHealth && status.status === 'AwaitingHealth')) return status;
+      await new Promise(resolve => window.setTimeout(resolve, 500));
+    }
+    throw new Error('نتیجه نهایی فرمان Agent در زمان مورد انتظار تأیید نشد.');
+  }
+
+  async function runCommand(agent: AgentStatusDto, type: AgentCommandType) {
+    setLoading(true);
+    setContext(null);
+    try {
+      const command = type === 'update'
+        ? await requestAgentUpdate(agent.agentId)
+        : type === 'rollback'
+          ? await requestAgentRollback(agent.agentId)
+          : await sendAgentCommand(agent.agentId, type);
+      const powerCommand = type === 'restart' || type === 'shutdown';
+      const final = await waitForCommand(command.commandId, powerCommand);
+      if (powerCommand && final.status === 'AwaitingHealth') {
+        setNotice(final.resultMessage || 'درخواست توان پذیرفته شد؛ تأیید نهایی پس از بازگشت Agent انجام می‌شود.');
+        return;
+      }
+      if (final.status !== 'Succeeded') {
+        throw new Error(final.resultMessage || 'فرمان Agent موفق نشد.');
+      }
+      setNotice(final.resultMessage || 'فرمان Agent با موفقیت اجرا شد.');
+      await loadAgents();
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'اجرای فرمان Agent انجام نشد'));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loginCustomer(agent: AgentStatusDto) {
+    const code = window.prompt('کد یا شناسه مشتری را وارد کنید');
+    if (!code) return;
+    const customer = customers.find(item => item.code === code.trim() || item.username === code.trim());
+    if (!customer) {
+      setNotice('مشتری پیدا نشد؛ ابتدا اطلاعات مشتری را از سرور تازه کنید.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const result = await acquireCustomerLogin(customer.id, agent.deviceId);
+      if (result) setNotice('ورود مشتری روی سرور ثبت شد · ' + result.activeCount + ' از ' + result.limit);
+      await loadAgents();
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ورود مشتری روی Agent ثبت نشد'));
+    } finally {
+      setLoading(false);
+      setContext(null);
+    }
+  }
+
+  function openSettings(agent: AgentStatusDto) {
+    setContext(null);
+    setSettingsAgent(agent);
+    setPolicy({ kioskEnabled: agent.kioskEnabled, lockOnDisconnect: agent.lockOnDisconnect });
+  }
+
+  async function savePolicy() {
+    if (!settingsAgent) return;
+    try {
+      await updateAgentPolicy(settingsAgent.agentId, policy);
+      setSettingsAgent(null);
+      setNotice('Policy روی Server ذخیره شد و به Agent ارسال شد.');
+      await loadAgents();
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ذخیره Policy Agent انجام نشد'));
+    }
+  }
+
+  function selectAgent(event: React.MouseEvent, agent: AgentStatusDto) {
+    if (event.shiftKey) {
+      setSelected(current => new Set([...current, agent.agentId]));
+      return;
+    }
+    if (event.ctrlKey || event.metaKey) {
       setSelected(current => {
         const next = new Set(current);
-        if (next.has(client.id)) next.delete(client.id); else next.add(client.id);
+        if (next.has(agent.agentId)) next.delete(agent.agentId); else next.add(agent.agentId);
         return next;
       });
-      setLastIndex(index);
-    } else {
-      setSelected(new Set([client.id]));
-      setLastIndex(index);
-    }
-  }
-
-  function openSettings(ids: string[]) {
-    const client = clients.find(item => item.id === ids[0]);
-    if (!client) return;
-    setSettingsTarget(ids);
-    setSettings({ ip: client.ip, dns1: client.dns1, dns2: client.dns2, systemNumber: client.systemNumber, serverAddress: client.serverAddress, shell: client.shell, network: client.network, bootMode: client.bootMode });
-    setContext(null);
-  }
-
-  function action(kind: string) {
-    const ids = selected.has(context?.client.id ?? '') ? [...selected] : context ? [context.client.id] : [...selected];
-    setContext(null);
-    if (!ids.length) return;
-    const clientNames = clients.filter(client => ids.includes(client.id)).map(client => client.name).join('، ');
-    if (kind === 'settings') { openSettings(ids); return; }
-    if (kind === 'switch-network') {
-      setClients(current => current.map(client => ids.includes(client.id) ? { ...client, network: client.network === 'internet1' ? 'internet2' : 'internet1' } : client));
-    } else if (kind === 'toggle-internet') {
-      setClients(current => current.map(client => ids.includes(client.id) ? { ...client, internetEnabled: !client.internetEnabled, network: client.internetEnabled ? 'lan' : 'internet1' } : client));
-    } else if (kind === 'logout') {
-      const released = clients.filter(client => ids.includes(client.id) && client.user);
-      updateClients(ids, { user: '', game: '', locked: true });
-      void Promise.all(released.map(async client => {
-        try {
-          const customer = clients.find(row => row.id === client.id)?.user;
-          if (customer) await releaseCustomerLogin(customer, client.id);
-        } catch (error) {
-          setNotice(userErrorMessage(error, 'خروج مشتری روی سرور ثبت نشد'));
-        }
-      }));
-    } else if (kind === 'login') {
-      const code = window.prompt('شناسه مشتری را وارد کنید');
-      if (code) {
-        void Promise.all(ids.map(async id => {
-          try {
-            const result = await acquireCustomerLogin(code, id);
-            updateClients([id], { user: code, locked: false });
-            if (result) setNotice('ورود مشتری ثبت شد · ' + result.activeCount + ' از ' + result.limit + ' ورود فعال');
-          } catch (error) {
-            setNotice(userErrorMessage(error, 'ورود مشتری انجام نشد'));
-          }
-        }));
-      }
-    } else if (kind === 'message') {
-      const text = window.prompt('پیام برای مشتری');
-      if (text) setNotice(`پیام برای ${clientNames} ثبت شد: ${text}`);
-      return;
-    } else if (kind === 'restart-shell') updateClients(ids, { shell: true });
-    else if (kind === 'restart' || kind === 'shutdown') updateClients(ids, { online: false, user: '', game: '' });
-    else if (kind === 'screenshot') { setNotice(`درخواست Screenshot برای ${ids.length} کلاینت در صف قرار گرفت`); return; }
-    else if (kind === 'move-user') {
-      const destination = window.prompt('شماره کلاینت مقصد، برای نمونه ۱۲');
-      if (destination) setNotice(`انتقال کاربر از ${clientNames} به PC ${destination} ثبت شد`);
       return;
     }
-    setNotice(`${kind} برای ${ids.length} کلاینت اجرا شد`);
+    setSelected(new Set([agent.agentId]));
   }
 
-  function showContext(event: React.MouseEvent, client: ClientRecord) {
+  function showContext(event: React.MouseEvent, agent: AgentStatusDto) {
     event.preventDefault();
-    if (!selected.has(client.id)) setSelected(new Set([client.id]));
-    const width = 260;
-    const height = 390;
-    setContext({ x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)), client });
+    if (!selected.has(agent.agentId)) setSelected(new Set([agent.agentId]));
+    setContext({
+      x: Math.min(event.clientX, window.innerWidth - 260),
+      y: Math.min(event.clientY, window.innerHeight - 430),
+      agent,
+    });
   }
 
-  function saveSettings() {
-    if (!settings) return;
-    updateClients(settingsTarget, settings);
-    setNotice(`تنظیمات برای ${settingsTarget.length} کلاینت ذخیره و ارسال شد`);
-    setSettings(null);
-  }
+  const menuAgent = context?.agent;
+  const selectedAgents = agents.filter(agent => selected.has(agent.agentId));
 
-  return <>
-    <div className="page-header"><div><p>مدیریت شبکه و سیستم‌ها</p><h1>کلاینت‌ها · ۴۰ رایانه</h1></div></div>
-    <div className="summary-grid">
-      <div className="summary-card"><div className="label">آنلاین</div><div className="value green">{onlineCount}</div></div>
-      <div className="summary-card"><div className="label">آفلاین</div><div className="value red">{clients.length - onlineCount}</div></div>
-      <div className="summary-card"><div className="label">در حال بازی</div><div className="value blue">{busyCount}</div></div>
-      <div className="summary-card"><div className="label">آپدیت معلق</div><div className="value orange">{pendingCount}</div></div>
-    </div>
-    <div className="toolbar client-toolbar">
-      <div className="search-box"><input aria-label="جستجوی کلاینت" value={query} onChange={event => setQuery(event.target.value)} placeholder="جست‌وجوی نام یا IP کلاینت…" /></div>
-      <button className="btn" onClick={() => setNotice(`Wake-on-LAN برای ${clients.length} کلاینت در صف قرار گرفت`)}>📡 Wake-on-LAN همه</button>
-      <button className="btn" onClick={() => openSettings(selected.size ? [...selected] : clients.map(item => item.id))}>⚙ تنظیم گروهی</button>
-      <button className="btn primary" onClick={() => { updateClients(clients.map(item => item.id), { dns1: '178.22.122.100', dns2: '185.51.200.2' }); setNotice('DNS پیش‌فرض برای همه کلاینت‌ها ارسال شد'); }}>📤 ارسال DNS به همه</button>
-    </div>
-    {selected.size > 0 && <div className="selection-bar"><strong>{selected.size} کلاینت انتخاب شده</strong><span>راست‌کلیک روی دستگاه انتخابی، عملیات را برای همه اعمال می‌کند</span><button className="btn sm" onClick={() => { setSelected(new Set()); setLastIndex(null); }}>پاک کردن انتخاب‌ها</button></div>}
-    <div className="client-hint">کلیک: انتخاب · Ctrl+کلیک: چندانتخاب · Shift+کلیک: انتخاب بازه · Drag: انتخاب گروهی · دابل‌کلیک: تنظیمات کلاینت · راست‌کلیک: عملیات</div>
-    <div className="client-grid">
-      {visible.map((client, index) => <article key={client.id} data-client-id={client.id} className={`client-card ${selected.has(client.id) ? 'selected' : ''} ${client.online ? '' : 'offline'}`} onMouseDown={event => { if (event.button !== 0) return; event.preventDefault(); dragRef.current = { startX: event.clientX, startY: event.clientY, dragging: false, ctrl: event.ctrlKey || event.metaKey }; window.getSelection()?.removeAllRanges(); }} onDragStart={event => event.preventDefault()} onClick={event => selectClient(event, client, index)} onDoubleClick={() => openSettings([client.id])} onContextMenu={event => showContext(event, client)}>
-        <div className="client-card-head"><b>{client.name}</b><span className={`status-pill ${client.online ? 'online' : 'offline'}`}>{client.online ? 'آنلاین' : 'آفلاین'}</span></div>
-        <div className="meta ltr">IP {client.ip} · DNS {client.dns1}</div>
-        <div className="meta">{client.user ? `یوزر: ${client.user} · ${client.game || 'بدون بازی'}` : client.locked ? 'سیستم قفل است' : 'بدون کاربر'}</div>
-        <div className="meta">شبکه: {client.network === 'internet1' ? 'اینترنت ۱' : client.network === 'internet2' ? 'اینترنت ۲' : 'فقط LAN'} · Shell: {client.shell ? 'فعال' : 'غیرفعال'}</div>
-        <div className="client-flags">{client.updatePending && <span className="status-pill pending">Update pending</span>}<span className="meta">Sync: {client.lastSync}</span></div>
-      </article>)}
-    </div>
-    {selectionRect && <div className="selection-rect" style={{ left: Math.min(selectionRect.startX, selectionRect.endX), top: Math.min(selectionRect.startY, selectionRect.endY), width: Math.abs(selectionRect.endX - selectionRect.startX), height: Math.abs(selectionRect.endY - selectionRect.startY) }} />}
-    {context && <div className="context-menu client-context" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}><strong>{selected.size > 1 ? `${selected.size} کلاینت انتخابی` : context.client.name}</strong><button onClick={() => action('switch-network')}>🌐 تغییر اینترنت ۱ ↔ ۲</button><button onClick={() => action('toggle-internet')}>🔌 قطع / وصل اینترنت</button><button onClick={() => action('move-user')}>🔀 جابه‌جایی یوزر</button><button onClick={() => action('logout')}>🚪 خروج یوزر و قفل</button><button onClick={() => action('login')}>🔑 ورود با شناسه</button><button onClick={() => action('message')}>💬 ارسال پیام</button><button onClick={() => action('screenshot')}>📸 Screenshot</button><button onClick={() => action('restart-shell')}>🔄 Restart Shell</button><button onClick={() => action('restart')}>⏻ Restart Windows</button><button onClick={() => action('shutdown')}>⛔ Shutdown</button><button onClick={() => action('settings')}>⚙ تنظیمات کامل کلاینت</button></div>}
-    {settings && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setSettings(null)}><section className="operation-modal wide" role="dialog" aria-modal="true"><button className="modal-close" onClick={() => setSettings(null)}>×</button><h2>تنظیمات {settingsTarget.length > 1 ? `${settingsTarget.length} کلاینت` : clients.find(item => item.id === settingsTarget[0])?.name}</h2><div className="settings-form-grid">
-      {([['ip', 'IP محلی'], ['systemNumber', 'شماره سیستم'], ['dns1', 'DNS ۱'], ['dns2', 'DNS ۲'], ['serverAddress', 'آدرس سرور']] as const).map(([field, label]) => <label key={field}>{label}<input value={settings[field]} onChange={event => setSettings({ ...settings, [field]: field === 'systemNumber' ? Number(event.target.value) : event.target.value })} /></label>)}
-      <label>شل هنگام بوت<select value={settings.shell ? 'on' : 'off'} onChange={event => setSettings({ ...settings, shell: event.target.value === 'on' })}><option value="on">فعال</option><option value="off">غیرفعال</option></select></label>
-      <label>شبکه<select value={settings.network} onChange={event => setSettings({ ...settings, network: event.target.value as ClientSettings['network'] })}><option value="internet1">اینترنت ۱</option><option value="internet2">اینترنت ۲</option><option value="lan">فقط LAN</option></select></label>
-      <label>Boot<select value={settings.bootMode} onChange={event => setSettings({ ...settings, bootMode: event.target.value as ClientSettings['bootMode'] })}><option value="normal">عادی</option><option value="ccboot">CCBOOT</option><option value="pxe">PXE</option></select></label>
-    </div><div className="modal-actions"><button className="btn primary" onClick={saveSettings}>ذخیره و ارسال</button><button className="btn" onClick={() => setNotice('درخواست Remote ثبت شد')}>Remote</button><button className="btn danger" onClick={() => { updateClients(settingsTarget, { online: false }); setSettings(null); setNotice('Restart ثبت شد'); }}>Restart</button></div></section></div>}
-    {notice && <div className="operation-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
-  </>;
+  return (
+    <>
+      <div className="page-header">
+        <div><p>مدیریت واقعی Agentها و سیستم‌های متصل</p><h1>کلاینت‌ها · {agents.length.toLocaleString('fa-IR')} دستگاه</h1></div>
+      </div>
+
+      <div className="summary-grid">
+        <div className="summary-card"><div className="label">آنلاین</div><div className="value green">{onlineCount}</div></div>
+        <div className="summary-card"><div className="label">آفلاین</div><div className="value red">{agents.length - onlineCount}</div></div>
+        <div className="summary-card"><div className="label">در حال Agent</div><div className="value blue">{busyCount}</div></div>
+        <div className="summary-card"><div className="label">آپدیت معلق</div><div className="value orange">{pendingCount}</div></div>
+      </div>
+
+      <div className="toolbar client-toolbar">
+        <div className="search-box"><input aria-label="جستجوی کلاینت" value={query} onChange={event => setQuery(event.target.value)} placeholder="نام Agent، DeviceId یا ایستگاه…" /></div>
+        <button className="btn" disabled={!selectedAgents.length || loading} onClick={() => selectedAgents.forEach(agent => void runCommand(agent, 'ping'))}>📡 Ping</button>
+        <button className="btn" disabled={!selectedAgents.length || loading} onClick={() => selectedAgents.forEach(agent => void runCommand(agent, 'lock'))}>🔒 قفل</button>
+        <button className="btn primary" disabled={!selectedAgents.length || loading} onClick={() => selectedAgents.forEach(agent => void runCommand(agent, 'unlock'))}>🔓 بازکردن</button>
+      </div>
+
+      <div className="client-hint">کلیک: انتخاب · Ctrl+کلیک: چندانتخاب · Shift+کلیک: افزودن · راست‌کلیک: عملیات واقعی Agent · دابل‌کلیک: Policy</div>
+
+      <div className="client-grid">
+        {visible.map(agent => (
+          <article
+            key={agent.agentId}
+            data-agent-id={agent.agentId}
+            className={\`client-card \${selected.has(agent.agentId) ? 'selected' : ''} \${agent.isOnline ? '' : 'offline'}\`}
+            onMouseDown={event => {
+              if (event.button !== 0) return;
+              dragRef.current = { startX: event.clientX, startY: event.clientY, dragging: false };
+            }}
+            onClick={event => selectAgent(event, agent)}
+            onDoubleClick={() => openSettings(agent)}
+            onContextMenu={event => showContext(event, agent)}
+          >
+            <div className="client-card-head">
+              <b>{agent.name}</b>
+              <span className={\`status-pill \${agent.isOnline ? 'online' : 'offline'}\`}>{agent.isOnline ? 'آنلاین' : 'آفلاین'}</span>
+            </div>
+            <div className="meta ltr">{agent.deviceId}</div>
+            <div className="meta">{agent.stationName ? \`ایستگاه: \${agent.stationName}\` : 'بدون ایستگاه'}</div>
+            <div className="meta">{agent.lifecycleState} · {agent.agentVersion || 'نسخه نامشخص'}</div>
+            <div className="meta">Kiosk: {agent.kioskEnabled ? 'فعال' : 'غیرفعال'} · Lock on disconnect: {agent.lockOnDisconnect ? 'فعال' : 'غیرفعال'}</div>
+            <div className="meta">{agent.lastHealthyAt ? \`آخرین سلامت: \${new Date(agent.lastHealthyAt).toLocaleString('fa-IR')}\` : 'سلامت هنوز ثبت نشده'}</div>
+          </article>
+        ))}
+      </div>
+
+      {selectionRect && <div className="selection-rect" style={{ left: Math.min(selectionRect.startX, selectionRect.endX), top: Math.min(selectionRect.startY, selectionRect.endY), width: Math.abs(selectionRect.endX - selectionRect.startX), height: Math.abs(selectionRect.endY - selectionRect.startY) }} />}
+
+      {menuAgent && (
+        <div
+          className="context-menu client-context"
+          style={{ left: Math.max(8, Math.min(context?.x ?? 8, window.innerWidth - 260)), top: Math.max(8, Math.min(context?.y ?? 8, window.innerHeight - 430)) }}
+          onClick={event => event.stopPropagation()}
+        >
+          <strong>{selectedAgents.length > 1 ? \`\${selectedAgents.length} Agent انتخابی\` : menuAgent.name}</strong>
+          <button onClick={() => void runCommand(menuAgent, 'lock')}>🔒 قفل Agent</button>
+          <button onClick={() => void runCommand(menuAgent, 'unlock')}>🔓 بازکردن Agent</button>
+          <button onClick={() => void runCommand(menuAgent, 'logout-lock')}>🚪 خروج مشتری و قفل</button>
+          <button onClick={() => void loginCustomer(menuAgent)}>🔑 ورود مشتری</button>
+          {canPower && <button onClick={() => void runCommand(menuAgent, 'restart')}>🔄 Restart Windows</button>}
+          {canPower && <button onClick={() => void runCommand(menuAgent, 'shutdown')}>⛔ Shutdown Windows</button>}
+          <button onClick={() => void runCommand(menuAgent, 'update')}>⬆ Update Agent</button>
+          <button onClick={() => void runCommand(menuAgent, 'rollback')}>↩ Rollback Agent</button>
+          <button onClick={() => openSettings(menuAgent)}>⚙ Policy و تنظیمات</button>
+        </div>
+      )}
+
+      {settingsAgent && (
+        <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setSettingsAgent(null)}>
+          <section className="operation-modal wide" role="dialog" aria-modal="true">
+            <button className="modal-close" onClick={() => setSettingsAgent(null)}>×</button>
+            <h2>Policy · {settingsAgent.name}</h2>
+            <div className="settings-form-grid">
+              <label>DeviceId<input value={settingsAgent.deviceId} readOnly /></label>
+              <label>ایستگاه<input value={settingsAgent.stationName || 'تخصیص‌داده‌نشده'} readOnly /></label>
+              <label>نسخه Agent<input value={settingsAgent.agentVersion || ''} readOnly /></label>
+              <label>Lifecycle<input value={settingsAgent.lifecycleState} readOnly /></label>
+              <label>وضعیت ارتباط<input value={settingsAgent.isOnline ? 'آنلاین' : 'آفلاین'} readOnly /></label>
+              <label>حالت Kiosk<select value={policy.kioskEnabled ? 'on' : 'off'} onChange={event => setPolicy({ ...policy, kioskEnabled: event.target.value === 'on' })}><option value="on">فعال</option><option value="off">غیرفعال</option></select></label>
+              <label>قفل هنگام قطع ارتباط<select value={policy.lockOnDisconnect ? 'on' : 'off'} onChange={event => setPolicy({ ...policy, lockOnDisconnect: event.target.value === 'on' })}><option value="on">فعال</option><option value="off">غیرفعال</option></select></label>
+            </div>
+            <div className="modal-actions">
+              <button className="btn primary" onClick={() => void savePolicy()}>ذخیره Policy روی Server</button>
+              <button className="btn" onClick={() => setSettingsAgent(null)}>انصراف</button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {notice && <div className="operation-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
+    </>
+  );
 }
