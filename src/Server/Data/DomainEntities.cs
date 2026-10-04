@@ -378,6 +378,7 @@ public sealed class Session : BaseEntity
     public int TimeAdjustmentMinutes { get; set; }
     public decimal PrepaidAmount { get; set; }
     public decimal TotalAmount { get; set; }
+    public decimal? HourlyRateSnapshot { get; set; }
     public decimal? HourlyRateOverride { get; set; }
     public int Persons { get; set; } = 1;
     public SessionState State { get; set; } = SessionState.Active;
