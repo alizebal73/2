@@ -10,7 +10,8 @@ public sealed class AgentHub(
     IConfiguration configuration,
     IHubContext<DashboardHub> dashboardHub,
     ILogger<AgentHub> logger,
-    AccountPoolService accountPool) : Hub
+    AccountPoolService accountPool,
+    SessionPricingService pricingService) : Hub
 {
     private const string AgentDeviceContextKey = "GameNet.AgentDeviceId";
 
@@ -535,6 +536,14 @@ public sealed class AgentHub(
             .Include(item => item.Tariff)
             .FirstAsync(item => item.Id == station.Id, Context.ConnectionAborted);
 
+        var pricing = await pricingService.GetPricingAsync(
+            customer.Id,
+            station.Id,
+            DateTimeOffset.UtcNow,
+            Context.ConnectionAborted);
+
+        var now = DateTimeOffset.UtcNow;
+
         var session = new Session
         {
             CustomerId = customer.Id,
@@ -542,9 +551,10 @@ public sealed class AgentHub(
             StationId = station.Id,
             TariffId = station.TariffId,
             AppUserId = null,
-            StartAt = DateTimeOffset.UtcNow,
+            StartAt = now,
             State = SessionState.Active,
             TotalAmount = 0m,
+            HourlyRateSnapshot = pricing.HourlyRate,
             GameId = game?.Id,
             AgentDeviceId = device.Id,
             // Customer/Agent cannot override the price. Server tariff is authoritative.
@@ -559,7 +569,7 @@ public sealed class AgentHub(
             Action = "AgentSessionStart",
             EntityName = "Session",
             EntityId = session.Id.ToString(),
-            Details = $"شروع جلسه از Agent · دستگاه {device.DeviceId} · مشتری {customer.Id}"
+            Details = $"شروع جلسه از Agent · دستگاه {device.DeviceId} · مشتری {customer.Id} · نرخ مرجع {pricing.HourlyRate:0.##} · تخفیف VIP {pricing.VipDiscountPercent:0.##}%"
         });
 
         await database.SaveChangesAsync(Context.ConnectionAborted);
