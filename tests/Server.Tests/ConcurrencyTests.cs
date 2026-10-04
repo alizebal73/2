@@ -211,6 +211,56 @@ public sealed class ConcurrencyTests : IDisposable
     }
 
     [Fact]
+    public async Task AtomicBuffetStockClaim_CannotOversell()
+    {
+        await using var connection1 = new SqliteConnection("DataSource=file:buffet-stock-concurrency;Mode=Memory;Cache=Shared");
+        await using var connection2 = new SqliteConnection("DataSource=file:buffet-stock-concurrency;Mode=Memory;Cache=Shared");
+        await connection1.OpenAsync();
+        await connection2.OpenAsync();
+
+        var options1 = new DbContextOptionsBuilder<GameNetDbContext>().UseSqlite(connection1).Options;
+        var options2 = new DbContextOptionsBuilder<GameNetDbContext>().UseSqlite(connection2).Options;
+
+        Guid productId;
+        await using (var seed = new GameNetDbContext(options1))
+        {
+            await seed.Database.EnsureCreatedAsync();
+            var product = new Product
+            {
+                Name = "Concurrent Stock",
+                Category = "Test",
+                UnitPrice = 100m,
+                CostPrice = 50m,
+                StockQuantity = 1,
+                IsActive = true
+            };
+            seed.Products.Add(product);
+            await seed.SaveChangesAsync();
+            productId = product.Id;
+        }
+
+        async Task<int> ClaimAsync(GameNetDbContext context)
+        {
+            await using var transaction = await context.Database.BeginTransactionAsync();
+            var updated = await context.Products
+                .Where(item => item.Id == productId && item.IsActive && item.StockQuantity >= 1)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.StockQuantity, item => item.StockQuantity - 1)
+                    .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow));
+            await transaction.CommitAsync();
+            return updated;
+        }
+
+        var claims = await Task.WhenAll(
+            ClaimAsync(new GameNetDbContext(options1)),
+            ClaimAsync(new GameNetDbContext(options2)));
+
+        Assert.Equal(1, claims.Sum());
+        await using var verify = new GameNetDbContext(options1);
+        Assert.Equal(0, await verify.Products.Where(item => item.Id == productId).Select(item => item.StockQuantity).SingleAsync());
+    }
+
+    [Fact]
     public async Task ConcurrentUpdatesToSameEntityAreRejected()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
