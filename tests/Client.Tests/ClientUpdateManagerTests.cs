@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using GameNetManager.Client;
+using GameNetManager.Shared.Contracts;
 
 namespace GameNetManager.Client.Tests;
 
