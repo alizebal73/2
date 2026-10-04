@@ -12,23 +12,29 @@ public sealed class ReservationService(GameNetDbContext database)
         ReservationKind? kind,
         CancellationToken cancellationToken)
     {
-        var rows = await database.Reservations
+        var query = database.Reservations
             .AsNoTracking()
             .Include(item => item.Customer)
             .Include(item => item.Station)
+            .AsQueryable();
+
+        if (from.HasValue)
+            query = query.Where(item => item.EndAt >= from.Value);
+        if (to.HasValue)
+            query = query.Where(item => item.StartAt <= to.Value);
+        if (status.HasValue)
+            query = query.Where(item => item.Status == status.Value);
+        if (kind.HasValue)
+            query = query.Where(item => item.Kind == kind.Value);
+
+        var rows = await query
             .OrderBy(item => item.StartAt)
             .ThenByDescending(item => item.Priority)
             .ThenBy(item => item.CreatedAt)
             .Take(1000)
             .ToListAsync(cancellationToken);
 
-        return rows
-            .Where(item => (!from.HasValue || item.EndAt >= from.Value)
-                && (!to.HasValue || item.StartAt <= to.Value)
-                && (!status.HasValue || item.Status == status.Value)
-                && (!kind.HasValue || item.Kind == kind.Value))
-            .Select(ToDto)
-            .ToList();
+        return rows.Select(ToDto).ToList();
     }
 
     public async Task<ReservationDto> CreateAsync(
@@ -57,21 +63,32 @@ public sealed class ReservationService(GameNetDbContext database)
             .FirstOrDefaultAsync(item => item.Id == request.StationId && item.IsActive, cancellationToken)
             ?? throw new KeyNotFoundException("ایستگاه پیدا نشد.");
 
+        // Upgrade the SQLite transaction to a writer before checking the station's
+        // reservation window. This serializes concurrent reservations on the same station.
+        var stationLock = await database.Stations
+            .Where(item => item.Id == station.Id && item.IsActive)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+        if (stationLock != 1)
+            throw new KeyNotFoundException("ایستگاه پیدا نشد.");
+
         if (kind == ReservationKind.Reservation)
         {
             if (station.State is StationState.Offline or StationState.Maintenance)
                 throw new InvalidOperationException("این ایستگاه قابل رزرو نیست.");
 
-            var possibleConflicts = await database.Reservations
+            var hasConflict = await database.Reservations
                 .AsNoTracking()
-                .Where(item => item.StationId == station.Id
+                .AnyAsync(item => item.StationId == station.Id
                     && item.Kind == ReservationKind.Reservation
                     && (item.Status == ReservationStatus.Pending
-    || item.Status == ReservationStatus.Confirmed
-    || item.Status == ReservationStatus.CheckedIn))
-                .ToListAsync(cancellationToken);
+                        || item.Status == ReservationStatus.Confirmed
+                        || item.Status == ReservationStatus.CheckedIn)
+                    && item.StartAt < end
+                    && item.EndAt > start,
+                    cancellationToken);
 
-            if (possibleConflicts.Any(item => item.StartAt < end && item.EndAt > start))
+            if (hasConflict)
                 throw new InvalidOperationException("این ایستگاه در این بازه قبلاً رزرو شده است.");
         }
 
@@ -202,15 +219,26 @@ public sealed class ReservationService(GameNetDbContext database)
             reservation.Station = station;
         }
 
-        var possibleConflicts = await database.Reservations
+        var stationLock = await database.Stations
+            .Where(item => item.Id == reservation.StationId && item.IsActive)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+        if (stationLock != 1)
+            throw new KeyNotFoundException("ایستگاه مقصد پیدا نشد.");
+
+        var hasConflict = await database.Reservations
             .AsNoTracking()
-            .Where(item => item.Id != reservation.Id
+            .AnyAsync(item => item.Id != reservation.Id
                 && item.StationId == reservation.StationId
                 && item.Kind == ReservationKind.Reservation
-                && item.Status is ReservationStatus.Pending or ReservationStatus.Confirmed or ReservationStatus.CheckedIn)
-            .ToListAsync(cancellationToken);
+                && (item.Status == ReservationStatus.Pending
+                    || item.Status == ReservationStatus.Confirmed
+                    || item.Status == ReservationStatus.CheckedIn)
+                && item.StartAt < reservation.EndAt
+                && item.EndAt > reservation.StartAt,
+                cancellationToken);
 
-        if (possibleConflicts.Any(item => item.StartAt < reservation.EndAt && item.EndAt > reservation.StartAt))
+        if (hasConflict)
             throw new InvalidOperationException("ایستگاه مقصد در این بازه رزرو شده است.");
     }
 
