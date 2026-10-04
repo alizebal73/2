@@ -280,7 +280,7 @@ public sealed class SessionSettlementTests : IDisposable
         await db.DisposeAsync();
 
         await using var settlementDb = new GameNetDbContext(options);
-        var service = new SessionSettlementService(settlementDb);
+        var service = new SessionSettlementService(settlementDb, new SessionPricingService(settlementDb));
         var result = await service.SettleAsync(
             session.Id,
             new SessionSettlementRequest(
