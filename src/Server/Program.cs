@@ -277,16 +277,15 @@ app.MapGet("/api/games", async (
         })
         .ToListAsync(cancellationToken);
 
-    var activeUserCounts = await database.Sessions
+    var activeGameIds = await database.Sessions
         .AsNoTracking()
         .Where(session => session.State == SessionState.Active && session.GameId.HasValue)
-        .GroupBy(session => session.GameId!.Value)
-        .Select(group => new
-        {
-            GameId = group.Key,
-            ActiveUsers = group.Count()
-        })
-        .ToDictionaryAsync(item => item.GameId, item => item.ActiveUsers, cancellationToken);
+        .Select(session => session.GameId!.Value)
+        .ToListAsync(cancellationToken);
+
+    var activeUserCounts = activeGameIds
+        .GroupBy(gameId => gameId)
+        .ToDictionary(group => group.Key, group => group.Count());
 
     return Results.Ok(games.Select(item => new GameRecordDto(
         item.Id,
