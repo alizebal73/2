@@ -165,7 +165,7 @@ public sealed class Stage131415Tests : IDisposable
                 CancellationToken.None);
 
             Assert.Equal(1, participant.Seed);
-            Assert.Equal(1, (await service.ListParticipantsAsync(eventRow.Id, CancellationToken.None)).Count);
+            Assert.Single(await service.ListParticipantsAsync(eventRow.Id, CancellationToken.None));
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
                 service.AddParticipantAsync(
