@@ -26,6 +26,7 @@ public static class AuthorizationService
             ["game.manage"] = "مدیریت بازی",
             ["account.manage"] = "مدیریت Account Pool",
             ["client.control"] = "کنترل کلاینت",
+            ["client.power"] = "راه‌اندازی مجدد و خاموش کردن کلاینت",
             ["user.manage"] = "مدیریت کاربران و دسترسی",
             ["approval.decide"] = "تأیید/رد عملیات حساس",
             ["payroll.view"] = "مشاهده اطلاعات حقوق و حساب پرسنلی",
