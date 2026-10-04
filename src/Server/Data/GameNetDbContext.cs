@@ -502,10 +502,20 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         session.Property(item => item.Persons).IsRequired();
         session.Property(item => item.State).HasConversion<string>().HasMaxLength(20);
         session.Property(item => item.Notes).HasMaxLength(500);
+        session.HasIndex(item => new { item.CustomerLoginId, item.State })
+            .HasFilter("CustomerLoginId IS NOT NULL AND State = 'Active'")
+            .IsUnique();
+        session.HasIndex(item => new { item.StationId, item.State })
+            .HasFilter("State = 'Active'")
+            .IsUnique();
         session.HasOne(item => item.Customer)
             .WithMany(item => item.Sessions)
             .HasForeignKey(item => item.CustomerId)
             .OnDelete(DeleteBehavior.Cascade);
+        session.HasOne(item => item.CustomerLogin)
+            .WithMany()
+            .HasForeignKey(item => item.CustomerLoginId)
+            .OnDelete(DeleteBehavior.SetNull);
         session.HasOne(item => item.Station)
             .WithMany(item => item.Sessions)
             .HasForeignKey(item => item.StationId)
