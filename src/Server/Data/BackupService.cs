@@ -146,7 +146,7 @@ public sealed class BackupService(
 
             await File.WriteAllTextAsync(
                 tempManifest,
-                JsonSerializer.Serialize(manifestWithoutArchiveHash, JsonOptions),
+                JsonSerializer.Serialize(manifest, JsonOptions),
                 Encoding.UTF8,
                 cancellationToken);
 
