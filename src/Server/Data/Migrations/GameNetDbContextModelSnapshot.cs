@@ -1489,10 +1489,6 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.HasIndex("GameId");
 
-                    b.HasIndex("StationId")
-                        .IsUnique()
-                        .HasFilter("State = 'Active'");
-
                     b.HasIndex("TariffId");
 
                     b.ToTable("Sessions");
