@@ -3403,6 +3403,23 @@ app.MapPost("/api/buffet/sales", async (
         return Results.BadRequest(new { code = "invalid_sale_target", message = "نوع مقصد فروش معتبر نیست." });
 
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+    var saleProductIds = request.Items
+        .Select(item => item.ProductId)
+        .Distinct()
+        .OrderBy(item => item)
+        .ToList();
+
+    var writerStamp = DateTimeOffset.UtcNow;
+    if (saleProductIds.Count > 0)
+    {
+        await database.Products
+            .Where(item => saleProductIds.Contains(item.Id) && item.IsActive)
+            .OrderBy(item => item.Id)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, writerStamp), cancellationToken);
+    }
+
     Session? session = null;
     Invoice? invoice = null;
 
@@ -3436,7 +3453,7 @@ app.MapPost("/api/buffet/sales", async (
         }
     }
 
-    var ids = request.Items.Select(item => item.ProductId).Distinct().ToList();
+    var ids = saleProductIds;
     var products = await database.Products.Where(item => ids.Contains(item.Id) && item.IsActive).ToListAsync(cancellationToken);
     var byId = products.ToDictionary(item => item.Id);
 
