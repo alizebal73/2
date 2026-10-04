@@ -24,17 +24,17 @@
 | Stage | وضعیت | مشکل واقعی باقی‌مانده |
 |---|---|---|
 | 1 Foundation | ⚠️ Software تقریباً تثبیت‌شده | head فعلی باید دوباره Build/EF/Startup را سبز کند؛ field deployment/recovery هنوز gate محصول است |
-| 2 Prototype/Behavior Transfer | ⚠️ قابل‌اجرا ولی parity کامل اثبات نشده | regression matrix کامل Prototype→Dashboard وجود ندارد |
+| 2 Prototype/Behavior Transfer | ✅ behavior-contract parity ثبت شد | `docs/26-stage1-12-behavior-integration-parity-matrix.md` + Dashboard E2E smoke؛ pixel/field parity خارج از software gate است |
 | 3 Operational Completion | ✅ Server-truth | UIهای عملیات از مسیر real server عبور می‌کنند؛ mockService production path در tree فعلی حذف شده |
 | 4 Finance/Session Core | ✅ هسته verified | full field finance drill هنوز باقی است |
 | 5 Customer/VIP | ✅ هسته verified | production seed و برخی field scenarios باید اصلاح/اثبات شوند |
-| 6 Buffet/Inventory | ⚠️ sale atomic است، manual stock adjustment هنوز race-safe نیست | adjustment باید transaction + atomic claim داشته باشد |
+| 6 Buffet/Inventory | ✅ Server transaction/concurrency hardened | stock adjustment با writer transaction و validation/audit انجام می‌شود؛ exact CI gate باقی است |
 | 7 Users/Permissions/Approval | ✅ هسته verified | permission scopeهای ریزتر خارج از Stage 1-12 |
 | 8 Agent Foundation | ✅ هسته verified | physical multi-PC gate |
-| 9 Agent/Kiosk/Session | ⚠️ contract gap | Restart/Shutdown در UI/Agent وجود دارند ولی در Server command support به‌طور کامل هماهنگ نبودند |
+| 9 Agent/Kiosk/Session | ✅ contract aligned | Restart/Shutdown در Shared/Server/Agent مسیر استاندارد command + persistence + health دارند |
 | 10 Client Lifecycle | ✅ update/rollback core verified | physical canary/installer gate |
 | 11 Game + Account Pool | ✅ server-backed verified | process detection/real game process control خارج از این Stage است |
-| 12 Vertical Integration | ✅ architecture درست، head جدید نیازمند exact CI | CustomerLogin persisted، active Session uniqueness، Lease/Credential/release chain درست؛ exact head باید سبز شود |
+| 12 Vertical Integration | ✅ implementation; ⚠️ exact head verification | CustomerLogin persisted، active Session uniqueness، Lease/Credential/release chain و Game Sync Succeeded path تثبیت شده‌اند |
 
 ## مشکلاتی که همین ممیزی آن‌ها را قطعی کرد
 
@@ -305,3 +305,10 @@ e2e/playwright.config.cjs
 - کد فعلی branch snapshot metadata آن navigation اشتباه را ندارد و migrations/designer فعلی با model هم‌راستا شده‌اند.
 - Latest head هنوز run مستقل ندارد؛ بنابراین «کامل بودن نرم‌افزاری» را از «exact-SHA verification» جدا نگه می‌داریم.
 - Stageهای 1 تا 12 در این ممیزی فقط وقتی بسته اعلام می‌شوند که exact latest head از Build/Test/EF/Startup/Dashboard و Agent/Session/Game/Lease smoke عبور کند.
+
+
+## ممیزی تکمیلی
+
+- سند behavior/integration parity: `docs/26-stage1-12-behavior-integration-parity-matrix.md`
+- migration parity اخیر: `20261004130000_ReservationIndexParity`
+- `Session.HourlyRateSnapshot` دارای mapping صریح `decimal(18,2)` است تا SQLite runtime model با migration target یکی باشد.
