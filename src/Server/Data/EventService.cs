@@ -133,10 +133,11 @@ public sealed class EventService(GameNetDbContext database)
     {
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
+        var writerLockAt = DateTimeOffset.UtcNow;
         var lockedEvent = await database.Events
             .Where(item => item.Id == eventId)
             .ExecuteUpdateAsync(setters => setters
-                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+                .SetProperty(item => item.UpdatedAt, writerLockAt), cancellationToken);
         if (lockedEvent != 1)
             throw new KeyNotFoundException("Event پیدا نشد.");
 
@@ -144,6 +145,13 @@ public sealed class EventService(GameNetDbContext database)
             .Include(item => item.Participants)
             .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken)
             ?? throw new KeyNotFoundException("Event پیدا نشد.");
+
+        // ExecuteUpdate bypasses EF tracking. If this Event was already tracked by a
+        // previous operation in the same scoped service/context, its concurrency-token
+        // OriginalValue would still contain the old UpdatedAt and the next SaveChanges
+        // would legitimately affect zero rows. Reload the tracked row so its current
+        // and original concurrency values match the writer-locked database row.
+        await database.Entry(entity).ReloadAsync(cancellationToken);
 
         if (entity.Status is EventStatus.Completed or EventStatus.Cancelled)
             throw new InvalidOperationException("این Event دیگر شرکت‌کننده جدید نمی‌پذیرد.");
