@@ -109,11 +109,12 @@ public sealed class EventService(GameNetDbContext database)
             .AsNoTracking()
             .Include(item => item.Customer)
             .Where(item => item.EventId == eventId)
-            .OrderBy(item => item.Seed)
-            .ThenBy(item => item.JoinedAt)
             .ToListAsync(cancellationToken);
 
-        return rows.Select(item => new EventParticipantDto(
+        return rows
+            .OrderBy(item => item.Seed)
+            .ThenBy(item => item.JoinedAt)
+            .Select(item => new EventParticipantDto(
             item.Id,
             item.EventId,
             item.CustomerId,
