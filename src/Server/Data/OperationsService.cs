@@ -11,12 +11,15 @@ public sealed class OperationsService(GameNetDbContext database)
             .AsNoTracking()
             .OrderBy(item => item.Zone)
             .ThenBy(item => item.Name)
+            .Include(item => item.Tariff)
             .Select(item => new StationManagementDto(
                 item.Id,
                 item.Name,
                 item.Zone,
                 item.Type,
-                item.RatePerHour,
+                item.Tariff != null && item.Tariff.IsActive
+                    ? item.Tariff.HourlyRate
+                    : item.RatePerHour,
                 item.State.ToString(),
                 item.StationTypeId,
                 item.TariffId,
