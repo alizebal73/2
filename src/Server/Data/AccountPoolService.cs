@@ -28,6 +28,10 @@ public sealed class AccountPoolService(
         for (var attempt = 0; attempt < 2; attempt++)
         {
             var now = DateTime.UtcNow;
+            // SQLite cannot translate DateTimeOffset ordering. Keep the server-side filter
+            // authoritative, then apply the deterministic CreatedAt ordering in memory.
+            // The account pool is intentionally bounded operational data; this preserves the
+            // allocation policy without weakening the atomic claim below.
             var candidates = await database.AccountPoolEntries.AsNoTracking()
                 .Where(item => item.Status == AccountPoolStatus.Free
                     && item.IsActive
@@ -36,7 +40,6 @@ public sealed class AccountPoolService(
 
             var candidate = candidates
                 .OrderBy(item => item.CreatedAt)
-                .ThenBy(item => item.Id)
                 .FirstOrDefault(item =>
                     item.AllowedGameIdsCsv
                         .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -57,7 +60,8 @@ public sealed class AccountPoolService(
                         .SetProperty(item => item.AssignedAgentDeviceId, agentDeviceId)
                         .SetProperty(item => item.UpdatedAt, now), cancellationToken);
 
-                if (updated != 1) return (null, null);
+                if (updated != 1)
+                    continue;
 
                 var lease = new AccountLease
                 {
@@ -106,13 +110,17 @@ public sealed class AccountPoolService(
         if (session.StationId != session.AgentDevice.StationId)
             throw new InvalidOperationException("Agent و ایستگاه جلسه با هم منطبق نیستند.");
 
+        if (!session.CustomerLoginId.HasValue)
+            throw new InvalidOperationException("ورود مشتری به Session متصل نشده است.");
+
         var login = await database.CustomerLogins.AsNoTracking().FirstOrDefaultAsync(
-            item => item.CustomerId == session.CustomerId
+            item => item.Id == session.CustomerLoginId.Value
+                && item.CustomerId == session.CustomerId
                 && item.ClientKey == session.AgentDevice.DeviceId
                 && item.IsActive,
             cancellationToken);
         if (login is null)
-            throw new InvalidOperationException("ورود مشتری برای Agent این جلسه فعال نیست.");
+            throw new InvalidOperationException("ورود مشتری ثبت‌شده برای این Session فعال نیست.");
 
         var lease = await database.AccountLeases
             .Include(item => item.AccountPoolEntry)
@@ -155,6 +163,20 @@ public sealed class AccountPoolService(
         string releaseReason,
         CancellationToken cancellationToken)
     {
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        var released = await ReleaseActiveForSessionWithinTransactionAsync(
+            sessionId,
+            releaseReason,
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return released;
+    }
+
+    public async Task<int> ReleaseActiveForSessionWithinTransactionAsync(
+        Guid sessionId,
+        string releaseReason,
+        CancellationToken cancellationToken)
+    {
         var leaseIds = await database.AccountLeases
             .AsNoTracking()
             .Where(item => item.SessionId == sessionId && item.State == AccountLeaseState.Active)
@@ -164,7 +186,7 @@ public sealed class AccountPoolService(
         var released = 0;
         foreach (var leaseId in leaseIds)
         {
-            if (await ReleaseAsync(leaseId, releaseReason, cancellationToken) is not null)
+            if (await ReleaseWithinTransactionAsync(leaseId, releaseReason, cancellationToken) is not null)
                 released++;
         }
 
@@ -172,6 +194,20 @@ public sealed class AccountPoolService(
     }
 
     public async Task<int> ReleaseActiveForAgentAsync(
+        Guid agentDeviceId,
+        string releaseReason,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+        var released = await ReleaseActiveForAgentWithinTransactionAsync(
+            agentDeviceId,
+            releaseReason,
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return released;
+    }
+
+    public async Task<int> ReleaseActiveForAgentWithinTransactionAsync(
         Guid agentDeviceId,
         string releaseReason,
         CancellationToken cancellationToken)
@@ -185,7 +221,7 @@ public sealed class AccountPoolService(
         var released = 0;
         foreach (var leaseId in leaseIds)
         {
-            if (await ReleaseAsync(leaseId, releaseReason, cancellationToken) is not null)
+            if (await ReleaseWithinTransactionAsync(leaseId, releaseReason, cancellationToken) is not null)
                 released++;
         }
 
@@ -209,13 +245,17 @@ public sealed class AccountPoolService(
         if (session.StationId != session.AgentDevice.StationId)
             throw new InvalidOperationException("Agent و ایستگاه جلسه با هم منطبق نیستند.");
 
+        if (!session.CustomerLoginId.HasValue)
+            throw new InvalidOperationException("ورود مشتری به Session متصل نشده است.");
+
         var login = await database.CustomerLogins.AsNoTracking().FirstOrDefaultAsync(
-            item => item.CustomerId == session.CustomerId
+            item => item.Id == session.CustomerLoginId.Value
+                && item.CustomerId == session.CustomerId
                 && item.ClientKey == session.AgentDevice.DeviceId
                 && item.IsActive, cancellationToken);
 
         if (login is null)
-            throw new InvalidOperationException("ورود مشتری برای Agent این جلسه فعال نیست.");
+            throw new InvalidOperationException("ورود مشتری ثبت‌شده برای این Session فعال نیست.");
 
         var result = await AllocateAsync(
             session.GameId.Value,
@@ -249,6 +289,9 @@ public sealed class AccountPoolService(
             .AsNoTracking()
             .Include(item => item.AccountPoolEntry)
             .Include(item => item.Session)
+                .ThenInclude(item => item!.CustomerLogin)
+            .Include(item => item.Session)
+                .ThenInclude(item => item!.AgentDevice)
             .FirstOrDefaultAsync(
                 item => item.Id == leaseId
                     && item.AgentDeviceId == agentDeviceId
@@ -259,15 +302,26 @@ public sealed class AccountPoolService(
             || !lease.SessionId.HasValue
             || lease.Session is null
             || lease.Session.State != SessionState.Active
+            || lease.Session.AgentDeviceId != agentDeviceId
+            || !lease.Session.CustomerLoginId.HasValue
+            || lease.Session.CustomerLogin is null
+            || !lease.Session.CustomerLogin.IsActive
+            || lease.Session.AgentDevice is null
+            || lease.Session.CustomerLogin.Id != lease.Session.CustomerLoginId.Value
+            || lease.Session.CustomerLogin.ClientKey != lease.Session.AgentDevice.DeviceId
+            || lease.GameId != lease.Session.GameId
             || !string.Equals(lease.LeaseToken, leaseToken, StringComparison.Ordinal)
             || !lease.CredentialAccessExpiresAt.HasValue
             || lease.CredentialAccessExpiresAt.Value <= DateTimeOffset.UtcNow
             || string.IsNullOrWhiteSpace(lease.AccountPoolEntry.SecretCiphertext))
             return null;
 
+        var session = lease.Session;
+        var credentialSecret = lease.AccountPoolEntry.SecretCiphertext!;
+
         try
         {
-            var secret = credentialProtection.Unprotect(lease.AccountPoolEntry.SecretCiphertext);
+            var secret = credentialProtection.Unprotect(credentialSecret);
             return new AgentGameAccountCredentialDto(
                 lease.Id,
                 lease.GameId,
@@ -289,8 +343,35 @@ public sealed class AccountPoolService(
         CancellationToken cancellationToken)
     {
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-        var lease = await database.AccountLeases.AsNoTracking().FirstOrDefaultAsync(item => item.Id == leaseId, cancellationToken);
-        if (lease is null || lease.State != AccountLeaseState.Active) return null;
+        try
+        {
+            var lease = await ReleaseWithinTransactionAsync(leaseId, releaseReason, cancellationToken);
+            if (lease is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return null;
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+            return lease;
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
+    }
+
+    private async Task<AccountLease?> ReleaseWithinTransactionAsync(
+        Guid leaseId,
+        string? releaseReason,
+        CancellationToken cancellationToken)
+    {
+        var lease = await database.AccountLeases
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == leaseId, cancellationToken);
+        if (lease is null || lease.State != AccountLeaseState.Active)
+            return null;
 
         var now = DateTimeOffset.UtcNow;
         var releasedLease = await database.AccountLeases
@@ -302,7 +383,8 @@ public sealed class AccountPoolService(
                 .SetProperty(item => item.ReleaseReason, releaseReason)
                 .SetProperty(item => item.UpdatedAt, now), cancellationToken);
 
-        if (releasedLease != 1) return null;
+        if (releasedLease != 1)
+            return null;
 
         var releasedAccount = await database.AccountPoolEntries
             .Where(item => item.Id == lease.AccountPoolEntryId && item.Status == AccountPoolStatus.InUse)
@@ -312,18 +394,13 @@ public sealed class AccountPoolService(
                 .SetProperty(item => item.UpdatedAt, now), cancellationToken);
 
         if (releasedAccount != 1)
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            return null;
-        }
+            throw new InvalidOperationException("آزادسازی Lease انجام شد اما Account Pool entry در وضعیت InUse نبود.");
 
         lease.State = AccountLeaseState.Released;
         lease.ReleasedAt = now;
         lease.CredentialAccessExpiresAt = null;
         lease.ReleaseReason = releaseReason;
         lease.UpdatedAt = now;
-
-        await transaction.CommitAsync(cancellationToken);
         return lease;
     }
 }
