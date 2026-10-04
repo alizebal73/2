@@ -6,7 +6,6 @@ using Microsoft.AspNetCore.SignalR;
 using GameNetManager.Shared.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
-using System.Security.Cryptography;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -3090,7 +3089,7 @@ app.MapPost("/api/customers", async (HttpContext context,
         IsVip = vipTier != "none",
         ConcurrentLoginLimit = Math.Max(1, request.ConcurrentLoginLimit),
         Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-        PasswordHash = string.IsNullOrWhiteSpace(request.Password) ? null : HashPassword(request.Password)
+        PasswordHash = string.IsNullOrWhiteSpace(request.Password) ? null : PasswordSecurity.Hash(request.Password)
     };
 
     database.Customers.Add(customer);
@@ -3214,7 +3213,7 @@ app.MapPost("/api/customers/{customerId:guid}/password", async (HttpContext cont
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
 
-    customer.PasswordHash = HashPassword(request.Password);
+    customer.PasswordHash = PasswordSecurity.Hash(request.Password);
     database.AuditLogs.Add(new AuditLog
     {
         Action = "CustomerPasswordChanged",
@@ -3234,32 +3233,29 @@ app.MapGet("/api/client/identity", async (
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var remoteIp = context.Connection.RemoteIpAddress;
-    var local = remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
+    var deviceId = context.Request.Headers["X-GameNet-Device-Id"].ToString().Trim();
+    var authorization = context.Request.Headers.Authorization.ToString();
 
-    AgentDevice? device = null;
-    if (remoteIp is not null && !local)
-    {
-        var ipText = remoteIp.ToString();
-        var matchingDevices = await database.AgentDevices
-            .AsNoTracking()
-            .Include(item => item.Station)
-            .Where(item => item.IsActive && item.IsOnline && item.LastIpAddress == ipText)
-            .ToListAsync(cancellationToken);
-        device = matchingDevices.OrderByDescending(item => item.LastSeenAt).FirstOrDefault();
-    }
-    else
-    {
-        var loopbackDevices = await database.AgentDevices
-            .AsNoTracking()
-            .Include(item => item.Station)
-            .Where(item => item.IsActive && item.IsOnline && item.LastSeenAt.HasValue)
-            .ToListAsync(cancellationToken);
-        device = loopbackDevices.OrderByDescending(item => item.LastSeenAt).FirstOrDefault();
-    }
+    if (string.IsNullOrWhiteSpace(deviceId)
+        || !authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        return Results.Unauthorized();
+
+    var token = authorization["Bearer ".Length..].Trim();
+    if (string.IsNullOrWhiteSpace(token))
+        return Results.Unauthorized();
+
+    var tokenHash = PasswordSecurity.HashToken(token);
+    var device = await database.AgentDevices
+        .AsNoTracking()
+        .Include(item => item.Station)
+        .FirstOrDefaultAsync(
+            item => item.DeviceId == deviceId
+                && item.AgentTokenHash == tokenHash
+                && item.IsActive,
+            cancellationToken);
 
     if (device is null)
-        return Results.NotFound(new { code = "client_identity_not_found", message = "Agent این رایانه پیدا نشد." });
+        return Results.Unauthorized();
 
     return Results.Ok(new
     {
@@ -3294,7 +3290,7 @@ app.MapPost("/api/customer-auth/login", async (
 
     if (customer is null
         || string.IsNullOrWhiteSpace(customer.PasswordHash)
-        || !VerifyPassword(request.Password, customer.PasswordHash))
+        || !PasswordSecurity.Verify(request.Password, customer.PasswordHash))
         return Results.Unauthorized();
 
     var agent = await database.AgentDevices
@@ -3787,7 +3783,9 @@ app.MapGet("/api/buffet/inventory-transactions", async (HttpContext context,
     var rows = await database.InventoryTransactions
         .AsNoTracking()
         .Include(item => item.Product)
-        .Take(300)
+        .OrderByDescending(item => item.CreatedAt)
+        .ThenByDescending(item => item.Id)
+        .Take(200)
         .Select(item => new
         {
             id = item.Id,
@@ -3804,10 +3802,7 @@ app.MapGet("/api/buffet/inventory-transactions", async (HttpContext context,
         })
         .ToListAsync(cancellationToken);
 
-    return Results.Ok(rows
-        .OrderByDescending(item => item.createdAt)
-        .Take(200)
-        .ToList());
+    return Results.Ok(rows);
 })
 .WithName("GetInventoryTransactions");
 
@@ -3820,14 +3815,27 @@ app.MapGet("/api/buffet/reports/profit", async (HttpContext context,
 
     var start = from ?? DateTimeOffset.UtcNow.Date.AddDays(-30);
     var end = to ?? DateTimeOffset.UtcNow;
+    if (end < start)
+        return Results.BadRequest(new { code = "invalid_report_range", message = "بازه گزارش نامعتبر است." });
+
+    // SQLite stores the shared BaseEntity timestamp as TEXT. Use SQLite's datetime()
+    // function for the bounded report query so the date window is enforced in SQL
+    // instead of loading the complete inventory ledger into server memory.
+    var startText = start.UtcDateTime.ToString("O");
+    var endText = end.UtcDateTime.ToString("O");
     var inventory = await database.InventoryTransactions
+        .FromSqlInterpolated($"""
+            SELECT *
+            FROM "InventoryTransactions"
+            WHERE datetime("CreatedAt") >= datetime({startText})
+              AND datetime("CreatedAt") <= datetime({endText})
+              AND "Kind" IN ('Sale', 'Purchase', 'Waste', 'Return')
+            """)
         .Include(item => item.Product)
         .AsNoTracking()
         .ToListAsync(cancellationToken);
 
     var rows = inventory
-        .Where(item => item.CreatedAt >= start && item.CreatedAt <= end
-            && (item.Kind == "Sale" || item.Kind == "Purchase" || item.Kind == "Waste" || item.Kind == "Return"))
         .Select(item => new { item.ProductId, productName = item.Product.Name, item.Quantity, item.UnitPrice, item.UnitCost, item.Direction, item.Kind, item.ReferenceInvoiceId })
         .ToList();
     var products = rows.GroupBy(item => new { item.ProductId, item.productName }).Select(group =>
@@ -4218,7 +4226,9 @@ app.MapGet("/api/customers/{customerId:guid}/vip-usage", async (HttpContext cont
 
     var todayStart = now.Date;
     var sessions = await database.Sessions.AsNoTracking()
-        .Where(item => item.CustomerId == customerId)
+        .Where(item => item.CustomerId == customerId
+            && item.StartAt < usageEnd
+            && (!item.EndAt.HasValue || item.EndAt.Value > activatedAt))
         .Select(item => new { item.StartAt, item.EndAt })
         .ToListAsync(cancellationToken);
 
@@ -5558,17 +5568,27 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
     if (session.State != SessionState.Active)
         return Results.Conflict(new { code = "session_not_active", message = "جلسه فعال نیست." });
 
-    var target = await database.Stations.FirstOrDefaultAsync(item => item.Id == request.TargetStationId, cancellationToken);
-    if (target is null)
+    var targetExists = await database.Stations.AnyAsync(
+        item => item.Id == request.TargetStationId && item.IsActive,
+        cancellationToken);
+    if (!targetExists)
         return Results.NotFound(new { code = "station_not_found", message = "ایستگاه مقصد پیدا نشد." });
 
-    if (target.State != StationState.Available)
-        return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد آزاد نیست." });
+    var claimedTarget = await database.Stations
+        .Where(item => item.Id == request.TargetStationId
+            && item.IsActive
+            && item.State == StationState.Available
+            && item.Id != session.StationId)
+        .ExecuteUpdateAsync(setters => setters
+            .SetProperty(item => item.State, StationState.Occupied)
+            .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+
+    if (claimedTarget != 1)
+        return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد دیگر آزاد نیست." });
 
     var source = session.Station;
     source.State = StationState.Available;
-    target.State = StationState.Occupied;
-    session.StationId = target.Id;
+    session.StationId = request.TargetStationId;
 
     database.AuditLogs.Add(new AuditLog
     {
@@ -5705,221 +5725,6 @@ static bool TryDecodeWalletRefundApprovalTarget(string? value, out WalletRefundA
     target = new WalletRefundApprovalTarget(customerId, amount, sourceTransactionId);
     return true;
 }
-
-static string HashPassword(string password)
-{
-    var salt = RandomNumberGenerator.GetBytes(16);
-    const int iterations = 120_000;
-    var hash = Rfc2898DeriveBytes.Pbkdf2(password.AsSpan(), salt, iterations, HashAlgorithmName.SHA256, 32);
-    return "PBKDF2-SHA256$" + iterations + "$" + Convert.ToBase64String(salt) + "$" + Convert.ToBase64String(hash);
-}
-
-static bool VerifyPassword(string password, string stored)
-{
-    var parts = stored.Split('$');
-    if (parts.Length != 4 || parts[0] != "PBKDF2-SHA256" || !int.TryParse(parts[1], out var iterations))
-        return false;
-
-    try
-    {
-        var salt = Convert.FromBase64String(parts[2]);
-        var expected = Convert.FromBase64String(parts[3]);
-        var actual = Rfc2898DeriveBytes.Pbkdf2(password.AsSpan(), salt, iterations, HashAlgorithmName.SHA256, expected.Length);
-        return CryptographicOperations.FixedTimeEquals(actual, expected);
-    }
-    catch
-    {
-        return false;
-    }
-}
-
-static string NormalizeVipTier(string? tier)
-{
-    var value = tier?.Trim().ToLowerInvariant();
-    return value is "silver" or "gold" or "bronze" or "custom" ? value : "none";
-}
-
-static CustomerDto ToCustomerDto(Customer customer) => new(
-    customer.Id,
-    customer.Code,
-    customer.Username,
-    customer.FullName,
-    customer.Alias,
-    customer.NationalId,
-    customer.Phone,
-    customer.Email,
-    customer.VipTier,
-    customer.Balance,
-    customer.FreeMoney,
-    customer.FreeTimeMinutes,
-    customer.ConcurrentLoginLimit,
-    customer.Notes);
-
-static async Task InitializeDatabaseAsync(
-    IServiceProvider services,
-    string databasePath,
-    ILogger logger,
-    bool includeDemoData)
-{
-    await using var scope = services.CreateAsyncScope();
-    var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
-
-    try
-    {
-        await database.Database.MigrateAsync();
-        await DatabaseSeeder.SeedAsync(database, includeDemoData);
-    }
-    catch (Exception exception) when (IsMigrationRecoveryCandidate(exception))
-    {
-        logger.LogCritical(
-            exception,
-            "خطای مهاجرت دیتابیس در {DatabasePath} رخ داد. حذف خودکار دیتابیس غیرفعال است؛ قبل از ادامه، فایل پشتیبان/Recovery بررسی شود.",
-            databasePath);
-
-        throw new InvalidOperationException(
-            "مهاجرت دیتابیس ناموفق بود. برای جلوگیری از از دست رفتن اطلاعات، دیتابیس حذف یا بازسازی خودکار نشد. ابتدا Recovery/Backup را بررسی کنید.",
-            exception);
-    }
-}
-static bool IsMigrationRecoveryCandidate(Exception exception)
-{
-    return exception is SqliteException or AggregateException { InnerException: SqliteException }
-        || exception.Message.Contains("FOREIGN KEY constraint failed", StringComparison.OrdinalIgnoreCase)
-        || exception.Message.Contains("SQLite Error 19", StringComparison.OrdinalIgnoreCase);
-}
-
-static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
-    GameNetDbContext database,
-    Shift shift,
-    decimal? countedCashOverride,
-    CancellationToken cancellationToken)
-{
-    var end = shift.CloseAt ?? DateTimeOffset.UtcNow;
-
-    var cashPayments = await database.InvoicePayments
-        .Where(item => item.Method == "cash"
-            && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null)
-        .ToListAsync(cancellationToken);
-    var cashSales = cashPayments
-        .Where(item => item.Invoice.PaidAt >= shift.OpenAt
-            && item.Invoice.PaidAt <= end)
-        .Sum(item => item.Amount);
-
-    var expenseTotal = await database.Expenses
-        .Where(item => item.ShiftId == shift.Id)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
-
-    var externalCash = 0m;
-    var expected = shift.CashOpening + cashSales - expenseTotal;
-    var counted = countedCashOverride ?? shift.CashClosing;
-    var difference = counted.HasValue ? counted.Value - expected : 0m;
-
-    return new ShiftSnapshotDto(
-        shift.Id,
-        shift.AppUserId,
-        shift.AppUser?.FullName ?? "کاربر",
-        shift.OpenAt,
-        shift.CloseAt,
-        shift.CashOpening,
-        counted,
-        cashSales,
-        expenseTotal,
-        externalCash,
-        expected,
-        difference,
-        shift.Notes);
-}
-
-static AppUserDto ToAppUserDto(AppUser user)
-    => new(
-        user.Id,
-        user.FullName,
-        user.UserName,
-        user.Email,
-        user.Role,
-        user.IsActive,
-        user.LastLoginAt,
-        user.Permissions.Select(item => item.Permission.Name).OrderBy(name => name).ToArray());
-
-public sealed record LoginRequest(string UserName, string Password);
-public sealed record AppUserDto(Guid Id, string FullName, string UserName, string Email, string Role, bool IsActive, DateTimeOffset? LastLoginAt, IReadOnlyList<string> Permissions);
-public sealed record AppUserWriteRequest(string FullName, string UserName, string Email, string Password, string Role, bool IsActive = true);
-public sealed record PermissionAssignmentRequest(IReadOnlyList<string> PermissionNames);
-public sealed record ApprovalCreateRequest(string Action, string EntityName, string? EntityId, string Reason);
-public sealed record ApprovalOperationRequest(string Reason);
-public sealed record PayrollProfileRequest(
-    string? Phone,
-    string PayType,
-    decimal HourlyRate,
-    decimal MonthlySalary,
-    decimal OvertimeRate,
-    DateTimeOffset? EmploymentStartDate,
-    string? WorkSchedule,
-    string? Notes,
-    bool IsActive = true);
-
-public sealed record PayrollEntryRequest(
-    string Kind,
-    decimal Amount,
-    string Reason,
-    string? PaymentMethod = null,
-    string? ReceiptNumber = null,
-    decimal? EmployeePayableDelta = null,
-    decimal? OwnerReceivableDelta = null);
-
-public sealed record ApprovalDecisionRequest(string? Note);
-public sealed record WalletRefundRequestDto(decimal Amount, string? Reason, Guid? SourceTransactionId);
-public sealed record WalletRefundApprovalTarget(Guid CustomerId, decimal Amount, Guid? SourceTransactionId);
-
-public sealed record StartShiftRequest(
-    string? OperatorName,
-    Guid? AppUserId,
-    decimal CashOpening,
-    string? Note);
-
-public sealed record CloseShiftRequest(
-    decimal CashClosing,
-    decimal ExternalCash,
-    string? Note);
-
-public sealed record StartSessionRequest(Guid CustomerId, Guid StationId, Guid? TariffId, Guid? AppUserId, decimal? HourlyRateOverride, int? Persons);
-public sealed record SessionDetailsRequest(decimal? HourlyRate, int? Persons);
-public sealed record SessionTimeAdjustmentRequest(int Minutes);
-public sealed record SessionTransferRequest(Guid TargetStationId);
-public sealed record SessionTransferResultDto(Guid SessionId, Guid StationId);
-public sealed record StartSessionResultDto(Guid SessionId, Guid StationId, Guid CustomerId, DateTimeOffset StartAt);
-
-public sealed record FinanceExpenseRequestDto(decimal Amount, string Category, string? Description, Guid? AppUserId);
-public sealed record FinanceExpenseDto(Guid Id, Guid ShiftId, string Category, decimal Amount, string? Description, DateTimeOffset CreatedAt);
-public sealed record FinanceSummaryDto(DateTimeOffset From, DateTimeOffset To, decimal Revenue, decimal Expense, decimal OperatingProfit);
-public sealed record FinanceTransactionDto(Guid Id, DateTimeOffset ClosedAt, string Description, decimal Amount, string Method, string Status);
-
-public sealed record CustomerDebtRequest(decimal Amount, string? Description, Guid? AppUserId);
-public sealed record CustomerHistoryItemDto(Guid Id, string Type, string Description, decimal Amount, DateTimeOffset CreatedAt, Guid? ReferenceId);
-public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, int MinimumStock = 0, string? Unit = null, Guid? AppUserId = null);
-public sealed record UpdateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int MinimumStock = 0, string? Unit = null, bool IsActive = true, Guid? AppUserId = null);
-public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment", decimal? UnitCost = null);
-public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
-public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId, Guid? SessionId = null);
-public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
-public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
-public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);
-
-public sealed record ShiftSnapshotDto(
-    Guid Id,
-    Guid AppUserId,
-    string Operator,
-    DateTimeOffset OpenedAt,
-    DateTimeOffset? ClosedAt,
-    decimal CashOpening,
-    decimal? CashClosing,
-    decimal CashSales,
-    decimal Expenses,
-    decimal ExternalCash,
-    decimal ExpectedCash,
-    decimal Difference,
-    string? Note);
 
 public partial class Program { }
 
