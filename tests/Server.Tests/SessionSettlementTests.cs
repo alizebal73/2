@@ -53,7 +53,8 @@ public sealed class SessionSettlementTests : IDisposable
             Tariff = tariff,
             AppUser = user,
             StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
-            State = SessionState.Active
+            State = SessionState.Active,
+            HourlyRateSnapshot = 150000m
         };
 
         db.AddRange(type, tariff, customer, user, station, session);
@@ -186,8 +187,9 @@ public sealed class SessionSettlementTests : IDisposable
             Customer = customer,
             Station = station,
             Tariff = tariff,
-            StartAt = DateTimeOffset.UtcNow.AddMinutes(-30),
-            State = SessionState.Active
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 100000m
         };
         var draft = new Invoice
         {
