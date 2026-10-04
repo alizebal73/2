@@ -3916,6 +3916,19 @@ button:focus-visible {
   gap: 7px;
   margin: 0 22px 12px;
 }
+.report-audit-filter-grid {
+  grid-template-columns: repeat(4, minmax(150px, 1fr)) auto;
+}
+
+.report-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 10px 22px 20px;
+  color: var(--dim);
+  font-size: 9px;
+}
 .report-placeholder {
   display: grid;
   gap: 6px;
