@@ -6,7 +6,7 @@ stage13-reporting-audit
 
 ## Base
 
-main = 9aecaba120a69a9340ff214c2a3f3f7ffc7e104a
+main = 24a0654fa6490f415372ab2e7d28f30a0ecfbe89
 
 ## Slice 13.1 — Audit Explorer
 
@@ -17,9 +17,15 @@ main = 9aecaba120a69a9340ff214c2a3f3f7ffc7e104a
 - Finance data loading is skipped when the current user only has `audit.view`.
 - Regression coverage added for service filtering/pagination, browser behavior, and CI server API smoke.
 
+## Certified Gate
+
+- Exact-head Stage 13.1 CI: **Run #1380 — success**
+- Post-merge main CI: **Run #1383 — success**
+- Main merge commit: `24a0654fa6490f415372ab2e7d28f30a0ecfbe89`
+
 ## Not Done
 
-- Stage 13.1 has not been certified until the exact branch HEAD is green.
+- Stage 13.1 **CERTIFIED** — exact-head Run #1380 green; merge commit on main verified by Run #1383.
 - Sessions/Stations, Customers/VIP, Users/Shift reports are still later Stage 13 slices.
 - Fine-grained permission/scope and full reporting export policy remain later in Stage 13.
 - Notification/Event Queue remains later in Stage 13.
@@ -30,4 +36,4 @@ Resume from this branch and this checkpoint. Do not infer completion from chat h
 
 ## Next checkpoint
 
-After 13.1 is green: audit the real API/UI behavior, then implement Stage 13.2 Sessions & Stations reports without reintroducing Mock data.
+Create `stage13-sessions-stations` from the certified `main` above. Implement Stage 13.2 Sessions & Stations as the next real vertical slice, without reintroducing Mock data.
