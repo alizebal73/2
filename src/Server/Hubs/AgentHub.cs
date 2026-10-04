@@ -520,6 +520,7 @@ public sealed class AgentHub(
         var session = new Session
         {
             CustomerId = customer.Id,
+            CustomerLoginId = login.Id,
             StationId = station.Id,
             TariffId = station.TariffId,
             AppUserId = null,
@@ -591,11 +592,12 @@ public sealed class AgentHub(
         if (session.StationId != device.StationId.Value)
             throw new HubException("این جلسه متعلق به ایستگاه Agent نیست.");
 
-        if (!request.CustomerLoginId.HasValue)
-            throw new HubException("شناسهٔ ورود مشتری برای پایان جلسه الزامی است.");
+        var loginId = session.CustomerLoginId ?? request.CustomerLoginId;
+        if (!loginId.HasValue)
+            throw new HubException("شناسهٔ ورود مشتری برای پایان جلسه پیدا نشد.");
 
         var login = await database.CustomerLogins.FirstOrDefaultAsync(
-            item => item.Id == request.CustomerLoginId.Value
+            item => item.Id == loginId.Value
                 && item.CustomerId == session.CustomerId
                 && item.ClientKey == device.DeviceId,
             Context.ConnectionAborted);
