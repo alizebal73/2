@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.SignalR;
 using GameNetManager.Shared.Contracts;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -5587,6 +5588,12 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
 
     if (claimedTarget != 1)
         return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد دیگر آزاد نیست." });
+
+    var target = await database.Stations
+        .AsNoTracking()
+        .FirstOrDefaultAsync(item => item.Id == request.TargetStationId, cancellationToken);
+    if (target is null)
+        return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد دیگر در دسترس نیست." });
 
     var source = session.Station;
     source.State = StationState.Available;
