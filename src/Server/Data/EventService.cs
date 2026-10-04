@@ -142,6 +142,7 @@ public sealed class EventService(GameNetDbContext database)
             throw new KeyNotFoundException("Event پیدا نشد.");
 
         var entity = await database.Events
+            .AsNoTracking()
             .Include(item => item.Participants)
             .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken)
             ?? throw new KeyNotFoundException("Event پیدا نشد.");
@@ -208,7 +209,22 @@ public sealed class EventService(GameNetDbContext database)
         Guid appUserId,
         CancellationToken cancellationToken)
     {
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+        var writerLockAt = DateTimeOffset.UtcNow;
+        var lockedEvent = await database.Events
+            .Where(item => item.Id == eventId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, writerLockAt), cancellationToken);
+
+        if (lockedEvent != 1)
+            throw new KeyNotFoundException("Event پیدا نشد.");
+
+        // Use a fresh no-tracking read after the writer lock. Transition must not
+        // depend on a stale GameEvent instance left in the scoped DbContext by a
+        // previous operation.
         var entity = await database.Events
+            .AsNoTracking()
             .Include(item => item.Participants)
             .FirstOrDefaultAsync(item => item.Id == eventId, cancellationToken)
             ?? throw new KeyNotFoundException("Event پیدا نشد.");
@@ -227,7 +243,16 @@ public sealed class EventService(GameNetDbContext database)
         if (next == EventStatus.Running && entity.StartAt > DateTimeOffset.UtcNow.AddMinutes(5))
             throw new InvalidOperationException("زمان شروع Event هنوز نرسیده است.");
 
-        entity.Status = next;
+        var transitionAt = DateTimeOffset.UtcNow;
+        var updated = await database.Events
+            .Where(item => item.Id == eventId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Status, next)
+                .SetProperty(item => item.UpdatedAt, transitionAt), cancellationToken);
+
+        if (updated != 1)
+            throw new DbUpdateConcurrencyException("انتقال Event هم‌زمان با تغییر دیگری برخورد کرد.");
+
         database.AuditLogs.Add(new AuditLog
         {
             Action = "Event" + next,
@@ -236,8 +261,12 @@ public sealed class EventService(GameNetDbContext database)
             AppUserId = appUserId,
             Details = entity.Name
         });
-        await database.SaveChangesAsync(cancellationToken);
 
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        entity.Status = next;
+        entity.UpdatedAt = transitionAt;
         return ToDto(entity);
     }
 
