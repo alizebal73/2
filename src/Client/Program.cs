@@ -856,6 +856,18 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 message = "کاربر خارج شد و دستگاه قفل شد.";
                 break;
 
+            case AgentCommandTypes.Restart:
+                ScheduleSystemPowerAction("/r /t 3 /f");
+                Console.WriteLine($"فرمان Restart دریافت شد؛ CommandId={command.CommandId}.");
+                message = "راه‌اندازی مجدد سیستم برای چند ثانیه بعد زمان‌بندی شد.";
+                break;
+
+            case AgentCommandTypes.Shutdown:
+                ScheduleSystemPowerAction("/s /t 3 /f");
+                Console.WriteLine($"فرمان Shutdown دریافت شد؛ CommandId={command.CommandId}.");
+                message = "خاموش‌شدن سیستم برای چند ثانیه بعد زمان‌بندی شد.";
+                break;
+
             case AgentCommandTypes.Update:
             {
                 var payload = ClientUpdateCommandParser.Parse(command.PayloadJson);
@@ -976,6 +988,21 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
         restartVersion,
         restartVersion is not null,
         awaitingFinalResult);
+}
+
+static void ScheduleSystemPowerAction(string arguments)
+{
+    var startInfo = new ProcessStartInfo
+    {
+        FileName = "shutdown.exe",
+        Arguments = arguments,
+        CreateNoWindow = true,
+        UseShellExecute = false
+    };
+    var process = Process.Start(startInfo);
+    if (process is null)
+        throw new InvalidOperationException("فرمان مدیریت توان سیستم اجرا نشد.");
+    process.Dispose();
 }
 
 static async Task ApplyGameManifestAsync(
