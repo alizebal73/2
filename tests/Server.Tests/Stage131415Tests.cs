@@ -185,6 +185,146 @@ public sealed class Stage131415Tests : IDisposable
     }
 
     [Fact]
+    public async Task ConcurrentTournamentCreatesCannotOverlap()
+    {
+        await using var connection1 = new SqliteConnection("DataSource=file:event-overlap-concurrency;Mode=Memory;Cache=Shared");
+        await using var connection2 = new SqliteConnection("DataSource=file:event-overlap-concurrency;Mode=Memory;Cache=Shared");
+        await connection1.OpenAsync();
+        await connection2.OpenAsync();
+
+        var options1 = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(connection1)
+            .Options;
+        var options2 = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(connection2)
+            .Options;
+
+        Guid appUserId;
+        var start = DateTimeOffset.UtcNow.AddHours(2);
+
+        await using (var seed = new GameNetDbContext(options1))
+        {
+            await seed.Database.EnsureCreatedAsync();
+            var user = new AppUser
+            {
+                FullName = "Concurrent Event Operator",
+                UserName = "event-concurrent",
+                Email = "event-concurrent@test.local",
+                PasswordHash = "x",
+                Role = "Owner",
+                IsActive = true
+            };
+            seed.AppUsers.Add(user);
+            await seed.SaveChangesAsync();
+            appUserId = user.Id;
+        }
+
+        async Task<(bool Succeeded, bool Conflict)> CreateAsync(
+            DbContextOptions<GameNetDbContext> options)
+        {
+            try
+            {
+                await using var db = new GameNetDbContext(options);
+                await new EventService(db).CreateAsync(
+                    new EventCreateRequest(
+                        "Concurrent Tournament",
+                        "tournament",
+                        start,
+                        120,
+                        8),
+                    appUserId,
+                    CancellationToken.None);
+                return (true, false);
+            }
+            catch (InvalidOperationException exception) when (
+                exception.Message.Contains("بازه", StringComparison.Ordinal))
+            {
+                return (false, true);
+            }
+            catch (SqliteException exception) when (exception.SqliteErrorCode is 5 or 6)
+            {
+                // SQLite writer contention is transient. Retry after the first writer
+                // commits so the overlap rule, not the lock exception, decides the result.
+                await using var retryDb = new GameNetDbContext(options);
+                try
+                {
+                    await new EventService(retryDb).CreateAsync(
+                        new EventCreateRequest(
+                            "Concurrent Tournament",
+                            "tournament",
+                            start,
+                            120,
+                            8),
+                        appUserId,
+                        CancellationToken.None);
+                    return (true, false);
+                }
+                catch (InvalidOperationException retryException) when (
+                    retryException.Message.Contains("بازه", StringComparison.Ordinal))
+                {
+                    return (false, true);
+                }
+            }
+        }
+
+        var results = await Task.WhenAll(
+            CreateAsync(options1),
+            CreateAsync(options2));
+
+        Assert.Single(results, item => item.Succeeded);
+        Assert.Single(results, item => item.Conflict);
+
+        await using var verify = new GameNetDbContext(options1);
+        Assert.Equal(1, await verify.Events.CountAsync());
+    }
+
+    [Fact]
+    public async Task ReportingServiceSearchFiltersAuditInSqlBeforePagination()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using (var db = new GameNetDbContext(options))
+        {
+            await db.Database.EnsureCreatedAsync();
+            db.AuditLogs.AddRange(
+                new AuditLog
+                {
+                    Action = "TargetedAction",
+                    EntityName = "TargetEntity",
+                    EntityId = "target-1",
+                    Details = "عبارت-هدف"
+                },
+                new AuditLog
+                {
+                    Action = "NoiseAction",
+                    EntityName = "NoiseEntity",
+                    EntityId = "noise-1",
+                    Details = "عبارت-دیگر"
+                });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = new GameNetDbContext(options))
+        {
+            var service = new ReportingService(db);
+            var rows = await service.GetAuditAsync(
+                new AuditExplorerFilterDto(
+                    null,
+                    null,
+                    null,
+                    null,
+                    "عبارت-هدف",
+                    1),
+                CancellationToken.None);
+
+            Assert.Single(rows);
+            Assert.Equal("TargetedAction", rows[0].Action);
+        }
+    }
+
+    [Fact]
     public async Task ReportingServiceAggregatesServerFinancialTruth()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
