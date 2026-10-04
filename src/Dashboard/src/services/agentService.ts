@@ -1,6 +1,6 @@
 import type { AgentCommandStatusDto, AgentStatusDto } from '../types';
 
-export type AgentCommandType = 'ping' | 'lock' | 'unlock' | 'logout-lock' | 'update' | 'rollback';
+export type AgentCommandType = 'ping' | 'lock' | 'unlock' | 'logout-lock' | 'update' | 'rollback' | 'restart' | 'shutdown';
 
 export async function getAgentStatuses(): Promise<AgentStatusDto[]> {
   const response = await fetch('/api/agent/devices', {
