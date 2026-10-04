@@ -505,9 +505,6 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         session.HasIndex(item => new { item.CustomerLoginId, item.State })
             .HasFilter("CustomerLoginId IS NOT NULL AND State = 'Active'")
             .IsUnique();
-        session.HasIndex(item => new { item.StationId, item.State })
-            .HasFilter("State = 'Active'")
-            .IsUnique();
         session.HasOne(item => item.Customer)
             .WithMany(item => item.Sessions)
             .HasForeignKey(item => item.CustomerId)
