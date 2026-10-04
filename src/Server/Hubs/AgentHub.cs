@@ -720,17 +720,21 @@ public sealed class AgentHub(
 
         if (session.State == SessionState.Ended)
         {
+            await using var idempotentTransaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
+
             if (login.IsActive)
             {
                 login.IsActive = false;
                 login.LoggedOutAt = session.EndAt ?? now;
-                await database.SaveChangesAsync(Context.ConnectionAborted);
             }
 
-            await accountPool.ReleaseActiveForSessionAsync(
+            await accountPool.ReleaseActiveForSessionWithinTransactionAsync(
                 session.Id,
                 "آزادسازی خودکار با پایان Session",
                 Context.ConnectionAborted);
+
+            await database.SaveChangesAsync(Context.ConnectionAborted);
+            await idempotentTransaction.CommitAsync(Context.ConnectionAborted);
 
             return new AgentSessionEndResponse(
                 session.Id,
