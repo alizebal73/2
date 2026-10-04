@@ -1487,11 +1487,13 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
 
                     b.HasIndex("CustomerId");
 
-                    b.HasIndex("CustomerLoginId")
+                    b.HasIndex("CustomerLoginId", "State")
                         .IsUnique()
                         .HasFilter("CustomerLoginId IS NOT NULL AND State = 'Active'");
 
                     b.HasIndex("GameId");
+
+                    b.HasIndex("StationId");
 
                     b.HasIndex("TariffId");
 
