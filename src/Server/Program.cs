@@ -3850,6 +3850,14 @@ app.MapPost("/api/buffet/sales", async (
         if (!request.SessionId.HasValue || request.SessionId.Value == Guid.Empty)
             return Results.BadRequest(new { code = "missing_session", message = "برای فروش جلسه، جلسه فعال را انتخاب کنید." });
 
+        var lockedSession = await database.Sessions
+            .Where(item => item.Id == request.SessionId.Value && item.State == SessionState.Active)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+
+        if (lockedSession != 1)
+            return Results.Conflict(new { code = "session_not_active", message = "جلسه انتخاب‌شده فعال نیست." });
+
         session = await database.Sessions
             .FirstOrDefaultAsync(item => item.Id == request.SessionId.Value && item.State == SessionState.Active, cancellationToken);
 
@@ -4055,6 +4063,16 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
 
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
+    var lockedInvoice = await database.Invoices
+        .Where(item => item.Id == invoiceId
+            && item.CustomerId == customerId
+            && item.Status == InvoiceStatus.Draft)
+        .ExecuteUpdateAsync(setters => setters
+            .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+
+    if (lockedInvoice != 1)
+        return Results.NotFound(new { code = "debt_not_found", message = "بدهی موردنظر پیدا نشد یا قبلاً تسویه شده است." });
+
     var invoice = await database.Invoices
         .Include(item => item.Customer)
         .FirstOrDefaultAsync(item => item.Id == invoiceId && item.CustomerId == customerId && item.Status == InvoiceStatus.Draft, cancellationToken);
@@ -4064,7 +4082,13 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
 
     if (method == "wallet")
     {
-        if (invoice.Customer.Balance < invoice.TotalAmount)
+        var walletDebited = await database.Customers
+            .Where(item => item.Id == customerId && item.Balance >= invoice.TotalAmount)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Balance, item => item.Balance - invoice.TotalAmount)
+                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+
+        if (walletDebited != 1)
             return Results.Conflict(new { code = "insufficient_balance", message = "موجودی کیف پول برای تسویه این بدهی کافی نیست." });
 
         invoice.Customer.Balance -= invoice.TotalAmount;
@@ -4400,6 +4424,8 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (HttpC
         return Results.BadRequest(new { code = "missing_description", message = "توضیح تراکنش را وارد کنید." });
     }
 
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
     var customer = await database.Customers
         .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
 
@@ -4408,33 +4434,32 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (HttpC
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
     }
 
-    var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    var updatedBalance = type == WalletTransactionType.Credit
+        ? await database.Customers
+            .Where(item => item.Id == customerId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Balance, item => item.Balance + request.Amount)
+                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken)
+        : await database.Customers
+            .Where(item => item.Id == customerId && item.Balance >= request.Amount)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.Balance, item => item.Balance - request.Amount)
+                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
 
-    try
+    if (updatedBalance != 1)
+        return type == WalletTransactionType.Credit
+            ? Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." })
+            : Results.Conflict(new { code = "insufficient_balance", message = "موجودی کیف پول کافی نیست." });
+
+    var ledger = new WalletTransaction
     {
-        if (type == WalletTransactionType.Credit)
-        {
-            customer.Balance += request.Amount;
-        }
-        else
-        {
-            if (customer.Balance < request.Amount)
-            {
-                return Results.BadRequest(new { code = "insufficient_balance", message = "موجودی کیف پول کافی نیست." });
-            }
+        CustomerId = customer.Id,
+        Amount = request.Amount,
+        Type = type,
+        Description = description
+    };
 
-            customer.Balance -= request.Amount;
-        }
-
-        var ledger = new WalletTransaction
-        {
-            CustomerId = customer.Id,
-            Amount = request.Amount,
-            Type = type,
-            Description = description
-        };
-
-        database.WalletTransactions.Add(ledger);
+    database.WalletTransactions.Add(ledger);
         database.AuditLogs.Add(new AuditLog
         {
             Action = type == WalletTransactionType.Credit ? "WalletCredit" : "WalletDebit",
@@ -4454,7 +4479,11 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (HttpC
             ledger.Type.ToString(),
             ledger.Description,
             ledger.CreatedAt,
-            customer.Balance,
+            await database.Customers
+                .AsNoTracking()
+                .Where(item => item.Id == customer.Id)
+                .Select(item => item.Balance)
+                .SingleAsync(cancellationToken),
             ledger.ReferenceTransactionId));
     }
     catch
