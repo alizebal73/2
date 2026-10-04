@@ -41,10 +41,6 @@ public partial class ActiveSessionOwnershipGuards : Migration
             name: "IX_Sessions_CustomerLoginId",
             table: "Sessions");
 
-        migrationBuilder.DropIndex(
-            name: "IX_Sessions_StationId_Active",
-            table: "Sessions");
-
         migrationBuilder.DropColumn(
             name: "CustomerLoginId",
             table: "Sessions");
