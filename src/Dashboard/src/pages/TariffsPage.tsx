@@ -58,7 +58,7 @@ export function TariffsPage() {
   }
 
   async function disable(tariff: ServerTariff) {
-    if (!window.confirm(\`تعرفه «\${tariff.name}» غیرفعال شود؟\`)) return;
+    if (!window.confirm(`تعرفه «${tariff.name}» غیرفعال شود؟`)) return;
 
     try {
       await archiveTariff(tariff.id);
