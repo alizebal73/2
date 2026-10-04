@@ -5030,22 +5030,15 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
             : migrationsModelDiffer.GetDifferences(
                 snapshotModel.GetRelationalModel(),
                 designTimeModel.GetRelationalModel());
-        var snapshotToRuntime = snapshotModel is null
-            ? []
-            : migrationsModelDiffer.GetDifferences(
-                snapshotModel.GetRelationalModel(),
-                database.Model.GetRelationalModel());
+        var pendingModelChanges = database.Database.HasPendingModelChanges();
 
         logger.LogCritical(
-            "EF DIAGNOSTIC: HasPendingModelChanges={Pending}; SnapshotToDesignTime={DesignCount}; SnapshotToRuntime={RuntimeCount}",
-            database.Database.HasPendingModelChanges(),
-            snapshotToDesignTime.Count,
-            snapshotToRuntime.Count);
+            "EF DIAGNOSTIC: HasPendingModelChanges={Pending}; SnapshotToDesignTime={DesignCount}",
+            pendingModelChanges,
+            snapshotToDesignTime.Count);
 
         foreach (var operation in snapshotToDesignTime)
             logger.LogCritical("EF DIAGNOSTIC DESIGN: {Operation}", operation);
-        foreach (var operation in snapshotToRuntime)
-            logger.LogCritical("EF DIAGNOSTIC RUNTIME: {Operation}", operation);
 
         await database.Database.MigrateAsync();
         await DatabaseSeeder.SeedAsync(database, environment.IsDevelopment());
