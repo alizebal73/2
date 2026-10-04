@@ -203,3 +203,9 @@ partial class OneOpenShift
 partial class SessionHourlyRateSnapshot
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261004130000_ReservationIndexParity")]
+partial class ReservationIndexParity
+{
+}
