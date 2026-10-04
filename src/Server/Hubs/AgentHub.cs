@@ -10,7 +10,8 @@ public sealed class AgentHub(
     IConfiguration configuration,
     IHubContext<DashboardHub> dashboardHub,
     ILogger<AgentHub> logger,
-    AccountPoolService accountPool) : Hub
+    AccountPoolService accountPool,
+    SessionPricingService pricingService) : Hub
 {
     private const string AgentDeviceContextKey = "GameNet.AgentDeviceId";
 
@@ -618,6 +619,12 @@ public sealed class AgentHub(
         if (station.Tariff is null || !station.Tariff.IsActive)
             throw new HubException("تعرفهٔ فعال برای این ایستگاه تنظیم نشده است.");
 
+        var pricing = await pricingService.GetPricingAsync(
+            customer.Id,
+            station.Id,
+            now,
+            Context.ConnectionAborted);
+
         if (station.Type.Equals("PC", StringComparison.OrdinalIgnoreCase)
             || station.Type.Contains("رایانه", StringComparison.OrdinalIgnoreCase))
             persons = 1;
@@ -634,6 +641,7 @@ public sealed class AgentHub(
             StartAt = now,
             State = SessionState.Active,
             TotalAmount = 0m,
+            HourlyRateSnapshot = pricing.HourlyRate,
             GameId = game?.Id,
             AgentDeviceId = device.Id,
             // Customer/Agent cannot override the price. Server tariff is authoritative.
