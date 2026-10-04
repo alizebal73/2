@@ -134,7 +134,7 @@ public static class DatabaseSeeder
                 FullName = "مدیر سیستم",
                 UserName = "admin",
                 Email = "admin@gamenet.local",
-                PasswordHash = PasswordSecurity.Hash(GetAdminPassword()),
+                PasswordHash = PasswordSecurity.Hash(GetAdminPassword(includeDemoData)),
                 Role = "Admin",
                 IsActive = true
             };
@@ -142,7 +142,7 @@ public static class DatabaseSeeder
         }
         else if (PasswordSecurity.Verify("Admin123!", admin.PasswordHash) || string.Equals(admin.PasswordHash, "hash", StringComparison.Ordinal))
         {
-            admin.PasswordHash = PasswordSecurity.Hash(GetAdminPassword());
+            admin.PasswordHash = PasswordSecurity.Hash(GetAdminPassword(includeDemoData));
         }
 
         await database.SaveChangesAsync(cancellationToken);
