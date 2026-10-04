@@ -280,7 +280,7 @@ public sealed class ReportingService(GameNetDbContext database)
                 item.Id,
                 item.CreatedAt,
                 item.AppUserId,
-                item.AppUser?.FullName ?? "سیستم",
+                item.AppUser == null ? "سیستم" : item.AppUser.FullName,
                 item.Action,
                 item.EntityName,
                 item.EntityId,
