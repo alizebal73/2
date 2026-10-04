@@ -72,7 +72,7 @@ public sealed class ReportingService(GameNetDbContext database)
                 .Select(item => new { SessionId = item.SessionId!.Value, item.TotalAmount, item.IssuedAt })
                 .ToListAsync(cancellationToken))
                 .Where(item => item.IssuedAt >= from && item.IssuedAt <= to)
-                .Select(item => (item.SessionId, item.TotalAmount))
+                .Select(item => (SessionId: item.SessionId, Amount: item.TotalAmount))
                 .ToList();
 
         var revenueBySession = invoiceRows
@@ -123,7 +123,7 @@ public sealed class ReportingService(GameNetDbContext database)
                 .Select(item => new { SessionId = item.SessionId!.Value, item.TotalAmount, item.IssuedAt })
                 .ToListAsync(cancellationToken))
                 .Where(item => item.IssuedAt >= from && item.IssuedAt <= to)
-                .Select(item => (item.SessionId, item.TotalAmount, item.IssuedAt))
+                .Select(item => (SessionId: item.SessionId, Amount: item.TotalAmount, IssuedAt: item.IssuedAt))
                 .ToList();
 
         var customerIds = sessions.Select(item => item.CustomerId).Distinct().ToList();
@@ -257,7 +257,7 @@ public sealed class ReportingService(GameNetDbContext database)
                 .Select(item => new { SessionId = item.SessionId!.Value, item.TotalAmount, item.IssuedAt })
                 .ToListAsync(cancellationToken))
                 .Where(item => item.IssuedAt >= from && item.IssuedAt <= to)
-                .Select(item => (item.SessionId, item.TotalAmount))
+                .Select(item => (SessionId: item.SessionId, Amount: item.TotalAmount))
                 .ToList();
 
         var revenueBySession = invoiceRows
