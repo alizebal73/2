@@ -15,7 +15,7 @@ public sealed class CustomerLoginService(GameNetDbContext database)
         if (string.IsNullOrWhiteSpace(normalizedClientKey))
             throw new ArgumentException("شناسه دستگاه وارد نشده است.", nameof(clientKey));
 
-        for (var attempt = 0; attempt < 2; attempt++)
+        for (var attempt = 0; attempt < 4; attempt++)
         {
             await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
             try
@@ -85,19 +85,39 @@ public sealed class CustomerLoginService(GameNetDbContext database)
                     active.Count + 1,
                     limit);
             }
-            catch (SqliteException ex) when (attempt == 0 && ex.SqliteErrorCode is 5 or 6)
+            catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
             {
-                await transaction.RollbackAsync(CancellationToken.None);
-                await Task.Delay(25, cancellationToken);
+                await TryRollbackAsync(transaction);
+                if (attempt == 3)
+                    throw;
+
+                await Task.Delay(TimeSpan.FromMilliseconds(25 * (attempt + 1)), cancellationToken);
             }
             catch
             {
-                await transaction.RollbackAsync(CancellationToken.None);
+                await TryRollbackAsync(transaction);
                 throw;
             }
         }
 
         throw new InvalidOperationException("ورود هم‌زمان مشتری انجام نشد.");
+
+    private static async Task TryRollbackAsync(
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction)
+    {
+        try
+        {
+            await transaction.RollbackAsync(CancellationToken.None);
+        }
+        catch (InvalidOperationException)
+        {
+            // SQLite can abort a transaction while surfacing SQLITE_BUSY.
+            // Rollback is best-effort; preserve the original database exception.
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
     }
 
     public async Task<(Guid LoginId, int ActiveCount)> ReleaseAsync(
