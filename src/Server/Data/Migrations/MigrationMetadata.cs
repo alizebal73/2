@@ -179,3 +179,10 @@ partial class Stage12SessionLeaseCredential
 partial class AccountPoolExpiryUtc
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261005010000_ActiveSessionOwnershipGuards")]
+partial class ActiveSessionOwnershipGuards
+{
+}
