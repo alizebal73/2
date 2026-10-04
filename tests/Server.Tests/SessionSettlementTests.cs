@@ -59,7 +59,7 @@ public sealed class SessionSettlementTests : IDisposable
         db.AddRange(type, tariff, customer, user, station, session);
         await db.SaveChangesAsync();
 
-        var service = new SessionSettlementService(db);
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
 
         var result = await service.SettleAsync(
             session.Id,
@@ -128,7 +128,7 @@ public sealed class SessionSettlementTests : IDisposable
         db.AddRange(type, tariff, customer, station, session);
         await db.SaveChangesAsync();
 
-        var service = new SessionSettlementService(db);
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.SettleAsync(
@@ -214,7 +214,7 @@ public sealed class SessionSettlementTests : IDisposable
         await db.DisposeAsync();
 
         await using var settlementDb = new GameNetDbContext(options);
-        var service = new SessionSettlementService(settlementDb);
+        var service = new SessionSettlementService(settlementDb, new SessionPricingService(settlementDb));
         var result = await service.SettleAsync(
             session.Id,
             new SessionSettlementRequest(
