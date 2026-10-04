@@ -22,6 +22,7 @@ public static class AuthorizationService
             ["finance.view"] = "مشاهده گزارش مالی",
             ["finance.manage"] = "ثبت و مدیریت هزینه",
             ["shift.manage"] = "باز و بسته کردن شیفت",
+            ["tariff.view"] = "مشاهده تعرفه‌ها",
             ["tariff.manage"] = "مدیریت تعرفه",
             ["game.manage"] = "مدیریت بازی",
             ["account.manage"] = "مدیریت Account Pool",
