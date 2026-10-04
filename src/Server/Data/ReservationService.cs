@@ -66,7 +66,9 @@ public sealed class ReservationService(GameNetDbContext database)
                 .AsNoTracking()
                 .Where(item => item.StationId == station.Id
                     && item.Kind == ReservationKind.Reservation
-                    && item.Status is ReservationStatus.Pending or ReservationStatus.Confirmed or ReservationStatus.CheckedIn)
+                    && (item.Status == ReservationStatus.Pending
+    || item.Status == ReservationStatus.Confirmed
+    || item.Status == ReservationStatus.CheckedIn))
                 .ToListAsync(cancellationToken);
 
             if (possibleConflicts.Any(item => item.StartAt < end && item.EndAt > start))
@@ -142,7 +144,8 @@ public sealed class ReservationService(GameNetDbContext database)
                 break;
 
             case "complete":
-                if (reservation.Status is not (ReservationStatus.CheckedIn or ReservationStatus.Confirmed))
+                if (reservation.Status != ReservationStatus.CheckedIn
+                    && reservation.Status != ReservationStatus.Confirmed)
                     throw new InvalidOperationException("وضعیت رزرو برای تکمیل معتبر نیست.");
                 reservation.Status = ReservationStatus.Completed;
                 break;
