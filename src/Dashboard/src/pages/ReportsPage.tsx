@@ -4,6 +4,7 @@ import type { AppUserRecord } from '../types';
 import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createShiftExpense } from '../services/financeService';
 import { getCurrentShift } from '../services/shiftService';
 import { getServerBuffetProfit } from '../services/buffetService';
+import { getAuditLogs, type AuditLogPage } from '../services/auditService';
 import type { BuffetProfitReport } from '../types';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
@@ -26,9 +27,11 @@ type ReportCategory = 'finance' | 'sessions' | 'customers' | 'buffet' | 'users' 
 type Role = 'operator' | 'manager' | 'owner';
 
 export function ReportsPage({ user }: { user: AppUserRecord }) {
+  const canViewFinance = hasPermission(user, 'finance.view');
+  const canViewAudit = hasPermission(user, 'audit.view');
   const canManageFinance = hasPermission(user, 'finance.manage');
   const [period, setPeriod] = useState<Period>('week');
-  const [reportCategory, setReportCategory] = useState<ReportCategory>('finance');
+  const [reportCategory, setReportCategory] = useState<ReportCategory>(() => canViewFinance ? 'finance' : 'audit');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [fromTime, setFromTime] = useState('00:00');
@@ -46,8 +49,17 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
   const [financeError, setFinanceError] = useState('');
   const [buffetProfit, setBuffetProfit] = useState<BuffetProfitReport | null>(null);
   const [buffetProfitError, setBuffetProfitError] = useState('');
+  const [auditPage, setAuditPage] = useState(1);
+  const [auditOperator, setAuditOperator] = useState('');
+  const [auditAction, setAuditAction] = useState('');
+  const [auditEntity, setAuditEntity] = useState('');
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditResult, setAuditResult] = useState<AuditLogPage | null>(null);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState('');
 
   useEffect(() => {
+    if (!canViewFinance) return;
     setFinanceError('');
     void Promise.all([getFinanceTransactions(), getFinanceSummary(), getFinanceExpenses()])
       .then(([transactions, finance, costs]) => {
@@ -89,6 +101,35 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
       .then(setBuffetProfit)
       .catch(error => setBuffetProfitError(error instanceof Error ? error.message : 'گزارش سود بوفه دریافت نشد'));
   }, [reportCategory, period, range]);
+
+  useEffect(() => {
+    if (reportCategory !== 'audit' || !canViewAudit) return;
+
+    const now = Date.now();
+    const start = range
+      ? range.start
+      : period === 'month' ? now - 30 * 86400000
+      : period === 'sixMonths' ? now - 180 * 86400000
+      : period === 'year' ? now - 365 * 86400000
+      : now - 6 * 86400000;
+    const end = range?.end ?? now;
+
+    setAuditLoading(true);
+    setAuditError('');
+    void getAuditLogs({
+      from: new Date(start),
+      to: new Date(end),
+      operator: auditOperator,
+      action: auditAction,
+      entityName: auditEntity,
+      search: auditSearch,
+      page: auditPage,
+      pageSize: 50,
+    })
+      .then(setAuditResult)
+      .catch(error => setAuditError(error instanceof Error ? error.message : 'دریافت سوابق Audit انجام نشد'))
+      .finally(() => setAuditLoading(false));
+  }, [reportCategory, period, range, canViewAudit, auditPage, auditOperator, auditAction, auditEntity, auditSearch]);
 
   const visibleRows = useMemo(() => {
     const now = Date.now();
@@ -179,6 +220,14 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
     const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })); link.download = 'gamenet-report.csv'; link.click(); URL.revokeObjectURL(link.href);
   }
 
+  function exportAuditCsv() {
+    const rows = auditResult?.items ?? [];
+    const lines = [['تاریخ', 'کاربر', 'عملیات', 'هدف', 'جزئیات'],
+      ...rows.map(row => [new Date(row.createdAt).toLocaleString('fa-IR'), row.operator, row.action, row.target, row.details])];
+    const csv = lines.map(line => line.map(value => '\"' + String(value).replace(/\"/g, '\"\"') + '\"').join(',')).join('\\r\\n');
+    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })); link.download = 'gamenet-audit.csv'; link.click(); URL.revokeObjectURL(link.href);
+  }
+
   async function registerExpense() {
     const title = window.prompt('شرح هزینه'); if (!title) return;
     const value = amount(window.prompt('مبلغ هزینه به تومان', '100000') ?? ''); if (!value) { setNotice('مبلغ معتبر نیست'); return; }
@@ -196,8 +245,8 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
 
   return <>
     {role === 'operator' && <div className="operation-toast" style={{ position:'relative', inset:'auto', margin:'8px 22px' }}>🔒 اپراتور فقط گزارش شیفت خودش را می‌بیند.</div>}
-    {financeError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت اطلاعات مالی کامل نشد</strong><span>{financeError}</span></div><button type="button" className="btn sm" onClick={() => window.location.reload()}>تلاش مجدد</button></div>}
-    <div className="page-header"><div><p>مرکز گزارش</p><h1>گزارش‌ها</h1></div><div className="page-meta"><span>{visibleRows.length} تراکنش</span><span>{role === 'operator' ? 'شیفت شخصی' : 'گزارش کامل'}</span></div></div>
+    {canViewFinance && financeError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت اطلاعات مالی کامل نشد</strong><span>{financeError}</span></div><button type="button" className="btn sm" onClick={() => window.location.reload()}>تلاش مجدد</button></div>}
+    <div className="page-header"><div><p>مرکز گزارش</p><h1>گزارش‌ها</h1></div><div className="page-meta"><span>{reportCategory === 'audit' ? (auditResult?.total ?? 0) + ' رویداد Audit' : visibleRows.length + ' تراکنش'}</span><span>{role === 'operator' ? 'شیفت شخصی' : 'گزارش کامل'}</span></div></div>
 
     <section className="report-center-head">
       <div className="report-categories">
@@ -208,7 +257,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
           ['buffet','بوفه و موجودی'],
           ['users','کاربران و شیفت'],
           ['audit','Audit']
-        ] as Array<[ReportCategory,string]>).map(([key,label]) => <button key={key} className={reportCategory === key ? 'active' : ''} onClick={() => setReportCategory(key)}>{label}</button>)}
+        ] as Array<[ReportCategory,string]>).map(([key,label]) => <button key={key} disabled={(key === 'finance' && !canViewFinance) || (key === 'audit' && !canViewAudit)} className={reportCategory === key ? 'active' : ''} onClick={() => { setReportCategory(key); if (key === 'audit') setAuditPage(1); }}>{label}</button>)}
       </div>
       <div className="report-periods">
         {([
@@ -219,7 +268,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
           ['custom','بازه دلخواه']
         ] as Array<[Period,string]>).map(([key,label]) => <button key={key} className={period === key ? 'active' : ''} onClick={() => { setPeriod(key); if (key !== 'custom') setRange(null); }}>{label}</button>)}
       </div>
-      <div className="report-actions"><button className="btn" onClick={exportCsv}>📤 خروجی</button><button className="btn" onClick={() => window.print()}>🖨 چاپ</button>{canManageFinance && <button className="btn" onClick={() => void registerExpense()}>➖ ثبت هزینه</button>}</div>
+      <div className="report-actions"><button className="btn" onClick={reportCategory === 'audit' ? exportAuditCsv : exportCsv}>📤 خروجی</button><button className="btn" onClick={() => window.print()}>🖨 چاپ</button>{canManageFinance && <button className="btn" onClick={() => void registerExpense()}>➖ ثبت هزینه</button>}</div>
     </section>
 
     {period === 'custom' && <section className="card-panel report-range-panel"><div className="report-range-grid"><label>از تاریخ<input value={from} onChange={e=>setFrom(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۱"/></label><label>تا تاریخ<input value={to} onChange={e=>setTo(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۹"/></label><label>از ساعت<input type="time" value={fromTime} onChange={e=>setFromTime(e.target.value)}/></label><label>تا ساعت<input type="time" value={toTime} onChange={e=>setToTime(e.target.value)}/></label><button className="btn primary" onClick={applyRange}>اعمال بازه</button><button className="btn" onClick={()=>{setRange(null);setPeriod('week')}}>بازنشانی</button></div><div className="report-presets">{['امروز','دیروز','این هفته','ماه جاری','ماه قبل','۹۰ روز اخیر','امسال'].map(name=><button className="btn sm" key={name} onClick={()=>preset(name)}>{name}</button>)}</div></section>}
@@ -253,7 +302,45 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
           </tr>
         )}
       </tbody></table></div></>}
-    </> : <section className="report-placeholder"><strong>{({sessions:'جلسات و ایستگاه‌ها',customers:'مشتری و VIP',users:'کاربران و شیفت',audit:'Audit'} as Record<string,string>)[reportCategory]}</strong><span>ساختار این گزارش آماده شده است؛ اتصال منبع داده این دامنه باید قبل از نمایش عدد انجام شود.</span></section>}
+    </> : reportCategory === 'audit' ? <>
+      {!canViewAudit
+        ? <section className="report-placeholder"><strong>Audit</strong><span>برای مشاهده سوابق Audit دسترسی لازم را ندارید.</span></section>
+        : <>
+          {auditError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت سوابق Audit کامل نشد</strong><span>{auditError}</span></div><button type="button" className="btn sm" onClick={() => setAuditPage(page => page)}>تلاش مجدد</button></div>}
+          <section className="report-filter-grid report-audit-filter-grid">
+            <label>کاربر<input value={auditOperator} onChange={e => { setAuditOperator(e.target.value); setAuditPage(1); }} placeholder="نام یا نام کاربری" /></label>
+            <label>عملیات<input value={auditAction} onChange={e => { setAuditAction(e.target.value); setAuditPage(1); }} placeholder="مثلاً TariffUpdated" /></label>
+            <label>دامنه<input value={auditEntity} onChange={e => { setAuditEntity(e.target.value); setAuditPage(1); }} placeholder="مثلاً Session" /></label>
+            <label>جست‌وجو<input value={auditSearch} onChange={e => { setAuditSearch(e.target.value); setAuditPage(1); }} placeholder="شناسه، شرح یا کاربر" /></label>
+            <button type="button" className="btn" onClick={() => { setAuditOperator(''); setAuditAction(''); setAuditEntity(''); setAuditSearch(''); setAuditPage(1); }}>پاک کردن فیلتر</button>
+          </section>
+          <div className="card-panel" style={{ margin: '0 22px 12px', padding: '10px 12px' }}>
+            <div className="page-meta"><span>{auditLoading ? 'در حال دریافت…' : (auditResult?.items.length ?? 0) + ' مورد در این صفحه · ' + (auditResult?.total ?? 0) + ' مورد در بازه'}</span><span>Permission: audit.view</span></div>
+          </div>
+          <div className="table-wrap" data-testid="audit-explorer">
+            <table className="data-table">
+              <thead><tr><th>تاریخ</th><th>کاربر</th><th>عملیات</th><th>هدف</th><th>جزئیات</th></tr></thead>
+              <tbody>
+                {auditResult?.items.map(row => <tr key={row.id} data-testid="audit-row">
+                  <td>{new Date(row.createdAt).toLocaleString('fa-IR')}</td>
+                  <td>{row.operator}</td>
+                  <td dir="ltr">{row.action}</td>
+                  <td>{row.target}</td>
+                  <td>{row.details || '—'}</td>
+                </tr>)}
+                {!auditLoading && !(auditResult?.items.length) && <tr><td colSpan={5}>رکوردی برای این فیلتر پیدا نشد.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div className="report-pagination">
+            <button type="button" className="btn sm" disabled={auditLoading || auditPage <= 1} onClick={() => setAuditPage(page => Math.max(1, page - 1))}>قبلی</button>
+            <span>صفحه {auditPage} از {Math.max(1, Math.ceil((auditResult?.total ?? 0) / (auditResult?.pageSize ?? 50)))}</span>
+            <button type="button" className="btn sm" disabled={auditLoading || auditPage >= Math.max(1, Math.ceil((auditResult?.total ?? 0) / (auditResult?.pageSize ?? 50)))} onClick={() => setAuditPage(page => page + 1)}>بعدی</button>
+          </div>
+        </>
+      }
+    </>
+    : <section className="report-placeholder"><strong>{({sessions:'جلسات و ایستگاه‌ها',customers:'مشتری و VIP',users:'کاربران و شیفت'} as Record<string,string>)[reportCategory]}</strong><span>این دامنه هنوز در برش‌های بعدی Stage 13 به منبع داده واقعی متصل می‌شود.</span></section>}
 
     {notice && <div className="operation-toast">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
   </>;
