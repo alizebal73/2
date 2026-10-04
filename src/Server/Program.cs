@@ -5281,7 +5281,9 @@ app.MapPost("/api/sessions", async (
         StartAt = now,
         State = SessionState.Active,
         TotalAmount = 0m,
-        // Browser-supplied hourly rate is intentionally ignored. Pricing is server-owned.
+        // Persist the authoritative price at Session start. Later tariff edits must not
+        // rewrite the financial truth of an already-running Session.
+        HourlyRateSnapshot = pricing.HourlyRate,
         HourlyRateOverride = null,
         Persons = Math.Max(1, request.Persons ?? 1)
     };
