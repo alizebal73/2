@@ -1677,6 +1677,10 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.HasIndex("AppUserId");
 
+                    b.HasIndex("CloseAt")
+                        .IsUnique()
+                        .HasFilter(""CloseAt" IS NULL");
+
                     b.ToTable("Shifts");
                 });
 
