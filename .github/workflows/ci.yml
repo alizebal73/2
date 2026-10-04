@@ -5,7 +5,7 @@ on:
   pull_request:
 
 concurrency:
-  group: gamenet-ci-main
+  group: gamenet-ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -43,6 +43,32 @@ jobs:
       - name: Test .NET
         run: dotnet test GameNetManager.sln --no-build --configuration Release
 
+      - name: Validate EF model snapshot
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet tool install --global dotnet-ef --version 10.0.12 --ignore-failed-sources
+          $env:PATH = "$env:USERPROFILE\\.dotnet\\tools;$env:PATH"
+          dotnet ef migrations has-pending-model-changes --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --context GameNetDbContext --verbose
+          # Optional probe: an empty scaffolded migration is valid and must not fail CI.
+          $probeDir = 'src/Server/Data/Migrations/__Stage12ModelProbe'
+          Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+          dotnet ef migrations add Stage12ModelProbe --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --output-dir Data/Migrations/__Stage12ModelProbe --context GameNetDbContext --no-build
+          $probeMigration = Get-ChildItem $probeDir -Filter '????????????????_Stage12ModelProbe.cs' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($probeMigration) {
+            $probeText = Get-Content $probeMigration.FullName -Raw
+            if ($probeText -match 'migrationBuilder\.(Add|Alter|Drop|Create|Rename|Sql)') {
+              Write-Host 'Unexpected model-diff migration was scaffolded:'
+              git diff -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+              Write-Host ("===== " + $probeMigration.FullName + " =====")
+              Get-Content $probeMigration.FullName
+              git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+              Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
+              throw 'EF model snapshot has pending changes.'
+            }
+          }
+          git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+          Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
       - name: Server startup and migration smoke
         shell: pwsh
         run: |
@@ -363,21 +389,10 @@ jobs:
               $rollbackStatus = $null
               for ($i = 0; $i -lt 120; $i++) {
                 $rollbackStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/commands/$($rollbackCommand.commandId)" -Method Get -WebSession $adminSession
-                if ($rollbackStatus.status -in @('Succeeded','Failed','RolledBack')) { $rollbackCompleted = $true; break }
+                if ($rollbackStatus.status -in @('Succeeded','Failed')) { $rollbackCompleted = $true; break }
                 Start-Sleep -Milliseconds 500
               }
-              if (-not $rollbackCompleted -or $rollbackStatus.status -notin @('Succeeded','RolledBack')) {
-                Write-Host ("Stage 10 rollback command did not complete. Status={0}; Succeeded={1}; Result={2}" -f $rollbackStatus.status, $rollbackStatus.succeeded, $rollbackStatus.resultMessage)
-                Write-Host '--- Agent stdout during rollback ---'
-                if (Test-Path $agentStdout) { Get-Content $agentStdout }
-                Write-Host '--- Agent stderr during rollback ---'
-                if (Test-Path $agentStderr) { Get-Content $agentStderr }
-                Write-Host '--- Persisted Agent state during rollback ---'
-                $agentStatePath = Join-Path $agentData 'agent-state.json'
-                if (Test-Path $agentStatePath) { Get-Content $agentStatePath }
-                Write-Host '--- Update state during rollback ---'
-                $updateStatePath = Join-Path $agentData 'update-active.json'
-                if (Test-Path $updateStatePath) { Get-Content $updateStatePath }
+              if (-not $rollbackCompleted -or $rollbackStatus.status -ne 'Succeeded') {
                 throw 'Stage 10 rollback command did not complete successfully.'
               }
 
@@ -763,6 +778,37 @@ jobs:
               throw 'Stage 9 smoke customer creation failed.'
             }
 
+            $stage12Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              name = "Stage12 Game $stage9SmokeId"
+              version = '1.0'
+              genre = 'CI'
+              status = 'online'
+              path = 'C:\Games\Stage12'
+              executable = 'Stage12.exe'
+              cover = ''
+              trailer = ''
+              launchArgs = ''
+              connectionType = 'آنلاین'
+              active = $true
+              targetSystem = 'all'
+              target = 'all'
+              targetZone = 'pc'
+              targetStations = ''
+            } | ConvertTo-Json)
+            if (-not $stage12Game.id) { throw 'Stage 12 Game create smoke failed.' }
+
+            $stage12Account = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              title = "Stage12 Account $stage9SmokeId"
+              platform = 'Steam'
+              login = "stage12-login-$stage9SmokeId"
+              secret = 'Stage12Secret!'
+              owner = 'CI'
+              expiresAt = $null
+              allowedGameIds = @($stage12Game.id)
+              status = 'Free'
+            } | ConvertTo-Json)
+            if (-not $stage12Account.id) { throw 'Stage 12 Account Pool create smoke failed.' }
+
             $customerAuth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
               usernameOrCode = $stage9Customer.username
               password = 'Stage9Smoke123!'
@@ -782,6 +828,8 @@ jobs:
             $env:GAMENET_AGENT_TEST_SESSION_FLOW = '1'
             $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $stage9Customer.id
             $env:GAMENET_AGENT_TEST_LOGIN_ID = $customerAuth.loginId
+            $env:GAMENET_AGENT_TEST_GAME_ID = $stage12Game.id
+            $env:GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW = '1'
 
             $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
               'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
@@ -790,11 +838,39 @@ jobs:
             try {
               $sessionFlowCompleted = $false
               $sessionStartVerified = $false
+              $gameSyncVerified = $false
               $endedSessionId = $null
+
+              $syncAccepted = $false
+              for ($syncAttempt = 0; $syncAttempt -lt 20; $syncAttempt++) {
+                try {
+                  $syncResult = Invoke-RestMethod -Uri "$baseUrl/api/games/$($stage12Game.id)/sync" -Method Post -WebSession $adminSession
+                  if ([int]$syncResult.targetedAgents -lt 1) { throw 'Stage 12 Game sync returned no targeted online Agent.' }
+                  $syncAccepted = $true
+                  break
+                } catch {
+                  if ($syncAttempt -eq 19) { throw }
+                  Start-Sleep -Milliseconds 500
+                }
+              }
+              if (-not $syncAccepted) { throw 'Stage 12 real Game sync request did not reach an online Agent.' }
               for ($i = 0; $i -lt 30; $i++) {
                 if ($sessionAgentProcess.HasExited) { break }
                 if (Test-Path $sessionAgentStdout) {
                   $log = Get-Content $sessionAgentStdout -Raw
+
+                  if (-not $gameSyncVerified -and $log -match 'CLIENT_GAME_APPLIED:([0-9a-fA-F]+)') {
+                    $syncedGameId = $Matches[1]
+                    if ($syncedGameId -ne ($stage12Game.id -replace '-', '')) {
+                      throw "Stage 12 Game sync marker returned unexpected GameId: $syncedGameId"
+                    }
+                    $manifestPath = Join-Path $sessionAgentData "games\$syncedGameId.json"
+                    if (-not (Test-Path $manifestPath)) {
+                      throw 'Stage 12 Agent reported Game sync success but the local game manifest was not persisted.'
+                    }
+                    $gameSyncVerified = $true
+                    Write-Host "Stage 12 real Game Apply/Sync persisted on Agent."
+                  }
 
                   if (-not $sessionStartVerified -and $log -match 'AGENT_SESSION_START_OK:([0-9a-fA-F-]+)') {
                     $startedSessionId = $Matches[1]
@@ -810,6 +886,20 @@ jobs:
                     Write-Host 'Stage 9 Agent Session End login ownership guard passed.'
                   }
 
+                  if ($log -match 'AGENT_GAME_ACCOUNT_OK:([0-9a-fA-F-]+):([0-9a-fA-F-]+):([^:]+):(.+)') {
+                    $gameLeaseId = $Matches[1]
+                    $gameLeaseGameId = $Matches[2]
+                    if ($gameLeaseGameId -ne $stage12Game.id) { throw "Stage 12 Agent received a credential for an unexpected GameId: $gameLeaseGameId" }
+                    $gameRows = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
+                    $gameRow = @($gameRows | Where-Object { $_.id -eq $stage12Game.id })[0]
+                    if (-not $gameRow -or [int]$gameRow.activeUsers -ne 1) { throw 'Stage 12 Game activeUsers did not become authoritative while the Session was active.' }
+
+                    $accountRows = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+                    $inUseAccount = @($accountRows | Where-Object { $_.id -eq $stage12Account.id })[0]
+                    if (-not $inUseAccount -or $inUseAccount.status -ne 'InUse') { throw 'Stage 12 Account Pool entry did not become InUse after Agent acquisition.' }
+                    Write-Host ("Stage 12 Agent Game account acquisition passed: leaseId={0}; gameId={1}" -f $gameLeaseId, $gameLeaseGameId)
+                  }
+
                   if ($log -match 'AGENT_SESSION_END_OK:([0-9a-fA-F-]+)') {
                     $endedSessionId = $Matches[1]
                     $sessionFlowCompleted = $true
@@ -819,7 +909,7 @@ jobs:
                 Start-Sleep -Seconds 1
               }
 
-              if (-not $sessionStartVerified -or -not $sessionFlowCompleted) {
+              if (-not $gameSyncVerified -or -not $sessionStartVerified -or -not $sessionFlowCompleted) {
                 Write-Host '--- Stage 9 Session Agent stdout ---'
                 if (Test-Path $sessionAgentStdout) { Get-Content $sessionAgentStdout }
                 Write-Host '--- Stage 9 Session Agent stderr ---'
@@ -840,6 +930,20 @@ jobs:
               }
 
               Write-Host ("Stage 9 Agent-driven Session Start/End smoke passed: sessionId={0}; stationId={1}" -f $endedSessionId, $sessionStation.id)
+
+              $accountRowsAfterRelease = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
+              $releasedStage12Account = @($accountRowsAfterRelease | Where-Object { $_.id -eq $stage12Account.id })[0]
+              if (-not $releasedStage12Account -or $releasedStage12Account.status -ne 'Free' -or $releasedStage12Account.assignedAgentDeviceId) {
+                throw 'Stage 12 Session end did not release the Account Pool entry back to Free.'
+              }
+
+              $gameRowsAfterRelease = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
+              $releasedGame = @($gameRowsAfterRelease | Where-Object { $_.id -eq $stage12Game.id })[0]
+              if (-not $releasedGame -or [int]$releasedGame.activeUsers -ne 0) {
+                throw 'Stage 12 Game activeUsers did not return to zero after Session end.'
+              }
+
+              Write-Host 'Stage 12 Session → Game → Agent → Account Lease → Credential → Session End → Release smoke passed.'
 
               $duplicateDeviceId = "ci-stage9-duplicate-$stage9SmokeId"
               try {
@@ -868,6 +972,8 @@ jobs:
               $env:GAMENET_AGENT_TEST_SESSION_FLOW = $null
               $env:GAMENET_AGENT_TEST_CUSTOMER_ID = $null
               $env:GAMENET_AGENT_TEST_LOGIN_ID = $null
+              $env:GAMENET_AGENT_TEST_GAME_ID = $null
+              $env:GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW = $null
               $env:GAMENET_AGENT_REGISTRATION_TOKEN = $null
             }
 

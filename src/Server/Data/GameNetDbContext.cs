@@ -415,6 +415,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         account.Property(item => item.Platform).HasMaxLength(40).IsRequired();
         account.Property(item => item.Login).HasMaxLength(120);
         account.Property(item => item.SecretHash).HasMaxLength(250);
+        account.Property(item => item.SecretCiphertext).HasMaxLength(2000);
         account.Property(item => item.Owner).HasMaxLength(120).IsRequired();
         account.Property(item => item.AllowedGameIdsCsv).HasMaxLength(4000).IsRequired();
         account.Property(item => item.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
@@ -509,6 +510,14 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany(item => item.Sessions)
             .HasForeignKey(item => item.StationId)
             .OnDelete(DeleteBehavior.Cascade);
+        session.HasOne(item => item.AgentDevice)
+            .WithMany()
+            .HasForeignKey(item => item.AgentDeviceId)
+            .OnDelete(DeleteBehavior.SetNull);
+        session.HasOne(item => item.Game)
+            .WithMany()
+            .HasForeignKey(item => item.GameId)
+            .OnDelete(DeleteBehavior.SetNull);
         session.HasOne(item => item.Tariff)
             .WithMany(item => item.Sessions)
             .HasForeignKey(item => item.TariffId)
