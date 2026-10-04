@@ -5133,24 +5133,33 @@ app.MapPost("/api/sessions", async (
     var customer = await database.Customers
         .Include(item => item.VipPackage)
         .FirstOrDefaultAsync(item => item.Id == request.CustomerId, cancellationToken);
-    var station = await database.Stations.FirstOrDefaultAsync(item => item.Id == request.StationId, cancellationToken);
 
     if (customer is null)
     {
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
     }
 
-    if (station is null)
-    {
-        return Results.NotFound(new { code = "station_not_found", message = "ایستگاه پیدا نشد." });
-    }
-
-    if (station.State != StationState.Available)
-    {
-        return Results.Conflict(new { code = "station_not_available", message = "این ایستگاه دیگر آزاد نیست." });
-    }
-
     var now = DateTimeOffset.UtcNow;
+    var claimedStation = await database.Stations
+        .Where(item => item.Id == request.StationId
+            && item.IsActive
+            && item.State == StationState.Available)
+        .ExecuteUpdateAsync(setters => setters
+            .SetProperty(item => item.State, StationState.Occupied)
+            .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+    if (claimedStation != 1)
+    {
+        var exists = await database.Stations.AnyAsync(item => item.Id == request.StationId, cancellationToken);
+        return exists
+            ? Results.Conflict(new { code = "station_not_available", message = "این ایستگاه دیگر آزاد نیست." })
+            : Results.NotFound(new { code = "station_not_found", message = "ایستگاه پیدا نشد." });
+    }
+
+    var station = await database.Stations
+        .Include(item => item.Tariff)
+        .FirstAsync(item => item.Id == request.StationId, cancellationToken);
+
     var pricing = await pricingService.GetPricingAsync(customer.Id, station.Id, now, cancellationToken);
 
     var session = new Session
@@ -5168,7 +5177,6 @@ app.MapPost("/api/sessions", async (
     };
 
     database.Sessions.Add(session);
-    station.State = StationState.Occupied;
 
     database.AuditLogs.Add(new AuditLog
     {
