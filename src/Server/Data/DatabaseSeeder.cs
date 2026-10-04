@@ -77,23 +77,6 @@ public static class DatabaseSeeder
             };
             database.Products.Add(product);
 
-            var customer = new Customer
-            {
-                Code = "1050",
-                Username = "reza_hs",
-                FullName = "رضا محمدی",
-                Phone = "09123456789",
-                Email = "reza@gamenet.local",
-                IsVip = true,
-                VipTier = "gold",
-                VipPackage = vipPackage,
-                VipActivatedAt = vipActivatedAt,
-                VipExpiresAt = vipActivatedAt.AddDays(vipPackage.DurationDays),
-                Balance = 450000m,
-                Notes = "Gold VIP"
-            };
-            database.Customers.Add(customer);
-
             CreateStations(database, consoleType, hourlyTariff, "PS5", 10, "Zone A", "Console");
             CreateStations(database, consoleType, hourlyTariff, "PS4", 6, "Zone A", "Console");
             CreateStations(database, pcType, hourlyTariff, "PC", 40, "Zone B", "PC");
