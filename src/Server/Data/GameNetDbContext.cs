@@ -90,6 +90,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureReservation(modelBuilder);
         ConfigureSession(modelBuilder);
         ConfigureInvoice(modelBuilder);
+        ConfigureInvoicePayment(modelBuilder);
         ConfigureInvoiceItem(modelBuilder);
         ConfigureWalletTransaction(modelBuilder);
         ConfigureBenefitTransaction(modelBuilder);
