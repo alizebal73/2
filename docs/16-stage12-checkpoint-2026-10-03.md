@@ -76,3 +76,15 @@ Run روی self-hosted Windows/X64 runner با نام `Server` اجرا شده �
 **Stage 12 Done — Reference Vertical Slice approved for future chain design.**
 
 Stage بعدی فقط پس از re-entry audit اختصاصی خودش شروع می‌شود؛ این قرارداد و این chain مرجع اتصال آن خواهد بود.
+## Latest audit hardening — 2026-10-04
+
+- `Session.HourlyRateSnapshot` now has explicit EF decimal mapping (`decimal(18,2)`), matching its migration target.
+- Reservation index parity was corrected with migration `20261004130000_ReservationIndexParity`.
+- The runtime model/snapshot mismatch discovered by exact CI was:
+  - stale `IX_Reservations_StationId`
+  - stale unique/filtered `IX_Reservations_StationId_StartAt`
+  - missing explicit decimal mapping for `HourlyRateSnapshot`
+- CI validation was hardened so a native EF nonzero exit cannot be swallowed and diagnostic migration scaffolding uses the correct EF timestamp glob.
+- `docs/26-stage1-12-behavior-integration-parity-matrix.md` now records the approved behavior/integration contract for Stages 1–12.
+- Latest branch head: `b1708b419e22bcf8fa7732a0314e3d7ee4448c0a`.
+- Exact-head CI run #1309 exists but is pending because stale run #1298 is still reported `in_progress` on the self-hosted runner. Do not call Stage 1–12 Verified until #1309 completes successfully.
