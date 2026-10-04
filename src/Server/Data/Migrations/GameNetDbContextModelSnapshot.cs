@@ -1435,6 +1435,9 @@ namespace GameNetManager.Server.Data.Migrations.__SnapshotProbe
                     b.Property<decimal?>("HourlyRateOverride")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal?>("HourlyRateSnapshot")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateTimeOffset?>("PausedAt")
                         .HasColumnType("TEXT");
 
