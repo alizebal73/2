@@ -508,9 +508,6 @@ public sealed class AgentHub(
         if (station is null)
             throw new HubException("ایستگاه Agent پیدا نشد.");
 
-        if (station.State != StationState.Available)
-            throw new HubException("این ایستگاه دیگر آزاد نیست.");
-
         if (station.Tariff is null || !station.Tariff.IsActive)
             throw new HubException("تعرفهٔ فعال برای این ایستگاه تنظیم نشده است.");
 
@@ -522,6 +519,21 @@ public sealed class AgentHub(
             throw new HubException("تعداد نفرات برای این ایستگاه بیش از حد مجاز است.");
 
         await using var transaction = await database.Database.BeginTransactionAsync(Context.ConnectionAborted);
+
+        var claimed = await database.Stations
+            .Where(item => item.Id == station.Id
+                && item.IsActive
+                && item.State == StationState.Available)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.State, StationState.Occupied)
+                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), Context.ConnectionAborted);
+
+        if (claimed != 1)
+            throw new HubException("این ایستگاه دیگر آزاد نیست.");
+
+        station = await database.Stations
+            .Include(item => item.Tariff)
+            .FirstAsync(item => item.Id == station.Id, Context.ConnectionAborted);
 
         var session = new Session
         {
@@ -541,7 +553,6 @@ public sealed class AgentHub(
         };
 
         database.Sessions.Add(session);
-        station.State = StationState.Occupied;
 
         database.AuditLogs.Add(new AuditLog
         {
