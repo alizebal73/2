@@ -2678,6 +2678,7 @@ app.MapGet("/api/dashboard", async (HttpContext context,
 
     var stations = await database.Stations
         .AsNoTracking()
+        .Include(station => station.Tariff)
         .OrderBy(station => station.Zone)
         .ThenBy(station => station.Name)
         .ToListAsync(cancellationToken);
@@ -2740,7 +2741,7 @@ app.MapGet("/api/dashboard", async (HttpContext context,
             station.Name,
             station.Zone,
             station.Type,
-            (long)station.RatePerHour,
+            (long)(station.Tariff?.IsActive == true ? station.Tariff.HourlyRate : station.RatePerHour),
             active?.PausedAt is not null ? "Paused" : station.State.ToString(),
             active?.CustomerUsername,
             active?.CustomerFullName,
