@@ -144,6 +144,73 @@ public sealed class ConcurrencyTests : IDisposable
     }
 
     [Fact]
+    public async Task ConcurrentCustomerLoginAcquire_RespectsConfiguredLimit()
+    {
+        await using var connection1 = new SqliteConnection("DataSource=file:customer-login-concurrency;Mode=Memory;Cache=Shared");
+        await using var connection2 = new SqliteConnection("DataSource=file:customer-login-concurrency;Mode=Memory;Cache=Shared");
+        await connection1.OpenAsync();
+        await connection2.OpenAsync();
+
+        var options1 = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(connection1)
+            .Options;
+        var options2 = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(connection2)
+            .Options;
+
+        Guid customerId;
+        await using (var seed = new GameNetDbContext(options1))
+        {
+            await seed.Database.EnsureCreatedAsync();
+            var customer = new Customer
+            {
+                FullName = "Concurrent Login Customer",
+                Code = "CONCURRENT-LOGIN-1",
+                Username = "concurrent-login",
+                ConcurrentLoginLimit = 1,
+                VipTier = "none"
+            };
+            seed.Customers.Add(customer);
+            await seed.SaveChangesAsync();
+            customerId = customer.Id;
+        }
+
+        async Task<(bool Success, string? Error)> AcquireAsync(
+            GameNetDbContext context,
+            string clientKey)
+        {
+            try
+            {
+                var result = await new CustomerLoginService(context).AcquireAsync(
+                    customerId,
+                    clientKey,
+                    CancellationToken.None);
+                return (result.Acquired, null);
+            }
+            catch (Exception exception)
+            {
+                return (false, exception.Message);
+            }
+        }
+
+        await using var db1 = new GameNetDbContext(options1);
+        await using var db2 = new GameNetDbContext(options2);
+
+        var results = await Task.WhenAll(
+            AcquireAsync(db1, "customer-login-agent-1"),
+            AcquireAsync(db2, "customer-login-agent-2"));
+
+        Assert.Single(results, result => result.Success);
+        Assert.Single(results, result => result.Error?.StartsWith("CONCURRENT_LOGIN_LIMIT:", StringComparison.Ordinal) == true);
+
+        await using var verify = new GameNetDbContext(options1);
+        Assert.Equal(
+            1,
+            await verify.CustomerLogins.CountAsync(
+                item => item.CustomerId == customerId && item.IsActive));
+    }
+
+    [Fact]
     public async Task ConcurrentUpdatesToSameEntityAreRejected()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
