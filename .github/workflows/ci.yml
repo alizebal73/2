@@ -52,32 +52,46 @@ jobs:
           $ErrorActionPreference = 'Stop'
           dotnet tool install --global dotnet-ef --version 10.0.12 --ignore-failed-sources
           $env:PATH = "$env:USERPROFILE\\.dotnet\\tools;$env:PATH"
-          dotnet ef migrations has-pending-model-changes --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --context GameNetDbContext --verbose
-          # Optional probe: an empty scaffolded migration is valid and must not fail CI.
+
+          & dotnet ef migrations has-pending-model-changes --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --context GameNetDbContext --verbose
+          if ($LASTEXITCODE -ne 0) {
+            throw 'EF reported pending model changes.'
+          }
+
+          # Diagnostic scaffold: a non-empty migration proves model/snapshot parity is broken.
           $probeDir = 'src/Server/Data/Migrations/__Stage12ModelProbe'
           Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
-          dotnet ef migrations add Stage12ModelProbe --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --output-dir Data/Migrations/__Stage12ModelProbe --context GameNetDbContext --no-build
-          $probeMigration = Get-ChildItem $probeDir -Filter '????????????????_Stage12ModelProbe.cs' -File -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($probeMigration) {
-            $probeText = Get-Content $probeMigration.FullName -Raw
-            if ($probeText -match 'migrationBuilder\.(Add|Alter|Drop|Create|Rename|Sql)') {
-              Write-Host 'Unexpected model-diff migration was scaffolded:'
-              git diff -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
-              Write-Host ("===== " + $probeMigration.FullName + " =====")
-              Get-Content $probeMigration.FullName
-              git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
-              Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
-              throw 'EF model snapshot has pending changes.'
-            }
+
+          & dotnet ef migrations add Stage12ModelProbe --project src/Server/GameNetManager.Server.csproj --startup-project src/Server/GameNetManager.Server.csproj --output-dir Data/Migrations/__Stage12ModelProbe --context GameNetDbContext --no-build
+          if ($LASTEXITCODE -ne 0) {
+            throw 'EF migration probe command failed.'
           }
+
+          $probeMigration = Get-ChildItem $probeDir -Filter '*_Stage12ModelProbe.cs' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($probeMigration) {
+            $probeDesigner = Get-ChildItem $probeDir -Filter '*_Stage12ModelProbe.Designer.cs' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+            Write-Host 'Unexpected model-diff migration was scaffolded:'
+            Write-Host ("===== " + $probeMigration.FullName + " =====")
+            Get-Content $probeMigration.FullName
+            if ($probeDesigner) {
+              Write-Host ("===== " + $probeDesigner.FullName + " =====")
+              Get-Content $probeDesigner.FullName
+            }
+            git diff -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
+            throw 'EF model/snapshot parity is not satisfied.'
+          }
+
           git checkout -- src/Server/Data/Migrations/GameNetDbContextModelSnapshot.cs
           Remove-Item $probeDir -Recurse -Force -ErrorAction SilentlyContinue
 
       - name: Rebuild .NET after EF validation
+        shell: pwsh
         run: |
-          dotnet clean GameNetManager.sln --configuration Release --no-restore
-          dotnet build GameNetManager.sln --no-restore --configuration Release --no-incremental
+          dotnet clean GameNetManager.sln --configuration Release
+          if ($LASTEXITCODE -ne 0) { throw 'dotnet clean failed.' }
 
+          dotnet build GameNetManager.sln --configuration Release --no-restore --no-incremental
+          if ($LASTEXITCODE -ne 0) { throw 'dotnet rebuild failed.' }
       - name: Server startup and migration smoke
         shell: pwsh
         run: |
