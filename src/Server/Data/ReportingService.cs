@@ -288,7 +288,10 @@ public sealed class ReportingService(GameNetDbContext database)
                 item.EntityName,
                 item.EntityId,
                 item.Details))
+            .Take(Math.Clamp(filter.Limit, 1, 1000))
             .ToList();
+    }
+
     private async Task<List<Invoice>> LoadInvoicesInRangeAsync(
         DateTimeOffset from,
         DateTimeOffset to,
