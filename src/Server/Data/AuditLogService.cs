@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-
 namespace GameNetManager.Server.Data;
 
 public sealed record AuditLogQuery(
@@ -44,78 +42,76 @@ public sealed class AuditLogService
         var page = Math.Max(1, query.Page);
         var pageSize = Math.Clamp(query.PageSize, 10, 200);
 
-        IQueryable<AuditLog> logs = _database.AuditLogs
+        // SQLite cannot translate DateTimeOffset comparisons/order-by reliably.
+        // Audit Explorer is intentionally kept provider-safe here; the same server
+        // remains the source of truth, while filtering/order/paging happen in memory.
+        var logs = await _database.AuditLogs
             .AsNoTracking()
-            .Include(item => item.AppUser);
+            .Include(item => item.AppUser)
+            .ToListAsync(cancellationToken);
 
-        // SQLite in the current Server provider cannot translate DateTimeOffset
-        // comparisons/orderings. Apply text/entity filters in SQL first, then
-        // apply the authoritative time window and ordering in Server memory,
-        // matching the established finance/buffet reporting pattern.
+        IEnumerable<AuditLog> filtered = logs;
+
+        if (query.From is { } from)
+            filtered = filtered.Where(item => item.CreatedAt >= from);
+
+        if (query.To is { } to)
+            filtered = filtered.Where(item => item.CreatedAt <= to);
+
         if (!string.IsNullOrWhiteSpace(query.Operator))
         {
             var value = query.Operator.Trim();
-            logs = logs.Where(item =>
+            filtered = filtered.Where(item =>
                 item.AppUser != null
-                && (item.AppUser.FullName.Contains(value)
-                    || item.AppUser.UserName.Contains(value)));
+                && (item.AppUser.FullName.Contains(value, StringComparison.OrdinalIgnoreCase)
+                    || item.AppUser.UserName.Contains(value, StringComparison.OrdinalIgnoreCase)));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Action))
         {
             var value = query.Action.Trim();
-            logs = logs.Where(item => item.Action.Contains(value));
+            filtered = filtered.Where(item =>
+                item.Action.Contains(value, StringComparison.OrdinalIgnoreCase));
         }
 
         if (!string.IsNullOrWhiteSpace(query.EntityName))
         {
             var value = query.EntityName.Trim();
-            logs = logs.Where(item => item.EntityName.Contains(value));
+            filtered = filtered.Where(item =>
+                item.EntityName.Contains(value, StringComparison.OrdinalIgnoreCase));
         }
 
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var value = query.Search.Trim();
-            logs = logs.Where(item =>
-                item.Action.Contains(value)
-                || item.EntityName.Contains(value)
-                || (item.EntityId != null && item.EntityId.Contains(value))
-                || (item.Details != null && item.Details.Contains(value))
+            filtered = filtered.Where(item =>
+                item.Action.Contains(value, StringComparison.OrdinalIgnoreCase)
+                || item.EntityName.Contains(value, StringComparison.OrdinalIgnoreCase)
+                || (item.EntityId?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (item.Details?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false)
                 || (item.AppUser != null && (
-                    item.AppUser.FullName.Contains(value)
-                    || item.AppUser.UserName.Contains(value))));
+                    item.AppUser.FullName.Contains(value, StringComparison.OrdinalIgnoreCase)
+                    || item.AppUser.UserName.Contains(value, StringComparison.OrdinalIgnoreCase))));
         }
 
-        var rows = await logs
-            .Select(item => new AuditLogRecordDto(
-                item.Id,
-                item.CreatedAt,
-                item.AppUserId,
-                item.AppUser == null
-                    ? "سیستم"
-                    : item.AppUser.FullName,
-                item.Action,
-                item.EntityName,
-                item.EntityId,
-                item.Details))
-            .ToListAsync(cancellationToken);
-
-        if (query.From is { } from)
-            rows = rows.Where(item => item.CreatedAt >= from).ToList();
-
-        if (query.To is { } to)
-            rows = rows.Where(item => item.CreatedAt <= to).ToList();
-
-        var ordered = rows
+        var ordered = filtered
             .OrderByDescending(item => item.CreatedAt)
-            .ThenByDescending(item => item.Id)
-            .ToList();
+            .ThenByDescending(item => item.Id);
 
-        var total = ordered.Count;
+        var total = ordered.Count();
 
         var items = ordered
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
+            .Select(item => new AuditLogRecordDto(
+                item.Id,
+                item.CreatedAt,
+                item.AppUserId,
+                item.AppUser == null ? "سیستم" : item.AppUser.FullName,
+                item.Action,
+                item.EntityName,
+                item.EntityId,
+                item.Details))
             .ToList();
 
         return new AuditLogPageDto(page, pageSize, total, items);
