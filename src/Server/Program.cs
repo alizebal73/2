@@ -5021,7 +5021,7 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
         var modelRuntimeInitializer = scope.ServiceProvider
             .GetRequiredService<Microsoft.EntityFrameworkCore.Infrastructure.IModelRuntimeInitializer>();
         var designTimeModel = scope.ServiceProvider
-            .GetRequiredService<Microsoft.EntityFrameworkCore.Infrastructure.IDesignTimeModel>()
+            .GetRequiredService<Microsoft.EntityFrameworkCore.Metadata.IDesignTimeModel>()
             .Model;
         var snapshotModel = migrationsAssembly.ModelSnapshot?.Model;
         if (snapshotModel is Microsoft.EntityFrameworkCore.Metadata.IMutableModel mutableSnapshot)
