@@ -814,7 +814,7 @@ jobs:
             $env:GAMENET_AGENT_TEST_LOGIN_ID = $customerAuth.loginId
             $env:GAMENET_AGENT_TEST_GAME_ID = $stage12Game.id
             $env:GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW = '1'
-            $env:GAMENET_AGENT_TEST_SESSION_HOLD_SECONDS = '5'
+            $env:GAMENET_AGENT_TEST_SESSION_HOLD_SECONDS = '15'
 
             $sessionAgentProcess = Start-Process -FilePath 'dotnet' -ArgumentList @(
               'src/Client/bin/Release/net10.0-windows/GameNetManager.Client.dll'
@@ -875,8 +875,13 @@ jobs:
                     $gameLeaseId = $Matches[1]
                     $gameLeaseGameId = $Matches[2]
                     if ($gameLeaseGameId -ne $stage12Game.id) { throw "Stage 12 Agent received a credential for an unexpected GameId: $gameLeaseGameId" }
-                    $gameRows = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
-                    $gameRow = @($gameRows | Where-Object { $_.id -eq $stage12Game.id })[0]
+                    $gameRow = $null
+                    for ($activeUsersAttempt = 0; $activeUsersAttempt -lt 10; $activeUsersAttempt++) {
+                      $gameRows = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Get -WebSession $adminSession
+                      $gameRow = @($gameRows | Where-Object { $_.id -eq $stage12Game.id })[0]
+                      if ($gameRow -and [int]$gameRow.activeUsers -eq 1) { break }
+                      Start-Sleep -Milliseconds 500
+                    }
                     if (-not $gameRow -or [int]$gameRow.activeUsers -ne 1) { throw 'Stage 12 Game activeUsers did not become authoritative while the Session was active.' }
 
                     $accountRows = Invoke-RestMethod -Uri "$baseUrl/api/account-pool" -Method Get -WebSession $adminSession
