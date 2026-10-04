@@ -5079,7 +5079,19 @@ app.MapPost("/api/shifts/start", async (
         AppUserId = user.Id
     });
 
-    await database.SaveChangesAsync(cancellationToken);
+    try
+    {
+        await database.SaveChangesAsync(cancellationToken);
+    }
+    catch (DbUpdateException)
+    {
+        return Results.Conflict(new
+        {
+            code = "shift_already_open",
+            message = "در همین زمان یک شیفت دیگر باز شده است."
+        });
+    }
+
     return Results.Ok(await BuildShiftSnapshotAsync(database, shift, null, cancellationToken));
 })
 .WithName("StartShift");
