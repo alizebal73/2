@@ -9,6 +9,14 @@ namespace GameNetManager.Client.Tests;
 public sealed class ClientUpdateManagerTests
 {
     [Fact]
+    public void AgentPowerCommands_AreSupportedBySharedContract()
+    {
+        Assert.True(AgentCommandTypes.IsSupported(AgentCommandTypes.Restart));
+        Assert.True(AgentCommandTypes.IsSupported(AgentCommandTypes.Shutdown));
+        Assert.False(AgentCommandTypes.IsSupported("unknown-power-command"));
+    }
+
+    [Fact]
     public async Task StageActivateAndRollback_preserves_versions_and_integrity()
     {
         var root = CreateTempDirectory();
