@@ -22,7 +22,7 @@ import type { AppUserRecord } from './types';
 import { SectionLockDialog } from './components/SectionLockDialog';
 import { readPageLocks } from './services/securityService';
 import type { PageLockMap } from './types';
-import type { AgentStatusDto, DashboardSnapshotDto, PageKey, ServerInfoDto, StationDto } from './types';
+import type { AgentStatusDto, DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
 import { getAgentStatuses } from './services/agentService';
 
