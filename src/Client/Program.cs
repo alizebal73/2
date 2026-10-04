@@ -249,6 +249,7 @@ try
                     testCustomerLoginId,
                     Guid.TryParse(testGameIdText, out var testGameId) ? testGameId : null,
                     testGameAccountFlow,
+                    testSessionHoldSeconds,
                     shutdown.Token);
             }
         }
@@ -454,6 +455,7 @@ static async Task RunTestSessionFlowAsync(
     Guid customerLoginId,
     Guid? gameId,
     bool testGameAccountFlow,
+    int testSessionHoldSeconds,
     CancellationToken cancellationToken)
 {
     try
