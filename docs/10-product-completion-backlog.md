@@ -192,7 +192,7 @@
 14. **Reservations & Operations Scale** — Reservation/Waitlist، Event/Tournament، Network State و Multi-cashier
 15. **UI/Deployment Hardening** — Primitiveهای UI، DataTable، Keyboard-first، Desktop Shell، Backup/Recovery، Installer، Canary و انتشار نهایی
 
-**جایگاه فعلی:** Stage 12 در حال تکمیل است؛ Stage 1 تا 10 شواهد تاریخی CI دارند، Stage 11 با مرزهای مشخص‌شده بستهٔ نرم‌افزاری آن است، و Stage 12 هنوز تا CI هم‌زمانِ head نهایی Done محسوب نمی‌شود.
+**جایگاه فعلی:** Stage 12 از نظر مهندسی نرم‌افزار بسته و با CI Run #1369 روی HEAD کد `ae18da81761b82dcea5d11d69934fd47426c7f3d` تأیید شده است. Stage 1 تا 11 نیز در محدوده‌های ثبت‌شده تثبیت شده‌اند. Gateهای فیزیکی و Production جدا هستند. مرحلهٔ نرم‌افزاری فعال بعدی **Stage 13 — Reporting & Audit** است.
 
 این نقشه مرجع اجرایی فعلی است؛ اسناد تاریخی قبلی شماره‌گذاری قدیمی خود را حفظ می‌کنند، اما برای ادامهٔ توسعه از این جدول استفاده می‌شود.
 ## وضعیت نهایی مرحلهٔ ۷ — Users & Permissions
