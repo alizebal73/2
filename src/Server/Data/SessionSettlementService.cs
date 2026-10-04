@@ -92,9 +92,12 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             session.StationId,
             now,
             cancellationToken);
+        var authoritativeHourlyRate = session.HourlyRateOverride
+            ?? session.HourlyRateSnapshot
+            ?? pricing.HourlyRate;
         var authoritativeTimeAmount = SessionPricingService.CalculateTimeAmount(
             session,
-            pricing.HourlyRate,
+            authoritativeHourlyRate,
             request.FreeTimeMinutes,
             now);
 
