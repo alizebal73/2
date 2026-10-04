@@ -487,6 +487,20 @@ app.MapDelete("/api/tariffs/{tariffId:guid}", async (
     if (tariff is null)
         return Results.NotFound(new { code = "tariff_not_found", message = "تعرفه پیدا نشد." });
 
+    var assignedStations = await database.Stations
+        .Where(item => item.IsActive && item.TariffId == tariffId)
+        .Select(item => item.Name)
+        .Take(10)
+        .ToListAsync(cancellationToken);
+
+    if (assignedStations.Count > 0)
+        return Results.Conflict(new
+        {
+            code = "tariff_in_use",
+            message = "این تعرفه به ایستگاه فعال متصل است؛ ابتدا ایستگاه‌ها را به تعرفه دیگری منتقل کنید.",
+            stations = assignedStations
+        });
+
     tariff.IsActive = false;
     database.AuditLogs.Add(new AuditLog
     {
