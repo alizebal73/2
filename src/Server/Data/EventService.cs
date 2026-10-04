@@ -10,18 +10,22 @@ public sealed class EventService(GameNetDbContext database)
         DateTimeOffset? to,
         CancellationToken cancellationToken)
     {
-        var rows = await database.Events
+        var query = database.Events
             .AsNoTracking()
             .Include(item => item.Participants)
+            .AsQueryable();
+
+        if (from.HasValue)
+            query = query.Where(item => item.EndAt >= from.Value);
+        if (to.HasValue)
+            query = query.Where(item => item.StartAt <= to.Value);
+
+        var rows = await query
             .OrderBy(item => item.StartAt)
             .Take(500)
             .ToListAsync(cancellationToken);
 
-        return rows
-            .Where(item => (!from.HasValue || item.EndAt >= from.Value)
-                && (!to.HasValue || item.StartAt <= to.Value))
-            .Select(ToDto)
-            .ToList();
+        return rows.Select(ToDto).ToList();
     }
 
     public async Task<EventDto> CreateAsync(
@@ -41,14 +45,16 @@ public sealed class EventService(GameNetDbContext database)
         var start = request.StartAt;
         var end = start.AddMinutes(request.DurationMinutes);
 
-        var possibleConflicts = await database.Events
-            .AsNoTracking()
-            .Where(item => item.Status != EventStatus.Cancelled
-                && item.Status != EventStatus.Completed)
-            .ToListAsync(cancellationToken);
+        var hasConflict = kind.Equals("tournament", StringComparison.OrdinalIgnoreCase)
+            && await database.Events
+                .AsNoTracking()
+                .AnyAsync(item => item.Status != EventStatus.Cancelled
+                    && item.Status != EventStatus.Completed
+                    && item.StartAt < end
+                    && item.EndAt > start,
+                    cancellationToken);
 
-        if (possibleConflicts.Any(item => item.StartAt < end && item.EndAt > start)
-            && kind.Equals("tournament", StringComparison.OrdinalIgnoreCase))
+        if (hasConflict)
             throw new InvalidOperationException("Event دیگری در این بازه فعال است.");
 
         var entity = new GameEvent
@@ -107,6 +113,13 @@ public sealed class EventService(GameNetDbContext database)
         CancellationToken cancellationToken)
     {
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+        var lockedEvent = await database.Events
+            .Where(item => item.Id == eventId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+        if (lockedEvent != 1)
+            throw new KeyNotFoundException("Event پیدا نشد.");
 
         var entity = await database.Events
             .Include(item => item.Participants)
