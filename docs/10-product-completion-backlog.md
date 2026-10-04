@@ -10,6 +10,25 @@
 - هر مرحله قبل از رفتن به مرحله بعد باید Build/Test/CI و در صورت UI، تست تعاملی لازم را پاس کند.
 - وابستگی‌ها زودتر از مصرف‌کننده پیاده‌سازی می‌شوند.
 
+
+
+## آخرین وضعیت تأییدشده — Stage 12 / 2026-10-05
+
+این بخش مرجع اجرایی فعلی است و بر وضعیت واقعی HEAD شاخه غلبه دارد.
+
+- ✅ Stage 1 تا 10: هسته‌های نرم‌افزاری قبلاً در CI تثبیت شده‌اند.
+- ✅ Stage 11: Game Catalog + Account Pool/Lease از Mock خارج شده و مسیر واقعی آن در Server/Agent فعال است.
+- ✅ Stage 12: زنجیرهٔ واقعی Session → Game → Agent → Account Lease → Credential → Session End → Release روی همان HEAD نهایی تست شد.
+- ✅ Real Game Apply/Sync و persistence مانیفست Agent در CI تأیید شد.
+- ✅ authoritative activeUsers هنگام Session فعال و بازگشت آن به صفر پس از پایان Session تأیید شد.
+- ✅ Account Pool از Free → InUse → Free در همان چرخهٔ واقعی تأیید شد.
+- ✅ Build، Test، EF Model Validation، Server/Migration/Health Smoke، Agent/Session/Lease E2E و Dashboard Browser Smoke همگی روی HEAD یکسان سبز شدند.
+- ✅ CI نهایی کد: Run #1369 روی commit ae18da81761b82dcea5d11d69934fd47426c7f3d.
+- ⬜ Gateهای بیرون از CI همچنان باقی‌اند: Backup/Restore واقعی، Validation فیزیکی روی 2–3 PC و سپس rollout کنترل‌شدهٔ 40+ PC.
+- ⏭️ مرحلهٔ نرم‌افزاری بعدی پس از این checkpoint: Stage 13 — Reporting & Audit / Notification Queue / Fine-Grained Scope.
+
+> قانون: Stage 12 از نظر مهندسی نرم‌افزار Done است؛ Gateهای فیزیکی و Release تا زمان اجرای واقعی همچنان Done محسوب نمی‌شوند.
+
 ## تصمیم‌های تأییدشده از بازبینی دوم محصول
 
 این موارد از پیشنهادهای بازبینی خارجی بررسی و تأیید شدند و از این به بعد بخشی از نقشهٔ رسمی پروژه‌اند:
