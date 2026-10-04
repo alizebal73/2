@@ -27,6 +27,11 @@ var testSessionCustomerId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TE
 var testSessionLoginId = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_LOGIN_ID");
 var testGameIdText = Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_GAME_ID");
 var testGameAccountFlow = string.Equals(Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW"), "1", StringComparison.Ordinal);
+var testSessionHoldSeconds = int.TryParse(
+    Environment.GetEnvironmentVariable("GAMENET_AGENT_TEST_SESSION_HOLD_SECONDS"),
+    out var parsedTestSessionHoldSeconds)
+    ? Math.Clamp(parsedTestSessionHoldSeconds, 0, 30)
+    : 1;
 
 if (string.IsNullOrWhiteSpace(dataDirectory))
     dataDirectory = Path.Combine(
@@ -476,7 +481,9 @@ static async Task RunTestSessionFlowAsync(
             Console.WriteLine($"AGENT_GAME_ACCOUNT_OK:{credential.LeaseId}:{credential.GameId}:{credential.Platform}:{credential.Login}");
         }
 
-        await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+        await Task.Delay(
+            TimeSpan.FromSeconds(testSessionHoldSeconds),
+            cancellationToken);
 
         try
         {
