@@ -273,7 +273,11 @@ public sealed class ReportingService(GameNetDbContext database)
                 || (item.Details != null && EF.Functions.Like(item.Details, pattern)));
         }
 
-        return await query
+        // SQLite cannot translate DateTimeOffset ordering. Apply all selective
+        // filters in SQL, materialize the bounded audit result, then sort/page in CLR.
+        var rows = await query.ToListAsync(cancellationToken);
+
+        return rows
             .OrderByDescending(item => item.CreatedAt)
             .Take(Math.Clamp(filter.Limit, 1, 1000))
             .Select(item => new AuditExplorerDto(
@@ -285,7 +289,7 @@ public sealed class ReportingService(GameNetDbContext database)
                 item.EntityName,
                 item.EntityId,
                 item.Details))
-            .ToListAsync(cancellationToken);
+            .ToList();
     }
 
     private async Task<List<Invoice>> LoadInvoicesInRangeAsync(
