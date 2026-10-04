@@ -3164,51 +3164,84 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         && string.IsNullOrWhiteSpace(request.Notes))
         return Results.BadRequest(new { code = "missing_inventory_reason", message = "دلیل ضایعات یا مرجوعی را وارد کنید." });
 
-    var product = await database.Products.FirstOrDefaultAsync(item => item.Id == productId && item.IsActive, cancellationToken);
-    if (product is null)
-        return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
-
-    if (direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
-        return Results.Conflict(new { code = "insufficient_stock", message = "موجودی برای این خروج کافی نیست." });
-
-    var unitCost = request.UnitCost ?? product.CostPrice;
     if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase)
         && (!request.UnitCost.HasValue || request.UnitCost.Value <= 0))
         return Results.BadRequest(new { code = "missing_purchase_cost", message = "بهای خرید هر واحد را وارد کنید." });
 
-    var oldStock = product.StockQuantity;
-    var oldCost = product.CostPrice;
-    product.StockQuantity += direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
-    if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase))
+    try
     {
-        var newStock = product.StockQuantity;
-        product.CostPrice = newStock <= 0
-            ? unitCost
-            : ((oldStock * oldCost) + (request.Quantity * unitCost)) / newStock;
+        var now = DateTimeOffset.UtcNow;
+        var locked = await database.Products
+            .Where(item => item.Id == productId && item.IsActive)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+        if (locked != 1)
+            return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
+
+        var product = await database.Products
+            .FirstAsync(item => item.Id == productId && item.IsActive, cancellationToken);
+
+        if (direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
+            return Results.Conflict(new { code = "insufficient_stock", message = "موجودی برای این خروج کافی نیست." });
+
+        var unitCost = request.UnitCost ?? product.CostPrice;
+        var oldStock = product.StockQuantity;
+        var oldCost = product.CostPrice;
+
+        product.StockQuantity += direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
+
+        if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase))
+        {
+            var newStock = product.StockQuantity;
+            product.CostPrice = newStock <= 0
+                ? unitCost
+                : ((oldStock * oldCost) + (request.Quantity * unitCost)) / newStock;
+        }
+
+        database.InventoryTransactions.Add(new InventoryTransaction
+        {
+            ProductId = product.Id,
+            Quantity = request.Quantity,
+            UnitPrice = product.UnitPrice,
+            UnitCost = unitCost,
+            Direction = direction,
+            Kind = kind,
+            AppUserId = auth.User!.Id,
+            Notes = request.Notes
+        });
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = direction == TransactionDirection.In ? "InventoryIncrease" : "InventoryDecrease",
+            EntityName = "Product",
+            EntityId = product.Id.ToString(),
+            Details = kind + " · " + request.Quantity.ToString() + " · " + (request.Notes ?? ""),
+            AppUserId = auth.User!.Id
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            id = product.Id,
+            stock = product.StockQuantity,
+            lowStock = product.StockQuantity <= product.MinimumStock,
+            kind
+        });
     }
-
-    database.InventoryTransactions.Add(new InventoryTransaction
+    catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
     {
-        ProductId = product.Id,
-        Quantity = request.Quantity,
-        UnitPrice = product.UnitPrice,
-        UnitCost = unitCost,
-        Direction = direction,
-        Kind = kind,
-        AppUserId = auth.User!.Id,
-        Notes = request.Notes
-    });
-    database.AuditLogs.Add(new AuditLog
-    {
-        Action = direction == TransactionDirection.In ? "InventoryIncrease" : "InventoryDecrease",
-        EntityName = "Product",
-        EntityId = product.Id.ToString(),
-        Details = kind + " · " + request.Quantity.ToString() + " · " + (request.Notes ?? ""),
-        AppUserId = auth.User!.Id
-    });
-    await database.SaveChangesAsync(cancellationToken);
-    return Results.Ok(new { id = product.Id, stock = product.StockQuantity, lowStock = product.StockQuantity <= product.MinimumStock, kind });
+        await transaction.RollbackAsync(CancellationToken.None);
+        return Results.Conflict(new
+        {
+            code = "inventory_busy",
+            message = "هم‌زمانی ثبت موجودی رخ داد؛ عملیات بدون تغییر داده متوقف شد. دوباره تلاش کنید."
+        });
+    }
 })
 .WithName("AdjustBuffetStock");
  
