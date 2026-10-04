@@ -3674,24 +3674,45 @@ app.MapPost("/api/buffet/sales", async (
         }
     }
 
-    var ids = request.Items.Select(item => item.ProductId).Distinct().ToList();
-    var products = await database.Products.Where(item => ids.Contains(item.Id) && item.IsActive).ToListAsync(cancellationToken);
+    var normalizedItems = request.Items
+        .GroupBy(item => item.ProductId)
+        .Select(group => new BuffetSaleItem(group.Key, group.Sum(item => item.Quantity)))
+        .ToList();
+
+    if (normalizedItems.Any(item => item.Quantity <= 0))
+        return Results.BadRequest(new { code = "invalid_sale_item", message = "مقدار فروش باید مثبت باشد." });
+
+    var ids = normalizedItems.Select(item => item.ProductId).Distinct().ToList();
+    var products = await database.Products
+        .Where(item => ids.Contains(item.Id) && item.IsActive)
+        .ToListAsync(cancellationToken);
     var byId = products.ToDictionary(item => item.Id);
 
     decimal total = 0m;
-    foreach (var item in request.Items)
+    foreach (var item in normalizedItems)
     {
-        if (item.Quantity <= 0 || !byId.TryGetValue(item.ProductId, out var product))
+        if (!byId.TryGetValue(item.ProductId, out var product))
             return Results.BadRequest(new { code = "invalid_sale_item", message = "یکی از اقلام فروش معتبر نیست." });
-        if (product.StockQuantity < item.Quantity)
-            return Results.Conflict(new { code = "insufficient_stock", message = "موجودی «" + product.Name + "» کافی نیست." });
-        total += product.UnitPrice * item.Quantity;
-    }
 
-    foreach (var item in request.Items)
-    {
-        var product = byId[item.ProductId];
-        product.StockQuantity -= item.Quantity;
+        total += product.UnitPrice * item.Quantity;
+
+        // Claim the stock atomically. The database condition is part of the
+        // mutation, so two simultaneous sales cannot both consume the same stock.
+        var updated = await database.Products
+            .Where(row => row.Id == product.Id
+                && row.IsActive
+                && row.StockQuantity >= item.Quantity)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(row => row.StockQuantity, row => row.StockQuantity - item.Quantity)
+                .SetProperty(row => row.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+
+        if (updated != 1)
+            return Results.Conflict(new
+            {
+                code = "insufficient_stock",
+                message = "موجودی «" + product.Name + "» در زمان فروش کافی نبود."
+            });
+
         database.InventoryTransactions.Add(new InventoryTransaction
         {
             ProductId = product.Id,
