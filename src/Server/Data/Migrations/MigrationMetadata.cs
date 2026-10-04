@@ -179,3 +179,27 @@ partial class Stage12SessionLeaseCredential
 partial class AccountPoolExpiryUtc
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261004020000_ReservationWaitlistAndNetworkRoute")]
+partial class ReservationWaitlistAndNetworkRoute
+{
+}
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261004030000_EventTournamentReady")]
+partial class EventTournamentReady
+{
+}
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261004110000_OneOpenShift")]
+partial class OneOpenShift
+{
+}
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261004120000_SessionHourlyRateSnapshot")]
+partial class SessionHourlyRateSnapshot
+{
+}
