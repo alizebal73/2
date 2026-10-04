@@ -351,13 +351,16 @@ jobs:
               }
               Write-Host ("Stage 10 update command succeeded: commandId={0}" -f $updateCommand.commandId)
 
+              $updateRequestedAt = [DateTimeOffset]$updateCommand.requestedAt
               $updatedAgent = $null
               $updatedReady = $false
               for ($i = 0; $i -lt 45; $i++) {
                 try {
                   $agentRowsAfterUpdate = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices" -Method Get -WebSession $adminSession
                   $updatedAgent = @($agentRowsAfterUpdate | Where-Object { $_.agentId -eq $agentRow.agentId })[0]
-                  if ($updatedAgent -and $updatedAgent.isOnline -and $updatedAgent.lifecycleState -eq 'Running' -and $updatedAgent.agentVersion -eq '0.7.1') {
+                  $freshConnectedAt = $updatedAgent -and $updatedAgent.connectedAt -and ([DateTimeOffset]$updatedAgent.connectedAt -gt $updateRequestedAt)
+                  $freshLastSeenAt = $updatedAgent -and $updatedAgent.lastSeenAt -and ([DateTimeOffset]$updatedAgent.lastSeenAt -gt $updateRequestedAt)
+                  if ($updatedAgent -and $updatedAgent.isOnline -and $updatedAgent.lifecycleState -eq 'Running' -and $updatedAgent.agentVersion -eq '0.7.1' -and $freshConnectedAt -and $freshLastSeenAt) {
                     $updatedReady = $true
                     break
                   }
@@ -365,7 +368,7 @@ jobs:
                 Start-Sleep -Seconds 1
               }
               if (-not $updatedReady) {
-                throw "Stage 10 update did not restart into the new healthy version. Current=$($updatedAgent | ConvertTo-Json -Depth 5 -Compress)"
+                throw "Stage 10 update did not restart into a fresh healthy connection. UpdateRequestedAt=$updateRequestedAt; Current=$($updatedAgent | ConvertTo-Json -Depth 5 -Compress)"
               }
 
               $updatedLifecycle = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
