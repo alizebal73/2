@@ -4866,6 +4866,44 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
 })
 .WithName("TransferSession");
 
+app.MapGet("/api/sessions/{sessionId:guid}/settlement-preview", async (
+    Guid sessionId,
+    int? freeTimeMinutes,
+    decimal? discountAmount,
+    decimal? prepaidAmount,
+    SessionSettlementService settlement,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.settle", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    try
+    {
+        var result = await settlement.PreviewAsync(
+            sessionId,
+            freeTimeMinutes ?? 0,
+            discountAmount ?? 0m,
+            prepaidAmount ?? 0m,
+            cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (KeyNotFoundException)
+    {
+        return Results.NotFound(new { code = "session_not_found", message = "جلسه پیدا نشد." });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "settlement_preview_conflict", message = exception.Message });
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_settlement_preview", message = exception.Message });
+    }
+})
+.WithName("PreviewSessionSettlement");
+
 app.MapPost("/api/sessions/{sessionId:guid}/settle", async (
     Guid sessionId,
     SessionSettlementRequest request,
