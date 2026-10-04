@@ -17,9 +17,17 @@ main = 9aecaba120a69a9340ff214c2a3f3f7ffc7e104a
 - Finance data loading is skipped when the current user only has `audit.view`.
 - Regression coverage added for service filtering/pagination, browser behavior, and CI server API smoke.
 
+## Certification
+
+**Stage 13.1 — DONE / CERTIFIED**
+
+- Certified on `main` commit `24a0654fa6490f415372ab2e7d28f30a0ecfbe89`.
+- CI Run #1383: success.
+- Exact-head gates: Build, Test, EF, Server/Migration/Health, Stage 13 Audit API smoke, Dashboard Build/Lint, Browser Smoke.
+
 ## Not Done
 
-- Stage 13.1 has not been certified until the exact branch HEAD is green.
+- Stage 13.1 is certified; remaining items below are later slices.
 - Sessions/Stations, Customers/VIP, Users/Shift reports are still later Stage 13 slices.
 - Fine-grained permission/scope and full reporting export policy remain later in Stage 13.
 - Notification/Event Queue remains later in Stage 13.
