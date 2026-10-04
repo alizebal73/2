@@ -5014,6 +5014,43 @@ static async Task InitializeDatabaseAsync(IServiceProvider services, string data
 
     try
     {
+        var migrationsAssembly = scope.ServiceProvider
+            .GetRequiredService<Microsoft.EntityFrameworkCore.Migrations.IMigrationsAssembly>();
+        var migrationsModelDiffer = scope.ServiceProvider
+            .GetRequiredService<Microsoft.EntityFrameworkCore.Migrations.IMigrationsModelDiffer>();
+        var modelRuntimeInitializer = scope.ServiceProvider
+            .GetRequiredService<Microsoft.EntityFrameworkCore.Infrastructure.IModelRuntimeInitializer>();
+        var designTimeModel = scope.ServiceProvider
+            .GetRequiredService<Microsoft.EntityFrameworkCore.Infrastructure.IDesignTimeModel>()
+            .Model;
+        var snapshotModel = migrationsAssembly.ModelSnapshot?.Model;
+        if (snapshotModel is Microsoft.EntityFrameworkCore.Metadata.IMutableModel mutableSnapshot)
+            snapshotModel = mutableSnapshot.FinalizeModel();
+        if (snapshotModel is not null)
+            snapshotModel = modelRuntimeInitializer.Initialize(snapshotModel);
+
+        var snapshotToDesignTime = snapshotModel is null
+            ? []
+            : migrationsModelDiffer.GetDifferences(
+                snapshotModel.GetRelationalModel(),
+                designTimeModel.GetRelationalModel());
+        var snapshotToRuntime = snapshotModel is null
+            ? []
+            : migrationsModelDiffer.GetDifferences(
+                snapshotModel.GetRelationalModel(),
+                database.Model.GetRelationalModel());
+
+        logger.LogCritical(
+            "EF DIAGNOSTIC: HasPendingModelChanges={Pending}; SnapshotToDesignTime={DesignCount}; SnapshotToRuntime={RuntimeCount}",
+            database.Database.HasPendingModelChanges(),
+            snapshotToDesignTime.Count,
+            snapshotToRuntime.Count);
+
+        foreach (var operation in snapshotToDesignTime)
+            logger.LogCritical("EF DIAGNOSTIC DESIGN: {Operation}", operation);
+        foreach (var operation in snapshotToRuntime)
+            logger.LogCritical("EF DIAGNOSTIC RUNTIME: {Operation}", operation);
+
         await database.Database.MigrateAsync();
         await DatabaseSeeder.SeedAsync(database, environment.IsDevelopment());
     }
