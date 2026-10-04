@@ -98,6 +98,67 @@ public sealed class SessionSettlementTests : IDisposable
     }
 
     [Fact]
+    public async Task SettlementUsesSessionRateSnapshotAfterTariffChanges()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "PC-Snapshot" };
+        var tariff = new Tariff { Name = "Snapshot Tariff", HourlyRate = 95000m, DailyRate = 550000m };
+        var customer = new Customer { FullName = "Rate Snapshot Test", Balance = 200000m };
+        var station = new Station
+        {
+            Name = "PC-SNAPSHOT-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 95000m,
+            StationType = type,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var startedAt = DateTimeOffset.UtcNow.AddHours(-2);
+        var endedAt = startedAt.AddHours(1);
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            StartAt = startedAt,
+            EndAt = endedAt,
+            HourlyRateSnapshot = 95000m,
+            State = SessionState.Active
+        };
+
+        db.AddRange(type, tariff, customer, station, session);
+        await db.SaveChangesAsync();
+
+        tariff.HourlyRate = 190000m;
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db);
+        var result = await service.SettleAsync(
+            session.Id,
+            new SessionSettlementRequest(
+                95000m,
+                new[] { new SettlementPart("cash", 95000m) },
+                null,
+                0,
+                95000m,
+                0m,
+                0m),
+            CancellationToken.None);
+
+        Assert.Equal(95000m, result.TotalAmount);
+        Assert.Equal(95000m, await db.Invoices.Where(item => item.Id == result.InvoiceId).Select(item => item.TotalAmount).SingleAsync());
+        Assert.Equal(SessionState.Completed, await db.Sessions.Where(item => item.Id == session.Id).Select(item => item.State).SingleAsync());
+    }
+
+    [Fact]
     public async Task InvalidSplitTotalDoesNotChangeSessionOrWallet()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
