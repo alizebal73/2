@@ -625,7 +625,7 @@ static async Task<int?> SendHeartbeatAsync(
                 state.LifecycleState,
                 state.PendingUpdateVersion,
                 state.LastUpdateError,
-                await GetRunningGameProcessesAsync(state.DataDirectory, cancellationToken)));
+                await GetRunningGameProcessesAsync(dataDirectory, cancellationToken)));
 
         Console.WriteLine($"Heartbeat موفق؛ زمان سرور: {response.ServerUtcNow:HH:mm:ss}.");
         return response.HeartbeatIntervalSeconds;
