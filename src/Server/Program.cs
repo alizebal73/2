@@ -5729,5 +5729,3 @@ static bool TryDecodeWalletRefundApprovalTarget(string? value, out WalletRefundA
 }
 
 public partial class Program { }
-
-public partial class Program { }
