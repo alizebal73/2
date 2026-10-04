@@ -4450,39 +4450,33 @@ app.MapPost("/api/sessions", async (
     if (auth.Error is not null) return auth.Error;
     request = request with { AppUserId = auth.User!.Id };
 
-    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
-
     if (request.CustomerId == Guid.Empty || request.StationId == Guid.Empty)
-    {
         return Results.BadRequest(new { code = "invalid_session_reference", message = "مشتری و ایستگاه معتبر نیستند." });
-    }
 
     var customerExists = await database.Customers.AnyAsync(item => item.Id == request.CustomerId, cancellationToken);
-    var station = await database.Stations.FirstOrDefaultAsync(item => item.Id == request.StationId, cancellationToken);
-
     if (!customerExists)
-    {
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
-    }
 
-    if (station is null)
-    {
-        return Results.NotFound(new { code = "station_not_found", message = "ایستگاه پیدا نشد." });
-    }
+    if (request.TariffId is not null
+        && !await database.Tariffs.AnyAsync(item => item.Id == request.TariffId.Value, cancellationToken))
+        return Results.BadRequest(new { code = "tariff_not_found", message = "تعرفه انتخاب‌شده پیدا نشد." });
 
-    if (station.State != StationState.Available)
-    {
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    var now = DateTimeOffset.UtcNow;
+
+    var claimed = await database.Stations
+        .Where(item => item.Id == request.StationId
+            && item.IsActive
+            && item.State == StationState.Available)
+        .ExecuteUpdateAsync(setters => setters
+            .SetProperty(item => item.State, StationState.Occupied)
+            .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+    if (claimed != 1)
         return Results.Conflict(new { code = "station_not_available", message = "این ایستگاه دیگر آزاد نیست." });
-    }
 
-    if (request.TariffId is not null)
-    {
-        var tariffExists = await database.Tariffs.AnyAsync(item => item.Id == request.TariffId.Value, cancellationToken);
-        if (!tariffExists)
-        {
-            return Results.BadRequest(new { code = "tariff_not_found", message = "تعرفه انتخاب‌شده پیدا نشد." });
-        }
-    }
+    var station = await database.Stations
+        .FirstAsync(item => item.Id == request.StationId, cancellationToken);
 
     var session = new Session
     {
@@ -4490,7 +4484,7 @@ app.MapPost("/api/sessions", async (
         StationId = request.StationId,
         TariffId = request.TariffId,
         AppUserId = auth.User!.Id,
-        StartAt = DateTimeOffset.UtcNow,
+        StartAt = now,
         State = SessionState.Active,
         TotalAmount = 0m,
         HourlyRateOverride = request.HourlyRateOverride > 0 ? request.HourlyRateOverride : null,
@@ -4498,8 +4492,6 @@ app.MapPost("/api/sessions", async (
     };
 
     database.Sessions.Add(session);
-    station.State = StationState.Occupied;
-
     database.AuditLogs.Add(new AuditLog
     {
         Action = "SessionStart",
