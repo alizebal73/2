@@ -104,9 +104,12 @@ public sealed class NotificationQueueService
     {
         var limit = Math.Clamp(take, 1, 100);
 
-        var items = await _database.Notifications
+        var rows = await _database.Notifications
             .AsNoTracking()
             .Where(item => item.AppUserId == appUserId)
+            .ToListAsync(cancellationToken);
+
+        var items = rows
             .OrderByDescending(item => item.CreatedAt)
             .ThenByDescending(item => item.Id)
             .Take(limit)
@@ -122,10 +125,9 @@ public sealed class NotificationQueueService
                 item.IsRead,
                 item.CreatedAt,
                 item.ReadAt))
-            .ToListAsync(cancellationToken);
+            .ToList();
 
-        var unread = await _database.Notifications
-            .CountAsync(item => item.AppUserId == appUserId && !item.IsRead, cancellationToken);
+        var unread = rows.Count(item => !item.IsRead);
 
         return (items, unread);
     }
