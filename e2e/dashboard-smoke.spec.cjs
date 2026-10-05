@@ -650,7 +650,7 @@ test('settings information architecture supports search and category navigation'
   await page.route('**/hubs/**', route => route.abort());
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'تنظیمات' }).click();
+  await page.getByRole('button', { name: 'تنظیمات', exact: true }).click();
 
   const settingsNav = page.getByTestId('settings-category-nav');
   await expect(settingsNav).toBeVisible();
