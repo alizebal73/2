@@ -2,7 +2,7 @@
 
 ## Base
 
-main = 2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0
+main = c3f579b38ad1704a62d775c6f45921b24624d43c
 
 ## Slice 13.1 — Audit Explorer
 
@@ -43,6 +43,28 @@ main = 2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0
 - Post-merge main CI: **Run #1403 — success**.
 - Main merge commit: `2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0`.
 
+## Slice 13.4 — Permission/Scope + Export — CERTIFIED
+
+- Server-side report View/Scope All/Export permissions are enforced.
+- Report export is server-backed and audit logged.
+- Exact-head CI: Run #1411 — success.
+- Post-merge main CI: Run #1412 — success.
+
+## Slice 13.5 — Notification/Event Queue — CERTIFIED
+
+- Durable Notification entity + migration are live.
+- Domain publishers cover buffet low-stock and Agent offline/command failure events.
+- Authenticated notification Inbox, read and read-all APIs are server-side enforced and user-owned.
+- Dashboard consumes the server inbox and refreshes from SignalR notification events.
+- SQLite-safe notification list/read persistence and correct scoped DI are part of the certified baseline.
+- Exact-head CI: Run #1421 — success.
+- Post-merge main CI: Run #1422 — success.
+- Main merge commit: c3f579b38ad1704a62d775c6f45921b24624d43c.
+
+## Stage 13 — FINAL CERTIFICATION
+
+**Stage 13.1 through 13.5 — COMPLETE from software-engineering perspective.**
+
 ## Not Done
 
 - Fine-grained permission/scope and full reporting export policy remain later in Stage 13.
@@ -51,8 +73,8 @@ main = 2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0
 
 ## Recovery Rule
 
-Resume from the certified `main` commit `2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0` and this checkpoint. Do not infer completion from chat history; use the exact HEAD and CI result.
+Resume from the certified main commit c3f579b38ad1704a62d775c6f45921b24624d43c and this checkpoint. Do not infer completion from chat history; use the exact HEAD and CI result.
 
 ## Next checkpoint
 
-Create/resume from certified `main` `2ee64bf…` for **Stage 13.4 — Fine-Grained Permission/Scope + Export**. Do not modify certified Stage 13.1/13.2/13.3 slices except for regression fixes.
+Create/resume from certified main c3f579b… for **Stage 14 — UI Hardening / Settings Information Architecture / Dashboard UX**. Do not modify certified Stage 13 slices except for regression fixes.

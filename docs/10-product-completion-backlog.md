@@ -35,10 +35,10 @@
 
 ### مرز بعدی
 
-- ⏭️ Stage 13.2 — گزارش واقعی جلسات و ایستگاه‌ها
+- ✅ Stage 13.2 — گزارش واقعی جلسات و ایستگاه‌ها
 - ✅ Stage 13.3 — گزارش مشتری/VIP و Users/Shift
-- ⏭️ Stage 13.4 — Fine-Grained Permission/Scope + Export
-- ⏭️ Stage 13.5 — Notification/Event Queue
+- ✅ Stage 13.4 — Fine-Grained Permission/Scope + Export
+- ✅ Stage 13.5 — Notification/Event Queue
 
 > Stage 13.1 پس از سبز شدن exact-head و عبور Main از CI Done محسوب می‌شود؛ این قانون برای هر برش بعدی نیز برقرار است.
 
@@ -63,8 +63,8 @@
 
 ### مرز بعدی
 - ⏭️ Stage 13.3 — گزارش مشتری/VIP و Users/Shift
-- ⏭️ Stage 13.4 — Fine-Grained Permission/Scope + Export
-- ⏭️ Stage 13.5 — Notification/Event Queue
+- ✅ Stage 13.4 — Fine-Grained Permission/Scope + Export
+- ✅ Stage 13.5 — Notification/Event Queue
 
 > Stage 13.2 پس از سبز شدن exact-head و عبور Main از CI Done محسوب می‌شود.
 
@@ -88,10 +88,46 @@
 - ✅ Dashboard Browser Smoke — Run #1402 / Main Run #1403
 
 ### مرز بعدی
-- ⏭️ Stage 13.4 — Fine-Grained Permission/Scope + Export
-- ⏭️ Stage 13.5 — Notification/Event Queue
+- ✅ Stage 13.4 — Fine-Grained Permission/Scope + Export
+- ✅ Stage 13.5 — Notification/Event Queue
 
 > Stage 13.3 پس از سبز شدن exact-head و عبور Main از CI Done محسوب می‌شود.
+
+
+## Stage 13.4 — برش چهارم واقعی: Fine-Grained Permission/Scope + Export — 2026-10-05
+
+### وضعیت
+- ✅ Stage 13.4 روی main ادغام و با Run #1411 روی exact-head و Run #1412 روی main تأیید شد.
+- Scope گزارش‌ها در Server-side enforce شده و Export گزارش‌ها Server-backed و Audit شده است.
+- Unit Test، API Smoke و Browser Smoke سبز شده‌اند.
+
+### Gate این برش
+- ✅ Build
+- ✅ .NET Tests
+- ✅ EF validation
+- ✅ Server/Migration/Health Smoke + Stage 13.4 API Smoke — Run #1411 / Main Run #1412
+- ✅ Dashboard Build/Lint — Run #1411 / Main Run #1412
+- ✅ Dashboard Browser Smoke — Run #1411 / Main Run #1412
+
+## Stage 13.5 — برش پنجم واقعی: Notification/Event Queue — 2026-10-05
+
+### وضعیت
+- ✅ Stage 13.5 روی main ادغام و با Run #1421 روی exact-head و Run #1422 روی main تأیید شد.
+- Notificationها Server-backed و durable هستند و رویدادهای مهم مانند low-stock و Agent offline/command-failure را ثبت می‌کنند.
+- Inbox کاربر authenticated فقط اعلان‌های متعلق به همان کاربر را می‌خواند و read/read-all نیز Server-side enforce می‌شود.
+- Dashboard اعلان‌ها را از Server می‌گیرد و با SignalR در صورت ایجاد رویداد refresh می‌کند.
+- Queue، list و read-state برای SQLite provider-safe شده و lifetime سرویس در AgentPresenceMonitor صحیح است.
+
+### Gate این برش
+- ✅ Build
+- ✅ .NET Tests
+- ✅ EF validation
+- ✅ Server/Migration/Health Smoke + Stage 13.5 Notification API Smoke — Run #1421 / Main Run #1422
+- ✅ Dashboard Build/Lint — Run #1421 / Main Run #1422
+- ✅ Dashboard Browser Smoke — Run #1421 / Main Run #1422
+
+### نتیجه
+**✅ Stage 13 — COMPLETE از نظر مهندسی نرم‌افزار (13.1 تا 13.5).**
 
 ## آخرین وضعیت تأییدشده — Stage 12 / 2026-10-05
 
@@ -110,20 +146,21 @@
 
 > قانون: Stage 12 از نظر مهندسی نرم‌افزار Done است؛ Gateهای فیزیکی و Release تا زمان اجرای واقعی همچنان Done محسوب نمی‌شوند.
 
-## آخرین وضعیت اجرایی — Stage 13.3 / 2026-10-05
+## آخرین وضعیت اجرایی — Stage 13.5 / 2026-10-05
 
-این بخش مرجع اجرایی فعلی است و بر وضعیت تاریخی مراحل قبلی غلبه دارد.
+این بخش مرجع اجرایی فعلی و بر وضعیت تاریخی مراحل قبلی غالب است.
 
-- ✅ Stage 13.1 Audit Explorer: certified.
-- ✅ Stage 13.2 Sessions & Stations: certified.
-- ✅ Stage 13.3 Customer/VIP + Users/Shift: certified.
-- ✅ Main certified merge commit: `2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0`.
-- ✅ Exact-head Stage 13.3: Run #1402.
-- ✅ Post-merge main Stage 13.3: Run #1403.
-- ⏭️ مرحلهٔ نرم‌افزاری بعدی: Stage 13.4 — Fine-Grained Permission/Scope + Export.
+- ✅ Stage 13.1 Audit Explorer — Run #1380 / Main #1383.
+- ✅ Stage 13.2 Sessions & Stations — Run #1391 / Main #1392.
+- ✅ Stage 13.3 Customer/VIP + Users/Shift — Run #1402 / Main #1403.
+- ✅ Stage 13.4 Permission/Scope + Export — Run #1411 / Main #1412.
+- ✅ Stage 13.5 Notification/Event Queue — Run #1421 / Main #1422.
+- ✅ Main certified Stage 13 merge commit: `c3f579b38ad1704a62d775c6f45921b24624d43c`.
+- ✅ Stage 13 — COMPLETE از نظر مهندسی نرم‌افزار.
+- ⏭️ مرحلهٔ نرم‌افزاری بعدی: Stage 14 — UI Hardening / Settings Information Architecture / Dashboard UX.
 - ⬜ Gateهای بیرون از CI همچنان باقی‌اند: Backup/Restore واقعی، Validation فیزیکی روی 2–3 PC و سپس rollout کنترل‌شدهٔ 40+ PC.
 
-> قانون: Stage 13.3 از نظر مهندسی نرم‌افزار Done است؛ Gateهای فیزیکی و Release همچنان Done محسوب نمی‌شوند.
+> قانون: Stage 13 از نظر مهندسی نرم‌افزار Done است؛ Gateهای فیزیکی و Release همچنان Done محسوب نمی‌شوند.
 
 ## تصمیم‌های تأییدشده از بازبینی دوم محصول
 
