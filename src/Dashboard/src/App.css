@@ -4063,3 +4063,84 @@ button:focus-visible {
 [id^="settings-section-"]{
   scroll-margin-top:14px;
 }
+
+
+/* Stage 14.2 — dense dashboard responsive hardening */
+.pc-group { min-width: 0; }
+.pc-group-title { position: sticky; top: 0; z-index: 2; background: color-mix(in srgb, var(--panel) 92%, transparent); backdrop-filter: blur(6px); }
+
+@media (max-width: 1180px) {
+  .dashboard-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-attention-sidebar {
+    position: static;
+    order: 2;
+    min-height: auto;
+    max-height: none;
+  }
+
+  .dashboard-main {
+    order: 1;
+  }
+}
+
+@media (max-width: 820px) {
+  .dashboard-toolbar {
+    align-items: stretch;
+  }
+
+  .dashboard-toolbar .zone-filter,
+  .pc-group-control,
+  .search-box,
+  .view-switch,
+  .zoom-control {
+    width: 100%;
+  }
+
+  .dashboard-toolbar .zone-filter {
+    flex-wrap: wrap;
+  }
+
+  .pc-group-control {
+    justify-content: space-between;
+  }
+
+  .pc-group-control select,
+  .search-box input {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .station-grid.v-card {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+
+  .station-grid.v-list {
+    overflow-x: auto;
+  }
+
+  .station-card.v-list {
+    min-width: 560px;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard-workspace {
+    padding-inline: 10px;
+  }
+
+  .station-grid {
+    padding-inline: 0;
+  }
+
+  .station-grid.v-card,
+  .station-grid.v-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .station-card.v-list {
+    min-width: 500px;
+  }
+}
