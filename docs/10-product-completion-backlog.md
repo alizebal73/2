@@ -1,3 +1,28 @@
+# CURRENT RELEASE GATE — 2026-10-05
+
+> **این بخش مرجع اجرایی فعلی است و بر متن‌های تاریخی پایین فایل غالب است.**
+
+- **Main checked:** `f848c792c8bb628b9c2bebefa2caf66a323089cd`
+- **Latest CI at audit time:** Run #1532 — ✅ success
+- **Stage 14.6 Software Pre-flight:** ✅ complete
+- **Stage 14.6 Physical Validation:** 🟡 pending
+- **Installer:** ⛔ blocked until the Release Pre-flight blockers are resolved
+- **Detailed audit:** `docs/21-release-preflight-2026-10-05.md`
+
+### Installer blockers identified
+
+1. **Production Station provisioning:** fresh Production DB does not seed real Stations, and the current Dashboard has no server-backed Station create/edit path.
+2. **Server LAN hosting:** installed Server must explicitly bind to the LAN on the release port (target 5080).
+3. **Secret provisioning:** Installer/first-run setup must safely provide `GAMENET_ADMIN_PASSWORD` and `Agent:RegistrationToken`; neither may be hard-coded.
+4. **Writable data root:** SQLite/DataProtection/backup data currently live under `ContentRootPath/App_Data`; release packaging must avoid protected install-directory write failures.
+5. **Server service hosting:** define reliable auto-start/recovery hosting for the Server (preferred: native Windows Service).
+6. **Client runtime strategy:** current Client publish is framework-dependent; release must either install .NET 10 runtime or switch to self-contained Client packaging.
+7. **Production CI gate:** current Server smoke uses `ASPNETCORE_ENVIRONMENT=Development`; a true Production startup/provisioning smoke is still needed.
+
+**Rule:** Do not build the final Installer until these blockers are resolved and the Release Pre-flight is green.
+
+---
+
 # Product Completion Backlog — تکمیل جامع GameNet Manager
 
 این فایل فهرست مرجع مواردی است که در مرور جامع محصول شناسایی شده‌اند. ترتیب اجرا وابستگی‌ها را رعایت می‌کند و هر مورد فقط پس از پیاده‌سازی + تست به وضعیت Done می‌رسد.
