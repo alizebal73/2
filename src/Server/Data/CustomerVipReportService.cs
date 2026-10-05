@@ -124,7 +124,7 @@ public sealed class CustomerVipReportService
             if (!string.IsNullOrWhiteSpace(query.Search))
             {
                 var value = query.Search.Trim();
-                if (!customer.Code.Contains(value, StringComparison.OrdinalIgnoreCase)
+                if (!(customer.Code?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false)
                     && !customer.FullName.Contains(value, StringComparison.OrdinalIgnoreCase)
                     && !(customer.Username?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false)
                     && !(customer.Phone?.Contains(value, StringComparison.OrdinalIgnoreCase) ?? false))
