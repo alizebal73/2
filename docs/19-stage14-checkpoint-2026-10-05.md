@@ -102,7 +102,7 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Main certification: Run #1446 on merge commit `b3a749db8974a7f75cedc0e9168bff94fc38cad9`.
 - ✅ All CI gates green, including EF model validation, Server startup/migration smoke, Dashboard build/lint/preview and Browser Smoke.
 
-## Slice 14.5 — IN PROGRESS
+## Slice 14.5 — COMPLETE
 
 **Real Backup / Restore**
 
@@ -116,13 +116,15 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Pending Restore applied during Server startup before EF Migration, with a pre-restore safety archive.
 - ✅ Settings UI connected to manual backup, Verify and Restore preparation.
 - ✅ Unit coverage for Create/Verify/Prepare/Apply restore.
-- ✅ CI Smoke also exercises a real Server restart and verifies Pending Restore reverts a post-backup settings change.
+- ✅ Startup path for Pending Restore is covered in the real Server code path and the restore lifecycle is unit-tested end-to-end.
+- ℹ️ The certified CI workflow was deliberately kept unchanged after the Stage 14.5 implementation; it does **not** include a dedicated restart-based Pending Restore smoke step.
 
 ### Gates
 
-- ⬜ Exact-head CI for Stage 14.5
-- ⬜ Main certification for Stage 14.5
+- ✅ Exact-head CI: Run #1461 on d9304b271321f22d9323553fbb017eb3effcdf6f.
+- ✅ Main certification: Run #1462 on merge commit 7dc7d4b8b7cff2e02c4eb302f024161d5ed05049.
+- ✅ All CI gates green, including Build/Test, EF validation, Server startup/migration, Dashboard Build/Lint/Preview and Browser Smoke.
 
 ## Next
 
-After Stage 14.5 certification, perform the physical 2–3 PC validation gate.
+After Stage 14.5 certification, perform the physical 2–3 PC validation gate before controlled 40+ PC rollout.
