@@ -12,10 +12,7 @@ type ViewMode = 'card' | 'compact' | 'list';
 type Game = ClientCatalogGame;
 
 const commands = [
-  { title: 'نرم‌افزارها', key: 'apps', icon: '🧩' },
   { title: 'منوی بوفه', key: 'buffet', icon: '🛒' },
-  { title: 'مسابقات', key: 'tournaments', icon: '🏆' },
-  { title: 'بازی‌های من', key: 'my-games', icon: '🎮' },
   { title: 'حساب من', key: 'account', icon: '👤' },
   { title: 'درخواست شارژ', key: 'charge', icon: '💳' },
   { title: 'پیام به اپراتور', key: 'message', icon: '💬' },
@@ -133,7 +130,11 @@ export function ClientExperience() {
         setCustomerName(state.fullName);
         setWallet(state.balance);
         setSessionState(state.session?.state ?? null);
+        setSessionId(state.session?.id ?? null);
+        setActiveGame(state.session?.gameId ?? null);
         setSessionEndAt(state.session?.endAt ?? null);
+        setFreeMoney(state.freeMoney);
+        setStationName(state.session?.stationName ?? stationName);
         if (state.session?.endAt) {
           setRemainingSeconds(Math.max(0, Math.ceil((new Date(state.session.endAt).getTime() - Date.now()) / 1000)));
         }
@@ -153,26 +154,31 @@ export function ClientExperience() {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault(); setPaletteOpen(value => !value); setPaletteQuery('');
+        event.preventDefault();
+        setPaletteOpen(value => !value);
+        setPaletteQuery('');
       } else if (event.key === 'Escape') {
-        setPaletteOpen(false); setContext(null); setPanel(null); setDockHoverPanel(null); setAccountGame(null);
-
+        setPaletteOpen(false);
+        setContext(null);
+        setPanel(null);
       } else if (event.ctrlKey && event.key.toLowerCase() === 'm') {
-        event.preventDefault(); notify('درخواست جابه‌جایی برای اپراتور ارسال شد');
+        event.preventDefault();
+        void requestOperator('move');
       } else if (event.ctrlKey && event.key.toLowerCase() === 'l') {
         event.preventDefault();
-        if (loggedIn) signOut();
+        if (loggedIn) void logoutCustomer();
         else document.getElementById('client-login-id')?.focus();
       } else if (event.ctrlKey && event.key.toLowerCase() === 'r') {
-        event.preventDefault(); notify('درخواست شارژ برای اپراتور ارسال شد');
+        event.preventDefault();
+        void requestOperator('charge');
       } else if (event.ctrlKey && event.key.toLowerCase() === 'p') {
-        event.preventDefault(); askMessage();
-
+        event.preventDefault();
+        void askMessage();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [loggedIn]);
+  }, [loggedIn, customerId, loginId]);
 
   useEffect(() => {
     if (!notice) return;
@@ -217,10 +223,13 @@ export function ClientExperience() {
         setLoginId(result.loginId);
         setCustomerName(result.fullName);
         setWallet(result.balance);
+        setFreeMoney(result.freeMoney);
         setLoginLimit(result.limit);
         setActiveLoginCount(result.activeCount);
         setSessionEndAt(null);
         setSessionState(null);
+        setSessionId(null);
+        setActiveGame(null);
       } catch (error) {
         setLoginError(error instanceof Error ? error.message : 'ورود مشتری انجام نشد.');
         return;
