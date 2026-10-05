@@ -1,6 +1,6 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Configuration;
 
 namespace GameNetManager.Server.Tests;
 
