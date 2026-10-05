@@ -140,6 +140,23 @@ jobs:
             $meBeforeAgent = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($meBeforeAgent.userName -ne 'admin') { throw 'Current operator endpoint failed before Agent smoke.' }
 
+            $dashboardNegotiate = "$baseUrl/hubs/dashboard/negotiate?negotiateVersion=1"
+            try {
+              Invoke-WebRequest -Uri $dashboardNegotiate -Method Post -ContentType 'application/json' -Body '{}' -UseBasicParsing -TimeoutSec 10 | Out-Null
+              throw 'Anonymous Dashboard SignalR negotiate unexpectedly succeeded.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 401) { throw }
+            }
+
+            $authenticatedNegotiate = Invoke-RestMethod -Uri $dashboardNegotiate -Method Post -WebSession $adminSession -ContentType 'application/json' -Body '{}'
+            if (-not $authenticatedNegotiate.connectionId) {
+              throw 'Authenticated Dashboard SignalR negotiate did not return a connectionId.'
+            }
+
+            Write-Host 'Dashboard negotiate authentication regression smoke passed.'
+
+
             # Release regression gate: the endpoints that previously failed against SQLite DateTimeOffset
             # must execute successfully on the real Server process, not only in unit tests.
             foreach ($uri in @(
