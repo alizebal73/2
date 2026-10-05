@@ -21,12 +21,43 @@ function Find-Iscc {
         "$env:ProgramFiles\Inno Setup 7\ISCC.exe",
         "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
         "$env:ProgramFiles(x86)\Inno Setup 7\ISCC.exe",
-        "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe"
+        "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
+        (Join-Path $env:RUNNER_TEMP "InnoSetup\ISCC.exe")
     ) | Where-Object { $_ -and (Test-Path $_) }
-    if ($candidates.Count -gt 0) { return $candidates[0] }
-    throw "Inno Setup ISCC.exe not found. Install Inno Setup 7.x on the self-hosted runner."
-}
 
+    if ($candidates.Count -gt 0) { return $candidates[0] }
+
+    $tempInstaller = Join-Path $env:RUNNER_TEMP "innosetup-7.1.0-x64.exe"
+    $installDir = Join-Path $env:RUNNER_TEMP "InnoSetup"
+    New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+
+    Write-Host "Inno Setup 7.1.0 was not found. Downloading the official signed x64 installer."
+    Invoke-WebRequest -Uri "https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe" -OutFile $tempInstaller
+
+    $signature = Get-AuthenticodeSignature -FilePath $tempInstaller
+    if ($signature.Status -ne "Valid" -or $signature.SignerCertificate.Subject -notmatch "Pyrsys B.V.") {
+        throw "Inno Setup installer signature validation failed."
+    }
+
+    $process = Start-Process -FilePath $tempInstaller -ArgumentList @(
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/CURRENTUSER",
+        "/DIR=$installDir"
+    ) -Wait -PassThru
+
+    if ($process.ExitCode -ne 0) {
+        throw "Inno Setup bootstrap installer failed with exit code $($process.ExitCode)."
+    }
+
+    $iscc = Join-Path $installDir "ISCC.exe"
+    if (-not (Test-Path $iscc)) {
+        throw "Inno Setup bootstrap completed but ISCC.exe was not found."
+    }
+
+    return $iscc
+}
 Require-Command "dotnet"
 Require-Command "node"
 Require-Command "npm"
