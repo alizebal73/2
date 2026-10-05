@@ -41,7 +41,9 @@ public static class AuthorizationService
             ["report.users-shift.scope.all"] = "مشاهده تمام کاربران و شیفت‌ها",
             ["report.audit.view"] = "مشاهده گزارش Audit",
             ["report.audit.scope.all"] = "مشاهده تمام رویدادهای Audit",
-            ["reports.export"] = "خروجی گرفتن از گزارش‌های مجاز"
+            ["reports.export"] = "خروجی گرفتن از گزارش‌های مجاز",
+            ["settings.view"] = "مشاهده تنظیمات عملیاتی",
+            ["settings.manage"] = "مدیریت تنظیمات عملیاتی"
         };
 
     public static async Task<AppUser?> ResolveUserAsync(
