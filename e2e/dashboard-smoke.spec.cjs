@@ -1004,6 +1004,7 @@ test('client experience consumes server-backed catalog and customer state', asyn
       freeMoney: 0,
       freeTimeMinutes: 0,
       vipTier: 'Normal',
+      isLocked: false,
       session: {
         id: 'session-e2e-01',
         state: 'Active',
@@ -1023,6 +1024,13 @@ test('client experience consumes server-backed catalog and customer state', asyn
 
   await expect(page.getByText('مشتری تست')).toBeVisible();
   await expect(page.getByText('Counter-Strike 2')).toBeVisible();
+
+  await page.getByRole('button', { name: /Counter-Strike 2/ }).click();
+  await expect(page.getByText('در حال اجرا')).toBeVisible();
+  await expect.poll(() => launchCalls).toBe(1);
+
+  await page.getByRole('button', { name: '■ توقف بازی' }).click();
+  await expect.poll(() => stopCalls).toBe(1);
 
   await page.getByText('منوی بوفه').first().click();
   await expect(page.getByText('نوشابه واقعی')).toBeVisible();
