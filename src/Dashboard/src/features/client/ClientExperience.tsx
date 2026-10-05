@@ -190,13 +190,6 @@ export function ClientExperience() {
     setNotice(message);
   }
 
-  function scheduleDockHover(target: 'apps' | null) {
-    if (dockHoverTimer.current !== null) window.clearTimeout(dockHoverTimer.current);
-    const delay = target ? 220 : 160;
-    dockHoverTimer.current = window.setTimeout(() => setDockHoverPanel(target), delay);
-  }
-
-
   async function signIn(guest = false) {
     if (guest) {
       if (password.trim()) { setLoginError('برای مهمان رمز را خالی بگذارید'); return; }
@@ -390,21 +383,21 @@ export function ClientExperience() {
     ? remainingSeconds < 300 ? 'critical' : remainingSeconds < 900 ? 'warning' : ''
     : '';
   const sessionLocked = locked || Boolean(loggedIn && sessionEndAt && remainingSeconds === 0);
-  const recentGames = myGamesOnly ? games.filter(game => ['cs2', 'fc25'].includes(game.id)) : games;
+  const recentGames = games;
   const gameSize = Math.round(190 * zoom / 100);
 
   return <div className="client-app" dir="rtl" onClick={() => { if (context) setContext(null); }} onContextMenu={event => { if ((event.target as HTMLElement).closest('.client-game-card')) { event.preventDefault(); setContext({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 300) }); } }}>
     <header className="client-topbar">
-      <div className="client-logo">گ</div><div className="client-system"><b>PC ۱۲</b> — گیم‌نت منیجر</div><div className="client-spacer" />
+      <div className="client-logo">گ</div><div className="client-system"><b>{stationName}</b> — گیم‌نت منیجر</div><div className="client-spacer" />
       {loggedIn && <><div className="client-pill balance">👛 مانده: <b>{money(wallet)}</b> ت</div><div className="client-pill"><span className={`client-timer ${timerClass}`}>⏱ {sessionEndAt ? String(hours).padStart(2, '۰') + ':' + String(minutes).padStart(2, '۰') + ':' + String(seconds).padStart(2, '۰') : sessionState === 'Active' ? 'جلسه فعال' : 'در انتظار شروع جلسه'}</span></div><div className="client-segment" aria-label="نوع نمایش بازی‌ها">{(['card', 'compact', 'list'] as ViewMode[]).map((mode, index) => <button key={mode} className={view === mode ? 'active' : ''} title={['کارتی', 'فشرده', 'لیستی'][index]} onClick={() => setView(mode)}>{['▦', '▤', '☰'][index]}</button>)}</div><div className="client-zoom"><button onClick={() => setZoom(value => Math.max(70, value - 10))}>−</button><span>{money(zoom)}٪</span><button onClick={() => setZoom(value => Math.min(130, value + 10))}>＋</button></div><button className="client-user-pill" onClick={() => setPanel(panel === 'account' ? null : 'account')}><span className="client-avatar">{customerName.slice(0, 1)}</span>{customerName}</button></>}
       {!loggedIn && <span className="client-offline-pill">● متصل به GameNet</span>}
     </header>
 
     {!loggedIn ? <main className="client-login-stage"><section className="client-login-panel"><div className="client-login-logo">گ</div><h1>گیم‌نت منیجر</h1><p>برای شروع بازی وارد حساب خود شوید</p><form onSubmit={event => { event.preventDefault(); signIn(); }}><input id="client-login-id" autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} placeholder="کد کاربری — مثلاً ۱۰۵۰" /><input type="password" value={password} onChange={event => setPassword(event.target.value)} placeholder="رمز عبور (برای مهمان خالی بگذار)" /><div className="client-login-error">{loginError}</div><button className="client-login-submit" disabled={!clientIdentityReady}>ورود به سیستم</button></form><button className="client-guest" onClick={() => signIn(true)}>ورود مهمان</button><div className="client-login-separator" /><p className="client-login-footnote">کنترل‌های مدیریتی و آزادسازی سیستم فقط از طریق Agent و Dashboard انجام می‌شوند.</p></section><span className="client-login-foot">ورود با شناسه و رمز واقعی مشتری · دسترسی مهمان بدون حساب</span></main> : <>
-      {sessionLocked ? <main className="client-lock-screen"><div className="client-lock-icon">🔒</div><h1>سیستم قفل است</h1><p>برای ادامه، به اپراتور مراجعه کنید.</p><button className="client-button primary" onClick={() => notify('درخواست بازکردن قفل برای اپراتور ارسال شد')}>درخواست بازگشایی</button></main> : <main className="client-desktop">
-        <div className="client-toolbar"><span>{myGamesOnly ? 'بازی‌های من' : 'بازی‌های در دسترس'}</span><div className="client-spacer" /><span className="client-network">● متصل به GameNet</span></div>
+      {sessionLocked ? <main className="client-lock-screen"><div className="client-lock-icon">🔒</div><h1>سیستم قفل است</h1><p>برای ادامه، به اپراتور مراجعه کنید.</p><button className="client-button primary" onClick={() => void requestOperator('unlock')}>درخواست بازگشایی</button></main> : <main className="client-desktop">
+        <div className="client-toolbar"><span>بازی‌های در دسترس</span><div className="client-spacer" /><span className="client-network">● متصل به GameNet</span></div>
         <div className={`client-game-grid ${view}`} style={{ '--game-size': `${gameSize}px`, '--game-zoom': zoom / 100 } as React.CSSProperties}>
-          {recentGames.map(game => <button key={game.id} className={`client-game-card ${view} ${activeGame === game.id ? 'running' : ''}`} onClick={() => launchGame(game, game.hasPoolAccount ? undefined : 'own')} onContextMenu={event => { event.preventDefault(); setContext({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 300) }); }}>
+          {recentGames.map(game => <button key={game.id} className={`client-game-card ${view} ${activeGame === game.id ? 'running' : ''}`} onClick={() => void launchGame(game)} onContextMenu={event => { event.preventDefault(); setContext({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 300) }); }}>
             <span className="client-game-art">{game.icon}</span><span className="client-game-info"><b>{game.name}</b><small>{game.category}</small><small>{game.description}</small></span>{activeGame === game.id && <span className="client-running-badge">در حال اجرا</span>}
           </button>)}
         </div>
