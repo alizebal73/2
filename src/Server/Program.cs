@@ -3334,10 +3334,6 @@ app.MapPost("/api/customer-auth/login", async (
     if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_credentials", message = "نام کاربری، رمز و شناسه دستگاه الزامی است." });
 
-    var resolvedClientDevice = await ClientExperienceEndpoints.ResolveRegisteredDeviceAsync(context, database, cancellationToken);
-    if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, clientKey, StringComparison.Ordinal))
-        return Results.Forbid();
-
     var customer = await database.Customers
         .FirstOrDefaultAsync(item => item.Username == key || item.Code == key, cancellationToken);
 
@@ -3360,7 +3356,7 @@ app.MapPost("/api/customer-auth/login", async (
             freeMoney = customer.FreeMoney,
             freeTimeMinutes = customer.FreeTimeMinutes,
             vipTier = customer.VipTier,
-            isLocked = resolvedClientDevice.IsLocked
+            isLocked = (await ClientExperienceEndpoints.ResolveRegisteredDeviceAsync(context, database, cancellationToken))?.IsLocked ?? false
         });
     }
     catch (InvalidOperationException ex) when (ex.Message.StartsWith("CONCURRENT_LOGIN_LIMIT:", StringComparison.Ordinal))
