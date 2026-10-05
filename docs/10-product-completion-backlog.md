@@ -163,16 +163,20 @@
 - ✅ Dashboard Browser Smoke — Run #1429
 
 ### Stage 14.2 — Dashboard PC grouping / Internet 1-2 + dense responsive hardening
+
+**✅ COMPLETE**
+
 - ✅ ممیزی ثابت کرد UI از `station.network` پشتیبانی داشت اما Server مقدار Network را authoritative برنمی‌گرداند.
 - ✅ `Station.Network` به مدل Server اضافه و با EF migration + model snapshot ثبت شد.
 - ✅ `GET /api/dashboard` مقدار `Station.Network` را برمی‌گرداند.
 - ✅ Demo Seed: PC-01..20 → Internet 1 و PC-21..40 → Internet 2.
 - ✅ grouping صریح و پایدار Internet 1 / Internet 2 با برچسب فارسی.
-- ⬜ حفظ فیلترهای Status / VIP-Normal / Remaining Time — باید در Browser Smoke برش 14.2 نهایی تثبیت شود.
-- ✅ فیلتر/گروه‌بندی فقط presentation است و Session/Server Truth را تغییر نمی‌دهد.
+- ✅ گزینه‌های grouping موجود Status / VIP-Normal / Remaining Time حفظ شدند؛ grouping/filtering فقط presentation است.
+- ✅ فیلتر/گروه‌بندی فقط presentation است و Session / Server Truth را تغییر نمی‌دهد.
 - ✅ responsive hardening برای workspace، toolbar و کارت‌های متراکم در viewport کوچک.
-- ✅ Browser Smoke برای grouping و یک viewport متراکم 520px اضافه شد.
-- ⬜ Exact-head CI certification و Main certification.
+- ✅ Browser Smoke برای grouping، جابه‌جایی فیلتر grouping و viewport متراکم 520px سبز شد.
+- ✅ Exact-head CI: Run #1435.
+- ✅ Main certification: Run #1436 (Attempt 2) روی merge commit `63ac3f67357a0970df504a62c9ab16cc1ba4f53a`.
 
 ### مرز بعدی
 - ⏭️ Stage 14.3 — Accessibility / UI / operational polish
