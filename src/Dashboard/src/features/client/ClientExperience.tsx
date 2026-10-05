@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import './ClientExperience.css';
 import { authenticateCustomer, readCustomerState, releaseCustomerLogin } from '../../services/customerAuthService';
 import { createClientRequest, launchClientGame, lockClient, logoutAndLockClient, stopClientGame } from '../../services/clientExperienceService';
