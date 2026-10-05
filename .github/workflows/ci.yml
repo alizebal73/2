@@ -1793,6 +1793,7 @@ jobs:
 
           $env:ASPNETCORE_ENVIRONMENT = 'Production'
           $env:ASPNETCORE_URLS = $baseUrl
+          $env:Kestrel__Endpoints__Http__Url = $baseUrl
           $env:App__DataRoot = $dataRoot
           $env:GAMENET_ADMIN_PASSWORD = 'ProductionCiAdminPassword!2026'
           $env:Agent__RegistrationToken = 'ProductionCiRegistrationToken!2026'
