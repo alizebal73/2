@@ -544,8 +544,8 @@ public sealed class DatabaseBackupService
                 info.LastWriteTimeUtc,
                 info.Length,
                 hash,
-                true,
-                "فایل ثبت‌شده است؛ اعتبارسنجی کامل هنگام Restore انجام می‌شود.");
+                false,
+                "اعتبارسنجی کامل هنگام Restore یا Verify انجام می‌شود.");
 
         try
         {
@@ -649,7 +649,7 @@ public sealed class DatabaseBackupService
         long DatabaseSizeBytes,
         string DatabaseSha256);
 
-    private sealed record PendingRestoreMarker(
+    internal sealed record PendingRestoreMarker(
         string FileName,
         string StagingDirectory,
         DateTimeOffset RequestedAt,
