@@ -1445,9 +1445,11 @@ jobs:
             }
 
             $loginKeys = @('smoke-a', 'smoke-b', 'smoke-c')
+            $loginIds = @{}
             foreach ($clientKey in $loginKeys) {
               $loginResult = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json)
-              if (-not $loginResult.acquired) { throw "Concurrent login acquire failed for $clientKey." }
+              if (-not $loginResult.acquired -or -not $loginResult.loginId) { throw "Concurrent login acquire failed for $clientKey." }
+              $loginIds[$clientKey] = $loginResult.loginId
             }
             try {
               Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ clientKey = 'smoke-d' } | ConvertTo-Json) | Out-Null
@@ -1457,7 +1459,10 @@ jobs:
               if ($status -ne 409) { throw }
             }
             foreach ($clientKey in $loginKeys) {
-              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json) | Out-Null
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{
+                clientKey = $clientKey
+                loginId = $loginIds[$clientKey]
+              } | ConvertTo-Json) | Out-Null
             }
 
             $auth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
@@ -1465,8 +1470,11 @@ jobs:
               password = 'Smoke123!'
               clientKey = 'credential-smoke'
             } | ConvertTo-Json)
-            if (-not $auth.authenticated) { throw 'Customer credential authentication failed.' }
-            Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'credential-smoke' } | ConvertTo-Json) | Out-Null
+            if (-not $auth.authenticated -or -not $auth.loginId) { throw 'Customer credential authentication failed.' }
+            Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{
+              clientKey = 'credential-smoke'
+              loginId = $auth.loginId
+            } | ConvertTo-Json) | Out-Null
 
             $debt = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debt") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               amount = 55000
