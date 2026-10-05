@@ -27,6 +27,7 @@ export type CustomerSessionState = {
     state: string;
     startAt: string;
     endAt?: string | null;
+    gameId?: string | null;
     stationName: string;
   } | null;
 };
