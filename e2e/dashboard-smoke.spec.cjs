@@ -622,6 +622,54 @@ test('dashboard exposes operator account management', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: 'تعریف اپراتور جدید' })).toHaveCount(0);
 });
 
+test('settings information architecture supports search and category navigation', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-settings-admin',
+      fullName: 'مدیر تنظیمات',
+      userName: 'settings_admin',
+      email: 'settings@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['user.manage']
+    })
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
+  }));
+  await page.route('**/api/notifications?*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ items: [], unreadCount: 0 })
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'تنظیمات' }).click();
+
+  const settingsNav = page.getByTestId('settings-category-nav');
+  await expect(settingsNav).toBeVisible();
+  await expect(page.getByLabel('جست‌وجوی تنظیمات')).toBeVisible();
+
+  await page.getByLabel('جست‌وجوی تنظیمات').fill('بکاپ');
+  const backupCategory = page.getByRole('button', { name: /داده و پشتیبان‌گیری/ });
+  await expect(backupCategory).toHaveCount(1);
+  await backupCategory.click();
+
+  const backupSection = page.locator('#settings-section-backup');
+  await expect(backupSection).toBeVisible();
+  await expect(backupSection.getByRole('button', { name: '📦 بکاپ دستی الان' })).toBeDisabled();
+  await expect(backupSection).toContainText('پشتیبان واقعی');
+
+  await page.getByLabel('جست‌وجوی تنظیمات').fill('هات‌کی');
+  await expect(page.getByRole('button', { name: /میانبرها/ })).toHaveCount(1);
+});
+ 
 test('dashboard shows actionable Persian error UX', async ({ browser }) => {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
