@@ -13,7 +13,9 @@
 
 
 
-## Stage 13 — برش اول واقعی: Audit Explorer — 2026-10-05
+## Stage 13 — برش‌های گزارش و ممیزی — مرجع اجرایی فعلی
+
+## Stage 13.1 — برش اول واقعی: Audit Explorer — 2026-10-05
 
 ### وضعیت
 
@@ -35,12 +37,62 @@
 
 ### مرز بعدی
 
-- ⏭️ Stage 13.2 — گزارش واقعی جلسات و ایستگاه‌ها
+- ✅ Stage 13.2 — گزارش واقعی جلسات و ایستگاه‌ها
 - ⏭️ Stage 13.3 — گزارش مشتری/VIP و Users/Shift
 - ⏭️ Stage 13.4 — Fine-Grained Permission/Scope + Export
 - ⏭️ Stage 13.5 — Notification/Event Queue
 
 > Stage 13.1 پس از سبز شدن exact-head و عبور Main از CI Done محسوب می‌شود؛ این قانون برای هر برش بعدی نیز برقرار است.
+
+## Stage 13.2 — برش دوم واقعی: Sessions & Stations — 2026-10-05
+
+### وضعیت
+- ✅ **Stage 13.2 — Sessions & Stations** — روی `main` ادغام و با Run #1391 روی exact-head و Run #1392 روی `main` تأیید شد.
+- Server دارای `SessionReportService` و endpoint واقعی `GET /api/reports/sessions` است؛ منبع حقیقت `Session + Station + Customer + AppUser` است.
+- فیلترها: بازهٔ زمانی، ایستگاه، منطقه، اپراتور، وضعیت جلسه و جست‌وجوی مشتری.
+- Summary واقعی: تعداد جلسات، زمان قابل‌صورتحساب، درآمد، میانگین مدت و تفکیک ایستگاه‌ها.
+- Dashboard پنل واقعی Sessions & Stations دارد؛ pagination و خروجی CSV صفحهٔ قابل مشاهده را ارائه می‌کند.
+- Unit Test، Server API Smoke و Browser Smoke برای این برش سبز شده‌اند.
+- در همان برش، Restart/Rollback Agent نیز harden شد: Server URL در چرخهٔ Watchdog به‌صورت صریح به child Agent منتقل می‌شود و Stage 10 Update/Rollback Smoke روی exact-head و main سبز شد.
+
+### Gate این برش
+- ✅ Build
+- ✅ .NET Tests
+- ✅ EF validation
+- ✅ Server/Migration/Health Smoke + Stage 13.2 Sessions API Smoke — Run #1391 / Main Run #1392
+- ✅ Dashboard Build/Lint — Run #1391 / Main Run #1392
+- ✅ Dashboard Browser Smoke — Run #1391 / Main Run #1392
+
+### مرز بعدی
+- ⏭️ Stage 13.3 — گزارش مشتری/VIP و Users/Shift
+- ⏭️ Stage 13.4 — Fine-Grained Permission/Scope + Export
+- ⏭️ Stage 13.5 — Notification/Event Queue
+
+> Stage 13.2 پس از سبز شدن exact-head و عبور Main از CI Done محسوب می‌شود.
+
+### وضعیت
+- ✅ **Stage 13.2 — Sessions & Stations** — روی `main` ادغام و با Run #1391 روی exact-head و Run #1392 روی `main` تأیید شد.
+- Server دارای `SessionReportService` و endpoint واقعی `GET /api/reports/sessions` است؛ منبع حقیقت `Session + Station + Customer + AppUser` است.
+- فیلترها: بازهٔ زمانی، ایستگاه، منطقه، اپراتور، وضعیت جلسه و جست‌وجوی مشتری.
+- Summary واقعی: تعداد جلسات، زمان قابل‌صورتحساب، درآمد، میانگین مدت و تفکیک ایستگاه‌ها.
+- Dashboard پنل واقعی Sessions & Stations دارد؛ pagination و خروجی CSV صفحهٔ قابل مشاهده را ارائه می‌کند.
+- Unit Test، Server API Smoke و Browser Smoke برای این برش سبز شده‌اند.
+- در همان برش، Restart/Rollback Agent نیز harden شد: Server URL در چرخهٔ Watchdog به‌صورت صریح به child Agent منتقل می‌شود و Stage 10 Update/Rollback Smoke روی exact-head و main سبز شد.
+
+### Gate این برش
+- ✅ Build
+- ✅ .NET Tests
+- ✅ EF validation
+- ✅ Server/Migration/Health Smoke + Stage 13.2 Sessions API Smoke — Run #1391 / Main Run #1392
+- ✅ Dashboard Build/Lint — Run #1391 / Main Run #1392
+- ✅ Dashboard Browser Smoke — Run #1391 / Main Run #1392
+
+### مرز بعدی
+- ⏭️ Stage 13.3 — گزارش مشتری/VIP و Users/Shift
+- ⏭️ Stage 13.4 — Fine-Grained Permission/Scope + Export
+- ⏭️ Stage 13.5 — Notification/Event Queue
+
+> Stage 13.2 پس از سبز شدن exact-head و عبور Main از CI Done محسوب می‌شود.
 
 ## آخرین وضعیت تأییدشده — Stage 12 / 2026-10-05
 
