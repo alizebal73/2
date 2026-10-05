@@ -50,6 +50,17 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
+    await DatabaseBackupService.ApplyPendingRestoreAsync(
+        databasePath,
+        dataProtectionKeysPath,
+        app.Environment.ContentRootPath,
+        logger);
+
+    var bootstrapProtector = app.Services
+        .GetRequiredService<IDataProtectionProvider>()
+        .CreateProtector("GameNetManager.BackupBootstrap");
+    _ = bootstrapProtector.Protect("bootstrap");
+
     await InitializeDatabaseAsync(app.Services, databasePath, logger);
     logger.LogInformation("Database ready at {DatabasePath}", databasePath);
 }
