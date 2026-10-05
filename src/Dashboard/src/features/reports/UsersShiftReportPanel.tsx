@@ -32,33 +32,6 @@ function roleLabel(value: string) {
   return ({ Admin: 'مدیر', Operator: 'اپراتور', Owner: 'مالک' } as Record<string, string>)[value] ?? value;
 }
 
-function exportCsv(report: UsersShiftReportPage | null) {
-  if (!report) return;
-  const lines = [
-    ['کاربر', 'نقش', 'شیفت', 'شیفت بسته', 'فروش', 'فروش نقدی', 'هزینه', 'اختلاف صندوق', 'جلسات', 'درآمد جلسات', 'پرداخت حقوق', 'مطالبات پرسنل'],
-    ...report.items.map(item => [
-      item.fullName,
-      roleLabel(item.role),
-      item.shiftCount,
-      item.closedShiftCount,
-      item.shiftRevenue,
-      item.shiftCashSales,
-      item.shiftExpenses,
-      item.shiftDifference,
-      item.sessionCount,
-      item.sessionRevenue,
-      item.paidThisPeriod,
-      item.employeePayable,
-    ]),
-  ];
-  const csv = lines.map(line => line.map(value => '"' + String(value).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
-  link.download = 'gamenet-users-shifts-report.csv';
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
-
 export function UsersShiftReportPanel({ period, range, canExport }: Props & { canExport: boolean }) {
   const [userSearch, setUserSearch] = useState('');
   const [shiftState, setShiftState] = useState('all');
