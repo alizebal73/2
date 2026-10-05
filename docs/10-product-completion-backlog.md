@@ -178,8 +178,21 @@
 - ✅ Exact-head CI: Run #1435.
 - ✅ Main certification: Run #1436 (Attempt 2) روی merge commit `63ac3f67357a0970df504a62c9ab16cc1ba4f53a`.
 
+### Stage 14.3 — Accessibility / UI / operational polish
+
+**🟡 IN PROGRESS**
+
+- ✅ Keyboard-accessible skip link to the primary content area.
+- ✅ Current navigation item exposes aria-current="page".
+- ✅ API / SignalR connection states expose semantic status text to assistive technology.
+- ✅ Notification control exposes expanded state and a labelled notification region.
+- ✅ Reduced-motion preference is respected for transitions and animations.
+- ✅ Dashboard distinguishes the last valid snapshot from live data when API connectivity is lost.
+- ✅ Browser Smoke added for keyboard navigation, notification semantics and stale-state messaging.
+- ⬜ Exact-head CI certification.
+- ⬜ Main certification.
+
 ### مرز بعدی
-- ⏭️ Stage 14.3 — Accessibility / UI / operational polish
 - ⬜ Server-backed Settings
 - ⬜ Backup/Restore واقعی
 - ⬜ Validation فیزیکی 2–3 PC
