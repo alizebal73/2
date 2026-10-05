@@ -519,55 +519,111 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   async function finishSplitSession(finalTotal: number, bypassApproval = false) {
     if (!activeStation) return;
     if (!bypassApproval && role === 'operator' && discountPercent > 10) {
-      setApproval({ title: 'تخفیف بیشتر از حد مجاز اپراتور', detail: 'تسویه ترکیبی شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.', action: 'settle', method: 'split' });
+      setApproval({
+        title: 'تخفیف بیشتر از حد مجاز اپراتور',
+        detail: 'تسویه ترکیبی شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.',
+        action: 'settle',
+        method: 'split',
+      });
       return;
     }
+
     const cash = number(splitCash);
     const card = number(splitCard);
     const wallet = number(splitWallet);
     const total = cash + card + wallet;
+
     if (total !== finalTotal) {
       setMessage('جمع پرداخت‌های ترکیبی باید دقیقاً برابر ' + money(finalTotal) + ' تومان باشد.');
       return;
     }
-    const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
+
+    const customer = customers.find(item =>
+      item.code === activeStation.customerCode
+      || item.username === activeStation.customerCode
+      || item.id === activeStation.customerCode);
+
     if (wallet > 0 && (!customer || customer.wallet < wallet)) {
       setMessage('موجودی کیف پول برای سهم انتخاب‌شده کافی نیست.');
       return;
     }
 
-    try {
-      if (activeStation.serverSessionId && customer && isServerGuid(activeStation.serverSessionId) && isServerGuid(customer.id)) {
-      try {
-        const parts = [
-          ...(cash > 0 ? [{ method: 'cash' as const, amount: cash }] : []),
-          ...(card > 0 ? [{ method: 'card' as const, amount: card }] : []),
-          ...(wallet > 0 ? [{ method: 'wallet' as const, amount: wallet }] : []),
-        ];
-        const serverResult = await settleServerSession(activeStation.serverSessionId, finalTotal, parts);
-        if (wallet > 0) {
-          setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: serverResult.walletBalanceAfter } : item));
-        }
-        addSessionTimeline(activeStation.id, 'settle', 'تسویه ترکیبی سروری', parts.map(item => (item.method === 'cash' ? 'نقدی' : item.method === 'card' ? 'کارتخوان' : 'کیف پول') + ' ' + money(item.amount)).join(' · '), finalTotal, serverResult.invoiceId);
-        updateStation(activeStation.id, {
-          state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined,
-          customerCode: undefined, persons: undefined, buffetTotal: undefined, sessionCredit: undefined,
-          prepaidEndsAt: undefined, pausedAt: undefined, pausedMinutes: undefined, serverSessionId: undefined,
-        });
-        setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: 'ترکیبی', closedAt: new Date().toISOString() }, ...items]);
-        setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: 'paid' } : item));
-        setModal(null);
-        setSessionCenterStation(null);
-        setMessage('تسویه ترکیبی سروری با موفقیت ثبت شد.');
-        return;
-      } catch (error) {
-        setMessage(userErrorMessage(error, 'تسویه ترکیبی سروری انجام نشد'));
-        return;
-      }
+    if (!activeStation.serverSessionId
+      || !isServerGuid(activeStation.serverSessionId)
+      || !customer
+      || !isServerGuid(customer.id)) {
+      setMessage('تسویهٔ ترکیبی فقط برای جلسهٔ معتبر Server قابل ثبت است.');
+      return;
     }
 
-    setMessage('تسویهٔ ترکیبی فقط از مسیر Server-backed انجام می‌شود.');
-    return;
+    try {
+      const parts = [
+        ...(cash > 0 ? [{ method: 'cash' as const, amount: cash }] : []),
+        ...(card > 0 ? [{ method: 'card' as const, amount: card }] : []),
+        ...(wallet > 0 ? [{ method: 'wallet' as const, amount: wallet }] : []),
+      ];
+
+      const serverResult = await settleServerSession(
+        activeStation.serverSessionId,
+        finalTotal,
+        parts);
+
+      if (wallet > 0) {
+        setCustomers(current => current.map(item =>
+          item.id === customer.id
+            ? { ...item, wallet: serverResult.walletBalanceAfter }
+            : item));
+      }
+
+      addSessionTimeline(
+        activeStation.id,
+        'settle',
+        'تسویه ترکیبی سروری',
+        parts.map(item =>
+          (item.method === 'cash'
+            ? 'نقدی'
+            : item.method === 'card'
+              ? 'کارتخوان'
+              : 'کیف پول') + ' ' + money(item.amount))
+          .join(' · '),
+        finalTotal,
+        serverResult.invoiceId);
+
+      updateStation(activeStation.id, {
+        state: 'free',
+        startedAt: undefined,
+        sessionMinutes: undefined,
+        sessionRate: undefined,
+        amountSoFar: undefined,
+        customerCode: undefined,
+        persons: undefined,
+        buffetTotal: undefined,
+        sessionCredit: undefined,
+        prepaidEndsAt: undefined,
+        pausedAt: undefined,
+        pausedMinutes: undefined,
+        serverSessionId: undefined,
+      });
+
+      setInvoices(items => [{
+        station: activeStation.name,
+        total: finalTotal,
+        payment: 'ترکیبی',
+        closedAt: new Date().toISOString(),
+      }, ...items]);
+
+      setSessionFollowUps(current =>
+        current.map(item =>
+          item.stationId === activeStation.id && item.status !== 'paid'
+            ? { ...item, status: 'paid' }
+            : item));
+
+      setModal(null);
+      setSessionCenterStation(null);
+      setMessage('تسویه ترکیبی سروری با موفقیت ثبت شد.');
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'تسویه ترکیبی سروری انجام نشد'));
+    }
   }
 
   async function finishSession(method: string, bypassApproval = false) {
