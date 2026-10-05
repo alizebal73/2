@@ -27,6 +27,13 @@ public sealed class ServerSettingsTests
             invalidHour.RootElement,
             out var hourError));
         Assert.Contains("HH:mm", hourError);
+
+        using var unknown = JsonDocument.Parse("true");
+        Assert.False(ServerSettingsCatalog.TryValidate(
+            "notARealSetting",
+            unknown.RootElement,
+            out var unknownError));
+        Assert.Contains("تنظیم ناشناخته", unknownError);
     }
 
     [Fact]
