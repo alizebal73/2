@@ -950,7 +950,6 @@ app.MapGet("/api/account-pool/leases", async (
             Title = item.AccountPoolEntry.Title,
             Platform = item.AccountPoolEntry.Platform,
             Login = item.AccountPoolEntry.Login,
-            Secret = item.AccountPoolEntry.Secret,
             AgentName = item.AgentDevice == null ? null : item.AgentDevice.Name,
             item.LeasedAt,
             item.State
@@ -966,7 +965,6 @@ app.MapGet("/api/account-pool/leases", async (
             item.Title,
             item.Platform,
             item.Login,
-            item.Secret,
             item.AgentName,
             item.LeasedAt,
             item.State.ToString()))
