@@ -272,8 +272,8 @@ test('dashboard exposes real Customer and VIP report', async ({ page }) => {
   await expect(page.getByTestId('customer-vip-row')).toHaveCount(1);
   await expect(page.getByTestId('customer-vip-report')).toContainText('رضا VIP');
   await expect(page.getByTestId('customer-vip-report')).toContainText('Gold VIP');
-  await expect(page.getByText('درآمد جلسات')).toBeVisible();
-  await expect(page.getByText('۱۷۰٬۰۰۰ تومان')).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'درآمد جلسات' })).toBeVisible();
+  await expect(page.locator('.summary-grid').getByText('۱۷۰٬۰۰۰ تومان')).toBeVisible();
 });
 
 test('dashboard exposes real Users and Shift report', async ({ page }) => {
@@ -350,8 +350,8 @@ test('dashboard exposes real Users and Shift report', async ({ page }) => {
   await expect(page.getByTestId('users-shift-report')).toBeVisible();
   await expect(page.getByTestId('users-shift-row')).toHaveCount(1);
   await expect(page.getByTestId('users-shift-report')).toContainText('اپراتور تست');
-  await expect(page.getByText('فروش شیفت')).toBeVisible();
-  await expect(page.getByText('۴۵۰٬۰۰۰ تومان')).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'فروش شیفت' })).toBeVisible();
+  await expect(page.locator('.summary-grid').getByText('۴۵۰٬۰۰۰ تومان')).toBeVisible();
   await expect(page.getByText('حقوق پرداخت‌شده')).toBeVisible();
 });
 
