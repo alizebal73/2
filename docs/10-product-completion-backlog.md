@@ -259,13 +259,20 @@
 > Stage 14.6 فقط با شواهد واقعی محیط فروشگاه PASS می‌شود؛ CI جای این Gate را نمی‌گیرد.
 
 
-### Finding فعلی قبل از PASS
+### وضعیت ممیزی نرم‌افزاری قبل از PASS فیزیکی
 
-- ⚠️ **Client Experience هنوز کاملاً Server/Agent-backed نیست.**
-- Login/Identity/Customer State به Server متصل‌اند، اما برخی رفتارها در `src/Dashboard/src/features/client/ClientExperience.tsx` هنوز UI-local هستند؛ از جمله فهرست بازی‌ها/بوفهٔ hard-coded و رفتارهای launch/stop/lock/message/charge که فقط state/notification محلی را تغییر می‌دهند.
-- بنابراین این موارد نباید در Validation فیزیکی به‌عنوان قابلیت واقعی PASS ثبت شوند.
-- ⏩ تست فیزیکی هستهٔ Agent/Session همچنان قابل اجراست، اما **Certification نهایی Stage 14.6** تا تعیین تکلیف این Mock/Local behaviors باز نمی‌گردد.
-- Agent دارای Test Session Flow واقعی است و می‌تواند برای Validation فیزیکی instrumented استفاده شود: `GAMENET_AGENT_TEST_SESSION_FLOW=1` به‌همراه `GAMENET_AGENT_TEST_CUSTOMER_ID` و `GAMENET_AGENT_TEST_LOGIN_ID`؛ در صورت نیاز `GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW=1` و `GAMENET_AGENT_TEST_GAME_ID` نیز قابل استفاده است.
+- ✅ **Client Experience از نظر مسیر عملیاتی Server/Agent-backed شد.**
+- ✅ Catalog بازی/بوفه از `/api/client/catalog` می‌آید و دادهٔ GameNet credential به Client برگردانده نمی‌شود.
+- ✅ Login/Identity/Customer State از Server خوانده می‌شوند و Lock state authoritative روی Server باقی می‌ماند.
+- ✅ درخواست‌های message/charge/move/unlock/buffet از endpoint واقعی `/api/client/request` ثبت و Audit/Permission مسیر سروری را طی می‌کنند.
+- ✅ Lock و Logout-Lock از مسیر واقعی Agent command اجرا می‌شوند.
+- ✅ Launch/Stop بازی از مسیر `Client → Server → Agent → Process` عبور می‌کند؛ Server مالکیت Session/CustomerLogin/Station/Game را enforce می‌کند و Agent درست قبل از Launch دوباره Session زنده را validate می‌کند.
+- ✅ Process روی Client با `SessionId + GameId` مالکیت می‌شود و Stop مربوط به Session دیگر پذیرفته نمی‌شود.
+- ✅ Fakeهای billing/approval در Dashboard حذف شدند و محدودیت تخفیف اپراتور Server-side enforce می‌شود.
+- ✅ Exact-head CI: Run #1528.
+- ✅ Main certification: Run #1529 روی merge commit `bf88dd1d91875d12d33c58607776d5e928279bfc`.
+- 🟡 فقط **Physical Validation 2–3 PC** باقی مانده است؛ این Gate با CI جایگزین نمی‌شود.
+- Agent Test Session Flow برای تست فیزیکی instrumented همچنان در دسترس است.
 
 ## آخرین وضعیت اجرایی — Stage 13.5 / 2026-10-05
 
