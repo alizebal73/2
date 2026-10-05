@@ -23,6 +23,14 @@ main = 24a0654fa6490f415372ab2e7d28f30a0ecfbe89
 - Post-merge main CI: **Run #1383 — success**
 - Main merge commit: `24a0654fa6490f415372ab2e7d28f30a0ecfbe89`
 
+## Slice 13.2 — Sessions & Stations
+
+- Real server report endpoint: `GET /api/reports/sessions`.
+- Dashboard Reports has a real Sessions & Stations panel with date range, station, zone, operator, state and customer filters.
+- Summary is built from authoritative Session rows; revenue is `Session.TotalAmount`.
+- Unit, browser and CI API smoke were added in this branch.
+- This slice is not certified until the exact branch HEAD is green.
+
 ## Not Done
 
 - Stage 13.1 **CERTIFIED** — exact-head Run #1380 green; merge commit on main verified by Run #1383.
@@ -36,4 +44,4 @@ Resume from this branch and this checkpoint. Do not infer completion from chat h
 
 ## Next checkpoint
 
-Create `stage13-sessions-stations` from the certified `main` above. Implement Stage 13.2 Sessions & Stations as the next real vertical slice, without reintroducing Mock data.
+After Stage 13.2 exact-head Green, merge it to `main`, verify post-merge Green, then start Stage 13.3 Customer/VIP and Users/Shift reports.

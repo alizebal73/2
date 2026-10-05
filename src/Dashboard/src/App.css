@@ -3916,6 +3916,16 @@ button:focus-visible {
   gap: 7px;
   margin: 0 22px 12px;
 }
+.report-session-filter-grid {
+  grid-template-columns: repeat(5, minmax(140px, 1fr)) auto;
+}
+.muted-line {
+  display: block;
+  margin-top: 2px;
+  color: var(--dim);
+  font-size: 8px;
+}
+
 .report-audit-filter-grid {
   grid-template-columns: repeat(4, minmax(150px, 1fr)) auto;
 }

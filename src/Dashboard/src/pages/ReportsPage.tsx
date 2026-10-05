@@ -6,6 +6,7 @@ import { getCurrentShift } from '../services/shiftService';
 import { getServerBuffetProfit } from '../services/buffetService';
 import { getAuditLogs, type AuditLogPage } from '../services/auditService';
 import type { BuffetProfitReport } from '../types';
+import { SessionReportPanel } from '../features/reports/SessionReportPanel';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
 function count(value: number) { return new Intl.NumberFormat('fa-IR').format(value); }
@@ -342,7 +343,8 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
         </>
       }
     </>
-    : <section className="report-placeholder"><strong>{({sessions:'جلسات و ایستگاه‌ها',customers:'مشتری و VIP',users:'کاربران و شیفت'} as Record<string,string>)[reportCategory]}</strong><span>این دامنه هنوز در برش‌های بعدی Stage 13 به منبع داده واقعی متصل می‌شود.</span></section>}
+    : reportCategory === 'sessions' ? <SessionReportPanel period={period} range={range} />
+    : <section className="report-placeholder"><strong>{({customers:'مشتری و VIP',users:'کاربران و شیفت'} as Record<string,string>)[reportCategory]}</strong><span>این دامنه هنوز در برش‌های بعدی Stage 13 به منبع داده واقعی متصل می‌شود.</span></section>}
 
     {notice && <div className="operation-toast">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
   </>;

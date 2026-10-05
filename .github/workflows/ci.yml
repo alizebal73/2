@@ -398,6 +398,16 @@ jobs:
                 Write-Host ("Stage 10 rollback diagnostics: commandId={0}; status={1}; delivered={2}; result={3}" -f $rollbackCommand.commandId, $rollbackStatus.status, $rollbackDelivered, $rollbackStatus.resultMessage)
                 Write-Host '--- Agent stdout during rollback ---'
                 if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Watchdog/child stdout during rollback ---'
+                Get-ChildItem -Path $agentData -Filter 'watchdog-*-stdout.log' -File -ErrorAction SilentlyContinue | ForEach-Object {
+                  Write-Host ("### {0}" -f $_.FullName)
+                  Get-Content $_.FullName
+                }
+                Write-Host '--- Watchdog/child stderr during rollback ---'
+                Get-ChildItem -Path $agentData -Filter 'watchdog-*-stderr.log' -File -ErrorAction SilentlyContinue | ForEach-Object {
+                  Write-Host ("### {0}" -f $_.FullName)
+                  Get-Content $_.FullName
+                }
                 Write-Host '--- Agent stderr during rollback ---'
                 if (Test-Path $agentStderr) { Get-Content $agentStderr }
                 Write-Host '--- Persisted Agent state during rollback ---'
@@ -1514,6 +1524,15 @@ jobs:
             if ($sessionSettlement.invoiceId -ne $sessionSale.invoiceId -or [decimal]$sessionSettlement.totalAmount -ne $sessionSettlementTotal -or $sessionSettlement.invoiceStatus -ne 'Paid') {
               throw 'Session settlement did not finalize the buffet draft invoice using the authoritative server total.'
             }
+
+            $sessionReportSmoke = Invoke-RestMethod -Uri "$baseUrl/api/reports/sessions?page=1&pageSize=20&state=Completed" -Method Get -WebSession $adminSession
+            if ([int]$sessionReportSmoke.total -lt 1 -or -not @($sessionReportSmoke.items | Where-Object { $_.id -eq $startedSession.sessionId -and $_.state -eq 'Completed' }).Count) {
+              throw 'Stage 13.2 Sessions report smoke did not return the completed smoke session.'
+            }
+            if ([decimal]$sessionReportSmoke.summary.revenue -lt [decimal]$sessionSettlement.totalAmount) {
+              throw 'Stage 13.2 Sessions report summary revenue is lower than the authoritative settled Session amount.'
+            }
+            Write-Host ("Stage 13.2 Sessions & Stations report smoke passed: total={0}; revenue={1}" -f $sessionReportSmoke.total, $sessionReportSmoke.summary.revenue)
 
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
               permissionNames = @('finance.manage')

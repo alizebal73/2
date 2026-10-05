@@ -21,6 +21,7 @@ builder.Services.AddScoped<AccountPoolService>();
 builder.Services.AddScoped<CustomerLoginService>();
 builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<AuditLogService>();
+builder.Services.AddScoped<SessionReportService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
@@ -1461,6 +1462,54 @@ app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration c
     });
 })
 .WithName("GetReleaseManifest");
+
+app.MapGet("/api/reports/sessions", async (
+    HttpContext context,
+    GameNetDbContext database,
+    SessionReportService reports,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    string? station,
+    string? zone,
+    string? @operator,
+    string? state,
+    string? customerSearch,
+    int page,
+    int pageSize,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "finance.view",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    if (page < 1 || pageSize < 1 || pageSize > 200)
+    {
+        return Results.BadRequest(new
+        {
+            code = "session_report_paging_invalid",
+            message = "صفحه یا تعداد رکوردهای گزارش معتبر نیست."
+        });
+    }
+
+    var result = await reports.QueryAsync(
+        new SessionReportQuery(
+            from,
+            to,
+            station,
+            zone,
+            @operator,
+            state,
+            customerSearch,
+            page,
+            pageSize),
+        cancellationToken);
+
+    return Results.Ok(result);
+})
+.WithName("QuerySessionReport");
 
 app.MapGet("/api/audit", async (
     HttpContext context,

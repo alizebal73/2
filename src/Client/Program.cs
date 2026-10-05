@@ -195,7 +195,7 @@ try
 
             if (outcome.RequiresRestart && outcome.RestartVersion is not null)
             {
-                await LaunchUpdateWatchdogAsync(dataDirectory, outcome.RestartVersion, Environment.ProcessId);
+                await LaunchUpdateWatchdogAsync(dataDirectory, outcome.RestartVersion, Environment.ProcessId, serverUrl);
                 shutdown.Cancel();
             }
         });
@@ -969,7 +969,7 @@ static async Task MarkPendingLifecycleCommandOutcomeAsync(
     await SaveStateAsync(Path.Combine(dataDirectory, "agent-state.json"), next);
 }
 
-static async Task LaunchUpdateWatchdogAsync(string dataDirectory, string targetVersion, int parentProcessId)
+static async Task LaunchUpdateWatchdogAsync(string dataDirectory, string targetVersion, int parentProcessId, string serverUrl)
 {
     var entryPoint = Assembly.GetEntryAssembly()?.Location;
     var processPath = Environment.ProcessPath
@@ -990,7 +990,9 @@ static async Task LaunchUpdateWatchdogAsync(string dataDirectory, string targetV
     startInfo.ArgumentList.Add(dataDirectory);
     startInfo.ArgumentList.Add(targetVersion);
     startInfo.ArgumentList.Add(parentProcessId.ToString());
+    startInfo.ArgumentList.Add(serverUrl);
     startInfo.Environment["GAMENET_AGENT_DATA_DIR"] = dataDirectory;
+    startInfo.Environment["GAMENET_SERVER_URL"] = serverUrl;
 
     var watchdog = Process.Start(startInfo)
         ?? throw new InvalidOperationException("Watchdog به‌روزرسانی اجرا نشد.");
@@ -1018,6 +1020,7 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
 
     var dataDirectory = arguments[0];
     var targetVersion = arguments[1];
+    var serverUrl = arguments.Length >= 4 ? arguments[3] : Environment.GetEnvironmentVariable("GAMENET_SERVER_URL");
     var parentProcessId = 0;
     if (arguments.Length >= 3)
         _ = int.TryParse(arguments[2], out parentProcessId);
@@ -1037,7 +1040,7 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
             await Task.Delay(TimeSpan.FromSeconds(1), cancellation.Token);
 
         var baselineHealthyAt = await ReadAgentLastHealthyAtAsync(dataDirectory, cancellation.Token);
-        child = StartVersionProcess(manager, dataDirectory, targetVersion);
+        child = StartVersionProcess(manager, dataDirectory, targetVersion, serverUrl);
 
         var healthy = await WaitForFreshHealthyVersionAsync(
             manager,
@@ -1071,7 +1074,7 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
             $"سلامت نسخه {targetVersion} تأیید نشد؛ Rollback به {rollbackVersion} آغاز شد.",
             cancellation.Token);
 
-        var rollbackChild = StartVersionProcess(manager, dataDirectory, rollbackVersion);
+        var rollbackChild = StartVersionProcess(manager, dataDirectory, rollbackVersion, serverUrl);
 
         var rollbackHealthy = await WaitForFreshHealthyVersionAsync(
             manager,
@@ -1125,7 +1128,7 @@ static async Task<int> RunUpdateWatchdogAsync(string[] arguments)
             $"Rollback اولیه به {rollbackVersion} سالم نشد؛ بازگشت به نسخه {fallbackVersion} برای بازیابی انجام شد.",
             cancellation.Token);
 
-        var fallbackChild = StartVersionProcess(manager, dataDirectory, fallbackVersion);
+        var fallbackChild = StartVersionProcess(manager, dataDirectory, fallbackVersion, serverUrl);
         var fallbackHealthy = await WaitForFreshHealthyVersionAsync(
             manager,
             dataDirectory,
@@ -1182,7 +1185,8 @@ static async Task WaitForParentProcessExitAsync(int parentProcessId, Cancellatio
 static Process StartVersionProcess(
     ClientUpdateManager manager,
     string dataDirectory,
-    string targetVersion)
+    string targetVersion,
+    string? serverUrl)
 {
     var targetRoot = Path.Combine(manager.VersionsDirectory, targetVersion);
     var targetAssembly = Path.Combine(targetRoot, "GameNetManager.Client.dll");
@@ -1208,7 +1212,7 @@ static Process StartVersionProcess(
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             ArgumentList = { targetAssembly },
-            Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory, ["GAMENET_UPDATE_TARGET_VERSION"] = targetVersion },
+            Environment = { ["GAMENET_AGENT_DATA_DIR"] = dataDirectory, ["GAMENET_UPDATE_TARGET_VERSION"] = targetVersion, ["GAMENET_SERVER_URL"] = serverUrl ?? string.Empty },
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         });
