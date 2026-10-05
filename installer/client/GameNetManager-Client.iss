@@ -34,6 +34,7 @@ Name: "{group}\GameNet Manager Client"; Filename: "{app}\GameNetManager.Client.e
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: string; ValueName: "GAMENET_SERVER_URL"; ValueData: "{code:GetServerUrl}"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: string; ValueName: "GAMENET_AGENT_REGISTRATION_TOKEN"; ValueData: "{code:GetRegistrationToken}"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: string; ValueName: "GAMENET_AGENT_NAME"; ValueData: "{code:GetAgentName}"; Flags: uninsdeletevalue
+Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: string; ValueName: "GAMENET_AGENT_DATA_DIR"; ValueData: "{commonappdata}\GameNetManager\Agent"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GameNetManagerAgent"; ValueData: """{app}\GameNetManager.Client.exe"""; Flags: uninsdeletevalue
 
 [Code]
@@ -64,6 +65,32 @@ begin Result := Trim(TokenPage.Values[0]); end;
 
 function GetAgentName(Param: String): String;
 begin Result := Trim(NamePage.Values[0]); end;
+
+procedure GrantAgentDataAccess;
+var
+  ResultCode: Integer;
+  DataDir: String;
+begin
+  DataDir := ExpandConstant('{commonappdata}\GameNetManager\Agent');
+  if not ForceDirectories(DataDir) then
+    RaiseException('ساخت پوشه داده Agent شکست خورد.');
+  if not Exec(
+    ExpandConstant('{sys}\icacls.exe'),
+    '"' + DataDir + '" /grant "*S-1-5-32-545":(OI)(CI)M /T',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode) then
+    RaiseException('تنظیم ACL داده Agent شکست خورد.');
+  if ResultCode <> 0 then
+    RaiseException('تنظیم ACL داده Agent با کد ' + IntToStr(ResultCode) + ' شکست خورد.');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    GrantAgentDataAccess;
+end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
