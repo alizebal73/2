@@ -56,7 +56,8 @@ try
         databasePath,
         dataProtectionKeysPath,
         app.Environment.ContentRootPath,
-        logger);
+        logger,
+        dataRootPath: dataRoot);
 
     var bootstrapProtector = app.Services
         .GetRequiredService<IDataProtectionProvider>()
