@@ -2,7 +2,7 @@
 
 ## Base
 
-main = 72045d34a3ba9d561ddca488c61470daad27b3fc
+main = 2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0
 
 ## Slice 13.1 — Audit Explorer
 
@@ -30,17 +30,29 @@ main = 72045d34a3ba9d561ddca488c61470daad27b3fc
 - Main merge commit: `72045d34a3ba9d561ddca488c61470daad27b3fc`.
 - Supporting Stage 10 Agent watchdog hardening is included in the same certified main baseline.
 
+## Slice 13.3 — Customer/VIP + Users/Shift — CERTIFIED
+
+- Real server endpoint: `GET /api/reports/customers`.
+- Real server endpoint: `GET /api/reports/users-shifts`.
+- Customer/VIP report uses authoritative Customer/VipPackage/Session/Draft Invoice data.
+- Users/Shift report uses authoritative AppUser/EmployeeProfile/Payroll/Shift/Expense/InvoicePayment/Session data.
+- Server-side permission masking is applied to wallet/debt and payroll fields.
+- Dashboard Reports includes real Customer/VIP and Users/Shift panels with shared date range, filters, pagination and CSV export.
+- Unit/API/Browser coverage passed.
+- Exact-head CI: **Run #1402 — success**.
+- Post-merge main CI: **Run #1403 — success**.
+- Main merge commit: `2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0`.
+
 ## Not Done
 
-- Stage 13.1 **CERTIFIED** — exact-head Run #1380 green; merge commit on main verified by Run #1383.
-- Stage 13.2 **CERTIFIED** — exact-head Run #1391 green; merge commit on main verified by Run #1392.
 - Fine-grained permission/scope and full reporting export policy remain later in Stage 13.
 - Notification/Event Queue remains later in Stage 13.
+- Backup/Restore real, physical validation on 2–3 PCs and controlled 40+ PC rollout remain release gates outside CI.
 
 ## Recovery Rule
 
-Resume from the certified `main` commit `72045d34a3ba9d561ddca488c61470daad27b3fc` and this checkpoint. Do not infer completion from chat history; use the exact HEAD and CI result.
+Resume from the certified `main` commit `2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0` and this checkpoint. Do not infer completion from chat history; use the exact HEAD and CI result.
 
 ## Next checkpoint
 
-Create/resume from the certified `main` `72045d…` for **Stage 13.3 — Customer/VIP and Users/Shift reports**. Do not modify the certified Stage 13.1/13.2 slices except for regression fixes.
+Create/resume from certified `main` `2ee64bf…` for **Stage 13.4 — Fine-Grained Permission/Scope + Export**. Do not modify certified Stage 13.1/13.2/13.3 slices except for regression fixes.

@@ -36,7 +36,7 @@
 ### مرز بعدی
 
 - ⏭️ Stage 13.2 — گزارش واقعی جلسات و ایستگاه‌ها
-- ⏭️ Stage 13.3 — گزارش مشتری/VIP و Users/Shift
+- ✅ Stage 13.3 — گزارش مشتری/VIP و Users/Shift
 - ⏭️ Stage 13.4 — Fine-Grained Permission/Scope + Export
 - ⏭️ Stage 13.5 — Notification/Event Queue
 
@@ -68,6 +68,31 @@
 
 > Stage 13.2 پس از سبز شدن exact-head و عبور Main از CI Done محسوب می‌شود.
 
+## Stage 13.3 — برش سوم واقعی: Customer/VIP + Users/Shift — 2026-10-05
+
+### وضعیت
+- ✅ **Stage 13.3 — Customer/VIP + Users/Shift** — روی `main` ادغام و با Run #1402 روی exact-head و Run #1403 روی `main` تأیید شد.
+- Customer/VIP report: endpoint واقعی `GET /api/reports/customers` با منبع حقیقت Customer/VipPackage/Session/Draft Invoice.
+- Users/Shift report: endpoint واقعی `GET /api/reports/users-shifts` با منبع حقیقت AppUser/EmployeeProfile/Payroll/Shift/Expense/InvoicePayment/Session.
+- Permission masking سروری برای کیف پول/بدهی مشتری و داده‌های حقوقی اجرا شده است؛ Dashboard فقط داده‌ای را می‌گیرد که کاربر مجاز به دیدن آن است.
+- Dashboard Reports دارای پنل‌های واقعی Customer/VIP و Users/Shift با فیلتر، summary، pagination و CSV export صفحهٔ جاری است.
+- Unit Test، Server API Smoke و Browser Smoke برای هر دو پنل سبز شده‌اند.
+- در CI محدودیت ترجمهٔ DateTimeOffset در SQLite شناسایی و گزارش Users/Shift به الگوی materialize-then-filter هم‌راستا با SessionReportService اصلاح شد.
+
+### Gate این برش
+- ✅ Build
+- ✅ .NET Tests
+- ✅ EF validation
+- ✅ Server/Migration/Health Smoke + Stage 13.3 Customer/VIP + Users/Shift API Smoke — Run #1402 / Main Run #1403
+- ✅ Dashboard Build/Lint — Run #1402 / Main Run #1403
+- ✅ Dashboard Browser Smoke — Run #1402 / Main Run #1403
+
+### مرز بعدی
+- ⏭️ Stage 13.4 — Fine-Grained Permission/Scope + Export
+- ⏭️ Stage 13.5 — Notification/Event Queue
+
+> Stage 13.3 پس از سبز شدن exact-head و عبور Main از CI Done محسوب می‌شود.
+
 ## آخرین وضعیت تأییدشده — Stage 12 / 2026-10-05
 
 این بخش مرجع اجرایی فعلی است و بر وضعیت واقعی HEAD شاخه غلبه دارد.
@@ -84,6 +109,21 @@
 - ⏭️ مرحلهٔ نرم‌افزاری بعدی پس از این checkpoint: Stage 13 — Reporting & Audit / Notification Queue / Fine-Grained Scope.
 
 > قانون: Stage 12 از نظر مهندسی نرم‌افزار Done است؛ Gateهای فیزیکی و Release تا زمان اجرای واقعی همچنان Done محسوب نمی‌شوند.
+
+## آخرین وضعیت اجرایی — Stage 13.3 / 2026-10-05
+
+این بخش مرجع اجرایی فعلی است و بر وضعیت تاریخی مراحل قبلی غلبه دارد.
+
+- ✅ Stage 13.1 Audit Explorer: certified.
+- ✅ Stage 13.2 Sessions & Stations: certified.
+- ✅ Stage 13.3 Customer/VIP + Users/Shift: certified.
+- ✅ Main certified merge commit: `2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0`.
+- ✅ Exact-head Stage 13.3: Run #1402.
+- ✅ Post-merge main Stage 13.3: Run #1403.
+- ⏭️ مرحلهٔ نرم‌افزاری بعدی: Stage 13.4 — Fine-Grained Permission/Scope + Export.
+- ⬜ Gateهای بیرون از CI همچنان باقی‌اند: Backup/Restore واقعی، Validation فیزیکی روی 2–3 PC و سپس rollout کنترل‌شدهٔ 40+ PC.
+
+> قانون: Stage 13.3 از نظر مهندسی نرم‌افزار Done است؛ Gateهای فیزیکی و Release همچنان Done محسوب نمی‌شوند.
 
 ## تصمیم‌های تأییدشده از بازبینی دوم محصول
 
