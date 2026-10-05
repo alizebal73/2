@@ -28,40 +28,35 @@
 - ✅ Dashboard Preview
 - ✅ Dashboard Browser Smoke
 
-## Slice 14.2 — NEXT
+## Slice 14.2 — COMPLETE
 
 **Dashboard PC grouping by Internet 1/2 + dense responsive hardening**
 
-### Required scope
+### Delivered
 
-- Verify the existing PC/station grouping behavior against actual station/network data.
-- Make Internet 1 / Internet 2 grouping explicit and reliable in the Dashboard UI.
-- Preserve status, VIP/normal and remaining-time filters.
-- Ensure grouping and filtering do not alter server truth or session state.
-- Harden dense dashboard layouts for the real operator viewport.
-- Add Browser Smoke for grouping/filter combinations and responsive critical paths.
-
-### 14.2 implementation status — IN PROGRESS
-
-- ✅ `Station.Network` is now persisted server-side with EF migration and model snapshot.
+- ✅ `Station.Network` persisted server-side with EF migration and model snapshot.
 - ✅ Dashboard `GET /api/dashboard` returns the authoritative Station.Network value.
 - ✅ Demo seed distributes PC-01..20 to Internet 1 and PC-21..40 to Internet 2.
 - ✅ Dashboard grouping renders explicit Persian labels for Internet 1 / Internet 2.
-- ✅ Browser Smoke covers grouping/filter switching and a 520px dense viewport.
-- ✅ Responsive hardening collapses the dashboard workspace and protects dense station cards on narrow viewports.
+- ✅ Existing Status / VIP-Normal / Remaining Time grouping options preserved.
+- ✅ Grouping/filtering remains presentation-only and does not alter server truth or session state.
+- ✅ Responsive hardening covers workspace, toolbar and dense station cards down to the tested 520px viewport.
+- ✅ Browser Smoke covers Internet grouping, grouping/filter switching and responsive critical path.
+- ✅ Exact-head CI: Run #1435.
+- ✅ Main certification: Run #1436, Attempt 2.
+- ✅ Certified merge commit: `63ac3f67357a0970df504a62c9ab16cc1ba4f53a`.
 
 ### Not Done
 
-- Exact-head CI certification for 14.2.
 - Server-backed Settings
 - Physical 2–3 PC validation
 - Real Backup/Restore
-- Remaining Stage 14.3 accessibility/operational polish
+- Stage 14.3 accessibility / operational polish
 
 ## Recovery Rule
 
-Resume Stage 14.2 from branch `stage14-2-dashboard-network` and use the exact HEAD reported by CI. Do not infer completion from chat history.
+Resume from certified main commit `63ac3f67357a0970df504a62c9ab16cc1ba4f53a`. Do not infer completion from chat history.
 
 ## Next
 
-Start **Stage 14.2** only from the certified main baseline above.
+Start **Stage 14.3 — Accessibility / UI / operational polish** from the certified main baseline above.
