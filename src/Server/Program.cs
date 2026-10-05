@@ -3419,6 +3419,7 @@ app.MapGet("/api/customer-auth/state", async (
     var session = device?.StationId is Guid stationId
         ? await database.Sessions
             .Where(item => item.CustomerId == customerId
+                && item.CustomerLoginId == loginId
                 && item.StationId == stationId
                 && (item.State == SessionState.Active || item.State == SessionState.Ended))
             .OrderByDescending(item => item.StartAt)
