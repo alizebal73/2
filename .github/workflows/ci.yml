@@ -98,6 +98,8 @@ jobs:
           Remove-Item $releaseRoot -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $releaseClient -Force | Out-Null
           dotnet publish src/Client/GameNetManager.Client.csproj --configuration Release --output $releaseClient --no-restore
+          # Keep the CI Agent baseline distinct from the update package so Update/Rollback is a real two-version exercise.
+          '0.7.0' | Out-File -FilePath (Join-Path $env:GITHUB_WORKSPACE 'src\Client\bin\Release\net10.0-windows\client-version.txt') -Encoding ascii
           '0.7.1' | Out-File -FilePath (Join-Path $releaseClient 'client-version.txt') -Encoding ascii
           Compress-Archive -Path (Join-Path $releaseClient '*') -DestinationPath $releasePackage -Force
           $releaseHash = (Get-FileHash -Algorithm SHA256 -Path $releasePackage).Hash.ToLowerInvariant()
