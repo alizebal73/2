@@ -25,6 +25,8 @@ builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<SessionReportService>();
 builder.Services.AddScoped<NotificationQueueService>();
+builder.Services.AddScoped<DatabaseBackupService>();
+builder.Services.AddHostedService<BackupSchedulerHostedService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
@@ -63,6 +65,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapSettingsEndpoints();
+app.MapBackupEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
     .WithName("GetHealth");
