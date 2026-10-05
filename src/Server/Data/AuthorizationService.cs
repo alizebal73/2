@@ -32,7 +32,16 @@ public static class AuthorizationService
             ["approval.decide"] = "تأیید/رد عملیات حساس",
             ["payroll.view"] = "مشاهده اطلاعات حقوق و حساب پرسنلی",
             ["payroll.manage"] = "ثبت و مدیریت حقوق و حساب پرسنلی",
-            ["audit.view"] = "مشاهده Audit"
+            ["audit.view"] = "مشاهده Audit",
+            ["report.sessions.view"] = "مشاهده گزارش جلسات و ایستگاه‌ها",
+            ["report.sessions.scope.all"] = "مشاهده تمام جلسات و ایستگاه‌ها",
+            ["report.customers.view"] = "مشاهده گزارش مشتری و VIP",
+            ["report.customers.scope.all"] = "مشاهده تمام مشتریان و VIP",
+            ["report.users-shift.view"] = "مشاهده گزارش کاربران و شیفت",
+            ["report.users-shift.scope.all"] = "مشاهده تمام کاربران و شیفت‌ها",
+            ["report.audit.view"] = "مشاهده گزارش Audit",
+            ["report.audit.scope.all"] = "مشاهده تمام رویدادهای Audit",
+            ["reports.export"] = "خروجی گرفتن از گزارش‌های مجاز"
         };
 
     public static async Task<AppUser?> ResolveUserAsync(
@@ -111,6 +120,40 @@ public static class AuthorizationService
 
         return (user, null);
     }
+
+    public static async Task<(AppUser? User, IResult? Error)> RequireReportPermissionAsync(
+        HttpContext context,
+        GameNetDbContext database,
+        string reportKey,
+        CancellationToken cancellationToken,
+        params string[] legacyPermissions)
+    {
+        var user = await ResolveUserAsync(context, database, cancellationToken);
+        if (user is null)
+            return (null, Results.Unauthorized());
+
+        var permission = $"report.{reportKey}.view";
+        var allowed = HasPermission(user, permission)
+            || legacyPermissions.Any(item => HasPermission(user, item));
+
+        if (!allowed)
+            return (user, Results.Json(
+                new { code = "permission_denied", message = "دسترسی لازم برای مشاهده این گزارش را ندارید." },
+                statusCode: StatusCodes.Status403Forbidden));
+
+        return (user, null);
+    }
+
+    public static bool HasReportAllScope(AppUser user, string reportKey)
+        => IsGlobalUser(user)
+            || HasPermission(user, $"report.{reportKey}.scope.all");
+
+    public static bool HasReportExport(AppUser user)
+        => IsGlobalUser(user) || HasPermission(user, "reports.export");
+
+    private static bool IsGlobalUser(AppUser user)
+        => string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(user.Role, "Owner", StringComparison.OrdinalIgnoreCase);
 
     public static string CreateToken()
         => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));

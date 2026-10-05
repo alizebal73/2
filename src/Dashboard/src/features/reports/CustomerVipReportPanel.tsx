@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { downloadReportCsv } from '../../services/reportExportService';
 import { getCustomerVipReport, type CustomerVipReportPage } from '../../services/customerVipReportService';
 
 type Period = 'week' | 'month' | 'sixMonths' | 'year' | 'custom';
@@ -49,33 +50,7 @@ function getWindow(period: Period, range: Props['range']) {
   return { start: start.getTime(), end: now };
 }
 
-function exportCsv(report: CustomerVipReportPage | null) {
-  if (!report) return;
-  const lines = [
-    ['کد', 'نام مشتری', 'VIP', 'پکیج', 'انقضا', 'باقی‌مانده امروز', 'باقی‌مانده کل', 'کیف پول', 'بدهی', 'تعداد جلسات', 'درآمد جلسات'],
-    ...report.items.map(item => [
-      item.code,
-      item.name,
-      vipLabel(item.vipTier),
-      item.packageName ?? '—',
-      item.vipExpiresAt ? new Date(item.vipExpiresAt).toLocaleDateString('fa-IR') : '—',
-      minutes(item.remainingTodayMinutes),
-      minutes(item.remainingTotalMinutes),
-      item.walletBalance,
-      item.debt,
-      item.sessionCount,
-      item.sessionRevenue,
-    ]),
-  ];
-  const csv = lines.map(line => line.map(value => '"' + String(value).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
-  link.download = 'gamenet-customer-vip-report.csv';
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
-
-export function CustomerVipReportPanel({ period, range }: Props) {
+export function CustomerVipReportPanel({ period, range, canExport }: Props & { canExport: boolean }) {
   const [search, setSearch] = useState('');
   const [vip, setVip] = useState('all');
   const [debt, setDebt] = useState('all');
@@ -164,7 +139,7 @@ export function CustomerVipReportPanel({ period, range }: Props) {
     </div>
 
     <div className="report-actions" style={{ margin: '0 22px 10px' }}>
-      <button type="button" className="btn" onClick={() => exportCsv(result)}>📤 خروجی مشتری و VIP</button>
+      <button type="button" className="btn" disabled={!canExport} title={!canExport ? 'دسترسی خروجی گزارش ندارید' : undefined} onClick={() => { if (!canExport) return; const current = getWindow(period, range); void downloadReportCsv('customers', { from: new Date(current.start).toISOString(), to: new Date(current.end).toISOString(), search, vip, debt, package: packageName, page, pageSize: 50 }).catch(reason => setError(reason instanceof Error ? reason.message : 'خروجی گزارش مشتری و VIP انجام نشد')); }}>📤 خروجی مشتری و VIP</button>
       <span className="page-meta"><span>{count(result?.total ?? 0)} مشتری در بازه</span></span>
     </div>
 

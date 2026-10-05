@@ -10,7 +10,8 @@ public sealed record AuditLogQuery(
     string? EntityName,
     string? Search,
     int Page = 1,
-    int PageSize = 50);
+    int PageSize = 50,
+    Guid? ScopedAppUserId = null);
 
 public sealed record AuditLogRecordDto(
     Guid Id,
@@ -53,6 +54,9 @@ public sealed class AuditLogService
             .ToListAsync(cancellationToken);
 
         IEnumerable<AuditLog> filtered = logs;
+
+        if (query.ScopedAppUserId is { } scopedUserId)
+            filtered = filtered.Where(item => item.AppUserId == scopedUserId);
 
         if (query.From is { } from)
             filtered = filtered.Where(item => item.CreatedAt >= from);

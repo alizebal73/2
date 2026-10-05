@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { downloadReportCsv } from '../../services/reportExportService';
 import { getUsersShiftReport, type UsersShiftReportPage } from '../../services/usersShiftReportService';
 
 type Period = 'week' | 'month' | 'sixMonths' | 'year' | 'custom';
@@ -31,34 +32,7 @@ function roleLabel(value: string) {
   return ({ Admin: 'مدیر', Operator: 'اپراتور', Owner: 'مالک' } as Record<string, string>)[value] ?? value;
 }
 
-function exportCsv(report: UsersShiftReportPage | null) {
-  if (!report) return;
-  const lines = [
-    ['کاربر', 'نقش', 'شیفت', 'شیفت بسته', 'فروش', 'فروش نقدی', 'هزینه', 'اختلاف صندوق', 'جلسات', 'درآمد جلسات', 'پرداخت حقوق', 'مطالبات پرسنل'],
-    ...report.items.map(item => [
-      item.fullName,
-      roleLabel(item.role),
-      item.shiftCount,
-      item.closedShiftCount,
-      item.shiftRevenue,
-      item.shiftCashSales,
-      item.shiftExpenses,
-      item.shiftDifference,
-      item.sessionCount,
-      item.sessionRevenue,
-      item.paidThisPeriod,
-      item.employeePayable,
-    ]),
-  ];
-  const csv = lines.map(line => line.map(value => '"' + String(value).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
-  link.download = 'gamenet-users-shifts-report.csv';
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
-
-export function UsersShiftReportPanel({ period, range }: Props) {
+export function UsersShiftReportPanel({ period, range, canExport }: Props & { canExport: boolean }) {
   const [userSearch, setUserSearch] = useState('');
   const [shiftState, setShiftState] = useState('all');
   const [page, setPage] = useState(1);
@@ -154,7 +128,7 @@ export function UsersShiftReportPanel({ period, range }: Props) {
     </section>
 
     <div className="report-actions" style={{ margin: '0 22px 10px' }}>
-      <button type="button" className="btn" onClick={() => exportCsv(result)}>📤 خروجی کاربران و شیفت</button>
+      <button type="button" className="btn" disabled={!canExport} title={!canExport ? 'دسترسی خروجی گزارش ندارید' : undefined} onClick={() => { if (!canExport) return; const current = getWindow(period, range); void downloadReportCsv('users-shift', { from: new Date(current.start).toISOString(), to: new Date(current.end).toISOString(), userSearch, shiftState, page, pageSize: 50 }).catch(reason => setError(reason instanceof Error ? reason.message : 'خروجی گزارش کاربران و شیفت انجام نشد')); }}>📤 خروجی کاربران و شیفت</button>
       <span className="page-meta"><span>{count(result?.total ?? 0)} کاربر در گزارش</span></span>
     </div>
 

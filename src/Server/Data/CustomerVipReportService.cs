@@ -10,7 +10,8 @@ public sealed record CustomerVipReportQuery(
     string? Debt,
     string? Package,
     int Page = 1,
-    int PageSize = 50);
+    int PageSize = 50,
+    Guid? ScopedAppUserId = null);
 
 public sealed record CustomerVipReportRowDto(
     Guid CustomerId,
@@ -118,6 +119,17 @@ public sealed class CustomerVipReportService
                 .ToListAsync(cancellationToken);
 
         var debtByCustomer = debts.ToDictionary(item => item.CustomerId, item => item.Amount);
+
+        if (query.ScopedAppUserId is { } scopedUserId)
+        {
+            var scopedSessions = await _database.Sessions
+                .AsNoTracking()
+                .Where(item => item.AppUserId == scopedUserId && customerIds.Contains(item.CustomerId))
+                .Select(item => item.CustomerId)
+                .ToListAsync(cancellationToken);
+            var scopedCustomerIds = scopedSessions.ToHashSet();
+            customers = customers.Where(item => scopedCustomerIds.Contains(item.Id)).ToList();
+        }
 
         var filtered = customers.Where(customer =>
         {

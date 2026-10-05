@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { downloadReportCsv } from '../../services/reportExportService';
 import { getSessionReport, type SessionReportPage } from '../../services/sessionReportService';
 
 type Period = 'week' | 'month' | 'sixMonths' | 'year' | 'custom';
@@ -44,32 +45,7 @@ function windowFor(period: Period, range: Props['range']) {
   return { start: start.getTime(), end: now };
 }
 
-function exportCsv(report: SessionReportPage | null) {
-  if (!report) return;
-  const lines = [
-    ['تاریخ شروع', 'ایستگاه', 'منطقه', 'مشتری', 'اپراتور', 'وضعیت', 'مدت', 'مبلغ'],
-    ...report.items.map(item => [
-      new Date(item.startAt).toLocaleString('fa-IR'),
-      item.stationName,
-      item.zone,
-      item.customerName,
-      item.operator,
-      stateLabel(item.state),
-      minutes(item.billableMinutes),
-      item.totalAmount,
-    ]),
-  ];
-  const csv = lines
-    .map(line => line.map(value => '"' + String(value).replace(/"/g, '""') + '"').join(','))
-    .join('\r\n');
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
-  link.download = 'gamenet-sessions-report.csv';
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
-
-export function SessionReportPanel({ period, range }: Props) {
+export function SessionReportPanel({ period, range, canExport }: Props & { canExport: boolean }) {
   const [station, setStation] = useState('');
   const [zone, setZone] = useState('');
   const [operator, setOperator] = useState('');
@@ -198,7 +174,7 @@ export function SessionReportPanel({ period, range }: Props) {
     </section>
 
     <div className="report-actions" style={{ margin: '0 22px 10px' }}>
-      <button type="button" className="btn" onClick={() => exportCsv(result)}>📤 خروجی جلسات</button>
+      <button type="button" className="btn" disabled={!canExport} title={!canExport ? 'دسترسی خروجی گزارش ندارید' : undefined} onClick={() => { if (!canExport) return; const current = windowFor(period, range); void downloadReportCsv('sessions', { from: new Date(current.start).toISOString(), to: new Date(current.end).toISOString(), station, zone, operator, state, customerSearch, page, pageSize: 50 }).catch(reason => setError(reason instanceof Error ? reason.message : 'خروجی گزارش جلسات انجام نشد')); }}>📤 خروجی جلسات</button>
       <span className="page-meta"><span>{count(result?.total ?? 0)} جلسه در بازه</span></span>
     </div>
 

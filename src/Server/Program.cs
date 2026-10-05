@@ -1480,11 +1480,12 @@ app.MapGet("/api/reports/sessions", async (
     int pageSize,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
         context,
         database,
-        "finance.view",
-        cancellationToken);
+        "sessions",
+        cancellationToken,
+        "finance.view");
     if (auth.Error is not null) return auth.Error;
 
     if (page < 1 || pageSize < 1 || pageSize > 200)
@@ -1506,7 +1507,8 @@ app.MapGet("/api/reports/sessions", async (
             state,
             customerSearch,
             page,
-            pageSize),
+            pageSize,
+            AuthorizationService.HasReportAllScope(auth.User!, "sessions") ? null : auth.User!.Id),
         cancellationToken);
 
     return Results.Ok(result);
@@ -1527,9 +1529,10 @@ app.MapGet("/api/reports/customers", async (
     int pageSize,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
         context,
         database,
+        "customers",
         cancellationToken,
         "customer.manage",
         "customer.wallet",
@@ -1537,7 +1540,16 @@ app.MapGet("/api/reports/customers", async (
     if (auth.Error is not null) return auth.Error;
 
     var result = await reports.QueryAsync(
-        new CustomerVipReportQuery(from, to, search, vip, debt, package, page, pageSize),
+        new CustomerVipReportQuery(
+            from,
+            to,
+            search,
+            vip,
+            debt,
+            package,
+            page,
+            pageSize,
+            AuthorizationService.HasReportAllScope(auth.User!, "customers") ? null : auth.User!.Id),
         cancellationToken);
 
     var canWallet = AuthorizationService.HasPermission(auth.User!, "customer.wallet");
@@ -1581,9 +1593,10 @@ app.MapGet("/api/reports/users-shifts", async (
     int pageSize,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
         context,
         database,
+        "users-shift",
         cancellationToken,
         "shift.manage",
         "payroll.view",
@@ -1591,7 +1604,14 @@ app.MapGet("/api/reports/users-shifts", async (
     if (auth.Error is not null) return auth.Error;
 
     var result = await reports.QueryAsync(
-        new UsersShiftReportQuery(from, to, userSearch, shiftState, page, pageSize),
+        new UsersShiftReportQuery(
+            from,
+            to,
+            userSearch,
+            shiftState,
+            page,
+            pageSize,
+            AuthorizationService.HasReportAllScope(auth.User!, "users-shift") ? null : auth.User!.Id),
         cancellationToken);
 
     if (!AuthorizationService.HasPermission(auth.User!, "payroll.view"))
@@ -1622,6 +1642,124 @@ app.MapGet("/api/reports/users-shifts", async (
 .WithName("QueryUsersShiftReport");
 
 
+app.MapGet("/api/reports/export", async (
+    HttpContext context,
+    GameNetDbContext database,
+    SessionReportService sessionReports,
+    CustomerVipReportService customerReports,
+    UsersShiftReportService usersShiftReports,
+    AuditLogService auditLogs,
+    string report,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    string? station,
+    string? zone,
+    string? @operator,
+    string? state,
+    string? customerSearch,
+    string? search,
+    string? vip,
+    string? debt,
+    string? package,
+    string? userSearch,
+    string? shiftState,
+    string? action,
+    string? entityName,
+    int page,
+    int pageSize,
+    CancellationToken cancellationToken) =>
+{
+    var reportKey = (report ?? "").Trim().ToLowerInvariant();
+    var legacyPermissions = reportKey switch
+    {
+        "sessions" => new[] { "finance.view" },
+        "customers" => new[] { "customer.manage", "customer.wallet", "customer.debt" },
+        "users-shift" => new[] { "shift.manage", "payroll.view", "user.manage" },
+        "audit" => new[] { "audit.view" },
+        _ => Array.Empty<string>()
+    };
+
+    if (legacyPermissions.Length == 0)
+        return Results.BadRequest(new { code = "report_export_invalid", message = "نوع گزارش برای خروجی معتبر نیست." });
+
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
+        context,
+        database,
+        reportKey,
+        cancellationToken,
+        legacyPermissions);
+
+    if (auth.Error is not null) return auth.Error;
+
+    if (!AuthorizationService.HasReportExport(auth.User!))
+        return Results.Json(
+            new { code = "report_export_denied", message = "دسترسی خروجی گزارش را ندارید." },
+            statusCode: StatusCodes.Status403Forbidden);
+
+    if (page < 1 || pageSize < 1 || pageSize > 200)
+        return Results.BadRequest(new { code = "report_export_paging_invalid", message = "صفحه یا تعداد رکوردهای خروجی معتبر نیست." });
+
+    var scopedId = AuthorizationService.HasReportAllScope(auth.User!, reportKey)
+        ? (Guid?)null
+        : auth.User!.Id;
+
+    string csv;
+    string fileName;
+    switch (reportKey)
+    {
+        case "sessions":
+        {
+            var result = await sessionReports.QueryAsync(
+                new SessionReportQuery(from, to, station, zone, @operator, state, customerSearch, page, pageSize, scopedId),
+                cancellationToken);
+            csv = ReportExportService.Sessions(result);
+            fileName = "gamenet-sessions-report.csv";
+            break;
+        }
+        case "customers":
+        {
+            var result = await customerReports.QueryAsync(
+                new CustomerVipReportQuery(from, to, search, vip, debt, package, page, pageSize, scopedId),
+                cancellationToken);
+            csv = ReportExportService.Customers(result);
+            fileName = "gamenet-customer-vip-report.csv";
+            break;
+        }
+        case "users-shift":
+        {
+            var result = await usersShiftReports.QueryAsync(
+                new UsersShiftReportQuery(from, to, userSearch, shiftState, page, pageSize, scopedId),
+                cancellationToken);
+            csv = ReportExportService.UsersShift(result);
+            fileName = "gamenet-users-shifts-report.csv";
+            break;
+        }
+        default:
+        {
+            var result = await auditLogs.QueryAsync(
+                new AuditLogQuery(from, to, @operator, action, entityName, search, page, pageSize, scopedId),
+                cancellationToken);
+            csv = ReportExportService.Audit(result);
+            fileName = "gamenet-audit-report.csv";
+            break;
+        }
+    }
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ReportExport",
+        EntityName = "Report",
+        EntityId = reportKey,
+        AppUserId = auth.User!.Id,
+        Details = $"خروجی گزارش {reportKey} · صفحه {page} · {pageSize} رکورد"
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
+    return Results.File(bytes, "text/csv; charset=utf-8", fileName);
+})
+.WithName("ExportReportCsv");
+
 app.MapGet("/api/audit", async (
     HttpContext context,
     GameNetDbContext database,
@@ -1636,11 +1774,12 @@ app.MapGet("/api/audit", async (
     int page = 1,
     int pageSize = 50) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
         context,
         database,
-        "audit.view",
-        cancellationToken);
+        "audit",
+        cancellationToken,
+        "audit.view");
     if (auth.Error is not null) return auth.Error;
 
     if (page < 1 || pageSize < 1 || pageSize > 200)
@@ -1653,7 +1792,16 @@ app.MapGet("/api/audit", async (
     }
 
     var result = await auditLogs.QueryAsync(
-        new AuditLogQuery(from, to, @operator, action, entityName, search, page, pageSize),
+        new AuditLogQuery(
+            from,
+            to,
+            @operator,
+            action,
+            entityName,
+            search,
+            page,
+            pageSize,
+            AuthorizationService.HasReportAllScope(auth.User!, "audit") ? null : auth.User!.Id),
         cancellationToken);
 
     return Results.Ok(result);

@@ -11,7 +11,8 @@ public sealed record SessionReportQuery(
     string? State,
     string? CustomerSearch,
     int Page = 1,
-    int PageSize = 50);
+    int PageSize = 50,
+    Guid? ScopedAppUserId = null);
 
 public sealed record SessionReportRowDto(
     Guid Id,
@@ -81,6 +82,9 @@ public sealed class SessionReportService
             .ToListAsync(cancellationToken);
 
         IEnumerable<Session> filtered = sessions;
+
+        if (query.ScopedAppUserId is { } scopedUserId)
+            filtered = filtered.Where(item => item.AppUserId == scopedUserId);
 
         if (query.From is { } from)
             filtered = filtered.Where(item => item.StartAt >= from);
