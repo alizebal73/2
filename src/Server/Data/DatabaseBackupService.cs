@@ -248,7 +248,7 @@ public sealed class DatabaseBackupService
 
         return Path.IsPathRooted(target)
             ? Path.GetFullPath(target)
-            : Path.GetFullPath(Path.Combine(_environment.ContentRootPath, target));
+            : Path.GetFullPath(Path.Combine(StoragePaths.ResolveDataRoot(_configuration, _environment), target));
     }
 
     private async Task<int> GetBackupKeepAsync(CancellationToken cancellationToken)
