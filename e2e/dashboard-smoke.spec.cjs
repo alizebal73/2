@@ -799,6 +799,7 @@ test('settings information architecture supports search and category navigation'
   const settingsNav = page.getByTestId('settings-category-nav');
   await expect(settingsNav).toBeVisible();
   await expect(page.getByLabel('جست‌وجوی تنظیمات')).toBeVisible();
+  await expect(page.getByTestId('settings-server-sync')).toContainText('متصل و قابل ذخیره روی Server');
   const saveServerButton = page.getByRole('button', { name: '💾 ذخیره روی سرور' });
   await expect(saveServerButton).toBeEnabled();
   await saveServerButton.click();
