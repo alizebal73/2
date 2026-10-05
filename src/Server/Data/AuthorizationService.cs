@@ -46,7 +46,8 @@ public static class AuthorizationService
             ["settings.manage"] = "مدیریت تنظیمات عملیاتی",
             ["backup.view"] = "مشاهده نسخه‌های پشتیبان",
             ["backup.manage"] = "ایجاد و مدیریت نسخه‌های پشتیبان",
-            ["backup.restore"] = "بازیابی نسخهٔ پشتیبان"
+            ["backup.restore"] = "بازیابی نسخهٔ پشتیبان",
+            ["station.manage"] = "مدیریت و راه‌اندازی ایستگاه‌ها"
         };
 
     public static async Task<AppUser?> ResolveUserAsync(
