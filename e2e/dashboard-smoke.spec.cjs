@@ -900,6 +900,9 @@ test('dashboard shows actionable Persian error UX', async ({ browser }) => {
 
 
 test('client experience consumes server-backed catalog and customer state', async ({ page }) => {
+  let launchCalls = 0;
+  let stopCalls = 0;
+
   await page.route('**/api/client/identity', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
@@ -961,6 +964,32 @@ test('client experience consumes server-backed catalog and customer state', asyn
       vipTier: 'Normal'
     })
   }));
+
+  await page.route('**/api/client/game/launch', async route => {
+    launchCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        commandId: 'command-launch-e2e-01',
+        status: 'Sent',
+        message: 'اجرای بازی برای Agent ارسال شد.'
+      })
+    });
+  });
+
+  await page.route('**/api/client/game/stop', async route => {
+    stopCalls += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        commandId: 'command-stop-e2e-01',
+        status: 'Sent',
+        message: 'توقف بازی برای Agent ارسال شد.'
+      })
+    });
+  });
 
   await page.route('**/api/customer-auth/state?*', route => route.fulfill({
     status: 200,
