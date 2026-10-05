@@ -188,7 +188,7 @@ test('dashboard exposes real Sessions and Stations report', async ({ page }) => 
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'گزارش‌ها' }).click();
-  await page.getByRole('button', { name: 'جلسات و ایستگاه‌ها' }).click();
+  await page.locator('.report-categories').getByRole('button', { name: 'جلسات و ایستگاه‌ها' }).click();
 
   await expect(page.getByTestId('session-report')).toBeVisible();
   await expect(page.getByTestId('session-report-row')).toHaveCount(2);
@@ -266,7 +266,7 @@ test('dashboard exposes real Customer and VIP report', async ({ page }) => {
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'گزارش‌ها' }).click();
-  await page.getByRole('button', { name: 'مشتری و VIP' }).click();
+  await page.locator('.report-categories').getByRole('button', { name: 'مشتری و VIP' }).click();
 
   await expect(page.getByTestId('customer-vip-report')).toBeVisible();
   await expect(page.getByTestId('customer-vip-row')).toHaveCount(1);
@@ -345,7 +345,7 @@ test('dashboard exposes real Users and Shift report', async ({ page }) => {
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'گزارش‌ها' }).click();
-  await page.getByRole('button', { name: 'کاربران و شیفت' }).click();
+  await page.locator('.report-categories').getByRole('button', { name: 'کاربران و شیفت' }).click();
 
   await expect(page.getByTestId('users-shift-report')).toBeVisible();
   await expect(page.getByTestId('users-shift-row')).toHaveCount(1);
