@@ -10,8 +10,7 @@ public sealed class StoragePathsTests
     public void ProductionWithoutExplicitRoot_UsesCommonApplicationData()
     {
         var configuration = new ConfigurationBuilder().Build();
-        var environment = new TestEnvironment("Production", Path.Combine(Path.GetTempPath(), "GameNetManagerTestContentRoot", Guid.NewGuid().ToString("N")));
-        Directory.CreateDirectory(environment.ContentRootPath);
+        var environment = new TestEnvironment("Production", AppContext.BaseDirectory);
         var root = GameNetManager.Server.Data.StoragePaths.ResolveDataRoot(configuration, environment);
 
         Assert.EndsWith(
@@ -31,8 +30,7 @@ public sealed class StoragePathsTests
                 ["Database:FileName"] = "App_Data/gamenet.production.db"
             })
             .Build();
-        var environment = new TestEnvironment("Production", Path.Combine(Path.GetTempPath(), "GameNetManagerTestContentRoot", Guid.NewGuid().ToString("N")));
-        Directory.CreateDirectory(environment.ContentRootPath);
+        var environment = new TestEnvironment("Production", AppContext.BaseDirectory);
 
         try
         {
@@ -51,7 +49,6 @@ public sealed class StoragePathsTests
         finally
         {
             try { Directory.Delete(root, recursive: true); } catch { }
-            try { Directory.Delete(environment.ContentRootPath, recursive: true); } catch { }
         }
     }
 
@@ -60,6 +57,6 @@ public sealed class StoragePathsTests
         public string EnvironmentName { get; set; } = environmentName;
         public string ApplicationName { get; set; } = "GameNetManager.Server.Tests";
         public string ContentRootPath { get; set; } = contentRoot;
-        public IFileProvider ContentRootFileProvider { get; set; } = new PhysicalFileProvider(contentRoot);
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }
