@@ -432,6 +432,26 @@ public sealed class Expense : BaseEntity
     public string? Description { get; set; }
 }
 
+public enum NotificationLevel
+{
+    Info,
+    Warning,
+    Critical
+}
+
+public sealed class Notification : BaseEntity
+{
+    public Guid? AppUserId { get; set; }
+    public required string Category { get; set; }
+    public required string Title { get; set; }
+    public required string Detail { get; set; }
+    public NotificationLevel Level { get; set; } = NotificationLevel.Info;
+    public string? EntityName { get; set; }
+    public string? EntityId { get; set; }
+    public bool IsRead { get; set; }
+    public DateTimeOffset? ReadAt { get; set; }
+}
+
 public sealed class AuditLog : BaseEntity
 {
     public Guid? AppUserId { get; set; }
