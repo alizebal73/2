@@ -51,7 +51,7 @@ main = 2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0
 
 ## Recovery Rule
 
-Resume from the certified `main` commit `72045d34a3ba9d561ddca488c61470daad27b3fc` and this checkpoint. Do not infer completion from chat history; use the exact HEAD and CI result.
+Resume from the certified `main` commit `2ee64bf42ca1dca0d81f2e051a8fcf0557a5d2a0` and this checkpoint. Do not infer completion from chat history; use the exact HEAD and CI result.
 
 ## Next checkpoint
 
