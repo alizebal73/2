@@ -63,12 +63,15 @@ public static class ClientExperienceEndpoints
             {
                 game.id,
                 game.name,
+                category = game.category,
                 game.version,
                 game.genre,
                 game.status,
                 game.cover,
                 game.trailer,
                 game.connectionType,
+                icon = game.icon,
+                description = game.description,
                 hasPoolAccount = poolGameIds.Contains(game.id)
             });
 
