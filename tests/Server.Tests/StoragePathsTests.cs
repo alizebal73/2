@@ -10,7 +10,9 @@ public sealed class StoragePathsTests
     public void ProductionWithoutExplicitRoot_UsesCommonApplicationData()
     {
         var configuration = new ConfigurationBuilder().Build();
-        var environment = new TestEnvironment("Production", @"C:\ProgramFiles\GameNetManager");
+        var contentRoot = Path.Combine(Path.GetTempPath(), "GameNetManagerTestContentRoot", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(contentRoot);
+        var environment = new TestEnvironment("Production", contentRoot);
 
         var root = GameNetManager.Server.Data.StoragePaths.ResolveDataRoot(configuration, environment);
 
@@ -31,7 +33,9 @@ public sealed class StoragePathsTests
                 ["Database:FileName"] = "App_Data/gamenet.production.db"
             })
             .Build();
-        var environment = new TestEnvironment("Production", @"C:\ProgramFiles\GameNetManager");
+        var contentRoot = Path.Combine(Path.GetTempPath(), "GameNetManagerTestContentRoot", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(contentRoot);
+        var environment = new TestEnvironment("Production", contentRoot);
 
         try
         {
@@ -50,6 +54,7 @@ public sealed class StoragePathsTests
         finally
         {
             try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(contentRoot, recursive: true); } catch { }
         }
     }
 
