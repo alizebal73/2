@@ -33,7 +33,10 @@ public sealed class ClientDeviceResolutionTests
         });
         await database.SaveChangesAsync();
 
-        var context = new DefaultHttpContext();
+        var context = new DefaultHttpContext
+        {
+            RequestServices = CreateDataProtectionServiceProvider()
+        };
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.111");
 
         var resolved = await ClientExperienceEndpoints.ResolveDeviceAsync(
@@ -68,7 +71,10 @@ public sealed class ClientDeviceResolutionTests
         });
         await database.SaveChangesAsync();
 
-        var context = new DefaultHttpContext();
+        var context = new DefaultHttpContext
+        {
+            RequestServices = CreateDataProtectionServiceProvider()
+        };
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.113");
 
         var resolved = await ClientExperienceEndpoints.ResolveRegisteredDeviceAsync(
@@ -161,6 +167,13 @@ public sealed class ClientDeviceResolutionTests
             CancellationToken.None);
 
         Assert.Null(resolved);
+    }
+
+    private static IServiceProvider CreateDataProtectionServiceProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddDataProtection();
+        return services.BuildServiceProvider();
     }
 
     private static GameNetDbContext CreateContext(Microsoft.Data.Sqlite.SqliteConnection connection)
