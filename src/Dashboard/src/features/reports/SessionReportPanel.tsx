@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { downloadReportCsv } from '../../services/reportExportService';
 import { getSessionReport, type SessionReportPage } from '../../services/sessionReportService';
 
 type Period = 'week' | 'month' | 'sixMonths' | 'year' | 'custom';
@@ -69,7 +70,7 @@ function exportCsv(report: SessionReportPage | null) {
   URL.revokeObjectURL(link.href);
 }
 
-export function SessionReportPanel({ period, range }: Props) {
+export function SessionReportPanel({ period, range, canExport }: Props & { canExport: boolean }) {
   const [station, setStation] = useState('');
   const [zone, setZone] = useState('');
   const [operator, setOperator] = useState('');
@@ -198,7 +199,7 @@ export function SessionReportPanel({ period, range }: Props) {
     </section>
 
     <div className="report-actions" style={{ margin: '0 22px 10px' }}>
-      <button type="button" className="btn" onClick={() => exportCsv(result)}>📤 خروجی جلسات</button>
+      <button type="button" className="btn" disabled={!canExport} title={!canExport ? 'دسترسی خروجی گزارش ندارید' : undefined} onClick={() => { if (!canExport) return; const current = windowFor(period, range); void downloadReportCsv('sessions', { from: new Date(current.start).toISOString(), to: new Date(current.end).toISOString(), station, zone, operator, state, customerSearch, page, pageSize: 50 }).catch(reason => setError(reason instanceof Error ? reason.message : 'خروجی گزارش جلسات انجام نشد')); }}>📤 خروجی جلسات</button>
       <span className="page-meta"><span>{count(result?.total ?? 0)} جلسه در بازه</span></span>
     </div>
 
