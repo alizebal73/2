@@ -9,6 +9,7 @@ public sealed record CustomerVipReportQuery(
     string? Vip,
     string? Debt,
     string? Package,
+    Guid? ScopedAppUserId = null,
     int Page = 1,
     int PageSize = 50);
 
@@ -118,6 +119,21 @@ public sealed class CustomerVipReportService
                 .ToListAsync(cancellationToken);
 
         var debtByCustomer = debts.ToDictionary(item => item.CustomerId, item => item.Amount);
+
+        if (query.ScopedAppUserId is { } scopedUserId)
+        {
+            var scopedCustomerIds = allSessions
+                .Where(item => false)
+                .Select(item => item.CustomerId)
+                .ToHashSet();
+            var scopedSessions = await _database.Sessions
+                .AsNoTracking()
+                .Where(item => item.AppUserId == scopedUserId && customerIds.Contains(item.CustomerId))
+                .Select(item => item.CustomerId)
+                .ToListAsync(cancellationToken);
+            scopedCustomerIds = scopedSessions.ToHashSet();
+            customers = customers.Where(item => scopedCustomerIds.Contains(item.Id)).ToList();
+        }
 
         var filtered = customers.Where(customer =>
         {
