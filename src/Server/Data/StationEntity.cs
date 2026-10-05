@@ -6,6 +6,7 @@ public sealed class Station : BaseEntity
     public required string Zone { get; set; }
     public string Type { get; set; } = string.Empty;
     public decimal RatePerHour { get; set; }
+    public int Network { get; set; } = 1;
     public StationState State { get; set; } = StationState.Available;
     public bool IsActive { get; set; } = true;
 

@@ -1613,6 +1613,9 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Network")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("RatePerHour")
                         .HasColumnType("TEXT");
 

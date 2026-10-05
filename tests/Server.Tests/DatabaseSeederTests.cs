@@ -56,6 +56,9 @@ public sealed class DatabaseSeederTests
             Assert.Equal(4, await database.Customers.CountAsync());
             Assert.Single(await database.Products.ToListAsync());
             Assert.Equal(61, await database.Stations.CountAsync());
+            Assert.Equal(20, await database.Stations.CountAsync(item => item.Type == "PC" && item.Network == 1));
+            Assert.Equal(20, await database.Stations.CountAsync(item => item.Type == "PC" && item.Network == 2));
+            Assert.Equal("PC-21", (await database.Stations.OrderBy(item => item.Name).SingleAsync(item => item.Name == "PC-21")).Name);
             Assert.Single(await database.Customers.Where(item => item.Code == "1050").ToListAsync());
         }
         finally

@@ -91,6 +91,57 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await expect(page.getByText('وضعیت مالی')).toBeVisible();
 });
 
+test('dashboard groups PCs by Internet 1/2 without changing station data', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-network-grouping',
+      fullName: 'مدیر شبکه',
+      userName: 'network_admin',
+      email: 'network@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['session.start', 'session.manage']
+    })
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      totalStations: 4,
+      generatedAt: new Date().toISOString(),
+      stations: [
+        { id: 'net-pc-01', name: 'PC ۰۱', zone: 'pc', type: 'PC', ratePerHour: 95000, state: 'free', network: 1 },
+        { id: 'net-pc-02', name: 'PC ۰۲', zone: 'pc', type: 'PC', ratePerHour: 95000, state: 'free', network: 2 },
+        { id: 'net-pc-03', name: 'PC ۰۳', zone: 'pc', type: 'PC', ratePerHour: 95000, state: 'busy', network: 1 },
+        { id: 'net-pc-04', name: 'PC ۰۴', zone: 'pc', type: 'PC', ratePerHour: 95000, state: 'free', network: 2 },
+      ]
+    })
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-station-id="net-pc-01"]').waitFor();
+
+  const groupBy = page.getByLabel('گروه‌بندی PC');
+  await expect(groupBy).toHaveValue('state');
+  await groupBy.selectOption('network');
+
+  await expect(page.locator('.pc-group-title', { hasText: 'اینترنت ۱' }).last()).toHaveText('اینترنت ۱ · 2');
+  await expect(page.locator('.pc-group-title', { hasText: 'اینترنت ۲' }).last()).toHaveText('اینترنت ۲ · 2');
+  await expect(page.locator('[data-station-id="net-pc-01"]')).toBeVisible();
+  await expect(page.locator('[data-station-id="net-pc-04"]')).toBeVisible();
+
+  await groupBy.selectOption('remaining');
+  await expect(page.locator('.pc-group-title').first()).toBeVisible();
+
+  await page.setViewportSize({ width: 520, height: 900 });
+  await expect(page.getByRole('button', { name: 'داشبورد' })).toBeVisible();
+  await expect(page.locator('[data-station-id="net-pc-01"]')).toBeVisible();
+});
+
 test('dashboard exposes real Sessions and Stations report', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
     status: 200,

@@ -41,8 +41,18 @@
 - Harden dense dashboard layouts for the real operator viewport.
 - Add Browser Smoke for grouping/filter combinations and responsive critical paths.
 
+### 14.2 implementation status — IN PROGRESS
+
+- ✅ `Station.Network` is now persisted server-side with EF migration and model snapshot.
+- ✅ Dashboard `GET /api/dashboard` returns the authoritative Station.Network value.
+- ✅ Demo seed distributes PC-01..20 to Internet 1 and PC-21..40 to Internet 2.
+- ✅ Dashboard grouping renders explicit Persian labels for Internet 1 / Internet 2.
+- ✅ Browser Smoke covers grouping/filter switching and a 520px dense viewport.
+- ✅ Responsive hardening collapses the dashboard workspace and protects dense station cards on narrow viewports.
+
 ### Not Done
 
+- Exact-head CI certification for 14.2.
 - Server-backed Settings
 - Physical 2–3 PC validation
 - Real Backup/Restore
@@ -50,7 +60,7 @@
 
 ## Recovery Rule
 
-Resume from `main` at certified merge commit `4bc6cd4484647eb6eb029aef53c947149f9e1da9`. Do not infer completion from chat history.
+Resume Stage 14.2 from branch `stage14-2-dashboard-network` and use the exact HEAD reported by CI. Do not infer completion from chat history.
 
 ## Next
 
