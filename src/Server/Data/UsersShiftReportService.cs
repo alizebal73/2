@@ -79,11 +79,13 @@ public sealed class UsersShiftReportService
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        var shifts = await _database.Shifts
-            .AsNoTracking()
-            .Where(item => !query.From.HasValue || item.OpenAt >= query.From.Value)
-            .Where(item => !query.To.HasValue || item.OpenAt <= query.To.Value)
-            .ToListAsync(cancellationToken);
+        var shiftsQuery = _database.Shifts.AsNoTracking();
+        if (query.From is { } from)
+            shiftsQuery = shiftsQuery.Where(item => item.OpenAt >= from);
+        if (query.To is { } to)
+            shiftsQuery = shiftsQuery.Where(item => item.OpenAt <= to);
+
+        var shifts = await shiftsQuery.ToListAsync(cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(query.ShiftState))
         {
@@ -101,12 +103,16 @@ public sealed class UsersShiftReportService
                 .Select(item => new { item.ShiftId, item.Amount })
                 .ToListAsync(cancellationToken);
 
-        var payments = await _database.InvoicePayments
+        var paymentsQuery = _database.InvoicePayments
             .AsNoTracking()
             .Where(item => item.Invoice.Status == InvoiceStatus.Paid
-                && item.Invoice.PaidAt != null
-                && (!query.From.HasValue || item.Invoice.PaidAt >= query.From.Value)
-                && (!query.To.HasValue || item.Invoice.PaidAt <= query.To.Value))
+                && item.Invoice.PaidAt != null);
+        if (query.From is { } paymentFrom)
+            paymentsQuery = paymentsQuery.Where(item => item.Invoice.PaidAt >= paymentFrom);
+        if (query.To is { } paymentTo)
+            paymentsQuery = paymentsQuery.Where(item => item.Invoice.PaidAt <= paymentTo);
+
+        var payments = await paymentsQuery
             .Select(item => new
             {
                 item.Method,
@@ -115,11 +121,15 @@ public sealed class UsersShiftReportService
             })
             .ToListAsync(cancellationToken);
 
-        var sessions = await _database.Sessions
+        var sessionsQuery = _database.Sessions
             .AsNoTracking()
-            .Where(item => item.AppUserId.HasValue)
-            .Where(item => !query.From.HasValue || item.StartAt >= query.From.Value)
-            .Where(item => !query.To.HasValue || item.StartAt <= query.To.Value)
+            .Where(item => item.AppUserId.HasValue);
+        if (query.From is { } sessionFrom)
+            sessionsQuery = sessionsQuery.Where(item => item.StartAt >= sessionFrom);
+        if (query.To is { } sessionTo)
+            sessionsQuery = sessionsQuery.Where(item => item.StartAt <= sessionTo);
+
+        var sessions = await sessionsQuery
             .Select(item => new
             {
                 AppUserId = item.AppUserId!.Value,
@@ -128,14 +138,18 @@ public sealed class UsersShiftReportService
             .ToListAsync(cancellationToken);
 
         var userIds = users.Select(item => item.Id).ToList();
+        var payrollQuery = _database.PayrollLedgerEntries
+            .AsNoTracking()
+            .Where(item => userIds.Contains(item.EmployeeProfile.AppUserId)
+                && item.Status == ApprovalStatus.Approved);
+        if (query.From is { } payrollFrom)
+            payrollQuery = payrollQuery.Where(item => item.CreatedAt >= payrollFrom);
+        if (query.To is { } payrollTo)
+            payrollQuery = payrollQuery.Where(item => item.CreatedAt <= payrollTo);
+
         var payrollRows = userIds.Count == 0
-            ? []
-            : await _database.PayrollLedgerEntries
-                .AsNoTracking()
-                .Where(item => userIds.Contains(item.EmployeeProfile.AppUserId)
-                    && item.Status == ApprovalStatus.Approved
-                    && (!query.From.HasValue || item.CreatedAt >= query.From.Value)
-                    && (!query.To.HasValue || item.CreatedAt <= query.To.Value))
+            ? new List<PayrollLedgerEntry>()
+            : await payrollQuery
                 .Include(item => item.EmployeeProfile)
                 .ToListAsync(cancellationToken);
 
