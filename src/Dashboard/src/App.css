@@ -19,6 +19,46 @@
   box-sizing: border-box;
 }
 
+:focus-visible {
+  scroll-margin-block: 10px;
+}
+
+.skip-link {
+  position: fixed;
+  inset-inline-start: 12px;
+  top: 8px;
+  z-index: 120;
+  transform: translateY(-180%);
+  border: 1px solid var(--green);
+  background: #0b1526;
+  color: var(--txt);
+  padding: 9px 14px;
+  border-radius: 9px;
+  text-decoration: none;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+main.page-shell:focus {
+  outline: 2px solid rgba(34, 229, 138, 0.45);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 html, body, #root {
   margin: 0;
   min-height: 100%;

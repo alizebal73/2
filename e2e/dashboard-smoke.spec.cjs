@@ -91,6 +91,70 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await expect(page.getByText('وضعیت مالی')).toBeVisible();
 });
 
+test('dashboard exposes accessible navigation, notifications and stale-state semantics', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-accessibility',
+      fullName: 'مدیر دسترسی',
+      userName: 'accessibility_admin',
+      email: 'accessibility@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['user.manage']
+    })
+  }));
+
+  let dashboardCalls = 0;
+  await page.route('**/api/dashboard', route => {
+    dashboardCalls += 1;
+    if (dashboardCalls < 2) {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          totalStations: 0,
+          generatedAt: new Date(Date.now() - 120000).toISOString(),
+          stations: []
+        })
+      });
+    }
+    return route.fulfill({ status: 500, contentType: 'application/json', body: '{}' });
+  });
+  await page.route('**/api/notifications?*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ items: [], unreadCount: 0 })
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'داشبورد' }).waitFor();
+
+  const skipLink = page.getByRole('link', { name: 'پرش به محتوای اصلی' });
+  await page.keyboard.press('Tab');
+  await expect(skipLink).toBeFocused();
+  await skipLink.press('Enter');
+  await expect(page.locator('#main-content')).toBeFocused();
+
+  await expect(page.getByRole('button', { name: 'داشبورد' })).toHaveAttribute('aria-current', 'page');
+
+  const bell = page.getByRole('button', { name: /اعلان‌ها/ });
+  await expect(bell).toHaveAttribute('aria-expanded', 'false');
+  await bell.click();
+  await expect(bell).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('region', { name: 'مرکز اعلان‌ها' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(bell).toHaveAttribute('aria-expanded', 'false');
+
+  await page.getByRole('button', { name: 'تلاش مجدد برای دریافت اطلاعات از سرور' }).click();
+  await expect(page.locator('.status-chip').filter({ hasText: 'API قطع' })).toBeVisible();
+  await expect(page.getByText(/آخرین وضعیت معتبر/)).toBeVisible();
+  await expect(page.getByText('دادهٔ زنده در دسترس نیست')).toBeVisible();
+});
+
 test('dashboard groups PCs by Internet 1/2 without changing station data', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
     status: 200,
