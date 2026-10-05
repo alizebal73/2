@@ -74,6 +74,72 @@ public sealed class AuthorizationTests : IDisposable
     }
 
     [Fact]
+    public async Task NotificationReadFlowUpdatesOnlyTheAuthenticatedUser()
+    {
+        await using var connection = new Microsoft.Data.Sqlite.SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var database = new GameNetDbContext(options);
+        await database.Database.EnsureCreatedAsync();
+
+        var firstUser = new AppUser
+        {
+            FullName = "اعلان اول",
+            UserName = "notify-first",
+            Email = "notify-first@test.local",
+            PasswordHash = "hash",
+            Role = "Operator"
+        };
+        var secondUser = new AppUser
+        {
+            FullName = "اعلان دوم",
+            UserName = "notify-second",
+            Email = "notify-second@test.local",
+            PasswordHash = "hash",
+            Role = "Operator"
+        };
+        database.AppUsers.AddRange(firstUser, secondUser);
+        await database.SaveChangesAsync();
+
+        database.Notifications.AddRange(
+            new Notification
+            {
+                AppUserId = firstUser.Id,
+                Category = "test",
+                Title = "اعلان تست",
+                Detail = "جزئیات تست",
+                Level = NotificationLevel.Warning
+            },
+            new Notification
+            {
+                AppUserId = secondUser.Id,
+                Category = "test",
+                Title = "اعلان دیگر",
+                Detail = "نباید دیده شود",
+                Level = NotificationLevel.Info
+            });
+        await database.SaveChangesAsync();
+
+        var unread = await database.Notifications.CountAsync(
+            item => item.AppUserId == firstUser.Id && !item.IsRead);
+        Assert.Equal(1, unread);
+
+        var target = await database.Notifications.SingleAsync(item => item.AppUserId == firstUser.Id);
+        target.IsRead = true;
+        target.ReadAt = DateTimeOffset.UtcNow;
+        await database.SaveChangesAsync();
+
+        Assert.True(await database.Notifications.AnyAsync(
+            item => item.Id == target.Id && item.AppUserId == firstUser.Id && item.IsRead && item.ReadAt != null));
+        Assert.True(await database.Notifications.AnyAsync(
+            item => item.AppUserId == secondUser.Id && !item.IsRead));
+    }
+
+    [Fact]
     public void ReportScopeDefaultsToOwnAndExplicitAllGrantsGlobalReportScope()
     {
         var operatorUser = new AppUser
