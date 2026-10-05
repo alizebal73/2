@@ -4,7 +4,6 @@ import { authenticateCustomer, readCustomerState, releaseCustomerLogin } from '.
 import { getClientCatalog, type ClientCatalogBuffetItem, type ClientCatalogGame } from '../../services/clientCatalogService';
 import { getClientIdentity } from '../../services/clientIdentityService';
 
-type Game = { id: string; name: string; category: string; icon: string; requiresAccount: boolean; description: string };
 type ContextMenu = { x: number; y: number } | null;
 type Panel = 'apps' | 'buffet' | 'account' | 'operator' | null;
 type ViewMode = 'card' | 'compact' | 'list';
@@ -58,7 +57,7 @@ export function ClientExperience() {
   const [deviceId, setDeviceId] = useState(browserClientKey);
   const [clientIdentityReady, setClientIdentityReady] = useState(false);
   const [wallet, setWallet] = useState(0);
-  const [remainingSeconds, setRemainingSeconds] = useState(3 * 3600 + 45 * 60 + 12);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [view, setView] = useState<ViewMode>('card');
   const [zoom, setZoom] = useState(100);
