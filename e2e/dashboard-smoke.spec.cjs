@@ -1026,7 +1026,7 @@ test('client experience consumes server-backed catalog and customer state', asyn
   await expect(page.getByText('Counter-Strike 2')).toBeVisible();
 
   await page.getByRole('button', { name: /Counter-Strike 2/ }).click();
-  await expect(page.getByText('در حال اجرا')).toBeVisible();
+  await expect(page.locator('.client-running-badge').filter({ hasText: 'در حال اجرا' }).first()).toBeVisible();
   await expect.poll(() => launchCalls).toBe(1);
 
   await page.getByRole('button', { name: '■ توقف بازی' }).click();
