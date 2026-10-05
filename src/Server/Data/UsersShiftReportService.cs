@@ -7,9 +7,9 @@ public sealed record UsersShiftReportQuery(
     DateTimeOffset? To,
     string? UserSearch,
     string? ShiftState,
-    Guid? ScopedAppUserId = null,
     int Page = 1,
-    int PageSize = 50);
+    int PageSize = 50,
+    Guid? ScopedAppUserId = null);
 
 public sealed record UsersShiftReportRowDto(
     Guid UserId,
