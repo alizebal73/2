@@ -19,32 +19,19 @@ public sealed class ProductionSecretValidatorTests
     }
 
     [Fact]
-    public void Production_RejectsMissingAdminPassword()
+    public void Production_RejectsMissingRegistrationToken()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Agent:RegistrationToken"] = "1234567890123456"
-            })
-            .Build();
+        var configuration = new ConfigurationBuilder().Build();
         var environment = new TestEnvironment("Production");
-        var old = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD");
 
-        try
-        {
-            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", null);
-            var exception = Assert.Throws<InvalidOperationException>(() =>
-                GameNetManager.Server.Data.ProductionSecretValidator.Validate(configuration, environment));
-            Assert.Contains("GAMENET_ADMIN_PASSWORD", exception.Message, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", old);
-        }
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            GameNetManager.Server.Data.ProductionSecretValidator.Validate(configuration, environment));
+
+        Assert.Contains("Agent:RegistrationToken", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Production_RejectsShortAgentToken()
+    public void Production_RejectsShortRegistrationToken()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -53,23 +40,15 @@ public sealed class ProductionSecretValidatorTests
             })
             .Build();
         var environment = new TestEnvironment("Production");
-        var old = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD");
 
-        try
-        {
-            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", "strong-test-password");
-            var exception = Assert.Throws<InvalidOperationException>(() =>
-                GameNetManager.Server.Data.ProductionSecretValidator.Validate(configuration, environment));
-            Assert.Contains("Agent:RegistrationToken", exception.Message, StringComparison.Ordinal);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", old);
-        }
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            GameNetManager.Server.Data.ProductionSecretValidator.Validate(configuration, environment));
+
+        Assert.Contains("Agent:RegistrationToken", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Production_AcceptsConfiguredSecrets()
+    public void Production_AllowsStartupWithRegistrationTokenAfterBootstrapPasswordWasConsumed()
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -78,19 +57,11 @@ public sealed class ProductionSecretValidatorTests
             })
             .Build();
         var environment = new TestEnvironment("Production");
-        var old = Environment.GetEnvironmentVariable("GAMENET_ADMIN_PASSWORD");
 
-        try
-        {
-            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", "strong-test-password");
-            var exception = Record.Exception(() =>
-                GameNetManager.Server.Data.ProductionSecretValidator.Validate(configuration, environment));
-            Assert.Null(exception);
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("GAMENET_ADMIN_PASSWORD", old);
-        }
+        var exception = Record.Exception(() =>
+            GameNetManager.Server.Data.ProductionSecretValidator.Validate(configuration, environment));
+
+        Assert.Null(exception);
     }
 
     private sealed class TestEnvironment(string environmentName) : IHostEnvironment
