@@ -259,6 +259,14 @@
 > Stage 14.6 فقط با شواهد واقعی محیط فروشگاه PASS می‌شود؛ CI جای این Gate را نمی‌گیرد.
 
 
+### Finding فعلی قبل از PASS
+
+- ⚠️ **Client Experience هنوز کاملاً Server/Agent-backed نیست.**
+- Login/Identity/Customer State به Server متصل‌اند، اما برخی رفتارها در `src/Dashboard/src/features/client/ClientExperience.tsx` هنوز UI-local هستند؛ از جمله فهرست بازی‌ها/بوفهٔ hard-coded و رفتارهای launch/stop/lock/message/charge که فقط state/notification محلی را تغییر می‌دهند.
+- بنابراین این موارد نباید در Validation فیزیکی به‌عنوان قابلیت واقعی PASS ثبت شوند.
+- ⏩ تست فیزیکی هستهٔ Agent/Session همچنان قابل اجراست، اما **Certification نهایی Stage 14.6** تا تعیین تکلیف این Mock/Local behaviors باز نمی‌گردد.
+- Agent دارای Test Session Flow واقعی است و می‌تواند برای Validation فیزیکی instrumented استفاده شود: `GAMENET_AGENT_TEST_SESSION_FLOW=1` به‌همراه `GAMENET_AGENT_TEST_CUSTOMER_ID` و `GAMENET_AGENT_TEST_LOGIN_ID`؛ در صورت نیاز `GAMENET_AGENT_TEST_GAME_ACCOUNT_FLOW=1` و `GAMENET_AGENT_TEST_GAME_ID` نیز قابل استفاده است.
+
 ## آخرین وضعیت اجرایی — Stage 13.5 / 2026-10-05
 
 این بخش مرجع اجرایی فعلی و بر وضعیت تاریخی مراحل قبلی غالب است.
