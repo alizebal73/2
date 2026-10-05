@@ -116,6 +116,7 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Pending Restore applied during Server startup before EF Migration, with a pre-restore safety archive.
 - ✅ Settings UI connected to manual backup, Verify and Restore preparation.
 - ✅ Unit coverage for Create/Verify/Prepare/Apply restore.
+- ✅ CI Smoke also exercises a real Server restart and verifies Pending Restore reverts a post-backup settings change.
 
 ### Gates
 
