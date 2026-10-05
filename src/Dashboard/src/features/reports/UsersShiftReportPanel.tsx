@@ -121,7 +121,7 @@ export function UsersShiftReportPanel({ period, range }: Props) {
         ['شیفت‌ها', result?.summary.shiftCount ?? 0, 'purple'],
         ['فروش شیفت', money(result?.summary.shiftRevenue ?? 0) + ' تومان', 'orange'],
         ['هزینه شیفت', money(result?.summary.shiftExpenses ?? 0) + ' تومان', 'red'],
-        ['اختلاف ثبت‌شده', money(result?.summary.shiftDifference ?? 0) + ' تومان', 'blue'],
+        ['اختلاف محاسباتی', money(result?.summary.shiftDifference ?? 0) + ' تومان', 'blue'],
       ].map(item => (
         <div className="summary-card" key={String(item[0])}>
           <div className="label">{item[0]}</div>
