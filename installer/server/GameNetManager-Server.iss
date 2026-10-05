@@ -67,14 +67,21 @@ begin
     if not IsValidSecret(RegistrationTokenPage.Values[0], 16) then begin MsgBox('توکن Agent باید حداقل 16 کاراکتر باشد.', mbError, MB_OK); Result := False; end;
 end;
 
-procedure ConfigureMachineEnvironment;
+procedure ConfigureServiceEnvironment(IncludeBootstrapPassword: Boolean);
 var
   Key: String;
+  Data: String;
 begin
-  Key := 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment';
-  if not RegWriteStringValue(HKLM, Key, 'GAMENET_ADMIN_PASSWORD', AdminPasswordPage.Values[0]) then RaiseException('ثبت GAMENET_ADMIN_PASSWORD شکست خورد.');
-  if not RegWriteStringValue(HKLM, Key, 'Agent__RegistrationToken', RegistrationTokenPage.Values[0]) then RaiseException('ثبت Agent registration token شکست خورد.');
-  if not RegWriteStringValue(HKLM, Key, 'GAMENET_DATA_ROOT', DataRootPage.Values[0]) then RaiseException('ثبت GAMENET_DATA_ROOT شکست خورد.');
+  Key := 'SYSTEM\CurrentControlSet\Services\GameNet Manager Server';
+  Data :=
+    'Agent__RegistrationToken=' + RegistrationTokenPage.Values[0] + #0 +
+    'GAMENET_DATA_ROOT=' + DataRootPage.Values[0] + #0;
+
+  if IncludeBootstrapPassword then
+    Data := Data + 'GAMENET_ADMIN_PASSWORD=' + AdminPasswordPage.Values[0] + #0;
+
+  if not RegWriteMultiStringValue(HKLM, Key, 'Environment', Data) then
+    RaiseException('ثبت Environment اختصاصی Windows Service شکست خورد.');
 end;
 
 procedure GrantDataRootAccess;
@@ -130,17 +137,14 @@ end;
 
 procedure RemoveBootstrapAdminPassword;
 begin
-  RegDeleteValue(
-    HKLM,
-    'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
-    'GAMENET_ADMIN_PASSWORD');
+  ConfigureServiceEnvironment(False);
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
     ForceDirectories(DataRootPage.Values[0]);
-    ConfigureMachineEnvironment;
+    ConfigureServiceEnvironment(True);
     GrantDataRootAccess;
     ConfigureFirewall;
     RegisterServerService;
@@ -157,8 +161,6 @@ begin
     Exec(ExpandConstant('{sys}\sc.exe'), 'stop "GameNet Manager Server"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(ExpandConstant('{sys}\sc.exe'), 'delete "GameNet Manager Server"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
     Exec(ExpandConstant('{sys}\netsh.exe'), 'advfirewall firewall delete rule name="GameNet Manager Server (TCP 5080)"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    RegDeleteValue(HKLM, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'GAMENET_ADMIN_PASSWORD');
-    RegDeleteValue(HKLM, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'Agent__RegistrationToken');
-    RegDeleteValue(HKLM, 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'GAMENET_DATA_ROOT');
+    RegDeleteValue(HKLM, 'SYSTEM\CurrentControlSet\Services\GameNet Manager Server', 'Environment');
   end;
 end;
