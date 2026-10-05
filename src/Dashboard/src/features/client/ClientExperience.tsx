@@ -244,12 +244,27 @@ export function ClientExperience() {
     notify(guest ? 'ورود مهمان انجام شد' : 'ورود مشتری از سرور تأیید شد');
   }
 
+  async function logoutCustomer() {
+    if (customerId && loginId) {
+      try {
+        await logoutAndLockClient(customerId, loginId);
+        signOut(true);
+      } catch (error) {
+        notify(error instanceof Error ? error.message : 'خروج مشتری انجام نشد.');
+      }
+    } else {
+      signOut();
+    }
+  }
+
   function signOut(skipServerRelease = false) {
     if (!skipServerRelease && customerId) {
       void releaseCustomerLogin(customerId, deviceId).catch(() => undefined);
     }
     setLoggedIn(false);
     setActiveGame(null);
+    setSessionId(null);
+    setFreeMoney(0);
     setLocked(false);
     setPanel(null);
     setCustomerCode('');
@@ -263,41 +278,109 @@ export function ClientExperience() {
     notify('جلسه مشتری بسته شد و ورود سروری آزاد شد');
   }
 
-  function askMessage() {
+  async function askMessage() {
+    if (!customerId || !loginId) {
+      notify('برای ارسال پیام ابتدا وارد حساب مشتری شوید.');
+      return;
+    }
     const message = window.prompt('پیام برای اپراتور');
-    if (message?.trim()) notify('پیام برای اپراتور ارسال شد');
+    if (!message?.trim()) return;
+    try {
+      await createClientRequest({ customerId, loginId, kind: 'message', message: message.trim() });
+      notify('پیام برای اپراتور ارسال شد.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'ارسال پیام انجام نشد.');
+    }
+  }
+
+  async function requestOperator(kind: 'charge' | 'move' | 'unlock') {
+    if (!customerId || !loginId) {
+      notify('برای ثبت درخواست ابتدا وارد حساب مشتری شوید.');
+      return;
+    }
+    try {
+      await createClientRequest({ customerId, loginId, kind });
+      notify('درخواست برای اپراتور ارسال شد.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'ثبت درخواست انجام نشد.');
+    }
+  }
+
+  async function requestBuffet(productId: string) {
+    if (!customerId || !loginId) {
+      notify('برای درخواست بوفه ابتدا وارد حساب مشتری شوید.');
+      return;
+    }
+    try {
+      await createClientRequest({ customerId, loginId, kind: 'buffet', productId, quantity: 1 });
+      notify('درخواست بوفه برای اپراتور ارسال شد.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'ثبت درخواست بوفه انجام نشد.');
+    }
   }
 
   function runCommand(key: string) {
     setPaletteOpen(false);
-    if (key === 'apps') { setPanel('apps'); setDockHoverPanel('apps'); }
-    else if (key === 'buffet') setPanel('buffet');
+    if (key === 'buffet') setPanel('buffet');
     else if (key === 'account') setPanel('account');
-    else if (key === 'my-games') { setMyGamesOnly(true); notify('بازی‌های اخیراً اجراشده نمایش داده شدند'); }
-    else if (key === 'tournaments') notify('مسابقات دمو: جام CS2 · ثبت‌نام از صندوق');
-    else if (key === 'charge') notify('درخواست شارژ برای اپراتور ارسال شد');
-    else if (key === 'message') askMessage();
-    else if (key === 'advertisement') { setAdVisible(value => !value); notify('وضعیت تبلیغ تغییر کرد'); }
+    else if (key === 'charge') void requestOperator('charge');
+    else if (key === 'message') void askMessage();
+    else if (key === 'advertisement') setAdVisible(value => !value);
   }
 
-  function launchGame(game: Game, accountMode?: 'own' | 'pool') {
-    if (game.hasPoolAccount && !accountMode) { setAccountGame(game); return; }
-    setAccountGame(null); setActiveGame(game.id); setMyGamesOnly(false);
-    notify(accountMode === 'pool' ? `اکانت GameNet برای ${game.name} تخصیص یافت` : `${game.name} اجرا شد`);
+  async function launchGame(game: Game) {
+    if (!customerId || !loginId || !sessionId) {
+      notify('برای اجرای بازی ابتدا باید یک Session فعال روی همین رایانه داشته باشید.');
+      return;
+    }
+    try {
+      await launchClientGame({ customerId, loginId, sessionId, gameId: game.id });
+      setActiveGame(game.id);
+      notify(game.name + ' برای Agent ارسال شد و در حال اجراست.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'اجرای بازی انجام نشد.');
+    }
   }
 
-  function doContextAction(action: string) {
+  async function stopGame(gameId: string) {
+    if (!customerId || !loginId || !sessionId) {
+      notify('Session فعال برای توقف بازی پیدا نشد.');
+      return;
+    }
+    try {
+      await stopClientGame({ customerId, loginId, sessionId, gameId });
+      setActiveGame(null);
+      notify('فرمان توقف بازی برای Client ارسال شد.');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : 'توقف بازی انجام نشد.');
+    }
+  }
+
+  async function doContextAction(action: string) {
     setContext(null);
-    if (action === 'move') notify('درخواست جابه‌جایی شناسه به اپراتور ارسال شد');
+    if (action === 'move') await requestOperator('move');
     else if (action === 'login') {
-      if (loggedIn) signOut();
+      if (loggedIn) await logoutCustomer();
       else document.getElementById('client-login-id')?.focus();
     }
-    else if (action === 'charge') notify('درخواست شارژ برای اپراتور ارسال شد');
-    else if (action === 'message') askMessage();
-    else if (action === 'lock') { setLocked(true); setActiveGame(null); notify('سیستم قفل شد'); }
-    else if (action === 'logout') signOut();
-    else if (action === 'stop-game') { setActiveGame(null); notify('بازی متوقف شد و اکانت آزاد شد'); }
+    else if (action === 'charge') await requestOperator('charge');
+    else if (action === 'message') await askMessage();
+    else if (action === 'lock') {
+      if (!customerId || !loginId) {
+        notify('برای قفل کردن، ابتدا وارد حساب مشتری شوید.');
+        return;
+      }
+      try {
+        await lockClient(customerId, loginId);
+        setLocked(true);
+        setActiveGame(null);
+        notify('فرمان قفل برای Agent ارسال شد.');
+      } catch (error) {
+        notify(error instanceof Error ? error.message : 'قفل کردن سیستم انجام نشد.');
+      }
+    }
+    else if (action === 'logout') await logoutCustomer();
+    else if (action === 'stop-game' && activeGame) await stopGame(activeGame);
   }
 
   const hours = Math.floor(remainingSeconds / 3600);
