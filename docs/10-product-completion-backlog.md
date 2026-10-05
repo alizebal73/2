@@ -238,10 +238,25 @@
 - ✅ همهٔ Gateهای CI روی Main سبز شدند.
 
 ### مرز بعدی
-- ⬜ Validation فیزیکی 2–3 PC
+- 🟡 Stage 14.6 — Validation فیزیکی 2–3 PC
 - ⬜ rollout کنترل‌شدهٔ 40+ PC
 
-> Stage 14.5 از نظر مهندسی نرم‌افزار **DONE** است؛ Gateهای بعدی آن Validation فیزیکی 2–3 PC و سپس rollout کنترل‌شدهٔ 40+ PC هستند.
+> Stage 14.5 از نظر مهندسی نرم‌افزار **DONE** است؛ Gate بعدی Stage 14.6، اجرای واقعی روی 2–3 PC است.
+
+### Stage 14.6 — Validation فیزیکی 2–3 PC
+
+**🟡 IN PROGRESS — پروتکل آماده، اجرای فیزیکی هنوز انجام نشده**
+
+- ✅ پروتکل رسمی تست در `docs/20-physical-validation-2-3pc-2026-10-05.md` ثبت شد.
+- ✅ مسیر حداقل شامل Registration → Online → Lock/Unlock → Customer Login → Session Start → Timer → Disconnect → Recovery → Reconnect → Session End → Release است.
+- ✅ هم‌زمانی حداقل دو PC و جلوگیری از cross-device ownership در Gate تعریف شد.
+- ✅ Agent identity persistence بعد از restart و Safe Offline/Recovery در Gate تعریف شد.
+- ✅ شواهد لازم برای Client / Server / Dashboard / Audit / Notification مشخص شد.
+- ⬜ اجرای واقعی روی PC-01 و PC-02
+- ⬜ اجرای اختیاری PC-03
+- ⬜ PASS نهایی Stage 14.6
+
+> Stage 14.6 فقط با شواهد واقعی محیط فروشگاه PASS می‌شود؛ CI جای این Gate را نمی‌گیرد.
 
 
 ## آخرین وضعیت اجرایی — Stage 13.5 / 2026-10-05
