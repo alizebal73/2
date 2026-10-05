@@ -15,6 +15,7 @@ import { ClientShellPage } from './pages/ClientShellPage';
 import { ClientExperience } from './features/client/ClientExperience';
 import { GlobalCommandCenter } from './features/search/GlobalCommandCenter';
 import { OperationsPage } from './pages/OperationsPage';
+import { StationsPage } from './pages/StationsPage';
 import { UserErrorBanner } from './components/UserErrorBanner';
 import { LoginPage } from './pages/LoginPage';
 import { getCurrentUser, logout, hasPermission } from './services/authService';
@@ -59,6 +60,7 @@ const pagePermissions: Partial<Record<PageKey, string[]>> = {
   reports: ['finance.view', 'audit.view'],
   users: ['user.manage', 'shift.manage', 'payroll.view', 'payroll.manage', 'approval.decide'],
   settings: ['user.manage'],
+  stations: ['station.manage'],
 };
 
 function canOpenPage(user: AppUserRecord, page: PageKey): boolean {
@@ -411,6 +413,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
         <div hidden={activePage !== 'users'}><UsersPage user={user} /></div>
         <div hidden={activePage !== 'settings'}><SettingsPage /></div>
         <div hidden={activePage !== 'operations'}><OperationsPage /></div>
+        <div hidden={activePage !== 'stations'}><StationsPage /></div>
       </main>
 
       <GlobalCommandCenter open={commandOpen} stations={dashboardSnapshot?.stations ?? []} onNavigate={requestNavigation} onClose={() => setCommandOpen(false)} />
