@@ -1462,17 +1462,17 @@ jobs:
             $soldProduct = @($inventoryAfterSale | Where-Object { $_.id -eq $inventoryProduct.id })[0]
             if ([int]$soldProduct.stock -ne 2 -or -not $soldProduct.lowStock) { throw 'Buffet sale did not reduce server stock or low-stock state correctly.' }
 
-  $notificationInbox = Invoke-RestMethod -Uri "$baseUrl/api/notifications?take=20" -Method Get -WebSession $adminSession
-  $lowStockNotification = @($notificationInbox.items | Where-Object { $_.category -eq 'buffet.low-stock' -and $_.entityId -eq $inventoryProduct.id }) | Select-Object -First 1
-  if (-not $lowStockNotification -or [int]$notificationInbox.unreadCount -lt 1) {
-    throw 'Stage 13.5 notification queue did not persist the real buffet low-stock event.'
-  }
-  Invoke-RestMethod -Uri "$baseUrl/api/notifications/$($lowStockNotification.id)/read" -Method Post -WebSession $adminSession | Out-Null
-  $notificationAfterRead = Invoke-RestMethod -Uri "$baseUrl/api/notifications?take=20" -Method Get -WebSession $adminSession
-  if (@($notificationAfterRead.items | Where-Object { $_.id -eq $lowStockNotification.id -and -not $_.isRead }).Count -ne 0) {
-    throw 'Stage 13.5 notification read-state did not persist.'
-  }
-  Write-Host 'Stage 13.5 durable notification queue smoke passed: low-stock persisted and read-state updated.'
+            $notificationInbox = Invoke-RestMethod -Uri "$baseUrl/api/notifications?take=20" -Method Get -WebSession $adminSession
+            $lowStockNotification = @($notificationInbox.items | Where-Object { $_.category -eq 'buffet.low-stock' -and $_.entityId -eq $inventoryProduct.id }) | Select-Object -First 1
+            if (-not $lowStockNotification -or [int]$notificationInbox.unreadCount -lt 1) {
+              throw 'Stage 13.5 notification queue did not persist the real buffet low-stock event.'
+            }
+            Invoke-RestMethod -Uri "$baseUrl/api/notifications/$($lowStockNotification.id)/read" -Method Post -WebSession $adminSession | Out-Null
+            $notificationAfterRead = Invoke-RestMethod -Uri "$baseUrl/api/notifications?take=20" -Method Get -WebSession $adminSession
+            if (@($notificationAfterRead.items | Where-Object { $_.id -eq $lowStockNotification.id -and -not $_.isRead }).Count -ne 0) {
+              throw 'Stage 13.5 notification read-state did not persist.'
+            }
+            Write-Host 'Stage 13.5 durable notification queue smoke passed: low-stock persisted and read-state updated.'
 
             try {
               Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
