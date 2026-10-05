@@ -237,7 +237,7 @@ export function ClientExperience() {
 
     setLoginError('');
     setLoggedIn(true);
-    setLocked(false);
+    setLocked(guest ? false : result.isLocked);
     setPanel(null);
     setRemainingSeconds(0);
     notify(guest ? 'ورود مهمان انجام شد' : 'ورود مشتری از سرور تأیید شد');
