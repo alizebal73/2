@@ -135,6 +135,7 @@ export function ClientExperience() {
         setActiveGame(state.session?.gameId ?? null);
         setSessionEndAt(state.session?.endAt ?? null);
         setFreeMoney(state.freeMoney);
+        setLocked(state.isLocked);
         setStationName(state.session?.stationName ?? stationName);
         if (state.session?.endAt) {
           setRemainingSeconds(Math.max(0, Math.ceil((new Date(state.session.endAt).getTime() - Date.now()) / 1000)));
