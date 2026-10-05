@@ -15,7 +15,7 @@
 9. `http://127.0.0.1:5080/api/health` با HTTP 200 پاسخ دهد.
 10. Dashboard از LAN روی آدرس Server باز شود.
 11. در اولین اجرای Production، admin ساخته و password hash شود.
-12. plaintext `GAMENET_ADMIN_PASSWORD` بعد از اولین healthy start باقی نماند.
+12. plaintext `GAMENET_ADMIN_PASSWORD` بعد از اولین healthy start در Environment اختصاصی Service باقی نماند.
 13. Agent registration token برای Agentهای جدید قابل استفاده باشد.
 14. Database، DataProtection و Backup خارج از Install Root قرار داشته باشند.
 15. حذف Setup نباید بدون تصمیم مشخص، Data Root و دیتابیس فروشگاه را پاک کند.
