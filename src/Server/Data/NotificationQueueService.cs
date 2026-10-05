@@ -137,28 +137,42 @@ public sealed class NotificationQueueService
         Guid notificationId,
         CancellationToken cancellationToken)
     {
-        var affected = await _database.Notifications
-            .Where(item => item.Id == notificationId
-                && item.AppUserId == appUserId
-                && !item.IsRead)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(item => item.IsRead, true)
-                .SetProperty(item => item.ReadAt, DateTimeOffset.UtcNow),
+        var item = await _database.Notifications
+            .FirstOrDefaultAsync(
+                notification => notification.Id == notificationId
+                    && notification.AppUserId == appUserId
+                    && !notification.IsRead,
                 cancellationToken);
 
-        return affected == 1;
+        if (item is null)
+            return false;
+
+        item.IsRead = true;
+        item.ReadAt = DateTimeOffset.UtcNow;
+        await _database.SaveChangesAsync(cancellationToken);
+        return true;
     }
 
     public async Task<int> MarkAllReadAsync(
         Guid appUserId,
         CancellationToken cancellationToken)
     {
-        return await _database.Notifications
+        var rows = await _database.Notifications
             .Where(item => item.AppUserId == appUserId && !item.IsRead)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(item => item.IsRead, true)
-                .SetProperty(item => item.ReadAt, DateTimeOffset.UtcNow),
-                cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        if (rows.Count == 0)
+            return 0;
+
+        var readAt = DateTimeOffset.UtcNow;
+        foreach (var row in rows)
+        {
+            row.IsRead = true;
+            row.ReadAt = readAt;
+        }
+
+        await _database.SaveChangesAsync(cancellationToken);
+        return rows.Count;
     }
 
     private static bool IsGlobalUser(AppUser user)
