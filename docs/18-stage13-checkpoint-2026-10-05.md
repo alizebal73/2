@@ -1,12 +1,8 @@
 # Stage 13 — Checkpoint 2026-10-05
 
-## Branch
-
-stage13-reporting-audit
-
 ## Base
 
-main = 24a0654fa6490f415372ab2e7d28f30a0ecfbe89
+main = 72045d34a3ba9d561ddca488c61470daad27b3fc
 
 ## Slice 13.1 — Audit Explorer
 
@@ -23,25 +19,28 @@ main = 24a0654fa6490f415372ab2e7d28f30a0ecfbe89
 - Post-merge main CI: **Run #1383 — success**
 - Main merge commit: `24a0654fa6490f415372ab2e7d28f30a0ecfbe89`
 
-## Slice 13.2 — Sessions & Stations
+## Slice 13.2 — Sessions & Stations — CERTIFIED
 
 - Real server report endpoint: `GET /api/reports/sessions`.
 - Dashboard Reports has a real Sessions & Stations panel with date range, station, zone, operator, state and customer filters.
 - Summary is built from authoritative Session rows; revenue is `Session.TotalAmount`.
-- Unit, browser and CI API smoke were added in this branch.
-- This slice is not certified until the exact branch HEAD is green.
+- Unit, browser and CI API smoke passed.
+- Exact-head CI: **Run #1391 — success**.
+- Post-merge main CI: **Run #1392 — success**.
+- Main merge commit: `72045d34a3ba9d561ddca488c61470daad27b3fc`.
+- Supporting Stage 10 Agent watchdog hardening is included in the same certified main baseline.
 
 ## Not Done
 
 - Stage 13.1 **CERTIFIED** — exact-head Run #1380 green; merge commit on main verified by Run #1383.
-- Sessions/Stations, Customers/VIP, Users/Shift reports are still later Stage 13 slices.
+- Stage 13.2 **CERTIFIED** — exact-head Run #1391 green; merge commit on main verified by Run #1392.
 - Fine-grained permission/scope and full reporting export policy remain later in Stage 13.
 - Notification/Event Queue remains later in Stage 13.
 
 ## Recovery Rule
 
-Resume from this branch and this checkpoint. Do not infer completion from chat history; use the exact HEAD and CI result.
+Resume from the certified `main` commit `72045d34a3ba9d561ddca488c61470daad27b3fc` and this checkpoint. Do not infer completion from chat history; use the exact HEAD and CI result.
 
 ## Next checkpoint
 
-After Stage 13.2 exact-head Green, merge it to `main`, verify post-merge Green, then start Stage 13.3 Customer/VIP and Users/Shift reports.
+Create/resume from the certified `main` `72045d…` for **Stage 13.3 — Customer/VIP and Users/Shift reports**. Do not modify the certified Stage 13.1/13.2 slices except for regression fixes.
