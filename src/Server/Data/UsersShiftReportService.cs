@@ -79,13 +79,14 @@ public sealed class UsersShiftReportService
             .AsNoTracking()
             .ToListAsync(cancellationToken);
 
-        var shiftsQuery = _database.Shifts.AsNoTracking();
-        if (query.From is { } from)
-            shiftsQuery = shiftsQuery.Where(item => item.OpenAt >= from);
-        if (query.To is { } to)
-            shiftsQuery = shiftsQuery.Where(item => item.OpenAt <= to);
+        var shifts = await _database.Shifts
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
 
-        var shifts = await shiftsQuery.ToListAsync(cancellationToken);
+        if (query.From is { } from)
+            shifts = shifts.Where(item => item.OpenAt >= from).ToList();
+        if (query.To is { } to)
+            shifts = shifts.Where(item => item.OpenAt <= to).ToList();
 
         if (!string.IsNullOrWhiteSpace(query.ShiftState))
         {
@@ -103,16 +104,10 @@ public sealed class UsersShiftReportService
                 .Select(item => new { item.ShiftId, item.Amount })
                 .ToListAsync(cancellationToken);
 
-        var paymentsQuery = _database.InvoicePayments
+        var payments = await _database.InvoicePayments
             .AsNoTracking()
             .Where(item => item.Invoice.Status == InvoiceStatus.Paid
-                && item.Invoice.PaidAt != null);
-        if (query.From is { } paymentFrom)
-            paymentsQuery = paymentsQuery.Where(item => item.Invoice.PaidAt >= paymentFrom);
-        if (query.To is { } paymentTo)
-            paymentsQuery = paymentsQuery.Where(item => item.Invoice.PaidAt <= paymentTo);
-
-        var payments = await paymentsQuery
+                && item.Invoice.PaidAt != null)
             .Select(item => new
             {
                 item.Method,
@@ -121,37 +116,41 @@ public sealed class UsersShiftReportService
             })
             .ToListAsync(cancellationToken);
 
-        var sessionsQuery = _database.Sessions
-            .AsNoTracking()
-            .Where(item => item.AppUserId.HasValue);
-        if (query.From is { } sessionFrom)
-            sessionsQuery = sessionsQuery.Where(item => item.StartAt >= sessionFrom);
-        if (query.To is { } sessionTo)
-            sessionsQuery = sessionsQuery.Where(item => item.StartAt <= sessionTo);
+        if (query.From is { } paymentFrom)
+            payments = payments.Where(item => item.PaidAt >= paymentFrom).ToList();
+        if (query.To is { } paymentTo)
+            payments = payments.Where(item => item.PaidAt <= paymentTo).ToList();
 
-        var sessions = await sessionsQuery
+        var sessions = await _database.Sessions
+            .AsNoTracking()
+            .Where(item => item.AppUserId.HasValue)
             .Select(item => new
             {
                 AppUserId = item.AppUserId!.Value,
+                item.StartAt,
                 item.TotalAmount
             })
             .ToListAsync(cancellationToken);
 
-        var userIds = users.Select(item => item.Id).ToList();
-        var payrollQuery = _database.PayrollLedgerEntries
-            .AsNoTracking()
-            .Where(item => userIds.Contains(item.EmployeeProfile.AppUserId)
-                && item.Status == ApprovalStatus.Approved);
-        if (query.From is { } payrollFrom)
-            payrollQuery = payrollQuery.Where(item => item.CreatedAt >= payrollFrom);
-        if (query.To is { } payrollTo)
-            payrollQuery = payrollQuery.Where(item => item.CreatedAt <= payrollTo);
+        if (query.From is { } sessionFrom)
+            sessions = sessions.Where(item => item.StartAt >= sessionFrom).ToList();
+        if (query.To is { } sessionTo)
+            sessions = sessions.Where(item => item.StartAt <= sessionTo).ToList();
 
+        var userIds = users.Select(item => item.Id).ToList();
         var payrollRows = userIds.Count == 0
             ? new List<PayrollLedgerEntry>()
-            : await payrollQuery
+            : await _database.PayrollLedgerEntries
+                .AsNoTracking()
+                .Where(item => userIds.Contains(item.EmployeeProfile.AppUserId)
+                    && item.Status == ApprovalStatus.Approved)
                 .Include(item => item.EmployeeProfile)
                 .ToListAsync(cancellationToken);
+
+        if (query.From is { } payrollFrom)
+            payrollRows = payrollRows.Where(item => item.CreatedAt >= payrollFrom).ToList();
+        if (query.To is { } payrollTo)
+            payrollRows = payrollRows.Where(item => item.CreatedAt <= payrollTo).ToList();
 
         var profileByUser = profiles.ToDictionary(item => item.AppUserId);
         var shiftsByUser = shifts.GroupBy(item => item.AppUserId).ToDictionary(group => group.Key, group => group.ToList());
