@@ -104,7 +104,7 @@ public sealed class ClientDeviceResolutionTests
         database.AgentDevices.Add(device);
         await database.SaveChangesAsync();
 
-        using var services = new ServiceCollection();
+        var services = new ServiceCollection();
         services.AddDataProtection();
         using var serviceProvider = services.BuildServiceProvider();
 
