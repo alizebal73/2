@@ -5,6 +5,7 @@ import { getFinanceExpenses, getFinanceSummary, getFinanceTransactions, createSh
 import { getCurrentShift } from '../services/shiftService';
 import { getServerBuffetProfit } from '../services/buffetService';
 import { getAuditLogs, type AuditLogPage } from '../services/auditService';
+import { downloadReportCsv } from '../services/reportExportService';
 import type { BuffetProfitReport } from '../types';
 import { SessionReportPanel } from '../features/reports/SessionReportPanel';
 import { CustomerVipReportPanel } from '../features/reports/CustomerVipReportPanel';
@@ -32,12 +33,14 @@ type Role = 'operator' | 'manager' | 'owner';
 
 export function ReportsPage({ user }: { user: AppUserRecord }) {
   const canViewFinance = hasPermission(user, 'finance.view');
-  const canViewAudit = hasPermission(user, 'audit.view');
+  const canViewSessions = hasPermission(user, 'report.sessions.view') || canViewFinance;
+  const canViewAudit = hasPermission(user, 'report.audit.view') || hasPermission(user, 'audit.view');
   const canManageFinance = hasPermission(user, 'finance.manage');
-  const canViewCustomerReport = hasPermission(user, 'customer.manage') || hasPermission(user, 'customer.wallet') || hasPermission(user, 'customer.debt');
-  const canViewUsersShiftReport = hasPermission(user, 'shift.manage') || hasPermission(user, 'payroll.view') || hasPermission(user, 'user.manage');
+  const canViewCustomerReport = hasPermission(user, 'report.customers.view') || hasPermission(user, 'customer.manage') || hasPermission(user, 'customer.wallet') || hasPermission(user, 'customer.debt');
+  const canViewUsersShiftReport = hasPermission(user, 'report.users-shift.view') || hasPermission(user, 'shift.manage') || hasPermission(user, 'payroll.view') || hasPermission(user, 'user.manage');
+  const canExportReports = hasPermission(user, 'reports.export');
   const [period, setPeriod] = useState<Period>('week');
-  const [reportCategory, setReportCategory] = useState<ReportCategory>(() => canViewFinance ? 'finance' : 'audit');
+  const [reportCategory, setReportCategory] = useState<ReportCategory>(() => canViewFinance ? 'finance' : canViewSessions ? 'sessions' : canViewCustomerReport ? 'customers' : canViewUsersShiftReport ? 'users' : canViewAudit ? 'audit' : 'finance');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [fromTime, setFromTime] = useState('00:00');
@@ -266,7 +269,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
           ['audit','Audit']
         ] as Array<[ReportCategory,string]>).map(([key,label]) => <button key={key} disabled={
           (key === 'finance' && !canViewFinance)
-          || (key === 'sessions' && !canViewFinance)
+          || (key === 'sessions' && !canViewSessions)
           || (key === 'customers' && !canViewCustomerReport)
           || (key === 'users' && !canViewUsersShiftReport)
           || (key === 'audit' && !canViewAudit)
@@ -281,7 +284,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
           ['custom','بازه دلخواه']
         ] as Array<[Period,string]>).map(([key,label]) => <button key={key} className={period === key ? 'active' : ''} onClick={() => { setPeriod(key); if (key !== 'custom') setRange(null); }}>{label}</button>)}
       </div>
-      <div className="report-actions"><button className="btn" onClick={reportCategory === 'audit' ? exportAuditCsv : exportCsv}>📤 خروجی</button><button className="btn" onClick={() => window.print()}>🖨 چاپ</button>{canManageFinance && <button className="btn" onClick={() => void registerExpense()}>➖ ثبت هزینه</button>}</div>
+      <div className="report-actions">{(reportCategory === 'finance' || reportCategory === 'buffet') && <button className="btn" onClick={exportCsv}>📤 خروجی</button>}<button className="btn" onClick={() => window.print()}>🖨 چاپ</button>{canManageFinance && <button className="btn" onClick={() => void registerExpense()}>➖ ثبت هزینه</button>}</div>
     </section>
 
     {period === 'custom' && <section className="card-panel report-range-panel"><div className="report-range-grid"><label>از تاریخ<input value={from} onChange={e=>setFrom(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۱"/></label><label>تا تاریخ<input value={to} onChange={e=>setTo(e.target.value)} placeholder="۱۴۰۵/۰۷/۰۹"/></label><label>از ساعت<input type="time" value={fromTime} onChange={e=>setFromTime(e.target.value)}/></label><label>تا ساعت<input type="time" value={toTime} onChange={e=>setToTime(e.target.value)}/></label><button className="btn primary" onClick={applyRange}>اعمال بازه</button><button className="btn" onClick={()=>{setRange(null);setPeriod('week')}}>بازنشانی</button></div><div className="report-presets">{['امروز','دیروز','این هفته','ماه جاری','ماه قبل','۹۰ روز اخیر','امسال'].map(name=><button className="btn sm" key={name} onClick={()=>preset(name)}>{name}</button>)}</div></section>}
@@ -320,6 +323,9 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
         ? <section className="report-placeholder"><strong>Audit</strong><span>برای مشاهده سوابق Audit دسترسی لازم را ندارید.</span></section>
         : <>
           {auditError && <div className="user-error-banner network"><div className="user-error-icon">!</div><div className="user-error-copy"><strong>دریافت سوابق Audit کامل نشد</strong><span>{auditError}</span></div><button type="button" className="btn sm" onClick={() => setAuditRetry(value => value + 1)}>تلاش مجدد</button></div>}
+          <div className="report-actions" style={{ margin: '0 22px 10px' }}>
+            <button type="button" className="btn" disabled={!canExportReports} title={!canExportReports ? 'دسترسی خروجی گزارش ندارید' : undefined} onClick={() => void exportAuditCsv()}>📤 خروجی Audit</button>
+          </div>
           <section className="report-filter-grid report-audit-filter-grid">
             <label>کاربر<input value={auditOperator} onChange={e => { setAuditOperator(e.target.value); setAuditPage(1); }} placeholder="نام یا نام کاربری" /></label>
             <label>عملیات<input value={auditAction} onChange={e => { setAuditAction(e.target.value); setAuditPage(1); }} placeholder="مثلاً TariffUpdated" /></label>
@@ -353,9 +359,9 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
         </>
       }
     </>
-    : reportCategory === 'sessions' ? <SessionReportPanel period={period} range={range} />
-    : reportCategory === 'customers' ? <CustomerVipReportPanel period={period} range={range} />
-    : reportCategory === 'users' ? <UsersShiftReportPanel period={period} range={range} />
+    : reportCategory === 'sessions' ? <SessionReportPanel period={period} range={range} canExport={canExportReports} />
+    : reportCategory === 'customers' ? <CustomerVipReportPanel period={period} range={range} canExport={canExportReports} />
+    : reportCategory === 'users' ? <UsersShiftReportPanel period={period} range={range} canExport={canExportReports} />
     : <section className="report-placeholder"><strong>گزارش</strong><span>این دامنه در برش بعدی Stage 13 به منبع داده واقعی متصل می‌شود.</span></section>}
 
     {notice && <div className="operation-toast">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
