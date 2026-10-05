@@ -778,6 +778,15 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                     command.PayloadJson ?? string.Empty)
                     ?? throw new JsonException("دادهٔ اجرای بازی معتبر نیست.");
 
+                var launchAllowed = await connection.InvokeAsync<bool>(
+                    "ValidateGameLaunch",
+                    payload.SessionId,
+                    payload.GameId,
+                    cancellationToken);
+
+                if (!launchAllowed)
+                    throw new InvalidOperationException("Session بازی دیگر فعال نیست یا متعلق به این Agent نیست.");
+
                 await gameProcesses.LaunchAsync(payload, cancellationToken);
                 Console.WriteLine($"CLIENT_GAME_LAUNCHED:{payload.GameId:N}:{payload.SessionId:N}");
                 message = "بازی روی Client اجرا شد.";
