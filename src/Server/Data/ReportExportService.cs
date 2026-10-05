@@ -80,6 +80,6 @@ public static class ReportExportService
     private static string Escape(object? value)
     {
         var text = Convert.ToString(value, CultureInfo.InvariantCulture) ?? "";
-        return """ + text.Replace(""", """") + """;
+        return "\"" + text.Replace("\"", "\"\"") + "\"";
     }
 }
