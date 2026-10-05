@@ -188,7 +188,7 @@ test('dashboard exposes real Sessions and Stations report', async ({ page }) => 
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'گزارش‌ها' }).click();
-  await page.getByRole('button', { name: 'جلسات و ایستگاه‌ها' }).click();
+  await page.locator('.report-categories').getByRole('button', { name: 'جلسات و ایستگاه‌ها' }).click();
 
   await expect(page.getByTestId('session-report')).toBeVisible();
   await expect(page.getByTestId('session-report-row')).toHaveCount(2);
@@ -196,6 +196,163 @@ test('dashboard exposes real Sessions and Stations report', async ({ page }) => 
   await expect(page.getByText('۸۰٬۰۰۰ تومان')).toBeVisible();
   await expect(page.getByTestId('session-report')).toContainText('PC ۰۱');
   await expect(page.getByTestId('session-report')).toContainText('رضا تست');
+});
+
+
+test('dashboard exposes real Customer and VIP report', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-customer-report',
+      fullName: 'مدیر مشتری',
+      userName: 'customer_report',
+      email: 'customer-report@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['customer.manage', 'customer.wallet', 'customer.debt']
+    })
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
+  }));
+  await page.route('**/api/reports/customers*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      page: 1,
+      pageSize: 50,
+      total: 1,
+      summary: {
+        customerCount: 1,
+        vipCount: 1,
+        activeVipCount: 1,
+        debtorCount: 1,
+        walletTotal: 120000,
+        debtTotal: 55000,
+        sessionCount: 2,
+        sessionRevenue: 170000
+      },
+      items: [{
+        customerId: 'customer-vip-1',
+        code: 'C001',
+        username: 'customer_vip',
+        name: 'رضا VIP',
+        vipTier: 'gold',
+        packageName: 'Gold VIP',
+        vipActivatedAt: new Date(Date.now() - 86400000).toISOString(),
+        vipExpiresAt: new Date(Date.now() + 86400000 * 29).toISOString(),
+        vipDailyMinutes: 180,
+        vipTotalMinutes: 3000,
+        vipDiscountPercent: 10,
+        usedTodayMinutes: 45,
+        usedTotalMinutes: 120,
+        remainingTodayMinutes: 135,
+        remainingTotalMinutes: 2880,
+        walletBalance: 120000,
+        debt: 55000,
+        sessionCount: 2,
+        sessionRevenue: 170000,
+        lastSessionAt: new Date(Date.now() - 3600000).toISOString(),
+        status: 'vip-active',
+        notes: 'VIP تست'
+      }]
+    })
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'گزارش‌ها' }).click();
+  await page.locator('.report-categories').getByRole('button', { name: 'مشتری و VIP' }).click();
+
+  await expect(page.getByTestId('customer-vip-report')).toBeVisible();
+  await expect(page.getByTestId('customer-vip-row')).toHaveCount(1);
+  await expect(page.getByTestId('customer-vip-report')).toContainText('رضا VIP');
+  await expect(page.getByTestId('customer-vip-report')).toContainText('Gold VIP');
+  await expect(page.getByRole('columnheader', { name: 'درآمد جلسات' })).toBeVisible();
+  await expect(page.locator('.summary-grid').getByText('۱۷۰٬۰۰۰ تومان')).toBeVisible();
+});
+
+test('dashboard exposes real Users and Shift report', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-users-shift-report',
+      fullName: 'مدیر شیفت',
+      userName: 'users_shift_report',
+      email: 'users-shift-report@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['shift.manage', 'payroll.view', 'user.manage']
+    })
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
+  }));
+  await page.route('**/api/reports/users-shifts*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      page: 1,
+      pageSize: 50,
+      total: 1,
+      summary: {
+        userCount: 1,
+        activeUserCount: 1,
+        shiftCount: 2,
+        closedShiftCount: 1,
+        shiftRevenue: 450000,
+        shiftCashSales: 300000,
+        shiftExpenses: 50000,
+        shiftDifference: 0,
+        sessionCount: 4,
+        sessionRevenue: 450000,
+        payrollPaid: 80000,
+        payrollEmployeePayable: 120000
+      },
+      items: [{
+        userId: 'operator-1',
+        fullName: 'اپراتور تست',
+        userName: 'operator_test',
+        role: 'Operator',
+        isActive: true,
+        payType: 'hourly',
+        employeePayable: 120000,
+        ownerReceivable: 0,
+        paidThisPeriod: 80000,
+        bonusThisPeriod: 10000,
+        deductionThisPeriod: 0,
+        shiftCount: 2,
+        closedShiftCount: 1,
+        shiftRevenue: 450000,
+        shiftCashSales: 300000,
+        shiftExpenses: 50000,
+        shiftDifference: 0,
+        sessionCount: 4,
+        sessionRevenue: 450000,
+        lastLoginAt: new Date().toISOString()
+      }]
+    })
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'گزارش‌ها' }).click();
+  await page.locator('.report-categories').getByRole('button', { name: 'کاربران و شیفت' }).click();
+
+  await expect(page.getByTestId('users-shift-report')).toBeVisible();
+  await expect(page.getByTestId('users-shift-row')).toHaveCount(1);
+  await expect(page.getByTestId('users-shift-report')).toContainText('اپراتور تست');
+  await expect(page.getByRole('columnheader', { name: 'فروش شیفت' })).toBeVisible();
+  await expect(page.locator('.summary-grid').getByText('۴۵۰٬۰۰۰ تومان')).toBeVisible();
+  await expect(page.getByText('حقوق پرداخت‌شده')).toBeVisible();
 });
 
 test('dashboard exposes real Audit Explorer', async ({ page }) => {

@@ -19,6 +19,8 @@ builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
 builder.Services.AddScoped<AccountPoolService>();
 builder.Services.AddScoped<CustomerLoginService>();
+builder.Services.AddScoped<CustomerVipReportService>();
+builder.Services.AddScoped<UsersShiftReportService>();
 builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<SessionReportService>();
@@ -1510,6 +1512,115 @@ app.MapGet("/api/reports/sessions", async (
     return Results.Ok(result);
 })
 .WithName("QuerySessionReport");
+
+app.MapGet("/api/reports/customers", async (
+    HttpContext context,
+    GameNetDbContext database,
+    CustomerVipReportService reports,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    string? search,
+    string? vip,
+    string? debt,
+    string? package,
+    int page,
+    int pageSize,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context,
+        database,
+        cancellationToken,
+        "customer.manage",
+        "customer.wallet",
+        "customer.debt");
+    if (auth.Error is not null) return auth.Error;
+
+    var result = await reports.QueryAsync(
+        new CustomerVipReportQuery(from, to, search, vip, debt, package, page, pageSize),
+        cancellationToken);
+
+    var canWallet = AuthorizationService.HasPermission(auth.User!, "customer.wallet");
+    var canDebt = AuthorizationService.HasPermission(auth.User!, "customer.debt");
+
+    if (!canWallet || !canDebt)
+    {
+        var summary = result.Summary with
+        {
+            WalletTotal = canWallet ? result.Summary.WalletTotal : 0m,
+            DebtTotal = canDebt ? result.Summary.DebtTotal : 0m,
+            DebtorCount = canDebt ? result.Summary.DebtorCount : 0
+        };
+        result = result with
+        {
+            Summary = summary,
+            Items = result.Items
+                .Select(item => item with
+                {
+                    WalletBalance = canWallet ? item.WalletBalance : 0m,
+                    Debt = canDebt ? item.Debt : 0m,
+                    Status = canDebt ? item.Status : (item.Status == "debtor" ? "active" : item.Status)
+                })
+                .ToList()
+        };
+    }
+
+    return Results.Ok(result);
+})
+.WithName("QueryCustomerVipReport");
+
+app.MapGet("/api/reports/users-shifts", async (
+    HttpContext context,
+    GameNetDbContext database,
+    UsersShiftReportService reports,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    string? userSearch,
+    string? shiftState,
+    int page,
+    int pageSize,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+        context,
+        database,
+        cancellationToken,
+        "shift.manage",
+        "payroll.view",
+        "user.manage");
+    if (auth.Error is not null) return auth.Error;
+
+    var result = await reports.QueryAsync(
+        new UsersShiftReportQuery(from, to, userSearch, shiftState, page, pageSize),
+        cancellationToken);
+
+    if (!AuthorizationService.HasPermission(auth.User!, "payroll.view"))
+    {
+        var summary = result.Summary with
+        {
+            PayrollPaid = 0m,
+            PayrollEmployeePayable = 0m
+        };
+        result = result with
+        {
+            Summary = summary,
+            Items = result.Items
+                .Select(item => item with
+                {
+                    EmployeePayable = 0m,
+                    OwnerReceivable = 0m,
+                    PaidThisPeriod = 0m,
+                    BonusThisPeriod = 0m,
+                    DeductionThisPeriod = 0m
+                })
+                .ToList()
+        };
+    }
+
+    return Results.Ok(result);
+})
+.WithName("QueryUsersShiftReport");
+
 
 app.MapGet("/api/audit", async (
     HttpContext context,

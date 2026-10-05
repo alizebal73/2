@@ -1215,6 +1215,13 @@ jobs:
             $savedPayment = @($operatorPayrollProfile | Where-Object { $_.id -eq $salaryPayment.entryId -and $_.status -eq 'Approved' })[0]
             if (-not $savedPayment -or $savedPayment.paymentMethod -ne 'cash' -or $savedPayment.receiptNumber -ne "SAL-$userSmokeId") { throw 'Salary payment receipt/method was not persisted.' }
 
+            $usersShiftReportSmoke = Invoke-RestMethod -Uri ("$baseUrl/api/reports/users-shifts?userSearch=$([uri]::EscapeDataString($managedUser.userName))&page=1&pageSize=20") -Method Get -WebSession $adminSession
+            $usersShiftRowSmoke = @($usersShiftReportSmoke.items | Where-Object { $_.userId -eq $managedUser.id })[0]
+            if (-not $usersShiftRowSmoke -or [decimal]$usersShiftRowSmoke.paidThisPeriod -lt 20000) {
+              throw 'Stage 13.3 Users/Shift report smoke did not return the managed user payroll data.'
+            }
+            Write-Host ("Stage 13.3 Users/Shift report smoke passed: total={0}; payrollPaid={1}" -f $usersShiftReportSmoke.total, $usersShiftRowSmoke.paidThisPeriod)
+
             Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $operatorPayrollSession | Out-Null
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
               permissionNames = @('finance.manage')
@@ -1260,6 +1267,13 @@ jobs:
             if ($assignment.packageId -ne $packageId -or [int]$assignment.dailyMinutes -le 0 -or [int]$assignment.totalMinutes -le 0) {
               throw 'VIP package assignment smoke returned incomplete data.'
             }
+
+            $customerReportSmoke = Invoke-RestMethod -Uri ("$baseUrl/api/reports/customers?search=$([uri]::EscapeDataString($newCustomer.username))&vip=active&page=1&pageSize=20") -Method Get -WebSession $adminSession
+            $customerReportRowSmoke = @($customerReportSmoke.items | Where-Object { $_.customerId -eq $customerId })[0]
+            if (-not $customerReportRowSmoke -or $customerReportRowSmoke.vipTier -eq 'none' -or [int]$customerReportRowSmoke.remainingTotalMinutes -le 0) {
+              throw 'Stage 13.3 Customer/VIP report smoke did not return the active VIP customer.'
+            }
+            Write-Host ("Stage 13.3 Customer/VIP report smoke passed: total={0}; vip={1}" -f $customerReportSmoke.total, $customerReportSmoke.summary.activeVipCount)
 
             $usageBefore = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/vip-usage") -Method Get -WebSession $adminSession
             if (-not $usageBefore.active -or [int]$usageBefore.usedTodayMinutes -ne 0 -or [int]$usageBefore.usedTotalMinutes -ne 0) {
