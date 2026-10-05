@@ -718,7 +718,7 @@ public static class ClientExperienceEndpoints
         if (device is null)
             return;
 
-        var provider = context.RequestServices.GetService<IDataProtectionProvider>();
+        var provider = context.RequestServices?.GetService<IDataProtectionProvider>();
         if (provider is null)
             return;
 
