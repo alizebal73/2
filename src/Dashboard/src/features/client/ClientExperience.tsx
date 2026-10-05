@@ -1,23 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './ClientExperience.css';
 import { authenticateCustomer, readCustomerState, releaseCustomerLogin } from '../../services/customerAuthService';
+import { createClientRequest, launchClientGame, lockClient, logoutAndLockClient, stopClientGame } from '../../services/clientExperienceService';
 import { getClientCatalog, type ClientCatalogBuffetItem, type ClientCatalogGame } from '../../services/clientCatalogService';
 import { getClientIdentity } from '../../services/clientIdentityService';
 
 type ContextMenu = { x: number; y: number } | null;
-type Panel = 'apps' | 'buffet' | 'account' | 'operator' | null;
+type Panel = 'buffet' | 'account' | null;
 type ViewMode = 'card' | 'compact' | 'list';
 
 type Game = ClientCatalogGame;
-
-const clientApps = [
-  { icon: '🌐', name: 'Chrome', description: 'مرورگر مجاز' },
-  { icon: '💬', name: 'Discord', description: 'گفت‌وگوی تیمی' },
-  { icon: '✈️', name: 'Telegram', description: 'پیام‌رسان' },
-  { icon: '🎵', name: 'موزیک', description: 'پخش موسیقی' },
-  { icon: '🎥', name: 'OBS', description: 'ضبط و پخش' },
-  { icon: '🧮', name: 'ماشین حساب', description: 'ابزار عمومی' },
-];
 
 const commands = [
   { title: 'نرم‌افزارها', key: 'apps', icon: '🧩' },
@@ -40,10 +32,13 @@ export function ClientExperience() {
   const [loggedIn, setLoggedIn] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [customerName, setCustomerName] = useState('مهمان');
+  const [stationName, setStationName] = useState('GameNet');
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [loginId, setLoginId] = useState<string | null>(null);
   const [loginLimit, setLoginLimit] = useState(1);
   const [activeLoginCount, setActiveLoginCount] = useState(0);
+  const [freeMoney, setFreeMoney] = useState(0);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessionEndAt, setSessionEndAt] = useState<string | null>(null);
   const [sessionState, setSessionState] = useState<string | null>(null);
   const browserClientKey = useMemo(() => {
@@ -62,17 +57,13 @@ export function ClientExperience() {
   const [view, setView] = useState<ViewMode>('card');
   const [zoom, setZoom] = useState(100);
   const [activeGame, setActiveGame] = useState<string | null>(null);
-  const [accountGame, setAccountGame] = useState<Game | null>(null);
   const [panel, setPanel] = useState<Panel>(null);
-  const [dockHoverPanel, setDockHoverPanel] = useState<'apps' | null>(null);
-  const dockHoverTimer = useRef<number | null>(null);
   const [context, setContext] = useState<ContextMenu>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
   const [notice, setNotice] = useState('');
   const [adVisible, setAdVisible] = useState(true);
   const [locked, setLocked] = useState(false);
-  const [myGamesOnly, setMyGamesOnly] = useState(false);
   const [games, setGames] = useState<Game[]>([]);
   const [buffetItems, setBuffetItems] = useState<ClientCatalogBuffetItem[]>([]);
 
