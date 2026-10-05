@@ -798,7 +798,7 @@ test('settings information architecture supports search and category navigation'
   });
   await page.route('**/api/backup/*/restore', async route => {
     if (route.request().method() !== 'POST') return route.fallback();
-    return route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ pending: true, message: 'بازیابی برای راه‌اندازی بعدی Server آماده شد.' }) });
+    return route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ pending: true, message: 'بازیابی آماده شد و در راه‌اندازی بعدی Server اعمال می‌شود.' }) });
   });
   await page.route('**/api/settings', async route => {
     if (route.request().method() === 'GET') {
@@ -867,7 +867,7 @@ test('settings information architecture supports search and category navigation'
   await expect(page.getByText('نسخهٔ پشتیبان سالم و قابل‌بازیابی است.')).toBeVisible();
   page.once('dialog', dialog => dialog.accept());
   await backupSection.getByRole('button', { name: /آماده‌سازی Restore/ }).click();
-  await expect(page.getByText(/Restore برای راه‌اندازی بعدی آماده شد/)).toBeVisible();
+  await expect(page.getByText(/بازیابی آماده شد و در راه‌اندازی بعدی Server اعمال می‌شود/)).toBeVisible();
   await expect(backupSection).toContainText('دیتابیس SQLite و DataProtection Keys');
 
   await page.getByLabel('جست‌وجوی تنظیمات').fill('هات‌کی');
