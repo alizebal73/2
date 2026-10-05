@@ -67,7 +67,11 @@ var databasePath = StoragePaths.ResolveDatabasePath(
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
 
 var dataProtectionKeysPath = StoragePaths.ResolveDataProtectionKeysPath(dataRoot);
+var backupRoot = StoragePaths.ResolveDefaultBackupTarget(dataRoot);
+var backupRecoveryRoot = StoragePaths.ResolveBackupRecoveryRoot(dataRoot);
 Directory.CreateDirectory(dataProtectionKeysPath);
+Directory.CreateDirectory(backupRoot);
+Directory.CreateDirectory(backupRecoveryRoot);
 builder.Services
     .AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
