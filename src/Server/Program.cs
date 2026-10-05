@@ -102,6 +102,31 @@ if (app.Environment.IsDevelopment())
 
 app.UseRateLimiter();
 
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/hubs/dashboard")
+        && HttpMethods.IsPost(context.Request.Method)
+        && context.Request.Path.Value?.EndsWith("/negotiate", StringComparison.OrdinalIgnoreCase) == true)
+    {
+        await using var scope = context.RequestServices.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
+        var user = await AuthorizationService.ResolveUserAsync(
+            context,
+            database,
+            context.RequestAborted);
+
+        if (user is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        context.Items["GameNet.DashboardNegotiateAuth"] = user.Id;
+    }
+
+    await next();
+});
+
 app.MapSettingsEndpoints();
 app.MapBackupEndpoints();
 app.MapClientExperienceEndpoints();
@@ -3674,10 +3699,6 @@ app.MapPost("/api/customers/{customerId:guid}/login-release", async (
     if (string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
 
-    var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
-    if (customer is null)
-        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
-
     if (!request.LoginId.HasValue)
     {
         var auth = await AuthorizationService.RequirePermissionAsync(
@@ -3701,6 +3722,10 @@ app.MapPost("/api/customers/{customerId:guid}/login-release", async (
         if (login is null)
             return Results.Unauthorized();
     }
+
+    var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
+    if (customer is null)
+        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
 
     try
     {
