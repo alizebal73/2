@@ -55,12 +55,12 @@ export async function readCustomerState(customerId: string, loginId: string, cli
   );
 }
 
-export async function releaseCustomerLogin(customerId: string, clientKey: string) {
+export async function releaseCustomerLogin(customerId: string, clientKey: string, loginId?: string) {
   return await readJson<{ released: boolean; activeCount: number }>(
     await fetch('/api/customers/' + customerId + '/login-release', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientKey }),
+      body: JSON.stringify({ clientKey, loginId }),
     }),
   );
 }
