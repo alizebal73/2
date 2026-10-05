@@ -21,6 +21,26 @@ public sealed class StoragePathsTests
     }
 
     [Fact]
+    public void DefaultBackupTarget_IsInsideConfiguredDataRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "GameNetManagerStorageTests", Guid.NewGuid().ToString("N"));
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>())
+            .Build();
+        var environment = new TestEnvironment("Production", @"C:\ProgramFiles\GameNetManager");
+
+        var resolvedRoot = GameNetManager.Server.Data.StoragePaths.ResolveDataRoot(
+            new ConfigurationBuilder()
+                .AddInMemoryCollection(new Dictionary<string, string?> { ["App:DataRoot"] = root })
+                .Build(),
+            environment);
+
+        var backup = GameNetManager.Server.Data.StoragePaths.ResolveDefaultBackupTarget(resolvedRoot);
+
+        Assert.Equal(Path.Combine(Path.GetFullPath(root), "Backups"), backup);
+    }
+
+    [Fact]
     public void ExplicitDataRoot_IsUsedForProductionDatabaseAndKeys()
     {
         var root = Path.Combine(Path.GetTempPath(), "GameNetManagerStorageTests", Guid.NewGuid().ToString("N"));
