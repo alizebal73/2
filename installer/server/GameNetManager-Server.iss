@@ -59,9 +59,22 @@ end;
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
   Result := True;
-  if CurPageID = DataRootPage.ID then
-    if Trim(DataRootPage.Values[0]) = '' then begin MsgBox('مسیر Data Root نمی‌تواند خالی باشد.', mbError, MB_OK); Result := False; end
-  else if CurPageID = AdminPasswordPage.ID then
+  if CurPageID = DataRootPage.ID then begin
+    if Trim(DataRootPage.Values[0]) = '' then begin
+      MsgBox('مسیر Data Root نمی‌تواند خالی باشد.', mbError, MB_OK);
+      Result := False;
+    end else if CompareText(
+      Copy(
+        AddBackslash(ExpandFileName(Trim(DataRootPage.Values[0]))),
+        1,
+        Length(AddBackslash(ExpandFileName(ExpandConstant('{app}'))))
+      ),
+      AddBackslash(ExpandFileName(ExpandConstant('{app}')))
+    ) = 0 then begin
+      MsgBox('مسیر Data Root نباید داخل پوشه نصب Server باشد.', mbError, MB_OK);
+      Result := False;
+    end;
+  end else if CurPageID = AdminPasswordPage.ID then
     if not IsValidSecret(AdminPasswordPage.Values[0], 8) then begin MsgBox('رمز admin باید حداقل 8 کاراکتر باشد.', mbError, MB_OK); Result := False; end
   else if CurPageID = RegistrationTokenPage.ID then
     if not IsValidSecret(RegistrationTokenPage.Values[0], 16) then begin MsgBox('توکن Agent باید حداقل 16 کاراکتر باشد.', mbError, MB_OK); Result := False; end;
