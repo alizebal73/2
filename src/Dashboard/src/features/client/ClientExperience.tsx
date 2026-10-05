@@ -193,6 +193,7 @@ export function ClientExperience() {
   }
 
   async function signIn(guest = false) {
+    let serverLockState = false;
     if (guest) {
       if (password.trim()) { setLoginError('برای مهمان رمز را خالی بگذارید'); return; }
       setCustomerName('مهمان');
@@ -237,7 +238,7 @@ export function ClientExperience() {
 
     setLoginError('');
     setLoggedIn(true);
-    setLocked(guest ? false : result.isLocked);
+    setLocked(guest ? false : serverLockState);
     setPanel(null);
     setRemainingSeconds(0);
     notify(guest ? 'ورود مهمان انجام شد' : 'ورود مشتری از سرور تأیید شد');
