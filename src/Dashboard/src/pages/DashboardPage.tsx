@@ -480,7 +480,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
         stationId: activeStation.id,
         persons: activeStation.zone === 'pc' ? 1 : persons,
       });
-      const serverSessionId = result.sessionId;
+            if (!result) {
+         setMessage('پاسخ شروع جلسه از Server ناقص بود.');
+         return;
+       }
+ const serverSessionId = result.sessionId;
       updateStation(activeStation.id, {
         state: 'busy',
         startedAt: result.startAt,
