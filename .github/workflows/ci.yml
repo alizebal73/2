@@ -133,6 +133,42 @@ jobs:
             }
             Write-Host ("Stage 13 Audit Explorer API smoke passed: total={0}" -f $auditSmoke.total)
 
+            $settingsSmoke = Invoke-RestMethod -Uri "$baseUrl/api/settings" -Method Get -WebSession $adminSession
+            if ($settingsSmoke.scope -ne 'global' -or $settingsSmoke.values.sessionMode -ne 'settle' -or [int]$settingsSmoke.values.operatorDiscount -ne 10) {
+              throw 'Stage 14 Server-backed Settings GET smoke failed to return validated defaults.'
+            }
+            $settingsAddress = "192.168.0.9:5080"
+            $settingsUpdate = Invoke-RestMethod -Uri "$baseUrl/api/settings" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              values = @{
+                serverAddress = $settingsAddress
+                operatorDiscount = 15
+              }
+            } | ConvertTo-Json -Depth 5)
+            if ($settingsUpdate.values.serverAddress -ne $settingsAddress -or [int]$settingsUpdate.values.operatorDiscount -ne 15) {
+              throw 'Stage 14 Server-backed Settings PUT smoke failed to persist changed values.'
+            }
+            $settingsInvalidRequest = $null
+            try {
+              Invoke-RestMethod -Uri "$baseUrl/api/settings" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+                values = @{ operatorDiscount = 101 }
+              } | ConvertTo-Json -Depth 5) | Out-Null
+            } catch {
+              $settingsInvalidRequest = $_
+            }
+            if (-not $settingsInvalidRequest) {
+              throw 'Stage 14 Server-backed Settings validation smoke failed to reject operatorDiscount=101.'
+            }
+            $settingsRestored = Invoke-RestMethod -Uri "$baseUrl/api/settings" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              values = @{
+                serverAddress = '192.168.1.10:5080'
+                operatorDiscount = 10
+              }
+            } | ConvertTo-Json -Depth 5)
+            if ($settingsRestored.values.serverAddress -ne '192.168.1.10:5080' -or [int]$settingsRestored.values.operatorDiscount -ne 10) {
+              throw 'Stage 14 Server-backed Settings restore smoke failed.'
+            }
+            Write-Host 'Stage 14 Server-backed Settings API smoke passed: read -> update -> validation reject -> restore.'
+
             # Stage 11: prove Game and Account Pool are server-backed and allocation is atomic.
             $stage11Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               name = 'CI Stage11 Game'
