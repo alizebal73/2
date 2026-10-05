@@ -1613,6 +1613,9 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("Network")
+                        .HasColumnType("INTEGER");
+
                     b.Property<decimal>("RatePerHour")
                         .HasColumnType("TEXT");
 
@@ -1645,6 +1648,8 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.HasIndex("Name")
                         .IsUnique();
+
+                    b.HasIndex("Network");
 
                     b.HasIndex("StationTypeId");
 
