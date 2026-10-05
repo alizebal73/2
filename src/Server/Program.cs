@@ -3322,6 +3322,7 @@ app.MapGet("/api/client/identity", async (
 .WithName("GetClientIdentity");
 
 app.MapPost("/api/customer-auth/login", async (
+    HttpContext context,
     CustomerLoginAuthRequest request,
     CustomerLoginService customerLoginService,
     GameNetDbContext database,
@@ -3332,6 +3333,10 @@ app.MapPost("/api/customer-auth/login", async (
 
     if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_credentials", message = "نام کاربری، رمز و شناسه دستگاه الزامی است." });
+
+        var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(context, database, cancellationToken);
+        if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, clientKey, StringComparison.Ordinal))
+            return Results.Forbid();
 
     var customer = await database.Customers
         .FirstOrDefaultAsync(item => item.Username == key || item.Code == key, cancellationToken);
@@ -3374,6 +3379,7 @@ app.MapPost("/api/customer-auth/login", async (
 .WithName("CustomerAuthenticate");
 
 app.MapGet("/api/customer-auth/state", async (
+    HttpContext context,
     Guid customerId,
     Guid loginId,
     string clientKey,
@@ -3383,6 +3389,10 @@ app.MapGet("/api/customer-auth/state", async (
     var normalizedClientKey = clientKey?.Trim();
     if (string.IsNullOrWhiteSpace(normalizedClientKey))
         return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
+
+        var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(context, database, cancellationToken);
+        if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, normalizedClientKey, StringComparison.Ordinal))
+            return Results.Forbid();
 
     var customer = await database.Customers
         .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
@@ -3412,9 +3422,7 @@ app.MapGet("/api/customer-auth/state", async (
             session = (object?)null
         });
 
-    var device = await database.AgentDevices
-        .Include(item => item.Station)
-        .FirstOrDefaultAsync(item => item.DeviceId == normalizedClientKey && item.IsActive, cancellationToken);
+    var device = resolvedClientDevice;
 
     var session = device?.StationId is Guid stationId
         ? await database.Sessions
@@ -3453,6 +3461,7 @@ app.MapGet("/api/customer-auth/state", async (
 .WithName("CustomerAuthState");
 
 app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
+    HttpContext context,
     Guid customerId,
     CustomerLoginRequest request,
     CustomerLoginService customerLoginService,
@@ -3466,6 +3475,10 @@ app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     var clientKey = request.ClientKey?.Trim();
     if (string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
+
+        var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(context, database, cancellationToken);
+        if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, clientKey, StringComparison.Ordinal))
+            return Results.Forbid();
 
     try
     {
@@ -3483,6 +3496,7 @@ app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
 .WithName("AcquireCustomerLogin");
 
 app.MapPost("/api/customers/{customerId:guid}/login-release", async (
+    HttpContext context,
     Guid customerId,
     CustomerLoginRequest request,
     CustomerLoginService customerLoginService,
@@ -3492,6 +3506,10 @@ app.MapPost("/api/customers/{customerId:guid}/login-release", async (
     var clientKey = request.ClientKey?.Trim();
     if (string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
+
+        var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(context, database, cancellationToken);
+        if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, clientKey, StringComparison.Ordinal))
+            return Results.Forbid();
 
     var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
     if (customer is null)
