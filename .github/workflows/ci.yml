@@ -1745,8 +1745,7 @@ jobs:
             Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $restoredAdminSession | Out-Null
             Write-Host 'Stage 14.5 real Restore smoke passed: pending restore applied during Server startup and reverted the post-backup drift.'
 
-            $adminLogout = Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $adminSession
-            if (-not $adminLogout.success) { $adminLogout = @{ success = $true } }
+            Write-Host 'Stage 14.5 Restore restart completed; the pre-restart admin session is intentionally discarded.'
 
             Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
 
