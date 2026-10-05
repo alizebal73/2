@@ -83,7 +83,8 @@ jobs:
           $releasePackage = Join-Path $releaseRoot 'GameNetManager.Client-0.7.1.zip'
           Remove-Item $releaseRoot -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $releaseClient -Force | Out-Null
-          dotnet publish src/Client/GameNetManager.Client.csproj --configuration Release --output $releaseClient --no-restore
+          dotnet publish src/Client/GameNetManager.Client.csproj --configuration Release --runtime win-x64 --self-contained true --output $releaseClient
+          if (-not (Test-Path (Join-Path $releaseClient 'GameNetManager.Client.exe'))) { throw 'Self-contained Client executable was not produced.' }
           '0.7.1' | Out-File -FilePath (Join-Path $releaseClient 'client-version.txt') -Encoding ascii
           Compress-Archive -Path (Join-Path $releaseClient '*') -DestinationPath $releasePackage -Force
           $releaseHash = (Get-FileHash -Algorithm SHA256 -Path $releasePackage).Hash.ToLowerInvariant()
