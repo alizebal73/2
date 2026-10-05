@@ -3,6 +3,7 @@ export type ClientCatalogGame = {
   name: string;
   version?: string | null;
   genre?: string | null;
+  category?: string | null;
   status?: string | null;
   cover?: string | null;
   trailer?: string | null;
