@@ -69,6 +69,76 @@ app.MapGet("/api/server-info", (IWebHostEnvironment environment) =>
     Results.Ok(new ServerInfoDto("GameNet Manager", environment.EnvironmentName, DateTimeOffset.UtcNow)))
     .WithName("GetServerInfo");
 
+app.MapGet("/api/notifications", async (
+    HttpContext context,
+    GameNetDbContext database,
+    NotificationQueueService notifications,
+    int? take,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAuthenticatedAsync(
+        context,
+        database,
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var result = await notifications.ListAsync(
+        auth.User!.Id,
+        take ?? 50,
+        cancellationToken);
+
+    return Results.Ok(new
+    {
+        items = result.Items,
+        unreadCount = result.UnreadCount
+    });
+})
+.WithName("ListNotifications");
+
+app.MapPost("/api/notifications/{notificationId:guid}/read", async (
+    Guid notificationId,
+    HttpContext context,
+    GameNetDbContext database,
+    NotificationQueueService notifications,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAuthenticatedAsync(
+        context,
+        database,
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var changed = await notifications.MarkReadAsync(
+        auth.User!.Id,
+        notificationId,
+        cancellationToken);
+
+    return changed
+        ? Results.Ok(new { read = true })
+        : Results.NotFound(new { code = "notification_not_found", message = "اعلان پیدا نشد یا متعلق به کاربر جاری نیست." });
+})
+.WithName("MarkNotificationRead");
+
+app.MapPost("/api/notifications/read-all", async (
+    HttpContext context,
+    GameNetDbContext database,
+    NotificationQueueService notifications,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAuthenticatedAsync(
+        context,
+        database,
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var updated = await notifications.MarkAllReadAsync(
+        auth.User!.Id,
+        cancellationToken);
+
+    return Results.Ok(new { updated });
+})
+.WithName("MarkAllNotificationsRead");
+
 app.MapGet("/api/tariffs", async (
     HttpContext context,
     GameNetDbContext database,
