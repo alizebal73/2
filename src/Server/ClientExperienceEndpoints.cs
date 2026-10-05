@@ -599,12 +599,15 @@ public static class ClientExperienceEndpoints
                 .FirstOrDefault();
         }
 
-        return await database.AgentDevices
+        var localAgents = await database.AgentDevices
             .AsNoTracking()
             .Include(item => item.Station)
             .Where(item => item.IsActive && item.IsOnline && item.LastSeenAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        return localAgents
             .OrderByDescending(item => item.LastSeenAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefault();
     }
 
     private sealed record ClientRequestRequest(
