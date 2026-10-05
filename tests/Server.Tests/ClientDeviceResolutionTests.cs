@@ -1,8 +1,10 @@
 using System.Net;
 using GameNetManager.Server;
 using GameNetManager.Server.Data;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace GameNetManager.Server.Tests;
 
@@ -76,6 +78,55 @@ public sealed class ClientDeviceResolutionTests
 
         Assert.NotNull(resolved);
         Assert.Equal("agent-pc-offline", resolved!.DeviceId);
+    }
+
+    [Fact]
+    public async Task Protected_device_cookie_resolves_agent_without_relying_on_remote_ip()
+    {
+        var databaseName = $"client-device-cookie-{Guid.NewGuid():N}";
+        await using var keeper = new Microsoft.Data.Sqlite.SqliteConnection(
+            $"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5");
+        await keeper.OpenAsync();
+
+        await using var database = CreateContext(keeper);
+        await database.Database.EnsureCreatedAsync();
+
+        var device = new AgentDevice
+        {
+            DeviceId = "agent-cookie-01",
+            Name = "PC-cookie",
+            AgentTokenHash = "hash",
+            IsActive = true,
+            IsOnline = true,
+            LastIpAddress = "192.168.0.111",
+            LastSeenAt = DateTimeOffset.UtcNow,
+        };
+        database.AgentDevices.Add(device);
+        await database.SaveChangesAsync();
+
+        using var services = new ServiceCollection()
+            .AddDataProtection()
+            .BuildServiceProvider();
+
+        var protector = services
+            .GetRequiredService<IDataProtectionProvider>()
+            .CreateProtector("GameNetManager.ClientDeviceIdentity");
+        var cookie = protector.Protect($"{device.Id:D}|{DateTimeOffset.UtcNow.UtcTicks}");
+
+        var context = new DefaultHttpContext
+        {
+            RequestServices = services
+        };
+        context.Request.Headers.Cookie = $"gamenet_client_device={cookie}";
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.222");
+
+        var resolved = await ClientExperienceEndpoints.ResolveDeviceAsync(
+            context,
+            database,
+            CancellationToken.None);
+
+        Assert.NotNull(resolved);
+        Assert.Equal(device.DeviceId, resolved!.DeviceId);
     }
 
     [Fact]
