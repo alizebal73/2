@@ -1649,8 +1649,6 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasIndex("Name")
                         .IsUnique();
 
-                    b.HasIndex("Network");
-
                     b.HasIndex("StationTypeId");
 
                     b.HasIndex("TariffId");
