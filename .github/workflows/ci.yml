@@ -1705,24 +1705,16 @@ jobs:
               throw 'Fine-grained own report scope leaked an administrator-owned session.'
             }
 
-            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $scopeSession | Out-Null
-
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
               permissionNames = @('report.sessions.view','report.sessions.scope.all','reports.export')
             } | ConvertTo-Json) | Out-Null
 
-            $scopeAllSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $scopeAllSession -ContentType 'application/json' -Body (@{
-              userName = $managedUser.userName
-              password = 'Operator123!'
-            } | ConvertTo-Json) | Out-Null
-
-            $allScopedReport = Invoke-RestMethod -Uri "$baseUrl/api/reports/sessions?page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeAllSession
+            $allScopedReport = Invoke-RestMethod -Uri "$baseUrl/api/reports/sessions?page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeSession
             if (@($allScopedReport.items | Where-Object { $_.id -eq $startedSession.sessionId }).Count -ne 1) {
               throw 'Fine-grained all report scope did not return the authoritative completed session.'
             }
 
-            $exportResponse = Invoke-WebRequest -Uri "$baseUrl/api/reports/export?report=sessions&page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeAllSession
+            $exportResponse = Invoke-WebRequest -Uri "$baseUrl/api/reports/export?report=sessions&page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeSession
             $exportContentType = (@($exportResponse.Headers['Content-Type']) -join ';')
             if ($exportResponse.StatusCode -ne 200 -or $exportContentType -notmatch 'text/csv') {
               throw "Permission-gated sessions report did not return CSV: status=$($exportResponse.StatusCode); contentType=$exportContentType"
@@ -1731,21 +1723,12 @@ jobs:
               throw 'Sessions report export did not include the smoke session data.'
             }
 
-            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $scopeAllSession | Out-Null
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
               permissionNames = @('finance.manage')
             } | ConvertTo-Json) | Out-Null
             Write-Host 'Stage 13.4 fine-grained scope + export smoke passed.'
 
-            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
-              permissionNames = @('finance.manage')
-            } | ConvertTo-Json) | Out-Null
-
-            $operatorFinanceSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorFinanceSession -ContentType 'application/json' -Body (@{
-              userName = $managedUser.userName
-              password = 'Operator123!'
-            } | ConvertTo-Json) | Out-Null
+            $operatorFinanceSession = $scopeSession
 
             try {
               Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
