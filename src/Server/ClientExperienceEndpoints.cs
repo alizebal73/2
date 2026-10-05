@@ -141,7 +141,7 @@ public static class ClientExperienceEndpoints
                     _ => "درخواست مشتری ثبت شد."
                 };
 
-                if (kind == "message" && request.Message?.Trim().Length ?? 0 > 500)
+                if (kind == "message" && (request.Message?.Trim().Length ?? 0) > 500)
                     return Results.BadRequest(new
                     {
                         code = "client_message_too_long",
