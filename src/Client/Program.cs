@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using GameNetManager.Client;
 using System.Net.Http.Json;
 using System.Reflection;
@@ -61,6 +62,7 @@ Console.WriteLine(
     $"پیکربندی Agent: Server={serverUrl}; DeviceId={state.DeviceId}; Name={state.Name}; StationId={stationId?.ToString() ?? "none"}");
 
 using var shutdown = new CancellationTokenSource();
+var runningGames = new ConcurrentDictionary<Guid, Process>();
 using var lockScreen = new AgentLockScreenController();
 Console.CancelKeyPress += (_, eventArgs) =>
 {
@@ -132,7 +134,8 @@ try
                 updateManager,
                 dataDirectory,
                 agentVersion,
-                shutdown.Token);
+                shutdown.Token,
+                runningGames);
 
             if (outcome.AwaitingFinalResult)
             {
@@ -652,7 +655,8 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
     ClientUpdateManager updateManager,
     string dataDirectory,
     string agentVersion,
-    CancellationToken cancellationToken)
+    CancellationToken cancellationToken,
+    ConcurrentDictionary<Guid, Process> runningGames)
 {
     var success = AgentCommandTypes.IsSupported(command.CommandType);
     var message = success
@@ -750,6 +754,30 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 break;
             }
 
+            case AgentCommandTypes.LaunchGame:
+            {
+                var payload = JsonSerializer.Deserialize<AgentGameLaunchCommandPayload>(
+                    command.PayloadJson ?? string.Empty)
+                    ?? throw new JsonException("دادهٔ اجرای بازی معتبر نیست.");
+
+                await LaunchGameProcessAsync(payload, runningGames, cancellationToken);
+                Console.WriteLine($"CLIENT_GAME_LAUNCHED:{payload.GameId:N}:{payload.SessionId:N}");
+                message = "بازی روی Client اجرا شد.";
+                break;
+            }
+
+            case AgentCommandTypes.StopGame:
+            {
+                var payload = JsonSerializer.Deserialize<AgentGameLaunchCommandPayload>(
+                    command.PayloadJson ?? string.Empty)
+                    ?? throw new JsonException("دادهٔ توقف بازی معتبر نیست.");
+
+                await StopGameProcessAsync(payload.GameId, runningGames, cancellationToken);
+                Console.WriteLine($"CLIENT_GAME_STOPPED:{payload.GameId:N}:{payload.SessionId:N}");
+                message = "بازی روی Client متوقف شد.";
+                break;
+            }
+
             case AgentCommandTypes.Restart:
                 Console.WriteLine($"CLIENT_RESTART_REQUESTED:{command.CommandId}");
                 message = "راه‌اندازی مجدد ویندوز درخواست شد.";
@@ -838,6 +866,90 @@ static void ScheduleSystemPowerAction(string arguments)
 
     if (process is null)
         throw new InvalidOperationException("فرمان راه‌اندازی/خاموش کردن ویندوز اجرا نشد.");
+}
+
+static async Task LaunchGameProcessAsync(
+    AgentGameLaunchCommandPayload payload,
+    ConcurrentDictionary<Guid, Process> runningGames,
+    CancellationToken cancellationToken)
+{
+    cancellationToken.ThrowIfCancellationRequested();
+    if (payload.GameId == Guid.Empty || payload.SessionId == Guid.Empty)
+        throw new InvalidOperationException("شناسه بازی یا Session معتبر نیست.");
+
+    var executablePath = Path.IsPathRooted(payload.Executable)
+        ? Path.GetFullPath(payload.Executable)
+        : Path.GetFullPath(Path.Combine(payload.Path, payload.Executable));
+
+    if (!File.Exists(executablePath))
+        throw new FileNotFoundException("فایل اجرایی بازی روی این Client پیدا نشد.", executablePath);
+
+    if (runningGames.TryGetValue(payload.GameId, out var existing) && !existing.HasExited)
+        throw new InvalidOperationException("این بازی در حال اجراست.");
+
+    var workingDirectory = Path.GetDirectoryName(executablePath) ?? Path.GetFullPath(payload.Path);
+    var process = new Process
+    {
+        StartInfo = new ProcessStartInfo
+        {
+            FileName = executablePath,
+            Arguments = payload.LaunchArgs ?? string.Empty,
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            CreateNoWindow = false
+        },
+        EnableRaisingEvents = true
+    };
+
+    if (!process.Start())
+    {
+        process.Dispose();
+        throw new InvalidOperationException("فرآیند بازی روی Client اجرا نشد.");
+    }
+
+    runningGames[payload.GameId] = process;
+    process.Exited += (_, _) =>
+    {
+        runningGames.TryRemove(payload.GameId, out _);
+        process.Dispose();
+    };
+}
+
+static async Task StopGameProcessAsync(
+    Guid gameId,
+    ConcurrentDictionary<Guid, Process> runningGames,
+    CancellationToken cancellationToken)
+{
+    cancellationToken.ThrowIfCancellationRequested();
+    if (!runningGames.TryRemove(gameId, out var process))
+        return;
+
+    try
+    {
+        if (!process.HasExited)
+        {
+            try
+            {
+                process.CloseMainWindow();
+                await Task.WhenAny(
+                    process.WaitForExitAsync(cancellationToken),
+                    Task.Delay(TimeSpan.FromSeconds(3), cancellationToken));
+            }
+            catch
+            {
+                // Fall back to a hard stop below.
+            }
+
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+
+        await process.WaitForExitAsync(cancellationToken);
+    }
+    finally
+    {
+        process.Dispose();
+    }
 }
 
 static async Task ApplyGameManifestAsync(
