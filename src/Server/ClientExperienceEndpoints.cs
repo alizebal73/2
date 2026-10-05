@@ -707,8 +707,7 @@ public static class ClientExperienceEndpoints
 
             return await query.FirstOrDefaultAsync(cancellationToken);
         }
-        catch (Exception) when (
-            context.RequestServices.GetService<ILoggerFactory>() is not null)
+        catch
         {
             return null;
         }
