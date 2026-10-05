@@ -41,6 +41,10 @@ function formatTime(dateString: string) {
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatPersianNumber(value: number) {
+  return new Intl.NumberFormat('fa-IR').format(value);
+}
+
 function formatPersianDate(date = new Date()) {
   return new Intl.DateTimeFormat('fa-IR-u-ca-persian', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
 }
@@ -293,7 +297,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
           <span className="user-dot" />
           <span>{roleLabels[role]}: {user.fullName}</span>
         </button>
-        <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 {notificationUnreadCount}</button>
+        <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 {formatPersianNumber(notificationUnreadCount)}</button>
       </header>
 
       {notificationsOpen && (
