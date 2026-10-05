@@ -124,7 +124,8 @@ public sealed class Stage13CustomerAndUsersReportTests
             AppUser = user,
             OpenAt = DateTimeOffset.UtcNow.AddHours(-4),
             CloseAt = DateTimeOffset.UtcNow.AddHours(-1),
-            CashOpening = 100000
+            CashOpening = 100000,
+            CashClosing = 230000
         };
         var expense = new Expense
         {
