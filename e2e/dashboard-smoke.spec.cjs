@@ -416,6 +416,79 @@ test('dashboard exposes real Users and Shift report', async ({ page }) => {
   await expect(page.getByText('حقوق پرداخت‌شده')).toBeVisible();
 });
 
+test('dashboard shows server-backed notifications and persists read state', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-notify-user',
+      fullName: 'اپراتور اعلان',
+      userName: 'notify_operator',
+      email: 'notify@gamenet.local',
+      role: 'Operator',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['finance.view', 'buffet.inventory']
+    })
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
+  }));
+
+  let notificationState = {
+    items: [{
+      id: 'notification-1',
+      appUserId: 'e2e-notify-user',
+      category: 'buffet.low-stock',
+      title: 'موجودی بوفه کم شد',
+      detail: 'موجودی «نوشابه» به ۰ رسید.',
+      level: 'Critical',
+      entityName: 'Product',
+      entityId: 'product-1',
+      isRead: false,
+      createdAt: new Date().toISOString(),
+      readAt: null
+    }],
+    unreadCount: 1
+  };
+
+  await page.route('**/api/notifications?*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(notificationState)
+  }));
+  await page.route('**/api/notifications/*/read', async route => {
+    notificationState = {
+      ...notificationState,
+      unreadCount: 0,
+      items: notificationState.items.map(item => ({ ...item, isRead: true, readAt: new Date().toISOString() }))
+    };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ read: true }) });
+  });
+  await page.route('**/api/notifications/read-all', async route => {
+    notificationState = {
+      ...notificationState,
+      unreadCount: 0,
+      items: notificationState.items.map(item => ({ ...item, isRead: true, readAt: new Date().toISOString() }))
+    };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ updated: 1 }) });
+  });
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  const bell = page.getByRole('button', { name: 'اعلان‌ها' });
+  await expect(bell).toContainText('۱');
+  await bell.click();
+  await expect(page.getByText('موجودی بوفه کم شد')).toBeVisible();
+  await expect(page.getByText('موجودی «نوشابه» به ۰ رسید.')).toBeVisible();
+
+  await page.getByText('موجودی بوفه کم شد').click();
+  await expect(bell).toContainText('۰');
+  await expect(page.getByText('اعلان‌ها')).toBeVisible();
+});
+
 test('dashboard exposes real Audit Explorer', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
     status: 200,
