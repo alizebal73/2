@@ -486,7 +486,7 @@ test('dashboard shows server-backed notifications and persists read state', asyn
 
   await page.getByText('موجودی بوفه کم شد').click();
   await expect(bell).toContainText('۰');
-  await expect(page.getByText('اعلان‌ها')).toBeVisible();
+  await expect(page.getByText('اعلان‌ها', { exact: true })).toBeVisible();
 });
 
 test('dashboard exposes real Audit Explorer', async ({ page }) => {
