@@ -199,6 +199,67 @@ test('dashboard exposes real Sessions and Stations report', async ({ page }) => 
 });
 
 
+test('dashboard enforces report export permission in Sessions report', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-report-operator',
+      fullName: 'اپراتور گزارش',
+      userName: 'report_operator',
+      email: 'report-operator@gamenet.local',
+      role: 'Operator',
+      isActive: true,
+      lastLoginAt: new Date().toISOString(),
+      permissions: ['finance.view']
+    })
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] })
+  }));
+  await page.route('**/api/reports/sessions*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      page: 1,
+      pageSize: 50,
+      total: 1,
+      summary: { sessionCount: 1, billableMinutes: 30, revenue: 50000, averageMinutes: 30, stations: [] },
+      items: [{
+        id: 'session-export-permission',
+        startAt: new Date(Date.now() - 1800000).toISOString(),
+        endAt: new Date().toISOString(),
+        state: 'Completed',
+        stationId: 'pc-01',
+        stationName: 'PC ۰۱',
+        zone: 'pc',
+        stationType: 'PC',
+        customerId: 'customer-1',
+        customerName: 'مشتری گزارش',
+        customerCode: 'R001',
+        customerUsername: 'report_customer',
+        appUserId: 'operator-1',
+        operator: 'اپراتور گزارش',
+        persons: 1,
+        billableMinutes: 30,
+        totalAmount: 50000
+      }]
+    })
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'گزارش‌ها' }).click();
+  await page.locator('.report-categories').getByRole('button', { name: 'جلسات و ایستگاه‌ها' }).click();
+
+  await expect(page.getByTestId('session-report')).toBeVisible();
+  await expect(page.getByTestId('session-report')).toContainText('مشتری گزارش');
+  await expect(page.getByRole('button', { name: '📤 خروجی جلسات' })).toBeDisabled();
+  await expect(page.getByTitle('دسترسی خروجی گزارش ندارید')).toHaveCount(1);
+});
+
 test('dashboard exposes real Customer and VIP report', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
     status: 200,
