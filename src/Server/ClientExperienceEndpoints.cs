@@ -586,14 +586,17 @@ public static class ClientExperienceEndpoints
         if (remoteIp is not null && !local)
         {
             var ipText = remoteIp.ToString();
-            return await database.AgentDevices
+            var remoteAgents = await database.AgentDevices
                 .AsNoTracking()
                 .Include(item => item.Station)
                 .Where(item => item.IsActive
                     && item.IsOnline
                     && item.LastIpAddress == ipText)
+                .ToListAsync(cancellationToken);
+
+            return remoteAgents
                 .OrderByDescending(item => item.LastSeenAt)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefault();
         }
 
         return await database.AgentDevices
