@@ -27,12 +27,25 @@ jobs:
           'C:\dotnet' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           'DOTNET_ROOT=C:\dotnet' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: src/Dashboard/package-lock.json
+      - name: Check local Node
+        shell: pwsh
+        run: |
+          $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+          $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+          if (-not $nodeCommand -or -not $npmCommand) {
+            $nodePath = Join-Path $env:ProgramFiles 'nodejs'
+            if (Test-Path (Join-Path $nodePath 'node.exe')) {
+              $nodePath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            }
+          }
+          if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+            throw 'Node.js is not available on the self-hosted runner PATH.'
+          }
+          if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+            throw 'npm is not available on the self-hosted runner PATH.'
+          }
+          node --version
+          npm --version
 
       - name: Restore .NET
         run: dotnet restore GameNetManager.sln
@@ -127,6 +140,36 @@ jobs:
             $meBeforeAgent = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($meBeforeAgent.userName -ne 'admin') { throw 'Current operator endpoint failed before Agent smoke.' }
 
+            # Release regression gate: the endpoints that previously failed against SQLite DateTimeOffset
+            # must execute successfully on the real Server process, not only in unit tests.
+            foreach ($uri in @(
+              "$baseUrl/api/finance/summary",
+              "$baseUrl/api/finance/transactions",
+              "$baseUrl/api/shifts/current",
+              "$baseUrl/api/shifts/history",
+              "$baseUrl/api/account-pool/leases"
+            )) {
+              $response = Invoke-WebRequest -Uri $uri -Method Get -WebSession $adminSession -UseBasicParsing -TimeoutSec 10
+              if ($response.StatusCode -ne 200) { throw "SQLite endpoint regression failed: $uri returned $($response.StatusCode)." }
+            }
+
+            $unauthCustomerId = [guid]::NewGuid().ToString()
+            foreach ($uri in @(
+              "$baseUrl/api/customers/$unauthCustomerId/login-acquire",
+              "$baseUrl/api/customers/$unauthCustomerId/login-release"
+            )) {
+              try {
+                Invoke-WebRequest -Uri $uri -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'attacker-test' } | ConvertTo-Json) -UseBasicParsing -TimeoutSec 10 | Out-Null
+                throw "Unauthenticated customer login endpoint accepted a request: $uri"
+              } catch {
+                $status = $_.Exception.Response.StatusCode.value__
+                if ($status -ne 401) { throw }
+              }
+            }
+
+            Write-Host 'SQLite DateTimeOffset endpoint regression smoke passed.'
+
+
             $auditSmoke = Invoke-RestMethod -Uri "$baseUrl/api/audit?page=1&pageSize=20" -Method Get -WebSession $adminSession
             if ([int]$auditSmoke.total -lt 1 -or -not @($auditSmoke.items | Where-Object { $_.action -eq 'AppUserLogin' -and $_.entityName -eq 'AppUser' }).Count) {
               throw 'Stage 13 Audit Explorer API smoke failed to return the authoritative admin login audit event.'
@@ -168,6 +211,30 @@ jobs:
               throw 'Stage 14 Server-backed Settings restore smoke failed.'
             }
             Write-Host 'Stage 14 Server-backed Settings API smoke passed: read -> update -> validation reject -> restore.'
+
+            $shiftStart = Invoke-RestMethod -Uri "$baseUrl/api/shifts/start" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              cashOpening = 0
+              note = 'CI SQLite shift regression'
+            } | ConvertTo-Json)
+
+            if (-not $shiftStart.id) { throw 'Shift start regression smoke did not return a ShiftId.' }
+
+            $currentShift = Invoke-RestMethod -Uri "$baseUrl/api/shifts/current" -Method Get -WebSession $adminSession
+            if (-not $currentShift.id -or $currentShift.id -ne $shiftStart.id) {
+              throw 'Shift current regression smoke did not return the started shift.'
+            }
+
+            $closedShift = Invoke-RestMethod -Uri "$baseUrl/api/shifts/$($shiftStart.id)/close" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              cashClosing = 0
+              externalCash = 0
+              note = 'CI SQLite shift regression close'
+            } | ConvertTo-Json)
+
+            if (-not $closedShift.id -or $closedShift.state -eq 'Active') {
+              throw 'Shift close regression smoke failed.'
+            }
+
+            Write-Host 'Stage 5 Shift start/close regression smoke passed.'
 
             # Stage 11: prove Game and Account Pool are server-backed and allocation is atomic.
             $stage11Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
