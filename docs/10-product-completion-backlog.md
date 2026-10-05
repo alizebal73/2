@@ -908,6 +908,29 @@ A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8
 Stage 9 از نظر برش‌های نرم‌افزاری تأییدشده بود و سپس Stage 10 اجرا و تکمیل شد. Full Kiosk/Shell، UX کامل مشتری و validation فیزیکی 2–3 PC عمداً از scope Stage 10 خارج مانده‌اند. Server همچنان منبع حقیقت است و هر Command باید Permission → Persistence → SignalR → Ack/Result → Audit را حفظ کند.
 
 
+## Stage 14.1 — Settings Information Architecture / UI Hardening — 2026-10-05
+
+### وضعیت
+- 🟡 **در حال تثبیت** — شاخه `stage14-settings-ia`.
+- Settings از یک grid شلوغ به IA دسته‌بندی‌شده با Search و navigation تبدیل شده است.
+- دسته‌های رسمی این برش: داشبورد و نمایش، جلسه و تسویه، هشدارها، شبکه، Backup/Recovery، امنیت و دسترسی، کاربران و شیفت، بازی و کلاینت، ظاهر/محلی‌سازی و میانبرها.
+- رفتار تنظیمات عمداً حفظ شده؛ این برش Server-backed Settings را جعل نمی‌کند و وضعیت local-only را شفاف نمایش می‌دهد.
+- Browser Smoke برای جست‌وجوی تنظیمات و navigation دسته‌ها اضافه شده است.
+
+### Gate این برش
+- ⬜ Build
+- ⬜ .NET Tests
+- ⬜ EF validation
+- ⬜ Server/Migration/Health Smoke
+- ⬜ Dashboard Lint/Build
+- ⬜ Dashboard Browser Smoke
+
+### مرز بعدی
+- ⏭️ Stage 14.2 — Dashboard PC grouping / Internet 1-2 UX + dense responsive hardening
+- ⏭️ Stage 14.3 — remaining UI/accessibility/operational polish
+
+> Stage 14.1 تا زمانی که exact-head همه Gateهای بالا را سبز نکند Done محسوب نمی‌شود.
+
 ## Product Improvement Queue — ثبت در ممیزی Stage 1–9
 
 این موارد از نظر محصول مهم‌اند اما نباید با patchهای پراکنده و بدون جایگاه معماری وارد کد شوند. هر مورد در مرحلهٔ مناسب و پس از تعریف/تست اجرا می‌شود.
