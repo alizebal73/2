@@ -63,7 +63,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   const [sessionFollowUps, setSessionFollowUps] = useState<SessionFollowUp[]>([]);
   const [sessionTimeline, setSessionTimeline] = useState<SessionTimelineEvent[]>([]);
   const [message, setMessage] = useState('');
-  const [approval, setApproval] = useState<{ title: string; detail: string; action: 'settle'; method: string } | null>(null);
   const [reverseRequest, setReverseRequest] = useState<SessionTimelineEvent | null>(null);
   const [reversedEventIds, setReversedEventIds] = useState<string[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -516,17 +515,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     open('settle', station);
   }
 
-  async function finishSplitSession(finalTotal: number, bypassApproval = false) {
+  async function finishSplitSession(finalTotal: number) {
     if (!activeStation) return;
-    if (!bypassApproval && role === 'operator' && discountPercent > 10) {
-      setApproval({
-        title: 'تخفیف بیشتر از حد مجاز اپراتور',
-        detail: 'تسویه ترکیبی شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.',
-        action: 'settle',
-        method: 'split',
-      });
-      return;
-    }
 
     const cash = number(splitCash);
     const card = number(splitCard);
@@ -626,13 +616,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     }
   }
 
-  async function finishSession(method: string, bypassApproval = false) {
+  async function finishSession(method: string) {
     if (!canSettleSession) { setMessage('دسترسی تسویه جلسه ندارید'); return; }
     if (!activeStation) return;
-    if (!bypassApproval && role === 'operator' && discountPercent > 10) {
-      setApproval({ title: 'تخفیف بیشتر از حد مجاز اپراتور', detail: 'این تسویه شامل ' + money(discountPercent) + '٪ تخفیف است و برای ثبت نیاز به تأیید مدیر دارد.', action: 'settle', method });
-      return;
-    }
     const elapsed = duration(activeStation);
     const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
     const billing = calculateBilling({
@@ -1415,18 +1401,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
       {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && <button onClick={() => contextAction('agent-rollback')}>↩️ Rollback Client</button>}
     </div>}
     {reverseRequest && <ReverseDialog open={Boolean(reverseRequest)} title={reverseRequest.title} detail={reverseRequest.detail} onCancel={() => setReverseRequest(null)} onConfirm={() => reverseTimelineEvent(reverseRequest)} />}
-    {approval && <ApprovalDialog
-      open={Boolean(approval)}
-      title={approval.title}
-      detail={approval.detail}
-      requestLabel="تأیید و ادامه تسویه"
-      onReject={() => setApproval(null)}
-      onApprove={() => {
-        const request = approval;
-        setApproval(null);
-        finishSession(request.method, true);
-      }}
-    />}
     {modal && <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setModal(null)}><section className="operation-modal" role="dialog" aria-modal="true">
       <button className="modal-close" onClick={() => setModal(null)} aria-label="بستن">×</button>
       {modal === 'start' && <><h2>ورود یوزر · {activeStation?.name ?? 'انتخاب ایستگاه آزاد'}</h2>
