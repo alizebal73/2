@@ -246,7 +246,7 @@ public sealed class CustomerVipReportService
 
         return new CustomerVipReportRowDto(
             customer.Id,
-            customer.Code,
+            customer.Code ?? string.Empty,
             customer.Username ?? "",
             customer.FullName,
             vipTier,
