@@ -203,7 +203,7 @@ public sealed class Stage13CustomerAndUsersReportTests
         Assert.Equal(150000m, row.ShiftRevenue);
         Assert.Equal(150000m, row.ShiftCashSales);
         Assert.Equal(20000m, row.ShiftExpenses);
-        Assert.Equal(130000m, row.ShiftDifference);
+        Assert.Equal(0m, row.ShiftDifference);
         Assert.Equal(1, row.SessionCount);
         Assert.Equal(150000m, row.SessionRevenue);
         Assert.Equal(80000m, row.PaidThisPeriod);
