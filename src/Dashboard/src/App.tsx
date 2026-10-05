@@ -269,6 +269,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
 
   return (
     <div className="app-shell" dir="rtl">
+      <a className="skip-link" href="#main-content">پرش به محتوای اصلی</a>
       <header className="topbar">
         <div className="brand-mark">گ</div>
         <div className="brand-copy">
@@ -288,20 +289,30 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
           </span>
         </div>
 
-        <button type="button" className="refresh-button command-trigger" onClick={() => setCommandOpen(true)} title="مرکز جست‌وجو و فرمان · Ctrl+K">⌕ جست‌وجو · Ctrl+K</button>
-        <button type="button" className="refresh-button" onClick={() => setRetry((value) => value + 1)}>
+        <button type="button" className="refresh-button command-trigger" onClick={() => setCommandOpen(true)} title="مرکز جست‌وجو و فرمان · Ctrl+K" aria-label="باز کردن مرکز جست‌وجو و فرمان">⌕ جست‌وجو · Ctrl+K</button>
+        <button type="button" className="refresh-button" onClick={() => setRetry((value) => value + 1)} aria-label="تلاش مجدد برای دریافت اطلاعات از سرور">
           تلاش مجدد
         </button>
 
-        <button type="button" className="user-pill role-switch" onClick={onLogout} title="خروج از حساب">
+        <button type="button" className="user-pill role-switch" onClick={onLogout} title="خروج از حساب" aria-label={`خروج از حساب ${roleLabels[role]} ${user.fullName}`}>
           <span className="user-dot" />
           <span>{roleLabels[role]}: {user.fullName}</span>
         </button>
-        <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 {formatPersianNumber(notificationUnreadCount)}</button>
+        <button
+          type="button"
+          className="refresh-button"
+          onClick={() => setNotificationsOpen(open => !open)}
+          aria-label={`اعلان‌ها، ${formatPersianNumber(notificationUnreadCount)} خوانده‌نشده`}
+          aria-expanded={notificationsOpen}
+          aria-controls="notification-popover"
+          title="اعلان‌ها"
+        >
+          🔔 {formatPersianNumber(notificationUnreadCount)}
+        </button>
       </header>
 
       {notificationsOpen && (
-        <div className="notification-popover">
+        <div id="notification-popover" className="notification-popover" role="region" aria-label="مرکز اعلان‌ها">
           <div className="notification-popover-header">
             <strong>اعلان‌ها</strong>
             <button
@@ -388,7 +399,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
         />
       )}
 
-      <div className="page-shell">
+      <main id="main-content" className="page-shell" tabIndex={-1}>
         <div hidden={activePage !== 'dashboard'}><DashboardPage snapshot={dashboardSnapshot} apiState={apiState} serverInfo={serverInfo} error={error} onNavigate={requestNavigation} role={role} user={user} /></div>
         <div hidden={activePage !== 'games'}><GamesPage /></div>
         <div hidden={activePage !== 'client-shell'}><ClientShellPage canPower={hasPermission(user, 'client.power')} /></div>
@@ -400,7 +411,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
         <div hidden={activePage !== 'users'}><UsersPage user={user} /></div>
         <div hidden={activePage !== 'settings'}><SettingsPage /></div>
         <div hidden={activePage !== 'operations'}><OperationsPage /></div>
-      </div>
+      </main>
 
       <GlobalCommandCenter open={commandOpen} stations={dashboardSnapshot?.stations ?? []} onNavigate={requestNavigation} onClose={() => setCommandOpen(false)} />
 
