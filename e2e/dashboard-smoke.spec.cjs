@@ -129,8 +129,8 @@ test('dashboard groups PCs by Internet 1/2 without changing station data', async
   await expect(groupBy).toHaveValue('state');
   await groupBy.selectOption('network');
 
-  await expect(page.locator('.pc-group-title', { hasText: 'اینترنت ۱' }).last()).toContainText('۲');
-  await expect(page.locator('.pc-group-title', { hasText: 'اینترنت ۲' }).last()).toContainText('۲');
+  await expect(page.locator('.pc-group-title', { hasText: 'اینترنت ۱' }).last()).toHaveText('اینترنت ۱ · 2');
+  await expect(page.locator('.pc-group-title', { hasText: 'اینترنت ۲' }).last()).toHaveText('اینترنت ۲ · 2');
   await expect(page.locator('[data-station-id="net-pc-01"]')).toBeVisible();
   await expect(page.locator('[data-station-id="net-pc-04"]')).toBeVisible();
 
