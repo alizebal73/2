@@ -13,3 +13,5 @@ src/Server/App_Data/*.db
 src/Server/App_Data/*.db-shm
 src/Server/App_Data/*.db-wal
 *.log
+
+/artifacts/installer/
