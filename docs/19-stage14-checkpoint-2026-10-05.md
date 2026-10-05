@@ -82,7 +82,7 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Main certification: Run #1440
 - ✅ Certified merge commit: b69fa15c7ea166a65c5932f8ceb11fb34429eb4e
 
-## Slice 14.4 — IN PROGRESS
+## Slice 14.4 — COMPLETE
 
 **Server-backed Settings**
 
@@ -96,11 +96,12 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Hotkeys and UX section locks remain explicitly local rather than being falsely presented as global server state.
 - ✅ Server API Smoke and Browser Smoke added for the new path.
 
-### Current gates
+### Gates
 
-- ⬜ Exact-head CI for Stage 14.4
-- ⬜ Main certification for Stage 14.4
+- ✅ Exact-head CI: Run #1445 on exact Stage 14.4 head `5c6b4575ec46f387e70e715d87ff79e340cf7c14`.
+- ✅ Main certification: Run #1446 on merge commit `b3a749db8974a7f75cedc0e9168bff94fc38cad9`.
+- ✅ All CI gates green, including EF model validation, Server startup/migration smoke, Dashboard build/lint/preview and Browser Smoke.
 
 ## Next
 
-Complete Stage 14.4 through exact-head CI and Main certification, then advance to real Backup/Restore and physical 2–3 PC validation gates.
+Advance to **real Backup/Restore**, then the physical 2–3 PC validation gate.
