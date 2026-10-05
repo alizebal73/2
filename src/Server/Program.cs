@@ -13,6 +13,7 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Host.UseWindowsService(options => options.ServiceName = "GameNet Manager Server");
+ProductionSecretValidator.Validate(builder.Configuration, builder.Environment);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
