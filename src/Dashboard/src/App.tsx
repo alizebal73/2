@@ -25,6 +25,7 @@ import type { PageLockMap } from './types';
 import type { AgentStatusDto, DashboardSnapshotDto, PageKey, ServerInfoDto } from './types';
 import { normalizeDashboardSnapshot } from './services/dashboardAdapter';
 import { getAgentStatuses } from './services/agentService';
+import { getNotifications, markAllNotificationsRead, markNotificationRead, type NotificationRecord } from './services/notificationService';
 
 type HubState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 type DemoRole = 'operator' | 'manager' | 'owner';
@@ -38,6 +39,10 @@ function mapRole(role: string): DemoRole {
 function formatTime(dateString: string) {
   const date = new Date(dateString);
   return Number.isNaN(date.getTime()) ? '—' : date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatPersianNumber(value: number) {
+  return new Intl.NumberFormat('fa-IR').format(value);
 }
 
 function formatPersianDate(date = new Date()) {
@@ -78,11 +83,8 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
   const [pageLocks, setPageLocks] = useState<PageLockMap>(() => readPageLocks());
   const [lockedPage, setLockedPage] = useState<PageKey | null>(null);
   const [unlockedPages, setUnlockedPages] = useState<PageKey[]>(['dashboard']);
-  const [notifications, setNotifications] = useState([
-    { id: 'n1', title: 'درخواست بوفه', detail: 'PC ۰۴ درخواست فروش بوفه دارد', level: 'info', read: false },
-    { id: 'n2', title: 'به‌روزرسانی کلاینت', detail: '۲ ایستگاه به‌روزرسانی معلق دارند', level: 'warning', read: false },
-    { id: 'n3', title: 'رزرو نزدیک', detail: 'رزرو PC ۰۷ تا ۱۵ دقیقه دیگر شروع می‌شود', level: 'info', read: false },
-  ]);
+  const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
 
   useEffect(() => {
     const onNavigate = (event: Event) => {
@@ -165,8 +167,27 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
     let active = true;
     const connection = new HubConnectionBuilder().withUrl('/hubs/dashboard').withAutomaticReconnect().build();
 
+    const loadNotifications = async () => {
+      try {
+        const data = await getNotifications(50);
+        if (active) {
+          setNotifications(data.items);
+          setNotificationUnreadCount(data.unreadCount);
+        }
+      } catch {
+        if (active) {
+          setNotifications([]);
+          setNotificationUnreadCount(0);
+        }
+      }
+    };
+
+
     connection.on('ServerReady', (info: ServerInfoDto) => {
       if (active) setServerInfo(info);
+    });
+    connection.on('NotificationAdded', () => {
+      void loadNotifications();
     });
     connection.onreconnecting(() => {
       if (active) setHubState('reconnecting');
@@ -207,6 +228,7 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
     });
 
     void loadSnapshot();
+    void loadNotifications();
 
     return () => {
       active = false;
@@ -275,10 +297,87 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
           <span className="user-dot" />
           <span>{roleLabels[role]}: {user.fullName}</span>
         </button>
-        <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 {notifications.filter(item => !item.read).length}</button>
+        <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 {formatPersianNumber(notificationUnreadCount)}</button>
       </header>
 
-      {notificationsOpen && <div className="notification-popover"><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><strong>اعلان‌ها</strong><button type="button" className="btn sm" onClick={() => setNotifications(current => current.map(item => ({ ...item, read: true })))}>خوانده‌شده</button></div>{notifications.map(item => <button type="button" key={item.id} className={`notification-item ${item.read ? 'read' : ''}`} onClick={() => setNotifications(current => current.map(row => row.id === item.id ? { ...row, read: true } : row))}><strong>{item.title}</strong><span>{item.detail}</span></button>)}</div>}
+      {notificationsOpen && (
+        <div className="notification-popover">
+          <div className="notification-popover-header">
+            <strong>اعلان‌ها</strong>
+            <button
+              type="button"
+              className="btn sm"
+              disabled={notificationUnreadCount === 0}
+              onClick={() => {
+                void markAllNotificationsRead()
+                  .then(() => {
+                    setNotifications(current =>
+                      current.map(item => ({
+                        ...item,
+                        isRead: true,
+                        readAt: new Date().toISOString(),
+                      })),
+                    );
+                    setNotificationUnreadCount(0);
+                  })
+                  .catch(error =>
+                    setError(
+                      error instanceof Error
+                        ? error.message
+                        : 'خوانده‌شدن اعلان‌ها انجام نشد',
+                    ),
+                  );
+              }}
+            >
+              خوانده‌شده
+            </button>
+          </div>
+
+          {notifications.length === 0 ? (
+            <div className="notification-empty">اعلانی وجود ندارد.</div>
+          ) : (
+            notifications.map(item => (
+              <button
+                type="button"
+                key={item.id}
+                className={`notification-item ${item.isRead ? 'read' : ''} notification-level-${item.level.toLowerCase()}`}
+                onClick={() => {
+                  if (item.isRead) return;
+
+                  void markNotificationRead(item.id)
+                    .then(() => {
+                      setNotifications(current =>
+                        current.map(row =>
+                          row.id === item.id
+                            ? {
+                                ...row,
+                                isRead: true,
+                                readAt: new Date().toISOString(),
+                              }
+                            : row,
+                        ),
+                      );
+                      setNotificationUnreadCount(count =>
+                        Math.max(0, count - 1),
+                      );
+                    })
+                    .catch(error =>
+                      setError(
+                        error instanceof Error
+                          ? error.message
+                          : 'خوانده‌شدن اعلان انجام نشد',
+                      ),
+                    );
+                }}
+              >
+                <strong>{item.title}</strong>
+                <span>{item.detail}</span>
+                <small>{new Date(item.createdAt).toLocaleString('fa-IR')}</small>
+              </button>
+            ))
+          )}
+        </div>
+      )}
 
       {error && (
         <UserErrorBanner

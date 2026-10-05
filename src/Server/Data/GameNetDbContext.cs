@@ -36,6 +36,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<Shift> Shifts => Set<Shift>();
     public DbSet<Expense> Expenses => Set<Expense>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<InvoiceReversal> InvoiceReversals => Set<InvoiceReversal>();
 
     private void TouchUpdatedAt()
@@ -99,6 +100,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureShift(modelBuilder);
         ConfigureExpense(modelBuilder);
         ConfigureAuditLog(modelBuilder);
+        ConfigureNotification(modelBuilder);
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes()
                      .Where(type => typeof(BaseEntity).IsAssignableFrom(type.ClrType)))
@@ -672,6 +674,20 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany(item => item.Expenses)
             .HasForeignKey(item => item.ShiftId)
             .OnDelete(DeleteBehavior.Cascade);
+    }
+
+    private static void ConfigureNotification(ModelBuilder modelBuilder)
+    {
+        var notification = modelBuilder.Entity<Notification>();
+        notification.HasKey(item => item.Id);
+        notification.Property(item => item.Category).HasMaxLength(60).IsRequired();
+        notification.Property(item => item.Title).HasMaxLength(160).IsRequired();
+        notification.Property(item => item.Detail).HasMaxLength(1000).IsRequired();
+        notification.Property(item => item.Level).HasConversion<string>().HasMaxLength(20).IsRequired();
+        notification.Property(item => item.EntityName).HasMaxLength(80);
+        notification.Property(item => item.EntityId).HasMaxLength(120);
+        notification.Property(item => item.IsRead).IsRequired();
+        notification.HasIndex(item => new { item.AppUserId, item.IsRead, item.CreatedAt });
     }
 
     private static void ConfigureAuditLog(ModelBuilder modelBuilder)

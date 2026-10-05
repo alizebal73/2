@@ -24,6 +24,7 @@ builder.Services.AddScoped<UsersShiftReportService>();
 builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<SessionReportService>();
+builder.Services.AddScoped<NotificationQueueService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
@@ -67,6 +68,76 @@ app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
 app.MapGet("/api/server-info", (IWebHostEnvironment environment) =>
     Results.Ok(new ServerInfoDto("GameNet Manager", environment.EnvironmentName, DateTimeOffset.UtcNow)))
     .WithName("GetServerInfo");
+
+app.MapGet("/api/notifications", async (
+    HttpContext context,
+    GameNetDbContext database,
+    NotificationQueueService notifications,
+    int? take,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAuthenticatedAsync(
+        context,
+        database,
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var result = await notifications.ListAsync(
+        auth.User!.Id,
+        take ?? 50,
+        cancellationToken);
+
+    return Results.Ok(new
+    {
+        items = result.Items,
+        unreadCount = result.UnreadCount
+    });
+})
+.WithName("ListNotifications");
+
+app.MapPost("/api/notifications/{notificationId:guid}/read", async (
+    Guid notificationId,
+    HttpContext context,
+    GameNetDbContext database,
+    NotificationQueueService notifications,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAuthenticatedAsync(
+        context,
+        database,
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var changed = await notifications.MarkReadAsync(
+        auth.User!.Id,
+        notificationId,
+        cancellationToken);
+
+    return changed
+        ? Results.Ok(new { read = true })
+        : Results.NotFound(new { code = "notification_not_found", message = "اعلان پیدا نشد یا متعلق به کاربر جاری نیست." });
+})
+.WithName("MarkNotificationRead");
+
+app.MapPost("/api/notifications/read-all", async (
+    HttpContext context,
+    GameNetDbContext database,
+    NotificationQueueService notifications,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAuthenticatedAsync(
+        context,
+        database,
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var updated = await notifications.MarkAllReadAsync(
+        auth.User!.Id,
+        cancellationToken);
+
+    return Results.Ok(new { updated });
+})
+.WithName("MarkAllNotificationsRead");
 
 app.MapGet("/api/tariffs", async (
     HttpContext context,
@@ -3515,6 +3586,7 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
     StockAdjustmentRequest request,
     HttpContext context,
     GameNetDbContext database,
+    NotificationQueueService notifications,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
@@ -3601,6 +3673,20 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
 
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        if (product.StockQuantity <= product.MinimumStock)
+        {
+            await notifications.PublishToPermissionAsync(
+                "buffet.inventory",
+                new NotificationEvent(
+                    "buffet.low-stock",
+                    "موجودی بوفه کم شد",
+                    $"موجودی «{product.Name}» به {product.StockQuantity} {product.Unit} رسید؛ حداقل موجودی {product.MinimumStock} است.",
+                    product.StockQuantity == 0 ? NotificationLevel.Critical : NotificationLevel.Warning,
+                    "Product",
+                    product.Id.ToString()),
+                cancellationToken);
+        }
 
         return Results.Ok(new
         {
@@ -3766,6 +3852,7 @@ app.MapPost("/api/buffet/sales", async (
     BuffetSaleRequest request,
     HttpContext context,
     GameNetDbContext database,
+    NotificationQueueService notifications,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "buffet.sell", "buffet.inventory");
@@ -3901,6 +3988,20 @@ app.MapPost("/api/buffet/sales", async (
 
     await database.SaveChangesAsync(cancellationToken);
     await transaction.CommitAsync(cancellationToken);
+
+    foreach (var lowStockProduct in products.Where(item => item.StockQuantity <= item.MinimumStock))
+    {
+        await notifications.PublishToPermissionAsync(
+            "buffet.inventory",
+            new NotificationEvent(
+                "buffet.low-stock",
+                "موجودی بوفه کم شد",
+                $"موجودی «{lowStockProduct.Name}» به {lowStockProduct.StockQuantity} {lowStockProduct.Unit} رسید؛ حداقل موجودی {lowStockProduct.MinimumStock} است.",
+                lowStockProduct.StockQuantity == 0 ? NotificationLevel.Critical : NotificationLevel.Warning,
+                "Product",
+                lowStockProduct.Id.ToString()),
+            cancellationToken);
+    }
 
     var buffetTotal = invoice?.Items.Where(item => item.ProductId.HasValue).Sum(item => item.Amount) ?? 0m;
     return Results.Ok(new { total, target, sessionId = session?.Id, invoiceId = invoice?.Id, buffetTotal });
