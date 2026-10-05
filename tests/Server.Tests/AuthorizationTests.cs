@@ -74,6 +74,32 @@ public sealed class AuthorizationTests : IDisposable
     }
 
     [Fact]
+    public void ReportScopeDefaultsToOwnAndExplicitAllGrantsGlobalReportScope()
+    {
+        var operatorUser = new AppUser
+        {
+            FullName = "Report Operator",
+            UserName = "report-operator",
+            Email = "report-operator@test.local",
+            PasswordHash = "hash",
+            Role = "Operator"
+        };
+        var view = new Permission { Name = "report.sessions.view" };
+        operatorUser.Permissions.Add(new AppUserPermission { AppUser = operatorUser, Permission = view });
+
+        Assert.False(AuthorizationService.HasReportAllScope(operatorUser, "sessions"));
+        Assert.False(AuthorizationService.HasReportExport(operatorUser));
+
+        var all = new Permission { Name = "report.sessions.scope.all" };
+        var export = new Permission { Name = "reports.export" };
+        operatorUser.Permissions.Add(new AppUserPermission { AppUser = operatorUser, Permission = all });
+        operatorUser.Permissions.Add(new AppUserPermission { AppUser = operatorUser, Permission = export });
+
+        Assert.True(AuthorizationService.HasReportAllScope(operatorUser, "sessions"));
+        Assert.True(AuthorizationService.HasReportExport(operatorUser));
+    }
+
+    [Fact]
     public void AdminAndOwnerHaveGlobalPermission()
     {
         var admin = new AppUser
