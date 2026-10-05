@@ -158,7 +158,11 @@ public sealed class ClientDeviceResolutionTests
         });
         await database.SaveChangesAsync();
 
-        var context = new DefaultHttpContext();
+        using var serviceProvider = CreateRequestServices();
+        var context = new DefaultHttpContext
+        {
+            RequestServices = serviceProvider
+        };
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.111");
 
         var resolved = await ClientExperienceEndpoints.ResolveDeviceAsync(
