@@ -245,6 +245,16 @@ namespace GameNetManager.Server.Data.Migrations
                     b.ToTable("AppUsers");
                 });
 
+            modelBuilder.Entity("GameNetManager.Server.Data.AppSetting", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AppUser", "UpdatedByUser")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("UpdatedByUser");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.AppUserPermission", b =>
                 {
                     b.Property<Guid>("AppUserId")
@@ -298,6 +308,47 @@ namespace GameNetManager.Server.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("AppUserSessions");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.AppSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ScopeKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("UpdatedByUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ValueJson")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ScopeKey", "Key")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByUserId");
+
+                    b.ToTable("AppSettings");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.ApprovalRequest", b =>
