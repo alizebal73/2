@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { PageKey, PageLockMap } from '../types';
 import { hashPin, protectedPageLabels, readPageLocks, writePageLocks } from '../services/securityService';
 
+type BackupItem = { fileName:string; createdAt:string; sizeBytes:number; sha256:string; verified:boolean; verificationMessage:string|null };
 type AppSettings = {
   viewMode:'v-card'|'v-compact'|'v-list';
   payrollMode?: 'hourly'|'monthly'; shortagePolicy?: 'approval'|'payroll'|'expense'; autoPayrollDeduction?: boolean; zones:boolean; liveCost:boolean; progress:boolean; largeFont:boolean;
@@ -38,6 +39,12 @@ export function SettingsPage(){
  const [serverSettingsAccessible,setServerSettingsAccessible]=useState(false);
  const [serverSettingsSaving,setServerSettingsSaving]=useState(false);
  const [serverSettingsError,setServerSettingsError]=useState('');
+ const [backupItems,setBackupItems]=useState<BackupItem[]>([]);
+ const [backupAccessible,setBackupAccessible]=useState(false);
+ const [backupCanManage,setBackupCanManage]=useState(false);
+ const [backupCanRestore,setBackupCanRestore]=useState(false);
+ const [backupLoading,setBackupLoading]=useState(false);
+ const [backupBusy,setBackupBusy]=useState(false);
 
  useEffect(()=>{
   let active=true;
@@ -72,6 +79,77 @@ export function SettingsPage(){
   return ()=>{active=false};
  },[]);
 
+ useEffect(()=>{
+  let active=true;
+  void (async()=>{
+   try{
+    setBackupLoading(true);
+    const response=await fetch('/api/backup',{credentials:'include'});
+    if(!response.ok){
+     if(active){ setBackupAccessible(false); setBackupItems([]); }
+     return;
+    }
+    const payload=await response.json() as { items?: BackupItem[]; canManage?: boolean; canRestore?: boolean };
+    if(active){
+     setBackupAccessible(true);
+     setBackupItems(Array.isArray(payload.items) ? payload.items : []);
+     setBackupCanManage(Boolean(payload.canManage));
+     setBackupCanRestore(Boolean(payload.canRestore));
+    }
+   }catch{
+    if(active){ setBackupAccessible(false); setBackupItems([]); }
+   }finally{
+    if(active) setBackupLoading(false);
+   }
+  })();
+  return ()=>{active=false};
+ },[]);
+
+ async function refreshBackups(){
+  try{
+   const response=await fetch('/api/backup',{credentials:'include'});
+   if(!response.ok){setBackupAccessible(false);return;}
+   const payload=await response.json() as { items?: BackupItem[]; canManage?: boolean; canRestore?: boolean };
+   setBackupAccessible(true);
+   setBackupItems(Array.isArray(payload.items) ? payload.items : []);
+   setBackupCanManage(Boolean(payload.canManage));
+   setBackupCanRestore(Boolean(payload.canRestore));
+  }catch{setBackupAccessible(false);}
+ }
+ async function createBackup(){
+  if(!backupCanManage || backupBusy) return;
+  setBackupBusy(true);
+  try{
+   const response=await fetch('/api/backup/create',{method:'POST',credentials:'include'});
+   const payload=await response.json().catch(()=>({}));
+   if(!response.ok){setNotice(typeof payload?.message==='string' ? payload.message : 'ایجاد بکاپ انجام نشد');return;}
+   setNotice('بکاپ واقعی با موفقیت ایجاد شد');
+   await refreshBackups();
+  }catch{setNotice('ارتباط با Server برای ایجاد بکاپ برقرار نشد');}
+  finally{setBackupBusy(false);}
+ }
+ async function verifyBackup(fileName:string){
+  if(backupBusy) return;
+  setBackupBusy(true);
+  try{
+   const response=await fetch('/api/backup/'+encodeURIComponent(fileName)+'/verify',{method:'POST',credentials:'include'});
+   const payload=await response.json().catch(()=>({}));
+   setNotice(typeof payload?.message==='string' ? payload.message : (response.ok ? 'بکاپ معتبر است' : 'اعتبارسنجی بکاپ ناموفق بود'));
+   await refreshBackups();
+  }catch{setNotice('اعتبارسنجی بکاپ انجام نشد');}
+  finally{setBackupBusy(false);}
+ }
+ async function prepareRestore(fileName:string){
+  if(!backupCanRestore || backupBusy) return;
+  if(!window.confirm('این عملیات نسخهٔ انتخاب‌شده را برای Restore آماده می‌کند و در راه‌اندازی بعدی Server جایگزین می‌شود. ادامه می‌دهید؟')) return;
+  setBackupBusy(true);
+  try{
+   const response=await fetch('/api/backup/'+encodeURIComponent(fileName)+'/restore',{method:'POST',credentials:'include'});
+   const payload=await response.json().catch(()=>({}));
+   setNotice(typeof payload?.message==='string' ? payload.message : (response.ok ? 'Restore برای راه‌اندازی بعدی آماده شد' : 'آماده‌سازی Restore ناموفق بود'));
+  }catch{setNotice('ارتباط با Server برای Restore برقرار نشد');}
+  finally{setBackupBusy(false);}
+ }
  useEffect(()=>{localStorage.setItem('gamenet-settings-v1',JSON.stringify(settings));window.dispatchEvent(new CustomEvent('gamenet-settings-changed',{detail:settings}))},[settings]);
  useEffect(()=>{localStorage.setItem('gamenet-hotkeys-v1',JSON.stringify(hotkeys));window.dispatchEvent(new CustomEvent('gamenet-hotkeys-changed',{detail:hotkeys}))},[hotkeys]);
  function update<K extends keyof AppSettings>(key:K,value:AppSettings[K]){setSettings(current=>({...current,[key]:value}))}
@@ -195,15 +273,29 @@ export function SettingsPage(){
    <section id="settings-section-sessions" className="card-panel" style={{padding:14}}><h3>🧾 رفتار جلسه</h3><label>حالت پیش‌فرض<select value={settings.sessionMode} onChange={e=>update('sessionMode',e.target.value as AppSettings['sessionMode'])}><option value="settle">تسویه بعد از بازی</option><option value="prepaid">پیش‌پرداخت</option></select></label><label>سقف تخفیف آزاد اپراتور<input type="number" value={settings.operatorDiscount} onChange={e=>update('operatorDiscount',Number(e.target.value))}/></label></section>
    <section id="settings-section-backup" className="card-panel" style={{padding:14}}>
     <h3>💾 داده و پشتیبان‌گیری</h3>
-    <label className="setting-item"><span><b>بکاپ خودکار</b><small>تا زمان آماده‌شدن سرویس Backup سرور، این گزینه اجرایی نیست.</small></span><input type="checkbox" checked={false} disabled /></label>
-    <label>ساعت بکاپ<input type="time" value={settings.backupHour} disabled /></label>
-    <label>تعداد نسخه<input type="number" min="1" value={settings.backupKeep} disabled /></label>
-    <label>مقصد<input value={settings.backupTarget} disabled /></label>
+    <label className="setting-item"><span><b>بکاپ خودکار</b><small>هر روز در ساعت تعیین‌شده روی Server اجرا می‌شود.</small></span><input type="checkbox" checked={Boolean(settings.backupAuto)} onChange={e=>update('backupAuto',e.target.checked)} /></label>
+    <label>ساعت بکاپ<input type="time" value={settings.backupHour} onChange={e=>update('backupHour',e.target.value)} /></label>
+    <label>تعداد نسخه<input type="number" min="1" max="3650" value={settings.backupKeep} onChange={e=>update('backupKeep',Number(e.target.value))} /></label>
+    <label>مقصد<input value={settings.backupTarget} onChange={e=>update('backupTarget',e.target.value)} /></label>
     <div className="modal-actions">
-      <button className="btn primary" disabled title="پشتیبان واقعی Server-side هنوز در Release Gate پیاده‌سازی نشده است">📦 بکاپ دستی الان</button>
-      <button className="btn" disabled title="بازیابی واقعی Server-side هنوز در Release Gate پیاده‌سازی نشده است">♻️ بازیابی از نسخه</button>
+      <button className="btn primary" disabled={!backupAccessible || !backupCanManage || backupBusy} onClick={()=>void createBackup()}>{backupBusy ? 'در حال پردازش…' : '📦 بکاپ دستی الان'}</button>
+      {!backupAccessible && <small className="security-footnote">دسترسی Backup Server برای کاربر جاری فعال نیست.</small>}
     </div>
-    <small className="security-footnote">پشتیبان واقعی باید شامل دیتابیس و DataProtection Keys باشد و قبل از Migration قابل‌بازیابی تست شود؛ این کنترل‌ها تا آماده‌شدن مسیر سروری عمداً غیرفعال‌اند.</small>
+    <div style={{display:'grid',gap:8,marginTop:10}}>
+      {backupLoading && <small>در حال دریافت نسخه‌های پشتیبان…</small>}
+      {!backupLoading && backupAccessible && backupItems.length===0 && <small>هنوز نسخهٔ پشتیبانی ثبت نشده است.</small>}
+      {backupItems.slice(0,10).map(item=><div key={item.fileName} className="setting-item" style={{display:'grid',gridTemplateColumns:'1fr auto',gap:8,alignItems:'center'}}>
+        <span>
+          <b className="ltr">{item.fileName}</b>
+          <small>{new Date(item.createdAt).toLocaleString('fa-IR')} · {Math.max(1,Math.round(item.sizeBytes/1024))} KB · {item.verified ? 'تأییدشده' : 'نیازمند Verify'}</small>
+        </span>
+        <span style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+          <button className="btn sm" disabled={backupBusy} onClick={()=>void verifyBackup(item.fileName)}>✅ بررسی</button>
+          {backupCanRestore && <button className="btn sm danger" disabled={backupBusy || !item.verified} onClick={()=>void prepareRestore(item.fileName)}>♻️ آماده‌سازی Restore</button>}
+        </span>
+      </div>)}
+    </div>
+    <small className="security-footnote">نسخهٔ پشتیبان شامل دیتابیس SQLite و DataProtection Keys است. Restore روی دیتابیس زنده انجام نمی‌شود؛ ابتدا اعتبارسنجی و Pending می‌شود و در راه‌اندازی بعدی Server اعمال خواهد شد.</small>
    </section>
    <section id="settings-section-staff" className="card-panel" style={{padding:14}}><h3>👥 حقوق و شیفت</h3><label>روش محاسبه حقوق پیش‌فرض<select value={settings.payrollMode ?? 'hourly'} onChange={e=>update('payrollMode',e.target.value as AppSettings['payrollMode'])}><option value="hourly">ساعتی</option><option value="monthly">ماهانه</option></select></label><label>رفتار اختلاف صندوق<select value={settings.shortagePolicy ?? 'approval'} onChange={e=>update('shortagePolicy',e.target.value as AppSettings['shortagePolicy'])}><option value="approval">نیازمند تأیید</option><option value="payroll">قابل انتقال به حقوق</option><option value="expense">ثبت به‌عنوان هزینه/کسری</option></select></label><label className="setting-item"><span>کسر خودکار از حقوق</span><input type="checkbox" checked={Boolean(settings.autoPayrollDeduction)} onChange={e=>update('autoPayrollDeduction',e.target.checked)}/></label></section>
    <section id="settings-section-client" className="card-panel" style={{padding:14}}><h3>🛠 مدیریت بازی‌ها و کلاینت‌ها</h3><button className="btn" onClick={()=>window.dispatchEvent(new CustomEvent('gamenet-navigate',{detail:'games'}))}>🎮 صفحه بازی‌ها</button><button className="btn" onClick={()=>window.dispatchEvent(new CustomEvent('gamenet-navigate',{detail:'client-shell'}))}>🖧 صفحه کلاینت‌ها</button></section>
