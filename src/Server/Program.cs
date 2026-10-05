@@ -2841,7 +2841,8 @@ app.MapGet("/api/dashboard", async (HttpContext context,
             session.PausedAt,
             session.PausedMinutes,
             session.TimeAdjustmentMinutes,
-            session.PrepaidAmount
+            session.PrepaidAmount,
+            SessionRate = session.HourlyRateOverride ?? session.HourlyRateSnapshot
         })
         .ToListAsync(cancellationToken);
 
@@ -2896,7 +2897,8 @@ app.MapGet("/api/dashboard", async (HttpContext context,
             active?.PausedAt,
             active?.PausedMinutes ?? 0,
             active?.TimeAdjustmentMinutes ?? 0,
-            active?.PrepaidAmount ?? 0m);
+            active?.PrepaidAmount ?? 0m,
+            active?.SessionRate);
     }).ToList();
 
     return Results.Ok(new DashboardSnapshotDto(dtos.Count, dtos, now));
