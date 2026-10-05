@@ -43,7 +43,10 @@ public static class AuthorizationService
             ["report.audit.scope.all"] = "مشاهده تمام رویدادهای Audit",
             ["reports.export"] = "خروجی گرفتن از گزارش‌های مجاز",
             ["settings.view"] = "مشاهده تنظیمات عملیاتی",
-            ["settings.manage"] = "مدیریت تنظیمات عملیاتی"
+            ["settings.manage"] = "مدیریت تنظیمات عملیاتی",
+            ["backup.view"] = "مشاهده نسخه‌های پشتیبان",
+            ["backup.manage"] = "ایجاد و مدیریت نسخه‌های پشتیبان",
+            ["backup.restore"] = "بازیابی نسخهٔ پشتیبان"
         };
 
     public static async Task<AppUser?> ResolveUserAsync(
