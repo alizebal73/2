@@ -14,19 +14,10 @@ public partial class StationInternetNetwork : Migration
             type: "INTEGER",
             nullable: false,
             defaultValue: 1);
-
-        migrationBuilder.CreateIndex(
-            name: "IX_Stations_Network",
-            table: "Stations",
-            column: "Network");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropIndex(
-            name: "IX_Stations_Network",
-            table: "Stations");
-
         migrationBuilder.DropColumn(
             name: "Network",
             table: "Stations");
