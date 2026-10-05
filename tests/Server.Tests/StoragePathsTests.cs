@@ -10,7 +10,7 @@ public sealed class StoragePathsTests
     public void ProductionWithoutExplicitRoot_UsesCommonApplicationData()
     {
         var configuration = new ConfigurationBuilder().Build();
-        var environment = new TestEnvironment("Production", @"C:\ProgramFiles\GameNetManager");
+        var environment = new TestEnvironment("Production", AppContext.BaseDirectory);
 
         var root = GameNetManager.Server.Data.StoragePaths.ResolveDataRoot(configuration, environment);
 
@@ -58,6 +58,6 @@ public sealed class StoragePathsTests
         public string EnvironmentName { get; set; } = environmentName;
         public string ApplicationName { get; set; } = "GameNetManager.Server.Tests";
         public string ContentRootPath { get; set; } = contentRoot;
-        public IFileProvider ContentRootFileProvider { get; set; } = new PhysicalFileProvider(contentRoot);
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }
