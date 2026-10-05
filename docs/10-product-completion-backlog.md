@@ -180,7 +180,7 @@
 
 ### Stage 14.3 — Accessibility / UI / operational polish
 
-**🟡 IN PROGRESS**
+**✅ COMPLETE**
 
 - ✅ Keyboard-accessible skip link to the primary content area.
 - ✅ Current navigation item exposes aria-current="page".
@@ -189,15 +189,15 @@
 - ✅ Reduced-motion preference is respected for transitions and animations.
 - ✅ Dashboard distinguishes the last valid snapshot from live data when API connectivity is lost.
 - ✅ Browser Smoke added for keyboard navigation, notification semantics and stale-state messaging.
-- ⬜ Exact-head CI certification.
-- ⬜ Main certification.
+- ✅ Exact-head CI: Run #1439.
+- ✅ Main certification: Run #1440 on merge commit b69fa15c7ea166a65c5932f8ceb11fb34429eb4e.
 
 ### مرز بعدی
-- ⬜ Server-backed Settings
+- ⏭️ Stage 14.4 — Server-backed Settings
 - ⬜ Backup/Restore واقعی
 - ⬜ Validation فیزیکی 2–3 PC
 
-> قانون: هیچ مورد Stage 14.2 قبل از Build/Test/CI و Browser Smoke لازم Done محسوب نمی‌شود.
+> Stage 14.3 only becomes releasable after both exact-head CI and Main certification are green; both gates are now green.
 
 ## آخرین وضعیت اجرایی — Stage 13.5 / 2026-10-05
 
