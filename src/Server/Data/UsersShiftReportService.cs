@@ -7,6 +7,7 @@ public sealed record UsersShiftReportQuery(
     DateTimeOffset? To,
     string? UserSearch,
     string? ShiftState,
+    Guid? ScopedAppUserId = null,
     int Page = 1,
     int PageSize = 50);
 
@@ -74,6 +75,9 @@ public sealed class UsersShiftReportService
             .AsNoTracking()
             .OrderBy(item => item.FullName)
             .ToListAsync(cancellationToken);
+
+        if (query.ScopedAppUserId is { } scopedUserId)
+            users = users.Where(item => item.Id == scopedUserId).ToList();
 
         var profiles = await _database.EmployeeProfiles
             .AsNoTracking()
