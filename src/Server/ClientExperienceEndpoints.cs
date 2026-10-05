@@ -29,6 +29,7 @@ public static class ClientExperienceEndpoints
                 {
                     id = item.Id,
                     name = item.Name,
+                    category = item.Genre,
                     version = item.Version,
                     genre = item.Genre,
                     status = item.Status,
