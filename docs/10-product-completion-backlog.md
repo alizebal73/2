@@ -199,6 +199,28 @@
 
 > Stage 14.3 only becomes releasable after both exact-head CI and Main certification are green; both gates are now green.
 
+### Stage 14.4 — Server-backed Settings
+
+**🟡 IN PROGRESS**
+
+- ✅ Server-persistent AppSetting global scope with EF migration + snapshot.
+- ✅ Independent settings.view / settings.manage permissions.
+- ✅ GET/PUT /api/settings with typed validation and Persian errors.
+- ✅ Atomic persistence and AuditLog for changed settings.
+- ✅ Dashboard loads server settings and provides explicit server-save action.
+- ✅ Hotkeys and UX section locks remain explicitly local; they are not falsely presented as server-authoritative.
+- ✅ Server API Smoke added: read → update → validation reject → restore.
+- ✅ Browser Smoke added for server-backed settings synchronization/save.
+- ⬜ Exact-head CI.
+- ⬜ Main certification.
+
+### مرز بعدی
+- ⬜ Backup/Restore واقعی
+- ⬜ Validation فیزیکی 2–3 PC
+
+> Stage 14.4 is not Done until exact-head CI and Main certification are both green.
+
+
 ## آخرین وضعیت اجرایی — Stage 13.5 / 2026-10-05
 
 این بخش مرجع اجرایی فعلی و بر وضعیت تاریخی مراحل قبلی غالب است.
