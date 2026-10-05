@@ -55,7 +55,7 @@ public sealed class StoragePathsTests
 
     private sealed class TestEnvironment(string environmentName, string contentRoot) : IHostEnvironment
     {
-        public string EnvironmentName { get; } = environmentName;
+        public string EnvironmentName { get; set; } = environmentName;
         public string ApplicationName { get; set; } = "GameNetManager.Server.Tests";
         public string ContentRootPath { get; set; } = contentRoot;
         public IFileProvider ContentRootFileProvider { get; set; } = new PhysicalFileProvider(contentRoot);
