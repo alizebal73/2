@@ -74,7 +74,7 @@ public sealed class BackupServiceTests
 
                 var backup = await service.CreateBackupAsync(CancellationToken.None);
                 backupFileName = backup.FileName;
-                Assert.True(backup.FileName.EndsWith(".gnbackup", StringComparison.OrdinalIgnoreCase));
+                Assert.EndsWith(".gnbackup", backup.FileName, StringComparison.OrdinalIgnoreCase);
                 Assert.False(string.IsNullOrWhiteSpace(backup.Sha256));
 
                 var verified = await service.VerifyBackupAsync(backup.FileName, CancellationToken.None);
