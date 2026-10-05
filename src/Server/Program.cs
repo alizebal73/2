@@ -77,6 +77,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapSettingsEndpoints();
 app.MapBackupEndpoints();
+app.MapClientExperienceEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
     .WithName("GetHealth");
