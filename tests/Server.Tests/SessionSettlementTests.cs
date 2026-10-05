@@ -190,6 +190,7 @@ public sealed class SessionSettlementTests : IDisposable
             Station = station,
             Tariff = tariff,
             StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            EndAt = DateTimeOffset.UtcNow,
             State = SessionState.Active,
             HourlyRateSnapshot = 100000m
         };
