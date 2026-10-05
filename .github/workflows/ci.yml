@@ -1580,35 +1580,13 @@ jobs:
               throw 'Fine-grained all report scope did not return the authoritative completed session.'
             }
 
-            try {
-              $exportResponse = Invoke-WebRequest -Uri "$baseUrl/api/reports/export?report=sessions&page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeAllSession
-              $exportContentType = $exportResponse.Headers['Content-Type']
-              Write-Host ("Stage 13.4 export response: status={0}; contentType={1}; length={2}" -f $exportResponse.StatusCode, $exportContentType, $exportResponse.RawContentLength)
-              if ($exportResponse.StatusCode -ne 200 -or [string]$exportContentType -notmatch 'text/csv') {
-                throw "Permission-gated sessions report did not return CSV: status=$($exportResponse.StatusCode); contentType=$exportContentType"
-              }
-              if ($exportResponse.Content -notmatch 'Stage') {
-                throw 'Sessions report export did not include the smoke session data.'
-              }
-            } catch {
-              $response = $_.Exception.Response
-              Write-Host ("Stage 13.4 export request failed: exception={0}" -f $_.Exception.Message)
-              if ($response) {
-                try { Write-Host ("Stage 13.4 export HTTP status: {0}" -f [int]$response.StatusCode) } catch {}
-                try {
-                  if ($response.Content) {
-                    $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-                    Write-Host ("Stage 13.4 export response body: {0}" -f $body)
-                  } elseif ($response.GetResponseStream) {
-                    $reader = New-Object System.IO.StreamReader($response.GetResponseStream())
-                    Write-Host ("Stage 13.4 export response body: {0}" -f $reader.ReadToEnd())
-                    $reader.Dispose()
-                  }
-                } catch {
-                  Write-Host ("Stage 13.4 export response body could not be read: {0}" -f $_.Exception.Message)
-                }
-              }
-              throw
+            $exportResponse = Invoke-WebRequest -Uri "$baseUrl/api/reports/export?report=sessions&page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeAllSession
+            $exportContentType = (@($exportResponse.Headers['Content-Type']) -join ';')
+            if ($exportResponse.StatusCode -ne 200 -or $exportContentType -notmatch 'text/csv') {
+              throw "Permission-gated sessions report did not return CSV: status=$($exportResponse.StatusCode); contentType=$exportContentType"
+            }
+            if ($exportResponse.Content -notmatch 'Stage') {
+              throw 'Sessions report export did not include the smoke session data.'
             }
 
             Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $scopeAllSession | Out-Null
