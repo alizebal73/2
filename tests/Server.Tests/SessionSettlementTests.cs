@@ -96,6 +96,78 @@ public sealed class SessionSettlementTests : IDisposable
     }
 
     [Fact]
+    public async Task OperatorCannotExceedConfiguredDiscountLimit()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "PC-Discount" };
+        var tariff = new Tariff { Name = "Discount", HourlyRate = 100000m, DailyRate = 500000m };
+        var customer = new Customer { FullName = "Discount Test", Balance = 200000m };
+        var user = new AppUser
+        {
+            FullName = "Operator",
+            UserName = "discount-operator",
+            Email = "discount-operator@test.local",
+            PasswordHash = "hash",
+            Role = "Operator"
+        };
+        var station = new Station
+        {
+            Name = "PC-DISCOUNT-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 100000m,
+            StationType = type,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            AppUser = user,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 100000m
+        };
+
+        db.AddRange(type, tariff, customer, user, station, session);
+        db.AppSettings.Add(new AppSetting
+        {
+            Key = "operatorDiscount",
+            ScopeKey = ServerSettingsCatalog.GlobalScope,
+            ValueJson = "10"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.SettleAsync(
+                session.Id,
+                new SessionSettlementRequest(
+                    80000m,
+                    new[] { new SettlementPart("cash", 80000m) },
+                    user.Id,
+                    0,
+                    100000m,
+                    20000m,
+                    0m),
+                CancellationToken.None));
+
+        var savedSession = await db.Sessions.SingleAsync(item => item.Id == session.Id);
+        Assert.Equal(SessionState.Active, savedSession.State);
+        Assert.Empty(await db.Invoices.ToListAsync());
+    }
+
+    [Fact]
     public async Task InvalidSplitTotalDoesNotChangeSessionOrWallet()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
