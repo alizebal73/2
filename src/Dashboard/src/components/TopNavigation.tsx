@@ -3,6 +3,7 @@ import { hasPermission } from '../services/authService';
 
 const navItems: Array<{ key: PageKey; label: string; permissions?: string[] }> = [
   { key: 'dashboard', label: 'داشبورد' },
+  { key: 'stations', label: 'ایستگاه‌ها', permissions: ['station.manage'] },
   { key: 'customers', label: 'مشتریان', permissions: ['customer.manage'] },
   { key: 'buffet', label: 'بوفه', permissions: ['buffet.sell', 'buffet.inventory'] },
   { key: 'tariffs', label: 'تعرفه‌ها', permissions: ['tariff.manage'] },

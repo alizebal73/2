@@ -27,6 +27,7 @@ builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<SessionReportService>();
 builder.Services.AddScoped<NotificationQueueService>();
 builder.Services.AddScoped<DatabaseBackupService>();
+builder.Services.AddScoped<StationProvisioningService>();
 builder.Services.AddHostedService<BackupSchedulerHostedService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
@@ -2811,6 +2812,113 @@ app.MapPost("/api/approvals/{approvalId:guid}/reject", async (
     return Results.Ok(new { id = approval.Id, status = approval.Status.ToString() });
 })
 .WithName("RejectApprovalRequest");
+
+app.MapGet("/api/stations", async (
+    HttpContext context,
+    GameNetDbContext database,
+    StationProvisioningService stations,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "station.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    return Results.Ok(await stations.ListAsync(cancellationToken));
+})
+.WithName("ListStations");
+
+app.MapPost("/api/stations", async (
+    CreateStationRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    StationProvisioningService stations,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "station.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var result = await stations.CreateAsync(
+        request,
+        auth.User!.Id,
+        cancellationToken);
+
+    if (result.ErrorCode is not null)
+        return Results.BadRequest(new { code = result.ErrorCode, message = result.ErrorMessage });
+
+    return Results.Created($"/api/stations/{result.Item!.Id}", result.Item);
+})
+.WithName("CreateStation");
+
+app.MapPut("/api/stations/{stationId:guid}", async (
+    Guid stationId,
+    UpdateStationRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    StationProvisioningService stations,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "station.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var result = await stations.UpdateAsync(
+        stationId,
+        request,
+        auth.User!.Id,
+        cancellationToken);
+
+    if (result.ErrorCode is not null)
+        return result.ErrorCode == "station_not_found"
+            ? Results.NotFound(new { code = result.ErrorCode, message = result.ErrorMessage })
+            : result.ErrorCode is "station_exists" or "station_active_session" or "station_has_agent" or "tariff_not_found"
+                ? Results.Conflict(new { code = result.ErrorCode, message = result.ErrorMessage })
+                : Results.BadRequest(new { code = result.ErrorCode, message = result.ErrorMessage });
+
+    return Results.Ok(result.Item);
+})
+.WithName("UpdateStation");
+
+app.MapPost("/api/stations/provision", async (
+    ProvisionStationRangeRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    StationProvisioningService stations,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "station.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var result = await stations.ProvisionRangeAsync(
+        request,
+        auth.User!.Id,
+        cancellationToken);
+
+    if (result.ErrorCode is not null)
+        return result.ErrorCode == "station_exists"
+            ? Results.Conflict(new { code = result.ErrorCode, message = result.ErrorMessage, existing = result.Names })
+            : Results.BadRequest(new { code = result.ErrorCode, message = result.ErrorMessage });
+
+    return Results.Ok(new
+    {
+        created = result.Created,
+        names = result.Names
+    });
+})
+.WithName("ProvisionStationRange");
 
 app.MapGet("/api/dashboard", async (HttpContext context,
     GameNetDbContext database, CancellationToken cancellationToken) =>
@@ -5632,6 +5740,22 @@ static AppUserDto ToAppUserDto(AppUser user)
         user.IsActive,
         user.LastLoginAt,
         user.Permissions.Select(item => item.Permission.Name).OrderBy(name => name).ToArray());
+
+public sealed record StationRecordDto(
+    Guid Id,
+    string Name,
+    string Zone,
+    string Type,
+    decimal RatePerHour,
+    int Network,
+    string State,
+    bool IsActive,
+    Guid StationTypeId,
+    string StationTypeName,
+    Guid? TariffId,
+    string? TariffName,
+    Guid? AgentDeviceId,
+    string? AgentDeviceName);
 
 public sealed record LoginRequest(string UserName, string Password);
 public sealed record AppUserDto(Guid Id, string FullName, string UserName, string Email, string Role, bool IsActive, DateTimeOffset? LastLoginAt, IReadOnlyList<string> Permissions);
