@@ -23,7 +23,7 @@ public sealed record CustomerVipReportRowDto(
     DateTimeOffset? VipExpiresAt,
     int VipDailyMinutes,
     int VipTotalMinutes,
-    int VipDiscountPercent,
+    decimal VipDiscountPercent,
     int UsedTodayMinutes,
     int UsedTotalMinutes,
     int RemainingTodayMinutes,
