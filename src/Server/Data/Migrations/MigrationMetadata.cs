@@ -200,3 +200,10 @@ partial class NotificationQueue
 {
 }
 
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261005095000_StationInternetNetwork")]
+partial class StationInternetNetwork
+{
+}
