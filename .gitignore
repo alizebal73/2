@@ -14,4 +14,7 @@ src/Server/App_Data/*.db-shm
 src/Server/App_Data/*.db-wal
 *.log
 
+# Runtime cryptographic material and backup files
+src/Server/App_Data/DataProtection-Keys/
+src/Server/App_Data/Backups/
 /artifacts/installer/
