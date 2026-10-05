@@ -575,6 +575,40 @@ public static class ClientExperienceEndpoints
             : (device, customer, null);
     }
 
+    public static async Task<AgentDevice?> ResolveRegisteredDeviceAsync(
+        HttpContext context,
+        GameNetDbContext database,
+        CancellationToken cancellationToken)
+    {
+        var remoteIp = context.Connection.RemoteIpAddress;
+        var local = remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
+
+        if (remoteIp is not null && !local)
+        {
+            var ipText = remoteIp.ToString();
+            var remoteAgents = await database.AgentDevices
+                .AsNoTracking()
+                .Include(item => item.Station)
+                .Where(item => item.IsActive
+                    && item.LastIpAddress == ipText)
+                .ToListAsync(cancellationToken);
+
+            return remoteAgents
+                .OrderByDescending(item => item.LastSeenAt)
+                .FirstOrDefault();
+        }
+
+        var localAgents = await database.AgentDevices
+            .AsNoTracking()
+            .Include(item => item.Station)
+            .Where(item => item.IsActive && item.LastSeenAt.HasValue)
+            .ToListAsync(cancellationToken);
+
+        return localAgents
+            .OrderByDescending(item => item.LastSeenAt)
+            .FirstOrDefault();
+    }
+
     public static async Task<AgentDevice?> ResolveDeviceAsync(
         HttpContext context,
         GameNetDbContext database,
