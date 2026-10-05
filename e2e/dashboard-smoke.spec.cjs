@@ -128,6 +128,35 @@ test('dashboard exposes accessible navigation, notifications and stale-state sem
     contentType: 'application/json',
     body: JSON.stringify({ items: [], unreadCount: 0 })
   }));
+  let settingsPutBody = null;
+  await page.route('**/api/settings', async route => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          scope: 'global',
+          values: {
+            operatorDiscount: 12,
+            serverAddress: '192.168.0.9:5080',
+            sessionMode: 'settle'
+          },
+          definitions: []
+        })
+      });
+    }
+    settingsPutBody = route.request().postDataJSON();
+    const values = settingsPutBody?.values ?? {};
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        scope: 'global',
+        values,
+        changedKeys: Object.keys(values)
+      })
+    });
+  });
   await page.route('**/hubs/**', route => route.abort());
 
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
@@ -770,6 +799,11 @@ test('settings information architecture supports search and category navigation'
   const settingsNav = page.getByTestId('settings-category-nav');
   await expect(settingsNav).toBeVisible();
   await expect(page.getByLabel('جست‌وجوی تنظیمات')).toBeVisible();
+  const saveServerButton = page.getByRole('button', { name: '💾 ذخیره روی سرور' });
+  await expect(saveServerButton).toBeEnabled();
+  await saveServerButton.click();
+  await expect(page.getByText('تنظیمات عملیاتی روی سرور ذخیره شد')).toBeVisible();
+  expect(settingsPutBody.values.operatorDiscount).toBe(12);
   await expect(page.locator('#settings-section-sessions')).toHaveCount(1);
   await expect(page.locator('#settings-section-network')).toHaveCount(1);
   await page.getByRole('button', { name: /جلسه و تسویه/ }).click();
