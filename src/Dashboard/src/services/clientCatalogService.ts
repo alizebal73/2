@@ -7,6 +7,8 @@ export type ClientCatalogGame = {
   cover?: string | null;
   trailer?: string | null;
   connectionType?: string | null;
+  icon: string;
+  description: string;
   hasPoolAccount: boolean;
 };
 
@@ -17,6 +19,7 @@ export type ClientCatalogBuffetItem = {
   price: number;
   unit: string;
   available: boolean;
+  icon: string;
 };
 
 export type ClientCatalog = {
