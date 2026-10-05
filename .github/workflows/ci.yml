@@ -1580,9 +1580,12 @@ jobs:
               throw 'Fine-grained all report scope did not return the authoritative completed session.'
             }
 
-            $exportResponse = Invoke-WebRequest -Uri "$baseUrl/api/reports/export?report=sessions&page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeAllSession
-            if ($exportResponse.StatusCode -ne 200 -or $exportResponse.ContentType -notmatch 'text/csv') {
-              throw 'Permission-gated sessions report export did not return CSV.'
+            $exportHeaders = $null
+            $exportResponse = Invoke-WebRequest -Uri "$baseUrl/api/reports/export?report=sessions&page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeAllSession -ResponseHeadersVariable exportHeaders
+            $exportContentType = $exportResponse.Headers['Content-Type']
+            Write-Host ("Stage 13.4 export response: status={0}; contentType={1}; length={2}" -f $exportResponse.StatusCode, $exportContentType, $exportResponse.RawContentLength)
+            if ($exportResponse.StatusCode -ne 200 -or [string]$exportContentType -notmatch 'text/csv') {
+              throw "Permission-gated sessions report export did not return CSV: status=$($exportResponse.StatusCode); contentType=$exportContentType"
             }
             if ($exportResponse.Content -notmatch 'Stage') {
               throw 'Sessions report export did not include the smoke session data.'
