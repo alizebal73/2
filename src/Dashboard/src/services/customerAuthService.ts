@@ -10,6 +10,7 @@ type CustomerAuthResponse = {
   freeMoney: number;
   freeTimeMinutes: number;
   vipTier: string;
+  isLocked: boolean;
 };
 
 export type CustomerSessionState = {
