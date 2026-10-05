@@ -430,7 +430,7 @@ jobs:
 
               # Release Safety / Canary gate: exactly one online CI Agent plus a server-authoritative release manifest.
               if (@($agentRows | Where-Object { $_.isOnline }).Count -ne 1) { throw 'Canary gate requires exactly one online Agent target.' }
-              $releaseManifest = Invoke-RestMethod -Uri "$baseUrl/api/release/manifest" -Method Get
+              $releaseManifest = Invoke-RestMethod -Uri "$baseUrl/api/release/manifest" -Method Get -WebSession $adminSession
               if (-not $releaseManifest.clientPackage) { throw 'Release manifest did not expose a Client package.' }
               if ($releaseManifest.clientPackage.version -ne $env:App__ClientPackageVersion) { throw 'Release manifest package version does not match the configured package.' }
               if ([int64]$releaseManifest.clientPackage.sizeBytes -ne (Get-Item $env:App__ClientPackagePath).Length) { throw 'Release manifest package size does not match the package on Server.' }
