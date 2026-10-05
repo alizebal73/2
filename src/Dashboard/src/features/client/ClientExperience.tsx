@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import './ClientExperience.css';
 import { authenticateCustomer, readCustomerState, releaseCustomerLogin } from '../../services/customerAuthService';
+import { getClientCatalog, type ClientCatalogBuffetItem, type ClientCatalogGame } from '../../services/clientCatalogService';
 import { getClientIdentity } from '../../services/clientIdentityService';
 
 type Game = { id: string; name: string; category: string; icon: string; requiresAccount: boolean; description: string };
@@ -8,21 +9,7 @@ type ContextMenu = { x: number; y: number } | null;
 type Panel = 'apps' | 'buffet' | 'account' | 'operator' | null;
 type ViewMode = 'card' | 'compact' | 'list';
 
-const games: Game[] = [
-  { id: 'cs2', name: 'Counter-Strike 2', category: 'FPS · آنلاین', icon: '🎯', requiresAccount: true, description: 'رقابت تیمی و بازی رتبه‌ای' },
-  { id: 'valorant', name: 'Valorant', category: 'FPS · آنلاین', icon: '⚡', requiresAccount: true, description: 'نبرد تاکتیکی ۵ در برابر ۵' },
-  { id: 'fc25', name: 'EA SPORTS FC 25', category: 'ورزشی', icon: '⚽', requiresAccount: false, description: 'مسابقه فوتبال دونفره' },
-  { id: 'fortnite', name: 'Fortnite', category: 'Battle Royale', icon: '🪂', requiresAccount: true, description: 'بازی گروهی و رقابتی' },
-  { id: 'minecraft', name: 'Minecraft', category: 'ماجراجویی', icon: '🧱', requiresAccount: false, description: 'جهان باز و ساخت‌وساز' },
-  { id: 'rocket', name: 'Rocket League', category: 'ورزشی', icon: '🚗', requiresAccount: true, description: 'فوتبال با ماشین‌های راکتی' },
-];
-
-const buffetItems = [
-  { name: 'نوشابه', price: 35000, icon: '🥤' },
-  { name: 'قهوه فوری', price: 45000, icon: '☕' },
-  { name: 'پاپ‌کورن', price: 35000, icon: '🍿' },
-  { name: 'ساندویچ سرد', price: 90000, icon: '🥪' },
-];
+type Game = ClientCatalogGame;
 
 const clientApps = [
   { icon: '🌐', name: 'Chrome', description: 'مرورگر مجاز' },
@@ -87,6 +74,8 @@ export function ClientExperience() {
   const [adVisible, setAdVisible] = useState(true);
   const [locked, setLocked] = useState(false);
   const [myGamesOnly, setMyGamesOnly] = useState(false);
+  const [games, setGames] = useState<Game[]>([]);
+  const [buffetItems, setBuffetItems] = useState<ClientCatalogBuffetItem[]>([]);
 
   const visibleCommands = useMemo(() => commands.filter(item => item.title.includes(paletteQuery.trim())), [paletteQuery]);
 
@@ -105,6 +94,27 @@ export function ClientExperience() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!clientIdentityReady) return;
+    let active = true;
+    void getClientCatalog()
+      .then(catalog => {
+        if (!active) return;
+        setGames(catalog.games);
+        setBuffetItems(catalog.buffet.filter(item => item.available));
+      })
+      .catch(error => {
+        if (active) {
+          setGames([]);
+          setBuffetItems([]);
+          notify(error instanceof Error ? error.message : 'اطلاعات کلاینت دریافت نشد.');
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [clientIdentityReady]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -272,7 +282,7 @@ export function ClientExperience() {
   }
 
   function launchGame(game: Game, accountMode?: 'own' | 'pool') {
-    if (game.requiresAccount && !accountMode) { setAccountGame(game); return; }
+    if (game.hasPoolAccount && !accountMode) { setAccountGame(game); return; }
     setAccountGame(null); setActiveGame(game.id); setMyGamesOnly(false);
     notify(accountMode === 'pool' ? `اکانت GameNet برای ${game.name} تخصیص یافت` : `${game.name} اجرا شد`);
   }
@@ -312,7 +322,7 @@ export function ClientExperience() {
       {sessionLocked ? <main className="client-lock-screen"><div className="client-lock-icon">🔒</div><h1>سیستم قفل است</h1><p>برای ادامه، به اپراتور مراجعه کنید.</p><button className="client-button primary" onClick={() => notify('درخواست بازکردن قفل برای اپراتور ارسال شد')}>درخواست بازگشایی</button></main> : <main className="client-desktop">
         <div className="client-toolbar"><span>{myGamesOnly ? 'بازی‌های من' : 'بازی‌های در دسترس'}</span><div className="client-spacer" /><span className="client-network">● متصل به GameNet</span></div>
         <div className={`client-game-grid ${view}`} style={{ '--game-size': `${gameSize}px`, '--game-zoom': zoom / 100 } as React.CSSProperties}>
-          {recentGames.map(game => <button key={game.id} className={`client-game-card ${view} ${activeGame === game.id ? 'running' : ''}`} onClick={() => launchGame(game, game.requiresAccount ? undefined : 'own')} onContextMenu={event => { event.preventDefault(); setContext({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 300) }); }}>
+          {recentGames.map(game => <button key={game.id} className={`client-game-card ${view} ${activeGame === game.id ? 'running' : ''}`} onClick={() => launchGame(game, game.hasPoolAccount ? undefined : 'own')} onContextMenu={event => { event.preventDefault(); setContext({ x: Math.min(event.clientX, window.innerWidth - 260), y: Math.min(event.clientY, window.innerHeight - 300) }); }}>
             <span className="client-game-art">{game.icon}</span><span className="client-game-info"><b>{game.name}</b><small>{game.category}</small><small>{game.description}</small></span>{activeGame === game.id && <span className="client-running-badge">در حال اجرا</span>}
           </button>)}
         </div>
