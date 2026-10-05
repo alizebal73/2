@@ -355,26 +355,23 @@ public sealed class DatabaseBackupService
             throw new FileNotFoundException("فایل دیتابیس پیدا نشد.", sourcePath);
 
         Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-        var source = new SqliteConnection($"Data Source={sourcePath}");
-        var destination = new SqliteConnection($"Data Source={destinationPath}");
+        await using var source = new SqliteConnection($"Data Source={sourcePath}");
+        await using var destination = new SqliteConnection($"Data Source={destinationPath}");
 
         await source.OpenAsync(cancellationToken);
         await destination.OpenAsync(cancellationToken);
         source.BackupDatabase(destination);
-        await destination.CloseAsync();
-        await source.CloseAsync();
     }
 
     private static async Task VerifyDatabaseFileAsync(
         string databasePath,
         CancellationToken cancellationToken)
     {
-        var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly");
+        await using var connection = new SqliteConnection($"Data Source={databasePath};Mode=ReadOnly");
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = "PRAGMA integrity_check;";
         var result = await command.ExecuteScalarAsync(cancellationToken);
-        await connection.CloseAsync();
 
         if (!string.Equals(Convert.ToString(result), "ok", StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"SQLite integrity_check ناموفق بود: {result}");
