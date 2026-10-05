@@ -3445,6 +3445,7 @@ app.MapGet("/api/customer-auth/state", async (
         freeMoney = customer.FreeMoney,
         freeTimeMinutes = customer.FreeTimeMinutes,
         vipTier = customer.VipTier,
+        isLocked = device?.IsLocked ?? false,
         session
     });
 })
