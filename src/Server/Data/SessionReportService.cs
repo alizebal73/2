@@ -10,9 +10,9 @@ public sealed record SessionReportQuery(
     string? Operator,
     string? State,
     string? CustomerSearch,
-    Guid? ScopedAppUserId = null,
     int Page = 1,
-    int PageSize = 50);
+    int PageSize = 50,
+    Guid? ScopedAppUserId = null);
 
 public sealed record SessionReportRowDto(
     Guid Id,
