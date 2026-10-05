@@ -14,12 +14,19 @@ public sealed class StoragePathsTests
         Directory.CreateDirectory(contentRoot);
         var environment = new TestEnvironment("Production", contentRoot);
 
-        var root = GameNetManager.Server.Data.StoragePaths.ResolveDataRoot(configuration, environment);
+        try
+        {
+            var root = GameNetManager.Server.Data.StoragePaths.ResolveDataRoot(configuration, environment);
 
-        Assert.EndsWith(
-            Path.Combine("GameNetManager"),
-            root,
-            StringComparison.OrdinalIgnoreCase);
+            Assert.EndsWith(
+                Path.Combine("GameNetManager"),
+                root,
+                StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            try { Directory.Delete(contentRoot, recursive: true); } catch { }
+        }
     }
 
     [Fact]
