@@ -9,7 +9,8 @@ export type PageKey =
   | 'games'
   | 'accounts'
   | 'client-shell'
-  | 'operations';
+  | 'operations'
+  | 'stations';
 
 export type StationState = 'free' | 'busy' | 'paused' | 'reserved' | 'off';
 export type ZoneKey = 'all' | 'pc' | 'console' | 'table';
