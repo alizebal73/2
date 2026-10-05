@@ -111,6 +111,31 @@ begin
   if ResultCode <> 0 then RaiseException('Windows Service با کد ' + IntToStr(ResultCode) + ' شروع نشد.');
 end;
 
+procedure WaitForServerHealth;
+var
+  ResultCode: Integer;
+begin
+  if not Exec(
+    ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$deadline=(Get-Date).AddSeconds(45); do { try { if ((Invoke-WebRequest -UseBasicParsing -Uri ''http://127.0.0.1:5080/api/health'' -TimeoutSec 2).StatusCode -eq 200) { exit 0 } } catch {} ; Start-Sleep -Seconds 1 } while ((Get-Date) -lt $deadline); exit 1"',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode) then
+    RaiseException('بررسی سلامت Server انجام نشد.');
+
+  if ResultCode <> 0 then
+    RaiseException('Server روی TCP 5080 بعد از نصب آماده نشد؛ رمز bootstrap برای بررسی باقی می‌ماند.');
+end;
+
+procedure RemoveBootstrapAdminPassword;
+begin
+  RegDeleteValue(
+    HKLM,
+    'SYSTEM\CurrentControlSet\Control\Session Manager\Environment',
+    'GAMENET_ADMIN_PASSWORD');
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
@@ -120,6 +145,8 @@ begin
     ConfigureFirewall;
     RegisterServerService;
     StartServerService;
+    WaitForServerHealth;
+    RemoveBootstrapAdminPassword;
   end;
 end;
 
