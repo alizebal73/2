@@ -575,7 +575,7 @@ public static class ClientExperienceEndpoints
             : (device, customer, null);
     }
 
-    private static async Task<AgentDevice?> ResolveDeviceAsync(
+    public static async Task<AgentDevice?> ResolveDeviceAsync(
         HttpContext context,
         GameNetDbContext database,
         CancellationToken cancellationToken)
