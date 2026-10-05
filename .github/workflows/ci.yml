@@ -27,12 +27,25 @@ jobs:
           'C:\dotnet' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           'DOTNET_ROOT=C:\dotnet' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: src/Dashboard/package-lock.json
+      - name: Check local Node
+        shell: pwsh
+        run: |
+          $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+          $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+          if (-not $nodeCommand -or -not $npmCommand) {
+            $nodePath = Join-Path $env:ProgramFiles 'nodejs'
+            if (Test-Path (Join-Path $nodePath 'node.exe')) {
+              $nodePath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            }
+          }
+          if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+            throw 'Node.js is not available on the self-hosted runner PATH.'
+          }
+          if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+            throw 'npm is not available on the self-hosted runner PATH.'
+          }
+          node --version
+          npm --version
 
       - name: Restore .NET
         run: dotnet restore GameNetManager.sln
