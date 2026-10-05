@@ -897,3 +897,107 @@ test('dashboard shows actionable Persian error UX', async ({ browser }) => {
   await expect(page.getByRole('alert').getByRole('button', { name: 'تلاش مجدد' })).toBeVisible();
   await context.close();
 });
+
+
+test('client experience consumes server-backed catalog and customer state', async ({ page }) => {
+  await page.route('**/api/client/identity', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      deviceId: 'agent-device-e2e-01',
+      stationId: 'station-e2e-01',
+      stationName: 'PC ۰۱',
+      isOnline: true
+    })
+  }));
+
+  await page.route('**/api/client/catalog', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      deviceId: 'agent-device-e2e-01',
+      stationId: 'station-e2e-01',
+      stationName: 'PC ۰۱',
+      games: [{
+        id: 'game-e2e-cs2',
+        name: 'Counter-Strike 2',
+        category: 'FPS',
+        genre: 'FPS',
+        version: '1.0',
+        status: 'online',
+        cover: '',
+        trailer: '',
+        connectionType: 'آنلاین',
+        icon: '🎮',
+        description: 'FPS · آنلاین',
+        hasPoolAccount: true
+      }],
+      buffet: [{
+        id: 'buffet-e2e-cola',
+        name: 'نوشابه واقعی',
+        category: 'نوشیدنی',
+        price: 35000,
+        unit: 'عدد',
+        available: true,
+        icon: '🥤'
+      }]
+    })
+  }));
+
+  await page.route('**/api/customer-auth/login', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      authenticated: true,
+      customerId: 'customer-e2e-01',
+      username: 'e2e_customer',
+      fullName: 'مشتری تست',
+      loginId: 'login-e2e-01',
+      activeCount: 1,
+      limit: 1,
+      balance: 250000,
+      freeMoney: 0,
+      freeTimeMinutes: 0,
+      vipTier: 'Normal'
+    })
+  }));
+
+  await page.route('**/api/customer-auth/state?*', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      authenticated: true,
+      customerId: 'customer-e2e-01',
+      loginId: 'login-e2e-01',
+      username: 'e2e_customer',
+      fullName: 'مشتری تست',
+      balance: 250000,
+      freeMoney: 0,
+      freeTimeMinutes: 0,
+      vipTier: 'Normal',
+      session: {
+        id: 'session-e2e-01',
+        state: 'Active',
+        startAt: new Date().toISOString(),
+        endAt: new Date(Date.now() + 3600000).toISOString(),
+        stationName: 'PC ۰۱'
+      }
+    })
+  }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/client', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'ورود به سیستم' }).waitFor();
+  await page.locator('#client-login-id').fill('e2e_customer');
+  await page.locator('input[type="password"]').fill('secret');
+  await page.getByRole('button', { name: 'ورود به سیستم' }).click();
+
+  await expect(page.getByText('مشتری تست')).toBeVisible();
+  await expect(page.getByText('Counter-Strike 2')).toBeVisible();
+
+  await page.getByText('منوی بوفه').first().click();
+  await expect(page.getByText('نوشابه واقعی')).toBeVisible();
+  await expect(page.getByText('۳۵٬۰۰۰ ت')).toBeVisible();
+
+  await expect(page.getByText('۰۳:')).not.toBeVisible();
+});
