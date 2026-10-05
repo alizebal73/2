@@ -28,6 +28,7 @@ export function TopNavigation({ activePage, onChange, user }: Props) {
           type="button"
           className={activePage === item.key ? 'nav-item active' : 'nav-item'}
           onClick={() => onChange(item.key)}
+          aria-current={activePage === item.key ? 'page' : undefined}
         >
           {item.label}
         </button>
