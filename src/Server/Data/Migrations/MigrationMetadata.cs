@@ -193,3 +193,10 @@ partial class ActiveSessionOwnershipGuards
 partial class SessionHourlyRateSnapshot
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261005030000_NotificationQueue")]
+partial class NotificationQueue
+{
+}
+
