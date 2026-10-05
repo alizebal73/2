@@ -10,7 +10,6 @@ import { adjustServerSessionTime, isServerGuid, pauseServerSession, requestServe
 import { SessionCenter } from '../features/session/SessionCenter';
 import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem } from '../features/attention/DashboardAttentionSidebar';
-import { ApprovalDialog } from '../components/ApprovalDialog';
 import { ReverseDialog } from '../components/ReverseDialog';
 
 const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه‌ها (۴۰)', console: 'کنسول‌ها (۱۶)', table: 'میزها (۵)' };
@@ -19,7 +18,6 @@ const emptyStations: StationDto[] = [];
 type ViewMode = 'v-card' | 'v-compact' | 'v-list';
 type PcGroupBy = 'state' | 'vip' | 'network' | 'remaining';
 type ModalKind = 'start' | 'flow' | 'charge' | 'settle' | 'extend' | 'reduce' | null;
-type Invoice = { station: string; total: number; payment: string; closedAt: string };
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
 function number(value: string) { return Number(value.replace(/[۰-۹]/g, digit => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(digit))).replace(/[٬,\s]/g, '')) || 0; }
@@ -65,7 +63,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   const [message, setMessage] = useState('');
   const [reverseRequest, setReverseRequest] = useState<SessionTimelineEvent | null>(null);
   const [reversedEventIds, setReversedEventIds] = useState<string[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
   const [extendMinutes, setExtendMinutes] = useState(30);
   const [customExtendMinutes, setCustomExtendMinutes] = useState('30');
@@ -657,7 +654,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
             }
           : item));
         addSessionTimeline(activeStation.id, 'settle', 'تسویه سروری', money(finalTotal) + ' تومان · ' + (method === 'cash' ? 'نقدی' : method === 'card' ? 'کارتخوان' : method === 'wallet' ? 'کیف پول' : 'اعتبار رایگان'), finalTotal, serverResult.invoiceId);
-        setInvoices(items => [{ station: activeStation.name, total: finalTotal, payment: method, closedAt: new Date().toISOString() }, ...items]);
         setSessionFollowUps(current => current.map(item => item.stationId === activeStation.id && item.status !== 'paid' ? { ...item, status: 'paid' } : item));
         updateStation(activeStation.id, {
           state: 'free', startedAt: undefined, sessionMinutes: undefined, sessionRate: undefined, amountSoFar: undefined,
@@ -1279,7 +1275,17 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   return <>
     <div className="page-header"><div><p>وضعیت زنده · {serverInfo?.name ?? 'GameNet Manager'}</p><h1>داشبورد</h1></div><div className="page-meta"><span>{apiState === 'online' ? 'API متصل' : apiState === 'loading' ? 'در حال اتصال' : 'API قطع'}</span><span>{snapshot ? `آخرین دریافت ${new Date(snapshot.generatedAt).toLocaleTimeString('fa-IR')}` : 'در انتظار داده'}</span></div></div>
     <div className="summary-grid">
-      {[["ایستگاه آزاد", counts.free, 'green'], ['در حال جلسه', counts.busy + stations.filter(item => item.state === 'paused').length, 'red'], ['رزرو امروز', counts.reserved, 'blue'], ['درآمد امروز', invoices.reduce((sum, item) => sum + item.total, 4820000), 'orange'], ['فروش بوفه', 860000, 'orange'], ['مشتری حاضر', stations.filter(item => item.state === 'busy').reduce((sum, item) => sum + (item.persons ?? 1), 0), 'blue']].map(([label, value, color]) => <div key={label} className="summary-card"><div className="label">{label}</div><div className={`value ${color}`}>{money(Number(value))}{String(label).includes('درآمد') || String(label).includes('فروش') ? ' تومان' : ''}</div></div>)}
+      {[
+        ["ایستگاه آزاد", counts.free, 'green'],
+        ["در حال جلسه", counts.busy + stations.filter(item => item.state === 'paused').length, 'red'],
+        ["رزرو امروز", counts.reserved, 'blue'],
+        ["مشتری حاضر", stations.filter(item => item.state === 'busy').reduce((sum, item) => sum + (item.persons ?? 1), 0), 'blue']
+      ].map(([label, value, color]) => (
+        <div key={label} className="summary-card">
+          <div className="label">{label}</div>
+          <div className={`value ${color}`}>{money(Number(value))}</div>
+        </div>
+      ))}
     </div>
         <div
       className="dashboard-workspace"
@@ -1290,7 +1296,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
       }}
     >
       <DashboardAttentionSidebar
-        payments={sidebarPayments}
+        payments={[]}
         attentions={sidebarAttentions}
         recentActions={sidebarRecentActions}
         money={money}
@@ -1521,6 +1527,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
 
       {modal === 'extend' && activeStation && <><h2>⏱ تمدید جلسه · {activeStation.name}</h2><div className="info-row"><span>زمان فعلی</span><strong>{money(Math.floor(duration(activeStation)))} دقیقه</strong></div><div className="person-choice">{[[15,'۱۵ دقیقه'],[30,'۳۰ دقیقه'],[60,'۱ ساعت'],[120,'۲ ساعت'],[-1,'مدت دلخواه']].map(([value,label]) => <button key={String(value)} className={extendMinutes === value ? 'active' : ''} onClick={() => setExtendMinutes(Number(value))}>{label}</button>)}</div>{extendMinutes === -1 && <label>مدت دلخواه (دقیقه)<input autoFocus type="number" min="1" value={customExtendMinutes} onChange={event => setCustomExtendMinutes(event.target.value)} /></label>}<div className="modal-actions"><button className="btn primary" onClick={completeExtend}>ثبت تمدید</button><button className="btn" onClick={() => setModal(null)}>لغو</button></div></>}
     {message && <div className="operation-toast" role="status">{message}</div>}
-    <div className="status-footer">{snapshot?.generatedAt ? `آخرین به‌روزرسانی ${new Date(snapshot.generatedAt).toLocaleTimeString('fa-IR')}` : 'در انتظار دریافت داده'} · {serverInfo?.environment ?? 'Development'} · {invoices.length} فاکتور ثبت‌شده</div>
+    <div className="status-footer">{snapshot?.generatedAt ? `آخرین به‌روزرسانی ${new Date(snapshot.generatedAt).toLocaleTimeString('fa-IR')}` : 'در انتظار دریافت داده'} · {serverInfo?.environment ?? 'Development'}</div>
   </>;
 }
