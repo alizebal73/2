@@ -3389,7 +3389,7 @@ app.MapGet("/api/customer-auth/state", async (
 
         var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(context, database, cancellationToken);
         if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, normalizedClientKey, StringComparison.Ordinal))
-            return Results.Forbid();
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     var customer = await database.Customers
         .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
@@ -3473,10 +3473,6 @@ app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     if (string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
 
-        var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(context, database, cancellationToken);
-        if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, clientKey, StringComparison.Ordinal))
-            return Results.Forbid();
-
     try
     {
         var result = await customerLoginService.AcquireAsync(customerId, clientKey, cancellationToken);
@@ -3503,10 +3499,6 @@ app.MapPost("/api/customers/{customerId:guid}/login-release", async (
     var clientKey = request.ClientKey?.Trim();
     if (string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
-
-        var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(context, database, cancellationToken);
-        if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, clientKey, StringComparison.Ordinal))
-            return Results.Forbid();
 
     var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
     if (customer is null)
