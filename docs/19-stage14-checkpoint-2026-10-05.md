@@ -125,19 +125,27 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Main certification: Run #1462 on merge commit 7dc7d4b8b7cff2e02c4eb302f024161d5ed05049.
 - ✅ All CI gates green, including Build/Test, EF validation, Server startup/migration, Dashboard Build/Lint/Preview and Browser Smoke.
 
-## Slice 14.6 — IN PROGRESS
+## Slice 14.6 — SOFTWARE PRE-FLIGHT COMPLETE / PHYSICAL GATE PENDING
 
-**Physical 2–3 PC Validation Gate**
+**Client Experience + Server/Agent boundary hardening**
 
-### Protocol
+### Software pre-flight delivered
 
-- ✅ اجرای رسمی تست در `docs/20-physical-validation-2-3pc-2026-10-05.md` ثبت شد.
-- ✅ سناریوهای Registration/Identity، Lock/Unlock، Customer Login، Session Start/End، Game/Lease، Disconnect/Reconnect، Server outage، Agent restart و همزمانی چند PC تعریف شدند.
-- ✅ معیار خروج و شواهد مورد نیاز مشخص شد.
+- ✅ Server-backed Client Catalog for real Game/Buffet metadata.
+- ✅ Customer Identity/State bound to real Server state; authoritative Lock state is surfaced to Client.
+- ✅ Client requests (message/charge/move/unlock/buffet) are Server-backed and audited.
+- ✅ Lock / Logout-Lock use the real Agent command path.
+- ✅ Real Game Launch/Stop path: Client → Server → Agent → OS Process.
+- ✅ Server validates CustomerLogin + Session + Station + Game + Agent ownership.
+- ✅ Agent re-validates live Session immediately before launching a process.
+- ✅ Client process ownership is keyed by SessionId + GameId; cross-session Stop is rejected.
+- ✅ Dashboard fake billing/approval paths removed; operator discount limit is enforced Server-side.
+- ✅ Exact-head CI: Run #1528 on `8ab0b642f7166f214fd52f94cf1005862e8b00b1`.
+- ✅ Main certification: Run #1529 on merge commit `bf88dd1d91875d12d33c58607776d5e928279bfc`.
 
-### Status
+### Physical Gate
 
-- ✅ Protocol ready
+- ✅ Protocol: `docs/20-physical-validation-2-3pc-2026-10-05.md`
 - 🟡 Physical execution pending
 - ⬜ PC-01 + PC-02 PASS
 - ⬜ PC-03 optional PASS
@@ -145,4 +153,4 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 
 ## Next
 
-بعد از PASS شدن Stage 14.6، Gate بعدی **controlled 40+ PC rollout** است.
+ساخت Setup/Installer فقط بعد از این Software Pre-flight انجام می‌شود؛ Gate بعدی برای محصول، اجرای واقعی روی 2–3 PC است و سپس controlled 40+ PC rollout.
