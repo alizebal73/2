@@ -1642,6 +1642,124 @@ app.MapGet("/api/reports/users-shifts", async (
 .WithName("QueryUsersShiftReport");
 
 
+app.MapGet("/api/reports/export", async (
+    HttpContext context,
+    GameNetDbContext database,
+    SessionReportService sessionReports,
+    CustomerVipReportService customerReports,
+    UsersShiftReportService usersShiftReports,
+    AuditLogService auditLogs,
+    string report,
+    DateTimeOffset? from,
+    DateTimeOffset? to,
+    string? station,
+    string? zone,
+    string? @operator,
+    string? state,
+    string? customerSearch,
+    string? search,
+    string? vip,
+    string? debt,
+    string? package,
+    string? userSearch,
+    string? shiftState,
+    string? action,
+    string? entityName,
+    int page,
+    int pageSize,
+    CancellationToken cancellationToken) =>
+{
+    var reportKey = (report ?? "").Trim().ToLowerInvariant();
+    var legacyPermissions = reportKey switch
+    {
+        "sessions" => new[] { "finance.view" },
+        "customers" => new[] { "customer.manage", "customer.wallet", "customer.debt" },
+        "users-shift" => new[] { "shift.manage", "payroll.view", "user.manage" },
+        "audit" => new[] { "audit.view" },
+        _ => Array.Empty<string>()
+    };
+
+    if (legacyPermissions.Length == 0)
+        return Results.BadRequest(new { code = "report_export_invalid", message = "نوع گزارش برای خروجی معتبر نیست." });
+
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
+        context,
+        database,
+        reportKey,
+        cancellationToken,
+        legacyPermissions);
+
+    if (auth.Error is not null) return auth.Error;
+
+    if (!AuthorizationService.HasReportExport(auth.User!))
+        return Results.Json(
+            new { code = "report_export_denied", message = "دسترسی خروجی گزارش را ندارید." },
+            statusCode: StatusCodes.Status403Forbidden);
+
+    if (page < 1 || pageSize < 1 || pageSize > 200)
+        return Results.BadRequest(new { code = "report_export_paging_invalid", message = "صفحه یا تعداد رکوردهای خروجی معتبر نیست." });
+
+    var scopedId = AuthorizationService.HasReportAllScope(auth.User!, reportKey)
+        ? (Guid?)null
+        : auth.User!.Id;
+
+    string csv;
+    string fileName;
+    switch (reportKey)
+    {
+        case "sessions":
+        {
+            var result = await sessionReports.QueryAsync(
+                new SessionReportQuery(from, to, station, zone, @operator, state, customerSearch, page, pageSize, scopedId),
+                cancellationToken);
+            csv = ReportExportService.Sessions(result);
+            fileName = "gamenet-sessions-report.csv";
+            break;
+        }
+        case "customers":
+        {
+            var result = await customerReports.QueryAsync(
+                new CustomerVipReportQuery(from, to, search, vip, debt, package, page, pageSize, scopedId),
+                cancellationToken);
+            csv = ReportExportService.Customers(result);
+            fileName = "gamenet-customer-vip-report.csv";
+            break;
+        }
+        case "users-shift":
+        {
+            var result = await usersShiftReports.QueryAsync(
+                new UsersShiftReportQuery(from, to, userSearch, shiftState, page, pageSize, scopedId),
+                cancellationToken);
+            csv = ReportExportService.UsersShift(result);
+            fileName = "gamenet-users-shifts-report.csv";
+            break;
+        }
+        default:
+        {
+            var result = await auditLogs.QueryAsync(
+                new AuditLogQuery(from, to, @operator, action, entityName, search, page, pageSize, scopedId),
+                cancellationToken);
+            csv = ReportExportService.Audit(result);
+            fileName = "gamenet-audit-report.csv";
+            break;
+        }
+    }
+
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "ReportExport",
+        EntityName = "Report",
+        EntityId = reportKey,
+        AppUserId = auth.User!.Id,
+        Details = $"خروجی گزارش {reportKey} · صفحه {page} · {pageSize} رکورد"
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
+    return Results.File(bytes, "text/csv; charset=utf-8", fileName);
+})
+.WithName("ExportReportCsv");
+
 app.MapGet("/api/audit", async (
     HttpContext context,
     GameNetDbContext database,
