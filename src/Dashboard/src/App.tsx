@@ -296,7 +296,84 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
         <button type="button" className="refresh-button" onClick={() => setNotificationsOpen(open => !open)} aria-label="اعلان‌ها">🔔 {notificationUnreadCount}</button>
       </header>
 
-      {notificationsOpen && <div className="notification-popover"><div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12}}><strong>اعلان‌ها</strong><button type="button" className="btn sm" disabled={notificationUnreadCount === 0} onClick={() => { void markAllNotificationsRead().then(() => { setNotifications(current => current.map(item => ({ ...item, isRead: true, readAt: new Date().toISOString() }))); setNotificationUnreadCount(0); }).catch(error => setError(error instanceof Error ? error.message : 'خوانده‌شدن اعلان‌ها انجام نشد')); }}>خوانده‌شده</button></div>{notifications.length === 0 ? <div className="notification-empty">اعلانی وجود ندارد.</div> : notifications.map(item => <button type="button" key={item.id} className={`notification-item ${item.isRead ? 'read' : ''} notification-level-${item.level.toLowerCase()}`} onClick={() => { if (item.isRead) return; void markNotificationRead(item.id).then(() => { setNotifications(current => current.map(row => row.id === item.id ? { ...row, isRead: true, readAt: new Date().toISOString() } : row)); setNotificationUnreadCount(count => Math.max(0, count - 1)); }).catch(error => setError(error instanceof Error ? error.message : 'خوانده‌شدن اعلان انجام نشد')); }}><strong>{item.title}</strong><span>{item.detail}</span><small>{new Date(item.createdAt).toLocaleString('fa-IR')}</small></button>)}</div>
+      {notificationsOpen && (
+        <div className="notification-popover">
+          <div className="notification-popover-header">
+            <strong>اعلان‌ها</strong>
+            <button
+              type="button"
+              className="btn sm"
+              disabled={notificationUnreadCount === 0}
+              onClick={() => {
+                void markAllNotificationsRead()
+                  .then(() => {
+                    setNotifications(current =>
+                      current.map(item => ({
+                        ...item,
+                        isRead: true,
+                        readAt: new Date().toISOString(),
+                      })),
+                    );
+                    setNotificationUnreadCount(0);
+                  })
+                  .catch(error =>
+                    setError(
+                      error instanceof Error
+                        ? error.message
+                        : 'خوانده‌شدن اعلان‌ها انجام نشد',
+                    ),
+                  );
+              }}
+            >
+              خوانده‌شده
+            </button>
+          </div>
+
+          {notifications.length === 0 ? (
+            <div className="notification-empty">اعلانی وجود ندارد.</div>
+          ) : (
+            notifications.map(item => (
+              <button
+                type="button"
+                key={item.id}
+                className={`notification-item ${item.isRead ? 'read' : ''} notification-level-${item.level.toLowerCase()}`}
+                onClick={() => {
+                  if (item.isRead) return;
+
+                  void markNotificationRead(item.id)
+                    .then(() => {
+                      setNotifications(current =>
+                        current.map(row =>
+                          row.id === item.id
+                            ? {
+                                ...row,
+                                isRead: true,
+                                readAt: new Date().toISOString(),
+                              }
+                            : row,
+                        ),
+                      );
+                      setNotificationUnreadCount(count =>
+                        Math.max(0, count - 1),
+                      );
+                    })
+                    .catch(error =>
+                      setError(
+                        error instanceof Error
+                          ? error.message
+                          : 'خوانده‌شدن اعلان انجام نشد',
+                      ),
+                    );
+                }}
+              >
+                <strong>{item.title}</strong>
+                <span>{item.detail}</span>
+                <small>{new Date(item.createdAt).toLocaleString('fa-IR')}</small>
+              </button>
+            ))
+          )}
+        </div>
+      )}
 
       {error && (
         <UserErrorBanner
