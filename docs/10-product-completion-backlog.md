@@ -146,6 +146,38 @@
 
 > قانون: Stage 12 از نظر مهندسی نرم‌افزار Done است؛ Gateهای فیزیکی و Release تا زمان اجرای واقعی همچنان Done محسوب نمی‌شوند.
 
+## Stage 14 — UI Hardening / Settings IA / Dashboard UX — 2026-10-05
+
+### وضعیت
+- ✅ **Stage 14.1 — Settings Information Architecture** — روی `main` ادغام و با exact-head Run #1429 تأیید شد.
+- Settings دارای جست‌وجوی دسته‌ها، navigation پایدار، anchorهای یکتا و اطلاع‌رسانی شفاف local-only است.
+- Browser Smoke برای Settings و سناریوهای مرتبط با Notification نیز سبز شده است.
+- ✅ Merge commit: `4bc6cd4484647eb6eb029aef53c947149f9e1da9`
+
+### Gate Stage 14.1
+- ✅ Build
+- ✅ .NET Tests
+- ✅ EF validation
+- ✅ Server/Migration/Health Smoke
+- ✅ Dashboard Lint/Build/Preview
+- ✅ Dashboard Browser Smoke — Run #1429
+
+### Stage 14.2 — Dashboard PC grouping / Internet 1-2 + dense responsive hardening
+- ⬜ ممیزی رفتار فعلی grouping نسبت به دادهٔ واقعی Station/Network
+- ⬜ grouping صریح و پایدار Internet 1 / Internet 2
+- ⬜ حفظ فیلترهای Status / VIP-Normal / Remaining Time
+- ⬜ عدم تغییر Server Truth، Session state یا مالکیت Session در اثر فیلتر/گروه‌بندی
+- ⬜ responsive hardening برای viewport عملیاتی اپراتور
+- ⬜ Browser Smoke برای ترکیب grouping + filtering + critical responsive paths
+
+### مرز بعدی
+- ⏭️ Stage 14.3 — Accessibility / UI / operational polish
+- ⬜ Server-backed Settings
+- ⬜ Backup/Restore واقعی
+- ⬜ Validation فیزیکی 2–3 PC
+
+> قانون: هیچ مورد Stage 14.2 قبل از Build/Test/CI و Browser Smoke لازم Done محسوب نمی‌شود.
+
 ## آخرین وضعیت اجرایی — Stage 13.5 / 2026-10-05
 
 این بخش مرجع اجرایی فعلی و بر وضعیت تاریخی مراحل قبلی غالب است.
