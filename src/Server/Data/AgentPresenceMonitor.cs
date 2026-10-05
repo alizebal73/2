@@ -6,8 +6,7 @@ namespace GameNetManager.Server.Data;
 public sealed class AgentPresenceMonitor(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
-    ILogger<AgentPresenceMonitor> logger,
-    NotificationQueueService notifications) : BackgroundService
+    ILogger<AgentPresenceMonitor> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -39,6 +38,7 @@ public sealed class AgentPresenceMonitor(
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
                 var accountPool = scope.ServiceProvider.GetRequiredService<AccountPoolService>();
+                var notifications = scope.ServiceProvider.GetRequiredService<NotificationQueueService>();
                 var now = DateTimeOffset.UtcNow;
                 var cutoff = now.AddSeconds(-offlineAfter);
                 var commandCutoff = now.AddSeconds(-commandTimeoutSeconds);
