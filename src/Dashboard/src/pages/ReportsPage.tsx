@@ -7,6 +7,8 @@ import { getServerBuffetProfit } from '../services/buffetService';
 import { getAuditLogs, type AuditLogPage } from '../services/auditService';
 import type { BuffetProfitReport } from '../types';
 import { SessionReportPanel } from '../features/reports/SessionReportPanel';
+import { CustomerVipReportPanel } from '../features/reports/CustomerVipReportPanel';
+import { UsersShiftReportPanel } from '../features/reports/UsersShiftReportPanel';
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
 function count(value: number) { return new Intl.NumberFormat('fa-IR').format(value); }
@@ -32,6 +34,8 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
   const canViewFinance = hasPermission(user, 'finance.view');
   const canViewAudit = hasPermission(user, 'audit.view');
   const canManageFinance = hasPermission(user, 'finance.manage');
+  const canViewCustomerReport = hasPermission(user, 'customer.manage') || hasPermission(user, 'customer.wallet') || hasPermission(user, 'customer.debt');
+  const canViewUsersShiftReport = hasPermission(user, 'shift.manage') || hasPermission(user, 'payroll.view') || hasPermission(user, 'user.manage');
   const [period, setPeriod] = useState<Period>('week');
   const [reportCategory, setReportCategory] = useState<ReportCategory>(() => canViewFinance ? 'finance' : 'audit');
   const [from, setFrom] = useState('');
@@ -260,7 +264,13 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
           ['buffet','بوفه و موجودی'],
           ['users','کاربران و شیفت'],
           ['audit','Audit']
-        ] as Array<[ReportCategory,string]>).map(([key,label]) => <button key={key} disabled={(key === 'finance' && !canViewFinance) || (key === 'audit' && !canViewAudit)} className={reportCategory === key ? 'active' : ''} onClick={() => { setReportCategory(key); if (key === 'audit') setAuditPage(1); }}>{label}</button>)}
+        ] as Array<[ReportCategory,string]>).map(([key,label]) => <button key={key} disabled={
+          (key === 'finance' && !canViewFinance)
+          || (key === 'sessions' && !canViewFinance)
+          || (key === 'customers' && !canViewCustomerReport)
+          || (key === 'users' && !canViewUsersShiftReport)
+          || (key === 'audit' && !canViewAudit)
+        } className={reportCategory === key ? 'active' : ''} onClick={() => { setReportCategory(key); if (key === 'audit') setAuditPage(1); }}>{label}</button>)}
       </div>
       <div className="report-periods">
         {([
@@ -344,7 +354,9 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
       }
     </>
     : reportCategory === 'sessions' ? <SessionReportPanel period={period} range={range} />
-    : <section className="report-placeholder"><strong>{({customers:'مشتری و VIP',users:'کاربران و شیفت'} as Record<string,string>)[reportCategory]}</strong><span>این دامنه هنوز در برش‌های بعدی Stage 13 به منبع داده واقعی متصل می‌شود.</span></section>}
+    : reportCategory === 'customers' ? <CustomerVipReportPanel period={period} range={range} />
+    : reportCategory === 'users' ? <UsersShiftReportPanel period={period} range={range} />
+    : <section className="report-placeholder"><strong>گزارش</strong><span>این دامنه در برش بعدی Stage 13 به منبع داده واقعی متصل می‌شود.</span></section>}
 
     {notice && <div className="operation-toast">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
   </>;
