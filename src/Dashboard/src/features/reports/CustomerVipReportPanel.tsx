@@ -50,32 +50,6 @@ function getWindow(period: Period, range: Props['range']) {
   return { start: start.getTime(), end: now };
 }
 
-function exportCsv(report: CustomerVipReportPage | null) {
-  if (!report) return;
-  const lines = [
-    ['کد', 'نام مشتری', 'VIP', 'پکیج', 'انقضا', 'باقی‌مانده امروز', 'باقی‌مانده کل', 'کیف پول', 'بدهی', 'تعداد جلسات', 'درآمد جلسات'],
-    ...report.items.map(item => [
-      item.code,
-      item.name,
-      vipLabel(item.vipTier),
-      item.packageName ?? '—',
-      item.vipExpiresAt ? new Date(item.vipExpiresAt).toLocaleDateString('fa-IR') : '—',
-      minutes(item.remainingTodayMinutes),
-      minutes(item.remainingTotalMinutes),
-      item.walletBalance,
-      item.debt,
-      item.sessionCount,
-      item.sessionRevenue,
-    ]),
-  ];
-  const csv = lines.map(line => line.map(value => '"' + String(value).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
-  link.download = 'gamenet-customer-vip-report.csv';
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
-
 export function CustomerVipReportPanel({ period, range, canExport }: Props & { canExport: boolean }) {
   const [search, setSearch] = useState('');
   const [vip, setVip] = useState('all');
