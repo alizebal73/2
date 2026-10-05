@@ -24,6 +24,7 @@ builder.Services.AddScoped<UsersShiftReportService>();
 builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<SessionReportService>();
+builder.Services.AddScoped<NotificationQueueService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
