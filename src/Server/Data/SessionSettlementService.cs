@@ -1,3 +1,4 @@
+using System.Text.Json;
 using GameNetManager.Server.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -238,6 +239,53 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         }
 
         var discountAmount = Math.Max(0m, request.DiscountAmount ?? 0m);
+
+        var grossBeforeDiscount = Math.Max(0m, existingBuffetTotal + timeAmount);
+        if (discountAmount > grossBeforeDiscount)
+            throw new InvalidOperationException("مبلغ تخفیف نمی‌تواند از مبلغ قبل از تخفیف بیشتر باشد.");
+
+        if (request.AppUserId.HasValue)
+        {
+            var settlementUser = await database.AppUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Id == request.AppUserId.Value, cancellationToken);
+
+            if (settlementUser is not null
+                && string.Equals(settlementUser.Role, "Operator", StringComparison.OrdinalIgnoreCase))
+            {
+                var operatorDiscountPercent = 10;
+                var storedSetting = await database.AppSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        item => item.ScopeKey == ServerSettingsCatalog.GlobalScope
+                            && item.Key == "operatorDiscount",
+                        cancellationToken);
+
+                if (storedSetting is not null)
+                {
+                    try
+                    {
+                        using var settingJson = JsonDocument.Parse(storedSetting.ValueJson);
+                        if (settingJson.RootElement.TryGetInt32(out var configuredPercent))
+                            operatorDiscountPercent = Math.Clamp(configuredPercent, 0, 100);
+                    }
+                    catch (JsonException)
+                    {
+                        // Keep the safe default of 10% if the stored value is malformed.
+                    }
+                }
+
+                var maxOperatorDiscount = Math.Round(
+                    grossBeforeDiscount * operatorDiscountPercent / 100m,
+                    2,
+                    MidpointRounding.ToEven);
+
+                if (discountAmount > maxOperatorDiscount + 0.01m)
+                    throw new InvalidOperationException(
+                        $"تخفیف اپراتور بیش از سقف مجاز {operatorDiscountPercent}% است.");
+            }
+        }
+
         if (discountAmount > 0)
         {
             database.InvoiceItems.Add(new InvoiceItem
