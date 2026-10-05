@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { downloadReportCsv } from '../../services/reportExportService';
 import { getUsersShiftReport, type UsersShiftReportPage } from '../../services/usersShiftReportService';
 
 type Period = 'week' | 'month' | 'sixMonths' | 'year' | 'custom';
@@ -58,7 +59,7 @@ function exportCsv(report: UsersShiftReportPage | null) {
   URL.revokeObjectURL(link.href);
 }
 
-export function UsersShiftReportPanel({ period, range }: Props) {
+export function UsersShiftReportPanel({ period, range, canExport }: Props & { canExport: boolean }) {
   const [userSearch, setUserSearch] = useState('');
   const [shiftState, setShiftState] = useState('all');
   const [page, setPage] = useState(1);
@@ -154,7 +155,7 @@ export function UsersShiftReportPanel({ period, range }: Props) {
     </section>
 
     <div className="report-actions" style={{ margin: '0 22px 10px' }}>
-      <button type="button" className="btn" onClick={() => exportCsv(result)}>📤 خروجی کاربران و شیفت</button>
+      <button type="button" className="btn" disabled={!canExport} title={!canExport ? 'دسترسی خروجی گزارش ندارید' : undefined} onClick={() => { if (!canExport) return; const current = getWindow(period, range); void downloadReportCsv('users-shift', { from: new Date(current.start).toISOString(), to: new Date(current.end).toISOString(), userSearch, shiftState, page, pageSize: 50 }).catch(reason => setError(reason instanceof Error ? reason.message : 'خروجی گزارش کاربران و شیفت انجام نشد')); }}>📤 خروجی کاربران و شیفت</button>
       <span className="page-meta"><span>{count(result?.total ?? 0)} کاربر در گزارش</span></span>
     </div>
 
