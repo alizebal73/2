@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseWindowsService(options => options.ServiceName = "GameNet Manager Server");
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
@@ -32,18 +33,22 @@ builder.Services.AddHostedService<BackupSchedulerHostedService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
-var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
-var databasePath = Path.IsPathRooted(databaseFile)
-    ? databaseFile
-    : Path.Combine(builder.Environment.ContentRootPath, databaseFile);
+var dataRoot = StoragePaths.ResolveDataRoot(builder.Configuration, builder.Environment);
+Directory.CreateDirectory(dataRoot);
+
+var databasePath = StoragePaths.ResolveDatabasePath(
+    builder.Configuration,
+    builder.Environment,
+    dataRoot);
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
 
-var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+var dataProtectionKeysPath = StoragePaths.ResolveDataProtectionKeysPath(dataRoot);
 Directory.CreateDirectory(dataProtectionKeysPath);
 builder.Services
     .AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
     .SetApplicationName("GameNetManager");
+
 builder.Services.AddDbContext<GameNetDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
 
