@@ -63,6 +63,6 @@ public sealed class StoragePathsTests
         public string EnvironmentName { get; set; } = environmentName;
         public string ApplicationName { get; set; } = "GameNetManager.Server.Tests";
         public string ContentRootPath { get; set; } = contentRoot;
-        public IFileProvider ContentRootFileProvider { get; set; } = new PhysicalFileProvider(contentRoot);
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }
