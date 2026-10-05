@@ -1473,6 +1473,7 @@ jobs:
               throw 'Stage 13.5 notification read-state did not persist.'
             }
             Write-Host 'Stage 13.5 durable notification queue smoke passed: low-stock persisted and read-state updated.'
+            # Stage 13.5 notification smoke is intentionally server-backed; Dashboard smoke validates the same inbox contract.
 
             try {
               Invoke-RestMethod -Uri "$baseUrl/api/buffet/sales" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
