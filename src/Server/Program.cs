@@ -3428,6 +3428,7 @@ app.MapGet("/api/customer-auth/state", async (
                 state = item.State.ToString(),
                 startAt = item.StartAt,
                 endAt = item.EndAt,
+                gameId = item.GameId,
                 stationName = item.Station.Name
             })
             .FirstOrDefaultAsync(cancellationToken)
