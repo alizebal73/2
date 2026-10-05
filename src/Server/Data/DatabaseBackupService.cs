@@ -103,7 +103,7 @@ public sealed class DatabaseBackupService
         var archive = await ResolveArchivePathAsync(fileName, cancellationToken);
         await ValidateArchiveAsync(archive, cancellationToken);
 
-        var recoveryRoot = Path.Combine(_environment.ContentRootPath, "App_Data", "BackupRecovery");
+        var recoveryRoot = StoragePaths.ResolveBackupRecoveryRoot(StoragePaths.ResolveDataRoot(_configuration, _environment));
         var pendingRoot = Path.Combine(recoveryRoot, "Pending");
         Directory.CreateDirectory(pendingRoot);
 
@@ -139,9 +139,11 @@ public sealed class DatabaseBackupService
         string dataProtectionKeysPath,
         string contentRootPath,
         ILogger logger,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? dataRootPath = null)
     {
-        var recoveryRoot = Path.Combine(contentRootPath, "App_Data", "BackupRecovery");
+        var recoveryRoot = StoragePaths.ResolveBackupRecoveryRoot(
+            dataRootPath ?? Path.Combine(contentRootPath, "App_Data"));
         var markerPath = Path.Combine(recoveryRoot, "pending.json");
         if (!File.Exists(markerPath))
             return false;
@@ -241,7 +243,7 @@ public sealed class DatabaseBackupService
             : null;
 
         var target = string.IsNullOrWhiteSpace(configured)
-            ? "App_Data/Backups"
+            ? StoragePaths.ResolveDefaultBackupTarget(StoragePaths.ResolveDataRoot(_configuration, _environment))
             : configured!.Trim();
 
         return Path.IsPathRooted(target)
@@ -263,16 +265,14 @@ public sealed class DatabaseBackupService
         return Math.Clamp(keep, 1, 3650);
     }
 
+    private string ResolveDataRoot()
+        => StoragePaths.ResolveDataRoot(_configuration, _environment);
+
     private string ResolveDatabasePath()
-    {
-        var configured = _configuration["Database:FileName"] ?? "App_Data/gamenet.db";
-        return Path.IsPathRooted(configured)
-            ? configured
-            : Path.Combine(_environment.ContentRootPath, configured);
-    }
+        => StoragePaths.ResolveDatabasePath(_configuration, _environment, ResolveDataRoot());
 
     private string ResolveDataProtectionKeysPath()
-        => Path.Combine(_environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+        => StoragePaths.ResolveDataProtectionKeysPath(ResolveDataRoot());
 
     private static string BuildArchivePath(string target, DateTimeOffset now)
         => Path.Combine(
