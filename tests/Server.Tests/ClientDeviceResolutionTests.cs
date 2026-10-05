@@ -44,6 +44,41 @@ public sealed class ClientDeviceResolutionTests
     }
 
     [Fact]
+    public async Task Registered_client_can_resolve_when_agent_is_temporarily_offline()
+    {
+        var databaseName = $"client-device-registered-offline-{Guid.NewGuid():N}";
+        await using var keeper = new Microsoft.Data.Sqlite.SqliteConnection(
+            $"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5");
+        await keeper.OpenAsync();
+
+        await using var database = CreateContext(keeper);
+        await database.Database.EnsureCreatedAsync();
+
+        database.AgentDevices.Add(new AgentDevice
+        {
+            DeviceId = "agent-pc-offline",
+            Name = "PC-offline",
+            AgentTokenHash = "hash",
+            IsActive = true,
+            IsOnline = false,
+            LastIpAddress = "192.168.0.113",
+            LastSeenAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+        });
+        await database.SaveChangesAsync();
+
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.113");
+
+        var resolved = await ClientExperienceEndpoints.ResolveRegisteredDeviceAsync(
+            context,
+            database,
+            CancellationToken.None);
+
+        Assert.NotNull(resolved);
+        Assert.Equal("agent-pc-offline", resolved!.DeviceId);
+    }
+
+    [Fact]
     public async Task Remote_client_cannot_resolve_an_agent_from_a_different_ip()
     {
         var databaseName = $"client-device-resolution-negative-{Guid.NewGuid():N}";
