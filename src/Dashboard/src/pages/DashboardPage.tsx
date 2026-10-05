@@ -255,7 +255,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   const pcGroupLabel = (station: StationDto) => {
     const customer = customers.find(item => item.username === station.customerCode || item.code === station.customerCode);
     if (pcGroupBy === 'vip') return customer && customer.vip !== 'none' ? 'VIP' : 'عادی';
-    if (pcGroupBy === 'network') return 'اینترنت ' + (station.network ?? 1);
+    if (pcGroupBy === 'network') return station.network === 2 ? 'اینترنت ۲' : 'اینترنت ۱';
     if (pcGroupBy === 'remaining') {
       if (station.prepaidEndsAt) {
         const remaining = Math.max(0, Math.ceil((new Date(station.prepaidEndsAt).getTime() - now) / 60000));
