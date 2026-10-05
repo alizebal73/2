@@ -217,6 +217,20 @@ public sealed class ClientDeviceResolutionTests
         return services.BuildServiceProvider();
     }
 
+    private static DefaultHttpContext CreateHttpContext(string remoteIp)
+    {
+        var services = new ServiceCollection();
+        services.AddDataProtection();
+        var serviceProvider = services.BuildServiceProvider();
+
+        var context = new DefaultHttpContext
+        {
+            RequestServices = serviceProvider
+        };
+        context.Connection.RemoteIpAddress = IPAddress.Parse(remoteIp);
+        return context;
+    }
+
     private static GameNetDbContext CreateContext(Microsoft.Data.Sqlite.SqliteConnection connection)
         => new(new DbContextOptionsBuilder<GameNetDbContext>()
             .UseSqlite(connection)
