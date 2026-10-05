@@ -222,7 +222,7 @@
 
 ### Stage 14.5 — واقعی‌سازی Backup / Restore
 
-**🟡 IN PROGRESS**
+**✅ COMPLETE**
 
 - ✅ موتور Backup واقعی برای SQLite با Online Backup API پیاده شده است.
 - ✅ نسخهٔ پشتیبان شامل دیتابیس و DataProtection Keys است.
@@ -233,13 +233,15 @@
 - ✅ Restore روی دیتابیس زنده انجام نمی‌شود؛ Pending Restore در startup قبل از Migration اعمال می‌شود و Pre-Restore safety backup ساخته می‌شود.
 - ✅ Settings UI از کنترل‌های غیرفعال به Backup/Verify/Restore واقعی Server متصل شده است.
 - ✅ تست واحد مسیر Create → Verify → Prepare Restore → Apply Restore اضافه شده است.
-- ⬜ Exact-head CI و Main certification.
+- ✅ Exact-head CI: Run #1461 روی exact-head d9304b271321f22d9323553fbb017eb3effcdf6f.
+- ✅ Main certification: Run #1462 روی merge commit 7dc7d4b8b7cff2e02c4eb302f024161d5ed05049.
+- ✅ همهٔ Gateهای CI روی Main سبز شدند.
 
 ### مرز بعدی
 - ⬜ Validation فیزیکی 2–3 PC
 - ⬜ rollout کنترل‌شدهٔ 40+ PC
 
-> Stage 14.5 فقط پس از Exact-head CI و Main certification سبز، COMPLETE محسوب می‌شود.
+> Stage 14.5 از نظر مهندسی نرم‌افزار **DONE** است؛ Gateهای بعدی آن Validation فیزیکی 2–3 PC و سپس rollout کنترل‌شدهٔ 40+ PC هستند.
 
 
 ## آخرین وضعیت اجرایی — Stage 13.5 / 2026-10-05
