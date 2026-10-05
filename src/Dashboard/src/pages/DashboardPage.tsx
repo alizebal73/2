@@ -505,20 +505,6 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     }
   }
 
-  function calculateSessionDue(station: StationDto) {
-    const customer = customers.find(item => item.code === station.customerCode || item.username === station.customerCode || item.id === station.customerCode);
-    const billing = calculateBilling({
-      elapsedMinutes: duration(station),
-      ratePerHour: station.sessionRate ?? station.ratePerHour,
-      buffetAmount: station.buffetTotal ?? 0,
-      freeMinutes: customer?.freeTimeMinutes ?? 0,
-      discountPercent: 0,
-      minimumCharge: 0,
-      roundingStep: 0,
-    });
-    const prepaidUsed = Math.min(billing.finalAmount, station.sessionCredit ?? 0);
-    return { customer, total: Math.max(0, billing.finalAmount - prepaidUsed) };
-  }
 
   function endSessionForPayment(station: StationDto) {
     if (!canSettleSession) { setMessage('دسترسی تسویه جلسه ندارید'); return; }
