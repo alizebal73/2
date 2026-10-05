@@ -4099,6 +4099,32 @@ button:focus-visible {
   font-size:8.5px;
   line-height:1.7;
 }
+.settings-server-sync{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-top:10px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--panel2);
+}
+.settings-server-sync > div{
+  display:grid;
+  gap:3px;
+}
+.settings-server-sync small{
+  color:var(--dim);
+  font-size:8.5px;
+  line-height:1.7;
+}
+@media (max-width:560px){
+  .settings-server-sync{
+    align-items:stretch;
+    flex-direction:column;
+  }
+}
 #settings-section-hotkeys,
 [id^="settings-section-"]{
   scroll-margin-top:14px;
