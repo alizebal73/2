@@ -679,7 +679,7 @@ public static class ClientExperienceEndpoints
         if (string.IsNullOrWhiteSpace(protectedValue))
             return null;
 
-        var provider = context.RequestServices.GetService<IDataProtectionProvider>();
+        var provider = context.RequestServices?.GetService<IDataProtectionProvider>();
         if (provider is null)
             return null;
 
