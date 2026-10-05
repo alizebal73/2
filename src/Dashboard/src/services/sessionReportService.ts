@@ -70,10 +70,14 @@ export async function getSessionReport(filters: SessionReportFilters = {}): Prom
   params.set('pageSize', String(filters.pageSize ?? 50));
 
   const response = await fetch('/api/reports/sessions?' + params.toString());
-  const payload = await response.json().catch(() => null) as { message?: string } | null;
+  const payload = await response.json().catch(() => null) as SessionReportPage & { message?: string } | null;
   if (!response.ok) {
     throw new Error(payload?.message || 'دریافت گزارش جلسات انجام نشد');
   }
 
-  return await response.json() as SessionReportPage;
+  if (!payload) {
+    throw new Error('پاسخ گزارش جلسات از Server نامعتبر بود');
+  }
+
+  return payload;
 }
