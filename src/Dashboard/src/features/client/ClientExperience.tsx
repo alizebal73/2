@@ -259,7 +259,7 @@ export function ClientExperience() {
 
   function signOut(skipServerRelease = false) {
     if (!skipServerRelease && customerId) {
-      void releaseCustomerLogin(customerId, deviceId).catch(() => undefined);
+      void releaseCustomerLogin(customerId, deviceId, loginId ?? undefined).catch(() => undefined);
     }
     setLoggedIn(false);
     setActiveGame(null);

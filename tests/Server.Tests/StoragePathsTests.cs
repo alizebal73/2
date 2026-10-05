@@ -1,3 +1,7 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
+
 namespace GameNetManager.Server.Tests;
 
 public sealed class StoragePathsTests
@@ -6,7 +10,9 @@ public sealed class StoragePathsTests
     public void ProductionWithoutExplicitRoot_UsesCommonApplicationData()
     {
         var configuration = new ConfigurationBuilder().Build();
-        var environment = new TestEnvironment("Production", @"C:\ProgramFiles\GameNetManager");
+        var contentRoot = Path.Combine(Path.GetTempPath(), "GameNetManagerTestContentRoot", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(contentRoot);
+        var environment = new TestEnvironment("Production", contentRoot);
 
         var root = GameNetManager.Server.Data.StoragePaths.ResolveDataRoot(configuration, environment);
 
@@ -14,6 +20,14 @@ public sealed class StoragePathsTests
             Path.Combine("GameNetManager"),
             root,
             StringComparison.OrdinalIgnoreCase);
+
+        try
+        {
+            Directory.Delete(contentRoot, recursive: true);
+        }
+        catch
+        {
+        }
     }
 
     [Fact]
@@ -27,7 +41,9 @@ public sealed class StoragePathsTests
                 ["Database:FileName"] = "App_Data/gamenet.production.db"
             })
             .Build();
-        var environment = new TestEnvironment("Production", @"C:\ProgramFiles\GameNetManager");
+        var contentRoot = Path.Combine(Path.GetTempPath(), "GameNetManagerTestContentRoot", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(contentRoot);
+        var environment = new TestEnvironment("Production", contentRoot);
 
         try
         {
@@ -46,14 +62,15 @@ public sealed class StoragePathsTests
         finally
         {
             try { Directory.Delete(root, recursive: true); } catch { }
+            try { Directory.Delete(contentRoot, recursive: true); } catch { }
         }
     }
 
     private sealed class TestEnvironment(string environmentName, string contentRoot) : IHostEnvironment
     {
-        public string EnvironmentName { get; } = environmentName;
+        public string EnvironmentName { get; set; } = environmentName;
         public string ApplicationName { get; set; } = "GameNetManager.Server.Tests";
         public string ContentRootPath { get; set; } = contentRoot;
-        public IFileProvider ContentRootFileProvider { get; set; } = new PhysicalFileProvider(contentRoot);
+        public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
     }
 }

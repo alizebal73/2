@@ -15,7 +15,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Check local .NET
         shell: pwsh
@@ -27,12 +27,25 @@ jobs:
           'C:\dotnet' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           'DOTNET_ROOT=C:\dotnet' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: src/Dashboard/package-lock.json
+      - name: Check local Node
+        shell: pwsh
+        run: |
+          $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+          $npmCommand = Get-Command npm -ErrorAction SilentlyContinue
+          if (-not $nodeCommand -or -not $npmCommand) {
+            $nodePath = Join-Path $env:ProgramFiles 'nodejs'
+            if (Test-Path (Join-Path $nodePath 'node.exe')) {
+              $nodePath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            }
+          }
+          if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+            throw 'Node.js is not available on the self-hosted runner PATH.'
+          }
+          if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+            throw 'npm is not available on the self-hosted runner PATH.'
+          }
+          node --version
+          npm --version
 
       - name: Restore .NET
         run: dotnet restore GameNetManager.sln
@@ -83,7 +96,8 @@ jobs:
           $releasePackage = Join-Path $releaseRoot 'GameNetManager.Client-0.7.1.zip'
           Remove-Item $releaseRoot -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $releaseClient -Force | Out-Null
-          dotnet publish src/Client/GameNetManager.Client.csproj --configuration Release --output $releaseClient --no-restore
+          dotnet publish src/Client/GameNetManager.Client.csproj --configuration Release --runtime win-x64 --self-contained true --output $releaseClient
+          if (-not (Test-Path (Join-Path $releaseClient 'GameNetManager.Client.exe'))) { throw 'Self-contained Client executable was not produced.' }
           '0.7.1' | Out-File -FilePath (Join-Path $releaseClient 'client-version.txt') -Encoding ascii
           Compress-Archive -Path (Join-Path $releaseClient '*') -DestinationPath $releasePackage -Force
           $releaseHash = (Get-FileHash -Algorithm SHA256 -Path $releasePackage).Hash.ToLowerInvariant()
@@ -127,6 +141,53 @@ jobs:
             $meBeforeAgent = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
             if ($meBeforeAgent.userName -ne 'admin') { throw 'Current operator endpoint failed before Agent smoke.' }
 
+            $dashboardNegotiate = "$baseUrl/hubs/dashboard/negotiate?negotiateVersion=1"
+            try {
+              Invoke-WebRequest -Uri $dashboardNegotiate -Method Post -ContentType 'application/json' -Body '{}' -UseBasicParsing -TimeoutSec 10 | Out-Null
+              throw 'Anonymous Dashboard SignalR negotiate unexpectedly succeeded.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 401) { throw }
+            }
+
+            $authenticatedNegotiate = Invoke-RestMethod -Uri $dashboardNegotiate -Method Post -WebSession $adminSession -ContentType 'application/json' -Body '{}'
+            if (-not $authenticatedNegotiate.connectionId) {
+              throw 'Authenticated Dashboard SignalR negotiate did not return a connectionId.'
+            }
+
+            Write-Host 'Dashboard negotiate authentication regression smoke passed.'
+
+
+            # Release regression gate: the endpoints that previously failed against SQLite DateTimeOffset
+            # must execute successfully on the real Server process, not only in unit tests.
+            foreach ($uri in @(
+              "$baseUrl/api/finance/summary",
+              "$baseUrl/api/finance/transactions",
+              "$baseUrl/api/shifts/current",
+              "$baseUrl/api/shifts/history",
+              "$baseUrl/api/account-pool/leases"
+            )) {
+              $response = Invoke-WebRequest -Uri $uri -Method Get -WebSession $adminSession -UseBasicParsing -TimeoutSec 10
+              if ($response.StatusCode -ne 200) { throw "SQLite endpoint regression failed: $uri returned $($response.StatusCode)." }
+            }
+
+            $unauthCustomerId = [guid]::NewGuid().ToString()
+            foreach ($uri in @(
+              "$baseUrl/api/customers/$unauthCustomerId/login-acquire",
+              "$baseUrl/api/customers/$unauthCustomerId/login-release"
+            )) {
+              try {
+                Invoke-WebRequest -Uri $uri -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'attacker-test' } | ConvertTo-Json) -UseBasicParsing -TimeoutSec 10 | Out-Null
+                throw "Unauthenticated customer login endpoint accepted a request: $uri"
+              } catch {
+                $status = $_.Exception.Response.StatusCode.value__
+                if ($status -ne 401) { throw }
+              }
+            }
+
+            Write-Host 'SQLite DateTimeOffset endpoint regression smoke passed.'
+
+
             $auditSmoke = Invoke-RestMethod -Uri "$baseUrl/api/audit?page=1&pageSize=20" -Method Get -WebSession $adminSession
             if ([int]$auditSmoke.total -lt 1 -or -not @($auditSmoke.items | Where-Object { $_.action -eq 'AppUserLogin' -and $_.entityName -eq 'AppUser' }).Count) {
               throw 'Stage 13 Audit Explorer API smoke failed to return the authoritative admin login audit event.'
@@ -168,6 +229,30 @@ jobs:
               throw 'Stage 14 Server-backed Settings restore smoke failed.'
             }
             Write-Host 'Stage 14 Server-backed Settings API smoke passed: read -> update -> validation reject -> restore.'
+
+            $shiftStart = Invoke-RestMethod -Uri "$baseUrl/api/shifts/start" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              cashOpening = 0
+              note = 'CI SQLite shift regression'
+            } | ConvertTo-Json)
+
+            if (-not $shiftStart.id) { throw 'Shift start regression smoke did not return a ShiftId.' }
+
+            $currentShift = Invoke-RestMethod -Uri "$baseUrl/api/shifts/current" -Method Get -WebSession $adminSession
+            if (-not $currentShift.id -or $currentShift.id -ne $shiftStart.id) {
+              throw 'Shift current regression smoke did not return the started shift.'
+            }
+
+            $closedShift = Invoke-RestMethod -Uri "$baseUrl/api/shifts/$($shiftStart.id)/close" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              cashClosing = 0
+              externalCash = 0
+              note = 'CI SQLite shift regression close'
+            } | ConvertTo-Json)
+
+            if (-not $closedShift.id -or $closedShift.state -eq 'Active') {
+              throw 'Shift close regression smoke failed.'
+            }
+
+            Write-Host 'Stage 5 Shift start/close regression smoke passed.'
 
             # Stage 11: prove Game and Account Pool are server-backed and allocation is atomic.
             $stage11Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
@@ -346,7 +431,7 @@ jobs:
 
               # Release Safety / Canary gate: exactly one online CI Agent plus a server-authoritative release manifest.
               if (@($agentRows | Where-Object { $_.isOnline }).Count -ne 1) { throw 'Canary gate requires exactly one online Agent target.' }
-              $releaseManifest = Invoke-RestMethod -Uri "$baseUrl/api/release/manifest" -Method Get
+              $releaseManifest = Invoke-RestMethod -Uri "$baseUrl/api/release/manifest" -Method Get -WebSession $adminSession
               if (-not $releaseManifest.clientPackage) { throw 'Release manifest did not expose a Client package.' }
               if ($releaseManifest.clientPackage.version -ne $env:App__ClientPackageVersion) { throw 'Release manifest package version does not match the configured package.' }
               if ([int64]$releaseManifest.clientPackage.sizeBytes -ne (Get-Item $env:App__ClientPackagePath).Length) { throw 'Release manifest package size does not match the package on Server.' }
@@ -1360,19 +1445,24 @@ jobs:
             }
 
             $loginKeys = @('smoke-a', 'smoke-b', 'smoke-c')
+            $loginIds = @{}
             foreach ($clientKey in $loginKeys) {
-              $loginResult = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json)
-              if (-not $loginResult.acquired) { throw "Concurrent login acquire failed for $clientKey." }
+              $loginResult = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json)
+              if (-not $loginResult.acquired -or -not $loginResult.loginId) { throw "Concurrent login acquire failed for $clientKey." }
+              $loginIds[$clientKey] = $loginResult.loginId
             }
             try {
-              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'smoke-d' } | ConvertTo-Json) | Out-Null
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ clientKey = 'smoke-d' } | ConvertTo-Json) | Out-Null
               throw 'Concurrent login limit was not enforced.'
             } catch {
               $status = $_.Exception.Response.StatusCode.value__
               if ($status -ne 409) { throw }
             }
             foreach ($clientKey in $loginKeys) {
-              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json) | Out-Null
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{
+                clientKey = $clientKey
+                loginId = $loginIds[$clientKey]
+              } | ConvertTo-Json) | Out-Null
             }
 
             $auth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
@@ -1380,8 +1470,11 @@ jobs:
               password = 'Smoke123!'
               clientKey = 'credential-smoke'
             } | ConvertTo-Json)
-            if (-not $auth.authenticated) { throw 'Customer credential authentication failed.' }
-            Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'credential-smoke' } | ConvertTo-Json) | Out-Null
+            if (-not $auth.authenticated -or -not $auth.loginId) { throw 'Customer credential authentication failed.' }
+            Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{
+              clientKey = 'credential-smoke'
+              loginId = $auth.loginId
+            } | ConvertTo-Json) | Out-Null
 
             $debt = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/debt") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               amount = 55000
@@ -1612,24 +1705,16 @@ jobs:
               throw 'Fine-grained own report scope leaked an administrator-owned session.'
             }
 
-            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $scopeSession | Out-Null
-
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
               permissionNames = @('report.sessions.view','report.sessions.scope.all','reports.export')
             } | ConvertTo-Json) | Out-Null
 
-            $scopeAllSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $scopeAllSession -ContentType 'application/json' -Body (@{
-              userName = $managedUser.userName
-              password = 'Operator123!'
-            } | ConvertTo-Json) | Out-Null
-
-            $allScopedReport = Invoke-RestMethod -Uri "$baseUrl/api/reports/sessions?page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeAllSession
+            $allScopedReport = Invoke-RestMethod -Uri "$baseUrl/api/reports/sessions?page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeSession
             if (@($allScopedReport.items | Where-Object { $_.id -eq $startedSession.sessionId }).Count -ne 1) {
               throw 'Fine-grained all report scope did not return the authoritative completed session.'
             }
 
-            $exportResponse = Invoke-WebRequest -Uri "$baseUrl/api/reports/export?report=sessions&page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeAllSession
+            $exportResponse = Invoke-WebRequest -Uri "$baseUrl/api/reports/export?report=sessions&page=1&pageSize=20&state=Completed" -Method Get -WebSession $scopeSession
             $exportContentType = (@($exportResponse.Headers['Content-Type']) -join ';')
             if ($exportResponse.StatusCode -ne 200 -or $exportContentType -notmatch 'text/csv') {
               throw "Permission-gated sessions report did not return CSV: status=$($exportResponse.StatusCode); contentType=$exportContentType"
@@ -1638,21 +1723,12 @@ jobs:
               throw 'Sessions report export did not include the smoke session data.'
             }
 
-            Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $scopeAllSession | Out-Null
             Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
               permissionNames = @('finance.manage')
             } | ConvertTo-Json) | Out-Null
             Write-Host 'Stage 13.4 fine-grained scope + export smoke passed.'
 
-            Invoke-RestMethod -Uri "$baseUrl/api/users/$($managedUser.id)/permissions" -Method Put -WebSession $adminSession -ContentType 'application/json' -Body (@{
-              permissionNames = @('finance.manage')
-            } | ConvertTo-Json) | Out-Null
-
-            $operatorFinanceSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-            Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $operatorFinanceSession -ContentType 'application/json' -Body (@{
-              userName = $managedUser.userName
-              password = 'Operator123!'
-            } | ConvertTo-Json) | Out-Null
+            $operatorFinanceSession = $scopeSession
 
             try {
               Invoke-RestMethod -Uri "$baseUrl/api/invoices/$($sessionSale.invoiceId)/reverse" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
@@ -1694,6 +1770,110 @@ jobs:
 
             Write-Host 'Stage 5 Customer CRUD + VIP package + credentials + concurrent login + debt API smoke passed.'
 
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+          }
+      - name: Production startup and provisioning smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dataRoot = Join-Path $env:RUNNER_TEMP 'gamenet-production-smoke-data'
+          $stdout = Join-Path $env:RUNNER_TEMP 'gamenet-production-smoke.stdout.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'gamenet-production-smoke.stderr.log'
+          Remove-Item $dataRoot -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
+
+          $port = 16080
+          while (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
+            $port++
+            if ($port -gt 16980) { throw 'No free Production smoke port is available.' }
+          }
+          $baseUrl = "http://127.0.0.1:$port"
+
+          $env:ASPNETCORE_ENVIRONMENT = 'Production'
+          $env:ASPNETCORE_URLS = $baseUrl
+          $env:Kestrel__Endpoints__Http__Url = $baseUrl
+          $env:App__DataRoot = $dataRoot
+          $env:GAMENET_ADMIN_PASSWORD = 'ProductionCiAdminPassword!2026'
+          $env:Agent__RegistrationToken = 'ProductionCiRegistrationToken!2026'
+          $env:Agent__HeartbeatIntervalSeconds = '3'
+          $env:Agent__OfflineAfterSeconds = '6'
+
+          $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
+            'run','--no-build','--configuration','Release',
+            '--project','src\Server\GameNetManager.Server.csproj',
+            '--no-launch-profile'
+          ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              if ($process.HasExited) { break }
+              try {
+                $response = Invoke-WebRequest -Uri "$baseUrl/api/health" -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+
+            if (-not $ready) {
+              Write-Host '--- Production stdout ---'
+              if (Test-Path $stdout) { Get-Content $stdout }
+              Write-Host '--- Production stderr ---'
+              if (Test-Path $stderr) { Get-Content $stderr }
+              throw "Production Server did not reach /api/health on port $port."
+            }
+
+            $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            $adminLogin = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              userName = 'admin'
+              password = 'ProductionCiAdminPassword!2026'
+            } | ConvertTo-Json)
+
+            if (-not $adminLogin.id -or $adminLogin.role -ne 'Admin') {
+              throw 'Production admin authentication smoke failed.'
+            }
+
+            $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
+            if ($me.userName -ne 'admin') {
+              throw 'Production current-user smoke failed.'
+            }
+
+            $provision = Invoke-RestMethod -Uri "$baseUrl/api/stations/provision" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              prefix = 'PROD-PC'
+              startNumber = 1
+              count = 2
+              zone = 'pc'
+              type = 'PC'
+              ratePerHour = 95000
+              network = 1
+            } | ConvertTo-Json)
+
+            if ([int]$provision.created -ne 2 -or @($provision.names).Count -ne 2) {
+              throw 'Production Station provisioning smoke failed.'
+            }
+
+            $stations = Invoke-RestMethod -Uri "$baseUrl/api/stations" -Method Get -WebSession $adminSession
+            $createdStations = @($stations | Where-Object { $_.name -eq 'PROD-PC-01' -or $_.name -eq 'PROD-PC-02' })
+            if ($createdStations.Count -ne 2) {
+              throw 'Production Station list smoke failed to return provisioned stations.'
+            }
+
+            if (-not (Test-Path (Join-Path $dataRoot 'gamenet.production.db'))) {
+              throw 'Production database was not created in the configured data root.'
+            }
+            if (-not (Test-Path (Join-Path $dataRoot 'DataProtection-Keys'))) {
+              throw 'Production DataProtection key directory was not created in the configured data root.'
+            }
+            if (-not (Test-Path (Join-Path $dataRoot 'Backups'))) {
+              throw 'Production backup directory was not created at the expected data root.'
+            }
+
+            $logout = Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $adminSession
+            if (-not $logout.success) { throw 'Production admin logout smoke failed.' }
+
+            Write-Host 'Production startup + authentication + Station provisioning + data-root smoke passed.'
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
           }
@@ -1740,3 +1920,62 @@ jobs:
             if ($processId) { Stop-Process -Id ([int]$processId) -Force -ErrorAction SilentlyContinue }
             Remove-Item $pidFile -Force -ErrorAction SilentlyContinue
           }
+
+  installer-package:
+    needs: verify
+    runs-on: [self-hosted, windows, x64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Check local .NET
+        shell: pwsh
+        run: |
+          if (-not (Test-Path 'C:\dotnet\dotnet.exe')) {
+            throw 'C:\dotnet\dotnet.exe not found on the self-hosted runner.'
+          }
+          'C:\dotnet' | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          'DOTNET_ROOT=C:\dotnet' | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & 'C:\dotnet\dotnet.exe' --info
+
+      - name: Check local Node
+        shell: pwsh
+        run: |
+          if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+            $nodePath = Join-Path $env:ProgramFiles 'nodejs'
+            if (Test-Path (Join-Path $nodePath 'node.exe')) {
+              $nodePath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            }
+          }
+          if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js is not available on the self-hosted runner PATH.' }
+          if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { throw 'npm is not available on the self-hosted runner PATH.' }
+          node --version
+          npm --version
+
+      - name: Build Release Installers
+        shell: pwsh
+        env:
+          RELEASE_VERSION: 1.0.0-rc.${{ github.run_number }}
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\build\installer\Build-Setup.ps1 -Version $env:RELEASE_VERSION
+
+      - name: List Release Installers
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem .\artifacts\installer\out -Filter *.exe -File
+          if ($files.Count -ne 2) {
+            throw "Expected exactly 2 installer files, found $($files.Count)."
+          }
+          $files | Select-Object Name, Length | Format-Table -AutoSize
+
+      - name: Upload Release Installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: gamenet-manager-installers-${{ github.run_number }}
+          path: |
+            artifacts/installer/out/*.exe
+            artifacts/installer/out/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14

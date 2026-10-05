@@ -9,12 +9,37 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseWindowsService(options => options.ServiceName = "GameNet Manager Server");
+ProductionSecretValidator.Validate(builder.Configuration, builder.Environment);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth-login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+    options.AddPolicy("customer-login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
+});
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
 builder.Services.AddScoped<WalletRefundService>();
@@ -32,18 +57,26 @@ builder.Services.AddHostedService<BackupSchedulerHostedService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
-var databaseFile = builder.Configuration["Database:FileName"] ?? "App_Data/gamenet.db";
-var databasePath = Path.IsPathRooted(databaseFile)
-    ? databaseFile
-    : Path.Combine(builder.Environment.ContentRootPath, databaseFile);
+var dataRoot = StoragePaths.ResolveDataRoot(builder.Configuration, builder.Environment);
+Directory.CreateDirectory(dataRoot);
+
+var databasePath = StoragePaths.ResolveDatabasePath(
+    builder.Configuration,
+    builder.Environment,
+    dataRoot);
 Directory.CreateDirectory(Path.GetDirectoryName(databasePath)!);
 
-var dataProtectionKeysPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtection-Keys");
+var dataProtectionKeysPath = StoragePaths.ResolveDataProtectionKeysPath(dataRoot);
+var backupRoot = StoragePaths.ResolveDefaultBackupTarget(dataRoot);
+var backupRecoveryRoot = StoragePaths.ResolveBackupRecoveryRoot(dataRoot);
 Directory.CreateDirectory(dataProtectionKeysPath);
+Directory.CreateDirectory(backupRoot);
+Directory.CreateDirectory(backupRecoveryRoot);
 builder.Services
     .AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
     .SetApplicationName("GameNetManager");
+
 builder.Services.AddDbContext<GameNetDbContext>(options =>
     options.UseSqlite($"Data Source={databasePath}"));
 
@@ -56,7 +89,8 @@ try
         databasePath,
         dataProtectionKeysPath,
         app.Environment.ContentRootPath,
-        logger);
+        logger,
+        dataRootPath: dataRoot);
 
     var bootstrapProtector = app.Services
         .GetRequiredService<IDataProtectionProvider>()
@@ -76,6 +110,33 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+app.UseRateLimiter();
+
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/hubs/dashboard")
+        && HttpMethods.IsPost(context.Request.Method)
+        && context.Request.Path.Value?.EndsWith("/negotiate", StringComparison.OrdinalIgnoreCase) == true)
+    {
+        await using var scope = context.RequestServices.CreateAsyncScope();
+        var database = scope.ServiceProvider.GetRequiredService<GameNetDbContext>();
+        var user = await AuthorizationService.ResolveUserAsync(
+            context,
+            database,
+            context.RequestAborted);
+
+        if (user is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+
+        context.Items["GameNet.DashboardNegotiateAuth"] = user.Id;
+    }
+
+    await next();
+});
 
 app.MapSettingsEndpoints();
 app.MapBackupEndpoints();
@@ -911,24 +972,39 @@ app.MapGet("/api/account-pool/leases", async (
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "account.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var leases = await database.AccountLeases
+    var leaseRows = await database.AccountLeases
         .AsNoTracking()
         .Include(item => item.AccountPoolEntry)
         .Include(item => item.Game)
         .Include(item => item.AgentDevice)
         .Where(item => item.State == AccountLeaseState.Active)
+        .Select(item => new
+        {
+            item.Id,
+            item.AccountPoolEntryId,
+            item.GameId,
+            Title = item.AccountPoolEntry.Title,
+            Platform = item.AccountPoolEntry.Platform,
+            Login = item.AccountPoolEntry.Login,
+            AgentName = item.AgentDevice == null ? null : item.AgentDevice.Name,
+            item.LeasedAt,
+            item.State
+        })
+        .ToListAsync(cancellationToken);
+
+    var leases = leaseRows
         .OrderByDescending(item => item.LeasedAt)
         .Select(item => new AccountLeaseDto(
             item.Id,
             item.AccountPoolEntryId,
             item.GameId,
-            item.AccountPoolEntry.Title,
-            item.AccountPoolEntry.Platform,
-            item.AccountPoolEntry.Login,
-            item.AgentDevice == null ? null : item.AgentDevice.Name,
+            item.Title,
+            item.Platform,
+            item.Login,
+            item.AgentName,
             item.LeasedAt,
             item.State.ToString()))
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     return Results.Ok(leases);
 }).WithName("GetActiveAccountLeases");
@@ -1518,8 +1594,22 @@ app.MapGet("/api/agent/commands/{commandId:guid}", async (
 })
 .WithName("GetAgentCommand");
 
-app.MapGet("/api/release/manifest", (GameNetDbContext database, IConfiguration configuration, HttpRequest request) =>
+app.MapGet("/api/release/manifest", async (GameNetDbContext database, IConfiguration configuration, HttpRequest request, CancellationToken cancellationToken) =>
 {
+    var context = request.HttpContext;
+    if (context is null)
+        return Results.Unauthorized();
+
+    var operatorUser = await AuthorizationService.ResolveUserAsync(
+        context,
+        database,
+        cancellationToken);
+    var agentDevice = operatorUser is null
+        ? await ResolveAgentHttpDeviceAsync(context, database, cancellationToken)
+        : null;
+
+    if (operatorUser is null && agentDevice is null)
+        return Results.Unauthorized();
     var schemaVersion = database.Database.GetAppliedMigrations().LastOrDefault() ?? "unknown";
     var productVersion = configuration["App:ProductVersion"] ?? "0.7.0";
     var packageVersion = configuration["App:ClientPackageVersion"];
@@ -1947,6 +2037,7 @@ app.MapPost("/api/auth/login", async (
 
     return Results.Ok(ToAppUserDto(user));
 })
+.RequireRateLimiting("auth-login")
 .WithName("AppUserLogin");
 
 app.MapPost("/api/auth/logout", async (
@@ -3483,6 +3574,7 @@ app.MapPost("/api/customer-auth/login", async (
         });
     }
 })
+.RequireRateLimiting("customer-login")
 .WithName("CustomerAuthenticate");
 
 app.MapGet("/api/customer-auth/state", async (
@@ -3532,12 +3624,11 @@ app.MapGet("/api/customer-auth/state", async (
     var device = resolvedClientDevice;
 
     var session = device?.StationId is Guid stationId
-        ? await database.Sessions
+        ? (await database.Sessions
             .Where(item => item.CustomerId == customerId
                 && item.CustomerLoginId == loginId
                 && item.StationId == stationId
                 && (item.State == SessionState.Active || item.State == SessionState.Ended))
-            .OrderByDescending(item => item.StartAt)
             .Select(item => new
             {
                 id = item.Id,
@@ -3547,7 +3638,9 @@ app.MapGet("/api/customer-auth/state", async (
                 gameId = item.GameId,
                 stationName = item.Station.Name
             })
-            .FirstOrDefaultAsync(cancellationToken)
+            .ToListAsync(cancellationToken))
+            .OrderByDescending(item => item.startAt)
+            .FirstOrDefault()
         : null;
 
     return Results.Ok(new
@@ -3575,6 +3668,13 @@ app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "customer.manage",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
     var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
@@ -3609,6 +3709,30 @@ app.MapPost("/api/customers/{customerId:guid}/login-release", async (
     var clientKey = request.ClientKey?.Trim();
     if (string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
+
+    if (!request.LoginId.HasValue)
+    {
+        var auth = await AuthorizationService.RequirePermissionAsync(
+            context,
+            database,
+            "customer.manage",
+            cancellationToken);
+        if (auth.Error is not null) return auth.Error;
+    }
+    else
+    {
+        var login = await database.CustomerLogins
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == request.LoginId.Value
+                    && item.CustomerId == customerId
+                    && item.ClientKey == clientKey
+                    && item.IsActive,
+                cancellationToken);
+
+        if (login is null)
+            return Results.Unauthorized();
+    }
 
     var customer = await database.Customers.AsNoTracking().FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
     if (customer is null)
@@ -4835,15 +4959,24 @@ app.MapGet("/api/finance/summary", async (HttpContext context,
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
-    var revenue = await database.Invoices
+    var paidInvoices = await database.Invoices
         .AsNoTracking()
-        .Where(item => item.Status == InvoiceStatus.Paid && item.IssuedAt >= start && item.IssuedAt <= end)
-        .SumAsync(item => (decimal?)item.TotalAmount, cancellationToken) ?? 0m;
+        .Where(item => item.Status == InvoiceStatus.Paid)
+        .Select(item => new { item.IssuedAt, item.TotalAmount })
+        .ToListAsync(cancellationToken);
 
-    var expense = await database.Expenses
+    var expenses = await database.Expenses
         .AsNoTracking()
+        .Select(item => new { item.CreatedAt, item.Amount })
+        .ToListAsync(cancellationToken);
+
+    var revenue = paidInvoices
+        .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
+        .Sum(item => item.TotalAmount);
+
+    var expense = expenses
         .Where(item => item.CreatedAt >= start && item.CreatedAt <= end)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+        .Sum(item => item.Amount);
 
     return Results.Ok(new FinanceSummaryDto(
         start,
@@ -4868,12 +5001,9 @@ app.MapGet("/api/finance/transactions", async (HttpContext context,
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
-    var invoices = await database.Invoices
+    var invoiceRows = await database.Invoices
         .AsNoTracking()
         .Include(item => item.Items)
-        .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
-        .OrderByDescending(item => item.IssuedAt)
-        .Take(500)
         .Select(item => new
         {
             item.Id,
@@ -4886,6 +5016,12 @@ app.MapGet("/api/finance/transactions", async (HttpContext context,
                 .FirstOrDefault() ?? "فاکتور"
         })
         .ToListAsync(cancellationToken);
+
+    var invoices = invoiceRows
+        .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
+        .OrderByDescending(item => item.IssuedAt)
+        .Take(500)
+        .ToList();
 
     var invoiceIds = invoices.Select(item => item.Id).ToList();
     var payments = await database.InvoicePayments
@@ -4929,11 +5065,15 @@ app.MapGet("/api/shifts/current", async (HttpContext context,
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var shift = await database.Shifts
+    var openShifts = await database.Shifts
         .AsNoTracking()
         .Include(item => item.AppUser)
+        .Where(item => item.CloseAt == null)
+        .ToListAsync(cancellationToken);
+
+    var shift = openShifts
         .OrderByDescending(item => item.OpenAt)
-        .FirstOrDefaultAsync(item => item.CloseAt == null, cancellationToken);
+        .FirstOrDefault();
 
     if (shift is null)
         return Results.Ok<ShiftSnapshotDto?>(null);
@@ -4949,12 +5089,13 @@ app.MapGet("/api/shifts/history", async (HttpContext context,
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "shift.manage", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var shifts = await database.Shifts
+    var shifts = (await database.Shifts
         .AsNoTracking()
         .Include(item => item.AppUser)
+        .ToListAsync(cancellationToken))
         .OrderByDescending(item => item.OpenAt)
         .Take(30)
-        .ToListAsync(cancellationToken);
+        .ToList();
 
     var result = new List<ShiftSnapshotDto>(shifts.Count);
     foreach (var shift in shifts)
@@ -4992,18 +5133,29 @@ app.MapPost("/api/shifts/start", async (
         Notes = string.IsNullOrWhiteSpace(request.Note) ? null : request.Note.Trim()
     };
 
-    database.Shifts.Add(shift);
-    database.AuditLogs.Add(new AuditLog
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+    try
     {
-        Action = "ShiftStart",
-        EntityName = "Shift",
-        EntityId = shift.Id.ToString(),
-        Details = "شروع شیفت · " + user.FullName + " · صندوق اولیه " + request.CashOpening.ToString("0.##") + " تومان",
-        AppUserId = user.Id
-    });
+        database.Shifts.Add(shift);
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "ShiftStart",
+            EntityName = "Shift",
+            EntityId = shift.Id.ToString(),
+            Details = "شروع شیفت · " + user.FullName + " · صندوق اولیه " + request.CashOpening.ToString("0.##") + " تومان",
+            AppUserId = user.Id
+        });
 
-    await database.SaveChangesAsync(cancellationToken);
-    return Results.Ok(await BuildShiftSnapshotAsync(database, shift, null, cancellationToken));
+        await database.SaveChangesAsync(cancellationToken);
+        var snapshot = await BuildShiftSnapshotAsync(database, shift, null, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Results.Ok(snapshot);
+    }
+    catch
+    {
+        await transaction.RollbackAsync(CancellationToken.None);
+        throw;
+    }
 })
 .WithName("StartShift");
 
@@ -5032,13 +5184,23 @@ app.MapPost("/api/shifts/{shiftId:guid}/close", async (
         return Results.Conflict(new { code = "shift_closed", message = "این شیفت قبلاً بسته شده است." });
 
     var now = DateTimeOffset.UtcNow;
-    var cashSales = await database.InvoicePayments
+    var cashPayments = await database.InvoicePayments
+        .AsNoTracking()
         .Where(item => item.Method == "cash"
             && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null
-            && item.Invoice.PaidAt >= shift.OpenAt
-            && item.Invoice.PaidAt <= now)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+            && item.Invoice.PaidAt != null)
+        .Select(item => new
+        {
+            item.Amount,
+            item.Invoice.PaidAt
+        })
+        .ToListAsync(cancellationToken);
+
+    var cashSales = cashPayments
+        .Where(item => item.PaidAt.HasValue
+            && item.PaidAt.Value >= shift.OpenAt
+            && item.PaidAt.Value <= now)
+        .Sum(item => item.Amount);
 
     var expenseTotal = await database.Expenses
         .Where(item => item.ShiftId == shift.Id)
@@ -5697,13 +5859,23 @@ static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
 {
     var end = shift.CloseAt ?? DateTimeOffset.UtcNow;
 
-    var cashSales = await database.InvoicePayments
+    var cashPayments = await database.InvoicePayments
+        .AsNoTracking()
         .Where(item => item.Method == "cash"
             && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null
-            && item.Invoice.PaidAt >= shift.OpenAt
-            && item.Invoice.PaidAt <= end)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+            && item.Invoice.PaidAt != null)
+        .Select(item => new
+        {
+            item.Amount,
+            item.Invoice.PaidAt
+        })
+        .ToListAsync(cancellationToken);
+
+    var cashSales = cashPayments
+        .Where(item => item.PaidAt.HasValue
+            && item.PaidAt.Value >= shift.OpenAt
+            && item.PaidAt.Value <= end)
+        .Sum(item => item.Amount);
 
     var expenseTotal = await database.Expenses
         .Where(item => item.ShiftId == shift.Id)
@@ -5820,7 +5992,7 @@ public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, stri
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
 public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
 public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);
-public sealed record CustomerLoginRequest(string ClientKey);
+public sealed record CustomerLoginRequest(string ClientKey, Guid? LoginId = null);
 public sealed record CustomerLoginReleaseRequest(string ClientKey);
 public sealed record ConcurrentLoginResultDto(bool Acquired, Guid LoginId, int ActiveCount, int Limit);
 

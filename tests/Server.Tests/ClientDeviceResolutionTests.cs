@@ -1,8 +1,10 @@
 using System.Net;
 using GameNetManager.Server;
 using GameNetManager.Server.Data;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace GameNetManager.Server.Tests;
 
@@ -31,7 +33,11 @@ public sealed class ClientDeviceResolutionTests
         });
         await database.SaveChangesAsync();
 
-        var context = new DefaultHttpContext();
+        using var serviceProvider = CreateDataProtectionServiceProvider();
+        var context = new DefaultHttpContext
+        {
+            RequestServices = serviceProvider
+        };
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.111");
 
         var resolved = await ClientExperienceEndpoints.ResolveDeviceAsync(
@@ -41,6 +47,41 @@ public sealed class ClientDeviceResolutionTests
 
         Assert.NotNull(resolved);
         Assert.Equal("agent-pc-01", resolved!.DeviceId);
+    }
+
+    [Fact]
+    public async Task Client_device_resolution_without_request_services_still_resolves_by_ip()
+    {
+        var databaseName = $"client-device-no-services-{Guid.NewGuid():N}";
+        await using var keeper = new Microsoft.Data.Sqlite.SqliteConnection(
+            $"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5");
+        await keeper.OpenAsync();
+
+        await using var database = CreateContext(keeper);
+        await database.Database.EnsureCreatedAsync();
+
+        database.AgentDevices.Add(new AgentDevice
+        {
+            DeviceId = "agent-pc-no-services",
+            Name = "PC-no-services",
+            AgentTokenHash = "hash",
+            IsActive = true,
+            IsOnline = true,
+            LastIpAddress = "192.168.0.114",
+            LastSeenAt = DateTimeOffset.UtcNow,
+        });
+        await database.SaveChangesAsync();
+
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.114");
+
+        var resolved = await ClientExperienceEndpoints.ResolveDeviceAsync(
+            context,
+            database,
+            CancellationToken.None);
+
+        Assert.NotNull(resolved);
+        Assert.Equal("agent-pc-no-services", resolved!.DeviceId);
     }
 
     [Fact]
@@ -66,7 +107,11 @@ public sealed class ClientDeviceResolutionTests
         });
         await database.SaveChangesAsync();
 
-        var context = new DefaultHttpContext();
+        using var serviceProvider = CreateDataProtectionServiceProvider();
+        var context = new DefaultHttpContext
+        {
+            RequestServices = serviceProvider
+        };
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.113");
 
         var resolved = await ClientExperienceEndpoints.ResolveRegisteredDeviceAsync(
@@ -76,6 +121,55 @@ public sealed class ClientDeviceResolutionTests
 
         Assert.NotNull(resolved);
         Assert.Equal("agent-pc-offline", resolved!.DeviceId);
+    }
+
+    [Fact]
+    public async Task Protected_device_cookie_resolves_agent_without_relying_on_remote_ip()
+    {
+        var databaseName = $"client-device-cookie-{Guid.NewGuid():N}";
+        await using var keeper = new Microsoft.Data.Sqlite.SqliteConnection(
+            $"Data Source=file:{databaseName};Mode=Memory;Cache=Shared;Default Timeout=5");
+        await keeper.OpenAsync();
+
+        await using var database = CreateContext(keeper);
+        await database.Database.EnsureCreatedAsync();
+
+        var device = new AgentDevice
+        {
+            DeviceId = "agent-cookie-01",
+            Name = "PC-cookie",
+            AgentTokenHash = "hash",
+            IsActive = true,
+            IsOnline = true,
+            LastIpAddress = "192.168.0.111",
+            LastSeenAt = DateTimeOffset.UtcNow,
+        };
+        database.AgentDevices.Add(device);
+        await database.SaveChangesAsync();
+
+        var services = new ServiceCollection();
+        services.AddDataProtection();
+        using var serviceProvider = services.BuildServiceProvider();
+
+        var protector = serviceProvider
+            .GetRequiredService<IDataProtectionProvider>()
+            .CreateProtector("GameNetManager.ClientDeviceIdentity");
+        var cookie = protector.Protect($"{device.Id:D}|{DateTimeOffset.UtcNow.UtcTicks}");
+
+        var context = new DefaultHttpContext
+        {
+            RequestServices = serviceProvider
+        };
+        context.Request.Headers.Cookie = $"gamenet_client_device={cookie}";
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.222");
+
+        var resolved = await ClientExperienceEndpoints.ResolveDeviceAsync(
+            context,
+            database,
+            CancellationToken.None);
+
+        Assert.NotNull(resolved);
+        Assert.Equal(device.DeviceId, resolved!.DeviceId);
     }
 
     [Fact]
@@ -101,7 +195,11 @@ public sealed class ClientDeviceResolutionTests
         });
         await database.SaveChangesAsync();
 
-        var context = new DefaultHttpContext();
+        using var serviceProvider = CreateDataProtectionServiceProvider();
+        var context = new DefaultHttpContext
+        {
+            RequestServices = serviceProvider
+        };
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.111");
 
         var resolved = await ClientExperienceEndpoints.ResolveDeviceAsync(
@@ -110,6 +208,13 @@ public sealed class ClientDeviceResolutionTests
             CancellationToken.None);
 
         Assert.Null(resolved);
+    }
+
+    private static ServiceProvider CreateDataProtectionServiceProvider()
+    {
+        var services = new ServiceCollection();
+        services.AddDataProtection();
+        return services.BuildServiceProvider();
     }
 
     private static GameNetDbContext CreateContext(Microsoft.Data.Sqlite.SqliteConnection connection)
