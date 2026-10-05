@@ -1,3 +1,7 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.Hosting;
+
 namespace GameNetManager.Server.Tests;
 
 public sealed class ProductionSecretValidatorTests
@@ -91,7 +95,7 @@ public sealed class ProductionSecretValidatorTests
 
     private sealed class TestEnvironment(string environmentName) : IHostEnvironment
     {
-        public string EnvironmentName { get; } = environmentName;
+        public string EnvironmentName { get; set; } = environmentName;
         public string ApplicationName { get; set; } = "GameNetManager.Server.Tests";
         public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
         public IFileProvider ContentRootFileProvider { get; set; } = new PhysicalFileProvider(AppContext.BaseDirectory);
