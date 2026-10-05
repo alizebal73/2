@@ -40,7 +40,7 @@ public static class ClientExperienceEndpoints
 
             var activePoolRows = await database.AccountPoolEntries
                 .AsNoTracking()
-                .Where(item => item.IsActive && item.Status != AccountPoolStatus.Retired)
+                .Where(item => item.IsActive && item.Status == AccountPoolStatus.Free)
                 .Select(item => item.AllowedGameIdsCsv)
                 .ToListAsync(cancellationToken);
 
