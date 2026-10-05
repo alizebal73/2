@@ -76,6 +76,17 @@ public static class AuthorizationService
         return session?.AppUser;
     }
 
+    public static async Task<(AppUser? User, IResult? Error)> RequireAuthenticatedAsync(
+        HttpContext context,
+        GameNetDbContext database,
+        CancellationToken cancellationToken)
+    {
+        var user = await ResolveUserAsync(context, database, cancellationToken);
+        return user is null
+            ? (null, Results.Unauthorized())
+            : (user, null);
+    }
+
     public static bool HasPermission(AppUser user, string permission)
     {
         if (string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase)
