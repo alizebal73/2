@@ -34,9 +34,83 @@ export function SettingsPage(){
  const [pageLocks,setPageLocks]=useState<PageLockMap>(()=>readPageLocks());
  const [lockPins,setLockPins]=useState<Record<string,string>>({});
  const [settingsSearch,setSettingsSearch]=useState('');
+ const [serverSettingsLoaded,setServerSettingsLoaded]=useState(false);
+ const [serverSettingsAccessible,setServerSettingsAccessible]=useState(false);
+ const [serverSettingsSaving,setServerSettingsSaving]=useState(false);
+ const [serverSettingsError,setServerSettingsError]=useState('');
+
+ useEffect(()=>{
+  let active=true;
+  void (async()=>{
+   try{
+    const response=await fetch('/api/settings',{credentials:'include'});
+    if(!response.ok){
+     if(active){
+      setServerSettingsAccessible(false);
+      setServerSettingsLoaded(true);
+      setServerSettingsError(response.status===403
+       ? 'برای مشاهده یا مدیریت تنظیمات عملیاتی، Permission مربوط به تنظیمات سرور لازم است.'
+       : 'تنظیمات سرور در دسترس نیست؛ وضعیت local این داشبورد حفظ شد.');
+     }
+     return;
+    }
+    const payload=await response.json() as { values?: Partial<AppSettings> };
+    if(active && payload.values) setSettings(current=>({...current,...payload.values}));
+    if(active){
+     setServerSettingsAccessible(true);
+     setServerSettingsLoaded(true);
+     setServerSettingsError('');
+    }
+   }catch{
+    if(active){
+     setServerSettingsAccessible(false);
+     setServerSettingsLoaded(true);
+     setServerSettingsError('ارتباط با سرویس تنظیمات سرور برقرار نشد؛ وضعیت local این داشبورد حفظ شد.');
+    }
+   }
+  })();
+  return ()=>{active=false};
+ },[]);
+
  useEffect(()=>{localStorage.setItem('gamenet-settings-v1',JSON.stringify(settings));window.dispatchEvent(new CustomEvent('gamenet-settings-changed',{detail:settings}))},[settings]);
  useEffect(()=>{localStorage.setItem('gamenet-hotkeys-v1',JSON.stringify(hotkeys));window.dispatchEvent(new CustomEvent('gamenet-hotkeys-changed',{detail:hotkeys}))},[hotkeys]);
  function update<K extends keyof AppSettings>(key:K,value:AppSettings[K]){setSettings(current=>({...current,[key]:value}))}
+
+ async function saveServerSettings(){
+  if(!serverSettingsAccessible || serverSettingsSaving) return;
+  setServerSettingsSaving(true);
+  try{
+   const serverKeys: Array<keyof AppSettings> = [
+    'viewMode','zones','liveCost','progress','largeFont','alarmEnd','alarmFive','repeatAlarm','sound','popup',
+    'sessionMode','autoRound','confirmDelete','autoPrint','operatorDiscount',
+    'backupAuto','backupHour','backupKeep','backupTarget',
+    'dns','serverAddress','offlineMode','wol',
+    'payrollMode','shortagePolicy','autoPayrollDeduction',
+    'theme','accent','calendar','currency'
+   ];
+   const values: Record<string, unknown> = {};
+   for(const key of serverKeys) values[key] = settings[key];
+   const response=await fetch('/api/settings',{
+    method:'PUT',
+    credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({values})
+   });
+   const payload=await response.json().catch(()=>({}));
+   if(!response.ok){
+    setNotice(typeof payload?.message==='string' ? payload.message : 'ذخیرهٔ تنظیمات سرور انجام نشد');
+    return;
+   }
+   if(payload?.values) setSettings(current=>({...current,...payload.values}));
+   window.dispatchEvent(new CustomEvent('gamenet-settings-changed',{detail:payload?.values ?? settings}));
+   setNotice('تنظیمات عملیاتی روی سرور ذخیره شد');
+  }catch{
+   setNotice('ارتباط با سرور برای ذخیرهٔ تنظیمات برقرار نشد');
+  }finally{
+   setServerSettingsSaving(false);
+  }
+ }
+
  function changeHotkey(key:string){const next=window.prompt('کلید جدید را وارد کنید',hotkeys[key]);if(next?.trim())setHotkeys(current=>({...current,[key]:next.trim()}))}
  function reset(){setSettings(defaults);setHotkeys(hotkeyDefaults);setNotice('تنظیمات به حالت پیش‌فرض بازگشت')}
  async function saveSectionLocks(){
@@ -83,7 +157,22 @@ export function SettingsPage(){
         </button>
       ))}
    </div>
-   <small className="settings-local-notice">تنظیمات فعلی این صفحه در localStorage این داشبورد نگهداری می‌شوند؛ تنظیمات عملیاتی Server-backed در مسیر hardening بعدی قرار دارند.</small>
+   <div className="settings-server-sync" data-testid="settings-server-sync">
+    <div>
+     <b>تنظیمات عملیاتی سرور</b>
+     <small>{!serverSettingsLoaded ? 'در حال همگام‌سازی…' : serverSettingsAccessible ? 'متصل و قابل ذخیره روی Server' : 'دسترسی سروری برقرار نیست'}</small>
+     {serverSettingsError && <small className="security-footnote">{serverSettingsError}</small>}
+    </div>
+    <button
+      type="button"
+      className="btn primary"
+      onClick={()=>void saveServerSettings()}
+      disabled={!serverSettingsLoaded || !serverSettingsAccessible || serverSettingsSaving}
+    >
+      {serverSettingsSaving ? 'در حال ذخیره…' : '💾 ذخیره روی سرور'}
+    </button>
+   </div>
+   <small className="settings-local-notice">تنظیمات عملیاتی بالا منبع سروری دارند و با Permission و Audit ذخیره می‌شوند. هات‌کی‌ها و قفل‌های UX این صفحه فعلاً به‌صورت local نگهداری می‌شوند.</small>
   </section>
   <section id="settings-section-hotkeys" className="card-panel" style={{margin:'0 22px 14px',padding:14}}><h3>⌨️ هات‌کی‌ها (قابل تغییر)</h3><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:7}}>{Object.entries(hotkeys).map(([key,value])=><button className="btn" key={key} onClick={()=>changeHotkey(key)} style={{justifyContent:'space-between'}}><span>{({flow:'فلوی سرعت',amount:'رفتن به مبلغ',walletAdd:'شارژ مستقیم',debtAdd:'ثبت بدهی',walletDeduct:'کسر از کیف پول',walletDebt:'کسر کیف پول + بدهی',buffet:'رفتن به بوفه',reports:'رفتن به گزارش‌ها',closeShift:'بستن صندوق'} as Record<string,string>)[key]||key}</span><kbd>{value}</kbd></button>)}</div></section>
   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(330px,1fr))',gap:14,padding:'0 22px 30px'}}>
