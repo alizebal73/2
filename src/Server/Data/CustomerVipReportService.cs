@@ -122,16 +122,12 @@ public sealed class CustomerVipReportService
 
         if (query.ScopedAppUserId is { } scopedUserId)
         {
-            var scopedCustomerIds = allSessions
-                .Where(item => false)
-                .Select(item => item.CustomerId)
-                .ToHashSet();
             var scopedSessions = await _database.Sessions
                 .AsNoTracking()
                 .Where(item => item.AppUserId == scopedUserId && customerIds.Contains(item.CustomerId))
                 .Select(item => item.CustomerId)
                 .ToListAsync(cancellationToken);
-            scopedCustomerIds = scopedSessions.ToHashSet();
+            var scopedCustomerIds = scopedSessions.ToHashSet();
             customers = customers.Where(item => scopedCustomerIds.Contains(item.Id)).ToList();
         }
 
