@@ -34,8 +34,6 @@ Name: "{group}\GameNet Manager Client"; Filename: "{app}\GameNetManager.Client.e
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: string; ValueName: "GAMENET_SERVER_URL"; ValueData: "{code:GetServerUrl}"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: string; ValueName: "GAMENET_AGENT_REGISTRATION_TOKEN"; ValueData: "{code:GetRegistrationToken}"; Flags: uninsdeletevalue
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: string; ValueName: "GAMENET_AGENT_NAME"; ValueData: "{code:GetAgentName}"; Flags: uninsdeletevalue
-
-[Registry]
 Root: HKLM; Subkey: "SOFTWARE\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "GameNetManagerAgent"; ValueData: """{app}\GameNetManager.Client.exe"""; Flags: uninsdeletevalue
 
 [Code]
