@@ -3359,7 +3359,8 @@ app.MapPost("/api/customer-auth/login", async (
             balance = customer.Balance,
             freeMoney = customer.FreeMoney,
             freeTimeMinutes = customer.FreeTimeMinutes,
-            vipTier = customer.VipTier
+            vipTier = customer.VipTier,
+            isLocked = resolvedClientDevice.IsLocked
         });
     }
     catch (InvalidOperationException ex) when (ex.Message.StartsWith("CONCURRENT_LOGIN_LIMIT:", StringComparison.Ordinal))
