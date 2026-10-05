@@ -805,6 +805,7 @@ test('settings information architecture supports search and category navigation'
   await saveServerButton.click();
   await expect(page.getByText('تنظیمات عملیاتی روی سرور ذخیره شد')).toBeVisible();
   expect(settingsPutBody.values.operatorDiscount).toBe(12);
+  expect(settingsPutBody.values.serverAddress).toBe('192.168.0.9:5080');
   await expect(page.locator('#settings-section-sessions')).toHaveCount(1);
   await expect(page.locator('#settings-section-network')).toHaveCount(1);
   await page.getByRole('button', { name: /جلسه و تسویه/ }).click();
