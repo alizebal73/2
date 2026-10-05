@@ -17,6 +17,17 @@ jobs:
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
+      - name: Validate Server installer service ordering
+        shell: pwsh
+        run: |
+          $iss = Get-Content -Raw .\\installer\\server\\GameNetManager-Server.iss
+          if ($iss -notmatch 'RegisterServerService;\\s*ConfigureServiceEnvironment\\(True\\);\\s*StartServerService;') {
+            throw 'Server installer must create the Windows service before writing its Environment values.'
+          }
+          if ($iss -match 'ConfigureServiceEnvironment\\(True\\);\\s*GrantDataRootAccess') {
+            throw 'Server installer must not configure service Environment before service creation.'
+          }
+
       - name: Check local .NET
         shell: pwsh
         run: |
