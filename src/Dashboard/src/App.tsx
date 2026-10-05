@@ -417,8 +417,12 @@ function DashboardApp({ user, onLogout }: { user: AppUserRecord; onLogout: () =>
 
       <SectionLockDialog page={lockedPage} onClose={() => setLockedPage(null)} onUnlock={page => { setUnlockedPages(current => current.includes(page) ? current : [...current, page]); setActivePage(page); setLockedPage(null); }} />
 
-      <footer className="status-footer">
-        {(snapshot && snapshot.generatedAt ? `آخرین به‌روزرسانی ${formatTime(snapshot.generatedAt)}` : 'در انتظار دریافت داده')} · {serverInfo?.environment ?? 'Development'}
+      <footer className="status-footer" aria-live="polite">
+        {(snapshot && snapshot.generatedAt
+          ? apiState === 'offline'
+            ? `آخرین وضعیت معتبر ${formatTime(snapshot.generatedAt)} · دادهٔ زنده در دسترس نیست`
+            : `آخرین به‌روزرسانی ${formatTime(snapshot.generatedAt)}`
+          : 'در انتظار دریافت داده')} · {serverInfo?.environment ?? 'Development'}
       </footer>
     </div>
   );
