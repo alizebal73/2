@@ -763,6 +763,43 @@ test('settings information architecture supports search and category navigation'
     body: JSON.stringify({ items: [], unreadCount: 0 })
   }));
   let settingsPutBody = null;
+  let backupItems = [];
+  await page.route('**/api/backup', async route => {
+    if (route.request().method() === 'GET') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          items: backupItems,
+          canManage: true,
+          canRestore: true
+        })
+      });
+    }
+    return route.fallback();
+  });
+  await page.route('**/api/backup/create', async route => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    const item = {
+      fileName: 'gamenet-20261005-040000-000.gnbackup',
+      createdAt: new Date().toISOString(),
+      sizeBytes: 1024,
+      sha256: 'E2E-BACKUP-HASH',
+      verified: true,
+      verificationMessage: 'نسخهٔ پشتیبان معتبر است.'
+    };
+    backupItems = [item, ...backupItems];
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(item) });
+  });
+  await page.route('**/api/backup/*/verify', async route => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    backupItems = backupItems.map(item => ({ ...item, verified: true, verificationMessage: 'نسخهٔ پشتیبان معتبر است.' }));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ valid: true, message: 'نسخهٔ پشتیبان سالم و قابل‌بازیابی است.' }) });
+  });
+  await page.route('**/api/backup/*/restore', async route => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    return route.fulfill({ status: 202, contentType: 'application/json', body: JSON.stringify({ pending: true, message: 'بازیابی برای راه‌اندازی بعدی Server آماده شد.' }) });
+  });
   await page.route('**/api/settings', async route => {
     if (route.request().method() === 'GET') {
       return route.fulfill({
@@ -820,8 +857,18 @@ test('settings information architecture supports search and category navigation'
 
   const backupSection = page.locator('#settings-section-backup');
   await expect(backupSection).toBeVisible();
-  await expect(backupSection.getByRole('button', { name: '📦 بکاپ دستی الان' })).toBeDisabled();
-  await expect(backupSection).toContainText('پشتیبان واقعی');
+  const manualBackup = backupSection.getByRole('button', { name: /📦 بکاپ دستی الان/ });
+  await expect(manualBackup).toBeEnabled();
+  await manualBackup.click();
+  await expect(page.getByText('بکاپ واقعی با موفقیت ایجاد شد')).toBeVisible();
+  await expect(backupSection.getByText(/gamenet-20261005/)).toBeVisible();
+  const verifyBackup = backupSection.getByRole('button', { name: '✅ بررسی' });
+  await verifyBackup.click();
+  await expect(page.getByText('نسخهٔ پشتیبان سالم و قابل‌بازیابی است.')).toBeVisible();
+  page.once('dialog', dialog => dialog.accept());
+  await backupSection.getByRole('button', { name: /آماده‌سازی Restore/ }).click();
+  await expect(page.getByText(/Restore برای راه‌اندازی بعدی آماده شد/)).toBeVisible();
+  await expect(backupSection).toContainText('دیتابیس SQLite و DataProtection Keys');
 
   await page.getByLabel('جست‌وجوی تنظیمات').fill('هات‌کی');
   await expect(page.getByRole('button', { name: /میانبرها/ })).toHaveCount(1);
