@@ -104,18 +104,18 @@ public sealed class ClientDeviceResolutionTests
         database.AgentDevices.Add(device);
         await database.SaveChangesAsync();
 
-        using var services = new ServiceCollection()
-            .AddDataProtection()
-            .BuildServiceProvider();
+        using var services = new ServiceCollection();
+        services.AddDataProtection();
+        using var serviceProvider = services.BuildServiceProvider();
 
-        var protector = services
+        var protector = serviceProvider
             .GetRequiredService<IDataProtectionProvider>()
             .CreateProtector("GameNetManager.ClientDeviceIdentity");
         var cookie = protector.Protect($"{device.Id:D}|{DateTimeOffset.UtcNow.UtcTicks}");
 
         var context = new DefaultHttpContext
         {
-            RequestServices = services
+            RequestServices = serviceProvider
         };
         context.Request.Headers.Cookie = $"gamenet_client_device={cookie}";
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.222");
