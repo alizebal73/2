@@ -34,7 +34,13 @@ public static class ClientExperienceEndpoints
                     status = item.Status,
                     cover = item.Cover,
                     trailer = item.Trailer,
-                    connectionType = item.ConnectionType
+                    connectionType = item.ConnectionType,
+                    icon = "🎮",
+                    description = string.IsNullOrWhiteSpace(item.Genre)
+                        ? (item.ConnectionType ?? string.Empty)
+                        : string.IsNullOrWhiteSpace(item.ConnectionType)
+                            ? item.Genre
+                            : item.Genre + " · " + item.ConnectionType
                 })
                 .ToListAsync(cancellationToken);
 
@@ -76,7 +82,14 @@ public static class ClientExperienceEndpoints
                     category = item.Category,
                     price = item.UnitPrice,
                     unit = item.Unit,
-                    available = item.StockQuantity > 0
+                    available = item.StockQuantity > 0,
+                    icon = item.Category.Contains("نوش", StringComparison.OrdinalIgnoreCase)
+                        ? "🥤"
+                        : item.Category.Contains("قهو", StringComparison.OrdinalIgnoreCase)
+                            ? "☕"
+                            : item.Category.Contains("ساند", StringComparison.OrdinalIgnoreCase)
+                                ? "🥪"
+                                : "🛒"
                 })
                 .ToListAsync(cancellationToken);
 
