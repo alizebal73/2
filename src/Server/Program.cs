@@ -1,3 +1,4 @@
+using GameNetManager.Server;
 using Microsoft.AspNetCore.DataProtection;
 using GameNetManager.Server.Data;
 using GameNetManager.Server.Hubs;
