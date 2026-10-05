@@ -172,7 +172,7 @@ jobs:
             $stage145BackupsBefore = Invoke-RestMethod -Uri "$baseUrl/api/backup" -Method Get -WebSession $adminSession
             if ($null -eq $stage145BackupsBefore.items) { throw 'Stage 14.5 Backup list smoke did not return an items collection.' }
             $stage145Backup = Invoke-RestMethod -Uri "$baseUrl/api/backup/create" -Method Post -WebSession $adminSession
-            if (-not $stage145Backup.fileName -or $stage145Backup.fileName -notmatch '\\.gnbackup
+            if (-not $stage145Backup.fileName -or -not $stage145Backup.fileName.EndsWith('.gnbackup', [StringComparison]::OrdinalIgnoreCase)) { throw 'Stage 14.5 manual backup did not return a .gnbackup archive.' }
             # Stage 11: prove Game and Account Pool are server-backed and allocation is atomic.
             $stage11Game = Invoke-RestMethod -Uri "$baseUrl/api/games" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
               name = 'CI Stage11 Game'
