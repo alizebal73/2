@@ -180,7 +180,7 @@
 
 ### Stage 14.3 — Accessibility / UI / operational polish
 
-**🟠 MERGED — Main certification pending**
+**✅ COMPLETE**
 
 - ✅ Keyboard-accessible skip link to the primary content area.
 - ✅ Current navigation item exposes aria-current="page".
@@ -190,8 +190,14 @@
 - ✅ Dashboard distinguishes the last valid snapshot from live data when API connectivity is lost.
 - ✅ Browser Smoke added for keyboard navigation, notification semantics and stale-state messaging.
 - ✅ Exact-head CI: Run #1439.
-- ✅ PR #38 merged into Main as b69fa15c7ea166a65c5932f8ceb11fb34429eb4e.
-- ⬜ Main certification: Run #1440 still pending at checkpoint creation.
+- ✅ Main certification: Run #1440 on merge commit b69fa15c7ea166a65c5932f8ceb11fb34429eb4e.
+
+### مرز بعدی
+- ⏭️ Stage 14.4 — Server-backed Settings
+- ⬜ Backup/Restore واقعی
+- ⬜ Validation فیزیکی 2–3 PC
+
+> Stage 14.3 only becomes releasable after both exact-head CI and Main certification are green; both gates are now green.
 
 ### Stage 14.4 — Server-backed Settings
 
@@ -211,6 +217,9 @@
 ### مرز بعدی
 - ⬜ Backup/Restore واقعی
 - ⬜ Validation فیزیکی 2–3 PC
+
+> Stage 14.4 is not Done until exact-head CI and Main certification are both green.
+
 
 ## آخرین وضعیت اجرایی — Stage 13.5 / 2026-10-05
 
