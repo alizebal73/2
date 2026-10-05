@@ -85,5 +85,11 @@ try {
         if (-not (Test-Path $file)) { throw "Expected installer was not produced: $file" }
         Write-Host ("Installer: {0} ({1} bytes)" -f $file, (Get-Item $file).Length)
     }
+
+    $hashLines = foreach ($file in @($serverSetup,$clientSetup)) {
+        $hash = (Get-FileHash -Algorithm SHA256 -Path $file).Hash.ToLowerInvariant()
+        "$hash  $(Split-Path $file -Leaf)"
+    }
+    $hashLines | Set-Content -Path (Join-Path $outputRoot "SHA256SUMS.txt") -Encoding ascii
 }
 finally { Pop-Location }
