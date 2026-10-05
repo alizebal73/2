@@ -1697,6 +1697,109 @@ jobs:
           } finally {
             if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
           }
+      - name: Production startup and provisioning smoke
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dataRoot = Join-Path $env:RUNNER_TEMP 'gamenet-production-smoke-data'
+          $stdout = Join-Path $env:RUNNER_TEMP 'gamenet-production-smoke.stdout.log'
+          $stderr = Join-Path $env:RUNNER_TEMP 'gamenet-production-smoke.stderr.log'
+          Remove-Item $dataRoot -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $stdout,$stderr -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
+
+          $port = 16080
+          while (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
+            $port++
+            if ($port -gt 16980) { throw 'No free Production smoke port is available.' }
+          }
+          $baseUrl = "http://127.0.0.1:$port"
+
+          $env:ASPNETCORE_ENVIRONMENT = 'Production'
+          $env:ASPNETCORE_URLS = $baseUrl
+          $env:App__DataRoot = $dataRoot
+          $env:GAMENET_ADMIN_PASSWORD = 'ProductionCiAdminPassword!2026'
+          $env:Agent__RegistrationToken = 'ProductionCiRegistrationToken!2026'
+          $env:Agent__HeartbeatIntervalSeconds = '3'
+          $env:Agent__OfflineAfterSeconds = '6'
+
+          $process = Start-Process -FilePath 'dotnet' -ArgumentList @(
+            'run','--no-build','--configuration','Release',
+            '--project','src\Server\GameNetManager.Server.csproj',
+            '--no-launch-profile'
+          ) -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+
+          try {
+            $ready = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              if ($process.HasExited) { break }
+              try {
+                $response = Invoke-WebRequest -Uri "$baseUrl/api/health" -UseBasicParsing -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $ready = $true; break }
+              } catch {}
+              Start-Sleep -Seconds 1
+            }
+
+            if (-not $ready) {
+              Write-Host '--- Production stdout ---'
+              if (Test-Path $stdout) { Get-Content $stdout }
+              Write-Host '--- Production stderr ---'
+              if (Test-Path $stderr) { Get-Content $stderr }
+              throw "Production Server did not reach /api/health on port $port."
+            }
+
+            $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+            $adminLogin = Invoke-RestMethod -Uri "$baseUrl/api/auth/login" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              userName = 'admin'
+              password = 'ProductionCiAdminPassword!2026'
+            } | ConvertTo-Json)
+
+            if (-not $adminLogin.id -or $adminLogin.role -ne 'Admin') {
+              throw 'Production admin authentication smoke failed.'
+            }
+
+            $me = Invoke-RestMethod -Uri "$baseUrl/api/auth/me" -Method Get -WebSession $adminSession
+            if ($me.userName -ne 'admin') {
+              throw 'Production current-user smoke failed.'
+            }
+
+            $provision = Invoke-RestMethod -Uri "$baseUrl/api/stations/provision" -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{
+              prefix = 'PROD-PC'
+              startNumber = 1
+              count = 2
+              zone = 'pc'
+              type = 'PC'
+              ratePerHour = 95000
+              network = 1
+            } | ConvertTo-Json)
+
+            if ([int]$provision.created -ne 2 -or @($provision.names).Count -ne 2) {
+              throw 'Production Station provisioning smoke failed.'
+            }
+
+            $stations = Invoke-RestMethod -Uri "$baseUrl/api/stations" -Method Get -WebSession $adminSession
+            $createdStations = @($stations | Where-Object { $_.name -eq 'PROD-PC-01' -or $_.name -eq 'PROD-PC-02' })
+            if ($createdStations.Count -ne 2) {
+              throw 'Production Station list smoke failed to return provisioned stations.'
+            }
+
+            if (-not (Test-Path (Join-Path $dataRoot 'gamenet.production.db'))) {
+              throw 'Production database was not created in the configured data root.'
+            }
+            if (-not (Test-Path (Join-Path $dataRoot 'DataProtection-Keys'))) {
+              throw 'Production DataProtection key directory was not created in the configured data root.'
+            }
+            if (-not (Test-Path (Join-Path $dataRoot 'Backups'))) {
+              throw 'Production backup directory was not created at the expected data root.'
+            }
+
+            $logout = Invoke-RestMethod -Uri "$baseUrl/api/auth/logout" -Method Post -WebSession $adminSession
+            if (-not $logout.success) { throw 'Production admin logout smoke failed.' }
+
+            Write-Host 'Production startup + authentication + Station provisioning + data-root smoke passed.'
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue }
+          }
       - name: Install Dashboard
         run: npm ci --prefix src/Dashboard
 
