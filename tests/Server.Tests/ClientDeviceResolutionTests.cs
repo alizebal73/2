@@ -33,9 +33,10 @@ public sealed class ClientDeviceResolutionTests
         });
         await database.SaveChangesAsync();
 
+        using var serviceProvider = CreateDataProtectionServiceProvider();
         var context = new DefaultHttpContext
         {
-            RequestServices = CreateDataProtectionServiceProvider()
+            RequestServices = serviceProvider
         };
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.111");
 
@@ -71,9 +72,10 @@ public sealed class ClientDeviceResolutionTests
         });
         await database.SaveChangesAsync();
 
+        using var serviceProvider = CreateDataProtectionServiceProvider();
         var context = new DefaultHttpContext
         {
-            RequestServices = CreateDataProtectionServiceProvider()
+            RequestServices = serviceProvider
         };
         context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.0.113");
 
@@ -158,7 +160,7 @@ public sealed class ClientDeviceResolutionTests
         });
         await database.SaveChangesAsync();
 
-        using var serviceProvider = CreateRequestServices();
+        using var serviceProvider = CreateDataProtectionServiceProvider();
         var context = new DefaultHttpContext
         {
             RequestServices = serviceProvider
@@ -173,7 +175,7 @@ public sealed class ClientDeviceResolutionTests
         Assert.Null(resolved);
     }
 
-    private static IServiceProvider CreateDataProtectionServiceProvider()
+    private static ServiceProvider CreateDataProtectionServiceProvider()
     {
         var services = new ServiceCollection();
         services.AddDataProtection();
