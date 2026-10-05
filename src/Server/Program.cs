@@ -1,3 +1,4 @@
+using GameNetManager.Server;
 using Microsoft.AspNetCore.DataProtection;
 using GameNetManager.Server.Data;
 using GameNetManager.Server.Hubs;
@@ -77,6 +78,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapSettingsEndpoints();
 app.MapBackupEndpoints();
+app.MapClientExperienceEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
     .WithName("GetHealth");
@@ -3322,6 +3324,7 @@ app.MapGet("/api/client/identity", async (
 .WithName("GetClientIdentity");
 
 app.MapPost("/api/customer-auth/login", async (
+    HttpContext context,
     CustomerLoginAuthRequest request,
     CustomerLoginService customerLoginService,
     GameNetDbContext database,
@@ -3354,7 +3357,8 @@ app.MapPost("/api/customer-auth/login", async (
             balance = customer.Balance,
             freeMoney = customer.FreeMoney,
             freeTimeMinutes = customer.FreeTimeMinutes,
-            vipTier = customer.VipTier
+            vipTier = customer.VipTier,
+            isLocked = (await ClientExperienceEndpoints.ResolveRegisteredDeviceAsync(context, database, cancellationToken))?.IsLocked ?? false
         });
     }
     catch (InvalidOperationException ex) when (ex.Message.StartsWith("CONCURRENT_LOGIN_LIMIT:", StringComparison.Ordinal))
@@ -3374,6 +3378,7 @@ app.MapPost("/api/customer-auth/login", async (
 .WithName("CustomerAuthenticate");
 
 app.MapGet("/api/customer-auth/state", async (
+    HttpContext context,
     Guid customerId,
     Guid loginId,
     string clientKey,
@@ -3383,6 +3388,10 @@ app.MapGet("/api/customer-auth/state", async (
     var normalizedClientKey = clientKey?.Trim();
     if (string.IsNullOrWhiteSpace(normalizedClientKey))
         return Results.BadRequest(new { code = "missing_client_key", message = "شناسه دستگاه وارد نشده است." });
+
+        var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(context, database, cancellationToken);
+        if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, normalizedClientKey, StringComparison.Ordinal))
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     var customer = await database.Customers
         .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
@@ -3412,13 +3421,12 @@ app.MapGet("/api/customer-auth/state", async (
             session = (object?)null
         });
 
-    var device = await database.AgentDevices
-        .Include(item => item.Station)
-        .FirstOrDefaultAsync(item => item.DeviceId == normalizedClientKey && item.IsActive, cancellationToken);
+    var device = resolvedClientDevice;
 
     var session = device?.StationId is Guid stationId
         ? await database.Sessions
             .Where(item => item.CustomerId == customerId
+                && item.CustomerLoginId == loginId
                 && item.StationId == stationId
                 && (item.State == SessionState.Active || item.State == SessionState.Ended))
             .OrderByDescending(item => item.StartAt)
@@ -3428,6 +3436,7 @@ app.MapGet("/api/customer-auth/state", async (
                 state = item.State.ToString(),
                 startAt = item.StartAt,
                 endAt = item.EndAt,
+                gameId = item.GameId,
                 stationName = item.Station.Name
             })
             .FirstOrDefaultAsync(cancellationToken)
@@ -3444,12 +3453,14 @@ app.MapGet("/api/customer-auth/state", async (
         freeMoney = customer.FreeMoney,
         freeTimeMinutes = customer.FreeTimeMinutes,
         vipTier = customer.VipTier,
+        isLocked = device?.IsLocked ?? false,
         session
     });
 })
 .WithName("CustomerAuthState");
 
 app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
+    HttpContext context,
     Guid customerId,
     CustomerLoginRequest request,
     CustomerLoginService customerLoginService,
@@ -3480,6 +3491,7 @@ app.MapPost("/api/customers/{customerId:guid}/login-acquire", async (
 .WithName("AcquireCustomerLogin");
 
 app.MapPost("/api/customers/{customerId:guid}/login-release", async (
+    HttpContext context,
     Guid customerId,
     CustomerLoginRequest request,
     CustomerLoginService customerLoginService,

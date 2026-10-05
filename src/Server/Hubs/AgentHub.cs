@@ -386,6 +386,25 @@ public sealed class AgentHub(
             Context.ConnectionAborted);
     }
 
+    public async Task<bool> ValidateGameLaunch(Guid sessionId, Guid gameId)
+    {
+        var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);
+        if (device is null || !device.StationId.HasValue)
+            return false;
+
+        var valid = await database.Sessions
+            .AsNoTracking()
+            .AnyAsync(
+                item => item.Id == sessionId
+                    && item.AgentDeviceId == device.Id
+                    && item.StationId == device.StationId.Value
+                    && item.GameId == gameId
+                    && item.State == SessionState.Active,
+                Context.ConnectionAborted);
+
+        return valid;
+    }
+
     public async Task<AgentGameAccountCredentialDto> AcquireGameAccount(Guid sessionId)
     {
         var device = await ResolveConnectedDeviceAsync(Context.ConnectionAborted);

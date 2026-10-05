@@ -10,6 +10,7 @@ type CustomerAuthResponse = {
   freeMoney: number;
   freeTimeMinutes: number;
   vipTier: string;
+  isLocked: boolean;
 };
 
 export type CustomerSessionState = {
@@ -22,11 +23,13 @@ export type CustomerSessionState = {
   freeMoney: number;
   freeTimeMinutes: number;
   vipTier: string;
+  isLocked: boolean;
   session: {
     id: string;
     state: string;
     startAt: string;
     endAt?: string | null;
+    gameId?: string | null;
     stationName: string;
   } | null;
 };

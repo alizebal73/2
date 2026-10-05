@@ -61,6 +61,7 @@ Console.WriteLine(
     $"پیکربندی Agent: Server={serverUrl}; DeviceId={state.DeviceId}; Name={state.Name}; StationId={stationId?.ToString() ?? "none"}");
 
 using var shutdown = new CancellationTokenSource();
+await using var gameProcesses = new AgentGameProcessManager();
 using var lockScreen = new AgentLockScreenController();
 Console.CancelKeyPress += (_, eventArgs) =>
 {
@@ -132,7 +133,8 @@ try
                 updateManager,
                 dataDirectory,
                 agentVersion,
-                shutdown.Token);
+                shutdown.Token,
+                gameProcesses);
 
             if (outcome.AwaitingFinalResult)
             {
@@ -256,11 +258,19 @@ try
 
         connection.On<AgentReadyDto>("AgentReady", HandleAgentReadyAsync);
 
-        connection.Reconnecting += error =>
+        connection.Reconnecting += async error =>
         {
+            try
+            {
+                await gameProcesses.StopAllAsync(CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"توقف امن بازی‌ها هنگام قطع ارتباط Agent ناموفق بود: {exception.Message}");
+            }
+
             Console.WriteLine(
-                $"ارتباط Agent با سرور قطع شد؛ تلاش برای اتصال مجدد. {error?.Message ?? string.Empty}".Trim());
-            return Task.CompletedTask;
+                $"ارتباط Agent با سرور قطع شد؛ بازی‌ها متوقف شدند و تلاش برای اتصال مجدد ادامه دارد. {error?.Message ?? string.Empty}".Trim());
         };
 
         connection.Reconnected += async connectionId =>
@@ -296,12 +306,21 @@ try
 
         connection.Closed += async error =>
         {
+            try
+            {
+                await gameProcesses.StopAllAsync(CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"توقف امن بازی‌ها هنگام بسته شدن اتصال Agent ناموفق بود: {exception.Message}");
+            }
+
             if (kioskEnabled && lockOnDisconnect && !shutdown.IsCancellationRequested)
             {
                 try
                 {
                     await lockScreen.LockAsync(CancellationToken.None);
-                    Console.WriteLine("ارتباط Agent قطع شد؛ طبق Policy صفحه قفل شد.");
+                    Console.WriteLine("ارتباط Agent قطع شد؛ بازی‌ها متوقف و صفحه طبق Policy قفل شد.");
                 }
                 catch (Exception exception)
                 {
@@ -652,7 +671,8 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
     ClientUpdateManager updateManager,
     string dataDirectory,
     string agentVersion,
-    CancellationToken cancellationToken)
+    CancellationToken cancellationToken,
+    AgentGameProcessManager gameProcesses)
 {
     var success = AgentCommandTypes.IsSupported(command.CommandType);
     var message = success
@@ -674,6 +694,7 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 break;
 
             case AgentCommandTypes.Lock:
+                await gameProcesses.StopAllAsync(CancellationToken.None);
                 await lockScreen.LockAsync(cancellationToken);
                 Console.WriteLine($"فرمان قفل دریافت شد؛ CommandId={command.CommandId}.");
                 message = "صفحه قفل GameNet فعال شد.";
@@ -687,6 +708,7 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
 
             case AgentCommandTypes.LogoutLock:
                 await connection.InvokeAsync("AgentLogoutAndLock", cancellationToken);
+                await gameProcesses.StopAllAsync(CancellationToken.None);
                 await lockScreen.LockAsync(cancellationToken);
                 Console.WriteLine($"فرمان خروج کاربر و قفل دریافت شد؛ CommandId={command.CommandId}.");
                 message = "کاربر خارج شد و دستگاه قفل شد.";
@@ -747,6 +769,39 @@ static async Task<AgentCommandExecutionOutcome> HandleAgentCommandAsync(
                 await ApplyGameManifestAsync(dataDirectory, payload, cancellationToken);
                 Console.WriteLine($"CLIENT_GAME_APPLIED:{payload.GameId:N}");
                 message = $"تنظیمات بازی «{payload.Name}» روی Agent ثبت شد.";
+                break;
+            }
+
+            case AgentCommandTypes.LaunchGame:
+            {
+                var payload = JsonSerializer.Deserialize<AgentGameLaunchCommandPayload>(
+                    command.PayloadJson ?? string.Empty)
+                    ?? throw new JsonException("دادهٔ اجرای بازی معتبر نیست.");
+
+                var launchAllowed = await connection.InvokeAsync<bool>(
+                    "ValidateGameLaunch",
+                    payload.SessionId,
+                    payload.GameId,
+                    cancellationToken);
+
+                if (!launchAllowed)
+                    throw new InvalidOperationException("Session بازی دیگر فعال نیست یا متعلق به این Agent نیست.");
+
+                await gameProcesses.LaunchAsync(payload, cancellationToken);
+                Console.WriteLine($"CLIENT_GAME_LAUNCHED:{payload.GameId:N}:{payload.SessionId:N}");
+                message = "بازی روی Client اجرا شد.";
+                break;
+            }
+
+            case AgentCommandTypes.StopGame:
+            {
+                var payload = JsonSerializer.Deserialize<AgentGameLaunchCommandPayload>(
+                    command.PayloadJson ?? string.Empty)
+                    ?? throw new JsonException("دادهٔ توقف بازی معتبر نیست.");
+
+                await gameProcesses.StopAsync(payload.SessionId, payload.GameId, cancellationToken);
+                Console.WriteLine($"CLIENT_GAME_STOPPED:{payload.GameId:N}:{payload.SessionId:N}");
+                message = "بازی روی Client متوقف شد.";
                 break;
             }
 
