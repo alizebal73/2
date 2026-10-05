@@ -1480,11 +1480,12 @@ app.MapGet("/api/reports/sessions", async (
     int pageSize,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
         context,
         database,
-        "finance.view",
-        cancellationToken);
+        "sessions",
+        cancellationToken,
+        "finance.view");
     if (auth.Error is not null) return auth.Error;
 
     if (page < 1 || pageSize < 1 || pageSize > 200)
@@ -1506,7 +1507,8 @@ app.MapGet("/api/reports/sessions", async (
             state,
             customerSearch,
             page,
-            pageSize),
+            pageSize,
+            AuthorizationService.HasReportAllScope(auth.User!, "sessions") ? null : auth.User!.Id),
         cancellationToken);
 
     return Results.Ok(result);
@@ -1527,9 +1529,10 @@ app.MapGet("/api/reports/customers", async (
     int pageSize,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
         context,
         database,
+        "customers",
         cancellationToken,
         "customer.manage",
         "customer.wallet",
@@ -1537,7 +1540,16 @@ app.MapGet("/api/reports/customers", async (
     if (auth.Error is not null) return auth.Error;
 
     var result = await reports.QueryAsync(
-        new CustomerVipReportQuery(from, to, search, vip, debt, package, page, pageSize),
+        new CustomerVipReportQuery(
+            from,
+            to,
+            search,
+            vip,
+            debt,
+            package,
+            page,
+            pageSize,
+            AuthorizationService.HasReportAllScope(auth.User!, "customers") ? null : auth.User!.Id),
         cancellationToken);
 
     var canWallet = AuthorizationService.HasPermission(auth.User!, "customer.wallet");
@@ -1581,9 +1593,10 @@ app.MapGet("/api/reports/users-shifts", async (
     int pageSize,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequireAnyPermissionAsync(
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
         context,
         database,
+        "users-shift",
         cancellationToken,
         "shift.manage",
         "payroll.view",
@@ -1591,7 +1604,14 @@ app.MapGet("/api/reports/users-shifts", async (
     if (auth.Error is not null) return auth.Error;
 
     var result = await reports.QueryAsync(
-        new UsersShiftReportQuery(from, to, userSearch, shiftState, page, pageSize),
+        new UsersShiftReportQuery(
+            from,
+            to,
+            userSearch,
+            shiftState,
+            page,
+            pageSize,
+            AuthorizationService.HasReportAllScope(auth.User!, "users-shift") ? null : auth.User!.Id),
         cancellationToken);
 
     if (!AuthorizationService.HasPermission(auth.User!, "payroll.view"))
@@ -1636,11 +1656,12 @@ app.MapGet("/api/audit", async (
     int page = 1,
     int pageSize = 50) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(
+    var auth = await AuthorizationService.RequireReportPermissionAsync(
         context,
         database,
-        "audit.view",
-        cancellationToken);
+        "audit",
+        cancellationToken,
+        "audit.view");
     if (auth.Error is not null) return auth.Error;
 
     if (page < 1 || pageSize < 1 || pageSize > 200)
@@ -1653,7 +1674,16 @@ app.MapGet("/api/audit", async (
     }
 
     var result = await auditLogs.QueryAsync(
-        new AuditLogQuery(from, to, @operator, action, entityName, search, page, pageSize),
+        new AuditLogQuery(
+            from,
+            to,
+            @operator,
+            action,
+            entityName,
+            search,
+            page,
+            pageSize,
+            AuthorizationService.HasReportAllScope(auth.User!, "audit") ? null : auth.User!.Id),
         cancellationToken);
 
     return Results.Ok(result);
