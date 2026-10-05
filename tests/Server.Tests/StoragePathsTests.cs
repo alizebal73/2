@@ -31,7 +31,7 @@ public sealed class StoragePathsTests
                 ["Database:FileName"] = "App_Data/gamenet.production.db"
             })
             .Build();
-        var environment = new TestEnvironment("Production", @"C:\ProgramFiles\GameNetManager");
+        var environment = new TestEnvironment("Production", AppContext.BaseDirectory);
 
         try
         {
