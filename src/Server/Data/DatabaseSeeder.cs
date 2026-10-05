@@ -95,7 +95,8 @@ public static class DatabaseSeeder
 
             CreateStations(database, consoleType, hourlyTariff, "PS5", 10, "Zone A", "Console");
             CreateStations(database, consoleType, hourlyTariff, "PS4", 6, "Zone A", "Console");
-            CreateStations(database, pcType, hourlyTariff, "PC", 40, "Zone B", "PC");
+            CreateStations(database, pcType, hourlyTariff, "PC", 20, "Zone B", "PC", network: 1, startNumber: 1);
+            CreateStations(database, pcType, hourlyTariff, "PC", 20, "Zone B", "PC", network: 2, startNumber: 21);
             CreateStations(database, tableType, hourlyTariff, "Table", 5, "Zone C", "Table");
         }
 
@@ -158,9 +159,9 @@ public static class DatabaseSeeder
         throw new InvalidOperationException("Production startup requires GAMENET_ADMIN_PASSWORD; default credentials are disabled.");
     }
 
-    private static void CreateStations(GameNetDbContext database, StationType stationType, Tariff tariff, string prefix, int count, string zone, string type)
+    private static void CreateStations(GameNetDbContext database, StationType stationType, Tariff tariff, string prefix, int count, string zone, string type, int network = 1, int startNumber = 1)
     {
-        for (var number = 1; number <= count; number++)
+        for (var number = startNumber; number < startNumber + count; number++)
         {
             database.Stations.Add(new Station
             {
@@ -170,6 +171,7 @@ public static class DatabaseSeeder
                 StationTypeId = stationType.Id,
                 TariffId = tariff.Id,
                 RatePerHour = tariff.HourlyRate,
+                Network = network,
                 State = StationState.Available,
                 IsActive = true
             });
