@@ -21,7 +21,7 @@ public sealed class ServerSettingsTests
             out var discountError));
         Assert.Contains("۰ تا ۱۰۰", discountError);
 
-        using var invalidHour = JsonDocument.Parse(""25:61"");
+        using var invalidHour = JsonDocument.Parse("\"25:61\"");
         Assert.False(ServerSettingsCatalog.TryValidate(
             "backupHour",
             invalidHour.RootElement,
@@ -32,7 +32,7 @@ public sealed class ServerSettingsTests
     [Fact]
     public void StoredValueOverridesDefaultAndUnknownKeyDoesNotLeakIntoResponse()
     {
-        using var custom = JsonDocument.Parse(""192.168.0.9:5080"");
+        using var custom = JsonDocument.Parse("\"192.168.0.9:5080\"");
         var stored = new[]
         {
             new AppSetting
