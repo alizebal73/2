@@ -60,3 +60,30 @@ Resume from certified main commit `63ac3f67357a0970df504a62c9ab16cc1ba4f53a`. Do
 ## Next
 
 Start **Stage 14.3 — Accessibility / UI / operational polish** from the certified main baseline above.
+
+
+## Slice 14.3 — IN PROGRESS
+
+**Accessibility / UI / operational polish**
+
+### Current scope
+
+- ✅ Skip link and keyboard entry to main content
+- ✅ Active navigation semantics via aria-current
+- ✅ Accessible API / SignalR status announcements
+- ✅ Notification expanded state and labelled region semantics
+- ✅ Reduced-motion support
+- ✅ Last-valid-snapshot messaging when live API data is unavailable
+- ✅ Browser Smoke for the new accessibility and stale-data paths
+
+### Not Done
+
+- Exact-head CI certification
+- Main certification
+- Server-backed Settings
+- Physical 2–3 PC validation
+- Real Backup/Restore
+
+## Next
+
+Complete Stage 14.3 through exact-head CI and Main certification, then continue the remaining release gates.
