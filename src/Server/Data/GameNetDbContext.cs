@@ -38,6 +38,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<InvoiceReversal> InvoiceReversals => Set<InvoiceReversal>();
+    public DbSet<AppSetting> AppSettings => Set<AppSetting>();
 
     private void TouchUpdatedAt()
     {
@@ -100,6 +101,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureShift(modelBuilder);
         ConfigureExpense(modelBuilder);
         ConfigureAuditLog(modelBuilder);
+        ConfigureAppSetting(modelBuilder);
         ConfigureNotification(modelBuilder);
 
         foreach (var entityType in modelBuilder.Model.GetEntityTypes()
@@ -688,6 +690,20 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         notification.Property(item => item.EntityId).HasMaxLength(120);
         notification.Property(item => item.IsRead).IsRequired();
         notification.HasIndex(item => new { item.AppUserId, item.IsRead, item.CreatedAt });
+    }
+
+    private static void ConfigureAppSetting(ModelBuilder modelBuilder)
+    {
+        var setting = modelBuilder.Entity<AppSetting>();
+        setting.HasKey(item => item.Id);
+        setting.Property(item => item.Key).HasMaxLength(100).IsRequired();
+        setting.Property(item => item.ScopeKey).HasMaxLength(100).IsRequired();
+        setting.Property(item => item.ValueJson).HasMaxLength(4000).IsRequired();
+        setting.HasIndex(item => new { item.ScopeKey, item.Key }).IsUnique();
+        setting.HasOne(item => item.UpdatedByUser)
+            .WithMany()
+            .HasForeignKey(item => item.UpdatedByUserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
     private static void ConfigureAuditLog(ModelBuilder modelBuilder)

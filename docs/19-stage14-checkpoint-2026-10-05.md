@@ -82,6 +82,25 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Main certification: Run #1440
 - ✅ Certified merge commit: b69fa15c7ea166a65c5932f8ceb11fb34429eb4e
 
+## Slice 14.4 — IN PROGRESS
+
+**Server-backed Settings**
+
+### Delivered in current branch
+
+- ✅ Server-persistent AppSetting global scope with EF migration + model snapshot.
+- ✅ Independent settings.view / settings.manage permissions.
+- ✅ GET/PUT /api/settings with type/range validation and Persian errors.
+- ✅ Atomic save path with AuditLog for changed settings.
+- ✅ Dashboard server synchronization and explicit server-save action.
+- ✅ Hotkeys and UX section locks remain explicitly local rather than being falsely presented as global server state.
+- ✅ Server API Smoke and Browser Smoke added for the new path.
+
+### Current gates
+
+- ⬜ Exact-head CI for Stage 14.4
+- ⬜ Main certification for Stage 14.4
+
 ## Next
 
-Continue with Stage 14.4 — Server-backed Settings, then the remaining Backup/Restore and physical 2–3 PC release gates.
+Complete Stage 14.4 through exact-head CI and Main certification, then advance to real Backup/Restore and physical 2–3 PC validation gates.

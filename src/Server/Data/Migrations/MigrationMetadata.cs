@@ -207,3 +207,10 @@ partial class NotificationQueue
 partial class StationInternetNetwork
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261005110000_ServerBackedSettings")]
+partial class ServerBackedSettings
+{
+}
+
