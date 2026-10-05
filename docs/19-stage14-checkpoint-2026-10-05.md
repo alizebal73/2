@@ -62,11 +62,11 @@ Resume from certified main commit `63ac3f67357a0970df504a62c9ab16cc1ba4f53a`. Do
 Start **Stage 14.3 — Accessibility / UI / operational polish** from the certified main baseline above.
 
 
-## Slice 14.3 — IN PROGRESS
+## Slice 14.3 — COMPLETE
 
 **Accessibility / UI / operational polish**
 
-### Current scope
+### Delivered
 
 - ✅ Skip link and keyboard entry to main content
 - ✅ Active navigation semantics via aria-current
@@ -76,18 +76,11 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Last-valid-snapshot messaging when live API data is unavailable
 - ✅ Browser Smoke for the new accessibility and stale-data paths
 
-### Not Done
+### Gates
 
-- Exact-head CI certification
-- Main certification
-- Server-backed Settings
-- Physical 2–3 PC validation
-- Real Backup/Restore
-
-## Next
-
-Complete Stage 14.3 through exact-head CI and Main certification, then continue the remaining release gates.
-
+- ✅ Exact-head CI: Run #1439
+- ✅ Main certification: Run #1440
+- ✅ Certified merge commit: b69fa15c7ea166a65c5932f8ceb11fb34429eb4e
 
 ## Slice 14.4 — IN PROGRESS
 
@@ -95,9 +88,9 @@ Complete Stage 14.3 through exact-head CI and Main certification, then continue 
 
 ### Delivered in current branch
 
-- ✅ Server-persistent `AppSetting` global scope with EF migration + model snapshot.
-- ✅ Independent `settings.view` / `settings.manage` permissions.
-- ✅ GET/PUT `/api/settings` with type/range validation and Persian errors.
+- ✅ Server-persistent AppSetting global scope with EF migration + model snapshot.
+- ✅ Independent settings.view / settings.manage permissions.
+- ✅ GET/PUT /api/settings with type/range validation and Persian errors.
 - ✅ Atomic save path with AuditLog for changed settings.
 - ✅ Dashboard server synchronization and explicit server-save action.
 - ✅ Hotkeys and UX section locks remain explicitly local rather than being falsely presented as global server state.
@@ -107,7 +100,6 @@ Complete Stage 14.3 through exact-head CI and Main certification, then continue 
 
 - ⬜ Exact-head CI for Stage 14.4
 - ⬜ Main certification for Stage 14.4
-- ⬜ Main certification for merged Stage 14.3 — Run #1440 pending at this checkpoint
 
 ## Next
 
