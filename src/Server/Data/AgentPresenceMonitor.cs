@@ -6,7 +6,8 @@ namespace GameNetManager.Server.Data;
 public sealed class AgentPresenceMonitor(
     IServiceScopeFactory scopeFactory,
     IConfiguration configuration,
-    ILogger<AgentPresenceMonitor> logger) : BackgroundService
+    ILogger<AgentPresenceMonitor> logger,
+    NotificationQueueService notifications) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -41,6 +42,8 @@ public sealed class AgentPresenceMonitor(
                 var now = DateTimeOffset.UtcNow;
                 var cutoff = now.AddSeconds(-offlineAfter);
                 var commandCutoff = now.AddSeconds(-commandTimeoutSeconds);
+
+                var notificationEvents = new List<NotificationEvent>();
 
                 var onlineDevices = await database.AgentDevices
                     .Where(item => item.IsActive
@@ -134,6 +137,15 @@ public sealed class AgentPresenceMonitor(
                             });
                         }
 
+                        notificationEvents.Add(new NotificationEvent(
+                            "agent.offline",
+                            "قطع اتصال Agent",
+                            $"Agent {device.DeviceId} از دسترس خارج شد و وارد وضعیت {ClientLifecycleStates.Degraded} شد."
+                                + (device.Station is null ? "" : $" ایستگاه: {device.Station.Name}."),
+                            device.LockOnDisconnect && device.IsLocked ? NotificationLevel.Critical : NotificationLevel.Warning,
+                            "AgentDevice",
+                            device.Id.ToString()));
+
                         var unfinishedCommands = await database.AgentCommands
                             .Where(command => command.AgentDeviceId == device.Id
                                 && (command.Status == "Pending" || command.Status == "Sent"))
@@ -181,6 +193,16 @@ public sealed class AgentPresenceMonitor(
                         EntityId = command.Id.ToString(),
                         Details = $"فرمان {command.CommandType} به دلیل timeout پاسخ نگرفت."
                     });
+
+                    notificationEvents.Add(new NotificationEvent(
+                        "agent.command-failed",
+                        "خطای فرمان Agent",
+                        $"فرمان {command.CommandType} برای Agent پاسخ نداد و Failed شد.",
+                        command.CommandType is AgentCommandTypes.Update or AgentCommandTypes.Rollback
+                            ? NotificationLevel.Critical
+                            : NotificationLevel.Warning,
+                        "AgentCommand",
+                        command.Id.ToString()));
                 }
 
                 if (staleDevices.Count > 0 || timedOutCommands.Count > 0)
@@ -201,6 +223,14 @@ public sealed class AgentPresenceMonitor(
                             "Marked {Count} Agent command(s) failed by timeout. Cutoff={Cutoff}",
                             timedOutCommands.Count,
                             commandCutoff);
+                    }
+
+                    foreach (var notification in notificationEvents)
+                    {
+                        await notifications.PublishToPermissionAsync(
+                            "client.control",
+                            notification,
+                            stoppingToken);
                     }
                 }
 
