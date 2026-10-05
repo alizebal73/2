@@ -3334,9 +3334,9 @@ app.MapPost("/api/customer-auth/login", async (
     if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_credentials", message = "نام کاربری، رمز و شناسه دستگاه الزامی است." });
 
-        var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(context, database, cancellationToken);
-        if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, clientKey, StringComparison.Ordinal))
-            return Results.Forbid();
+    var resolvedClientDevice = await ClientExperienceEndpoints.ResolveRegisteredDeviceAsync(context, database, cancellationToken);
+    if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, clientKey, StringComparison.Ordinal))
+        return Results.Forbid();
 
     var customer = await database.Customers
         .FirstOrDefaultAsync(item => item.Username == key || item.Code == key, cancellationToken);
