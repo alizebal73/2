@@ -655,6 +655,12 @@ test('settings information architecture supports search and category navigation'
   const settingsNav = page.getByTestId('settings-category-nav');
   await expect(settingsNav).toBeVisible();
   await expect(page.getByLabel('جست‌وجوی تنظیمات')).toBeVisible();
+  await expect(page.locator('#settings-section-sessions')).toHaveCount(1);
+  await expect(page.locator('#settings-section-network')).toHaveCount(1);
+  await page.getByRole('button', { name: /جلسه و تسویه/ }).click();
+  await expect(page.locator('#settings-section-sessions')).toBeVisible();
+  await page.getByRole('button', { name: /شبکه و اتصال/ }).click();
+  await expect(page.locator('#settings-section-network')).toBeVisible();
 
   await page.getByLabel('جست‌وجوی تنظیمات').fill('بکاپ');
   const backupCategory = page.getByRole('button', { name: /داده و پشتیبان‌گیری/ });
