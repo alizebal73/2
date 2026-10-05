@@ -45,31 +45,6 @@ function windowFor(period: Period, range: Props['range']) {
   return { start: start.getTime(), end: now };
 }
 
-function exportCsv(report: SessionReportPage | null) {
-  if (!report) return;
-  const lines = [
-    ['تاریخ شروع', 'ایستگاه', 'منطقه', 'مشتری', 'اپراتور', 'وضعیت', 'مدت', 'مبلغ'],
-    ...report.items.map(item => [
-      new Date(item.startAt).toLocaleString('fa-IR'),
-      item.stationName,
-      item.zone,
-      item.customerName,
-      item.operator,
-      stateLabel(item.state),
-      minutes(item.billableMinutes),
-      item.totalAmount,
-    ]),
-  ];
-  const csv = lines
-    .map(line => line.map(value => '"' + String(value).replace(/"/g, '""') + '"').join(','))
-    .join('\r\n');
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
-  link.download = 'gamenet-sessions-report.csv';
-  link.click();
-  URL.revokeObjectURL(link.href);
-}
-
 export function SessionReportPanel({ period, range, canExport }: Props & { canExport: boolean }) {
   const [station, setStation] = useState('');
   const [zone, setZone] = useState('');
