@@ -53,6 +53,13 @@ public sealed record CustomerVipReportPageDto(
     CustomerVipReportSummaryDto Summary,
     IReadOnlyList<CustomerVipReportRowDto> Items);
 
+public sealed record CustomerSessionMetric(
+    Guid Id,
+    Guid CustomerId,
+    DateTimeOffset StartAt,
+    DateTimeOffset? EndAt,
+    decimal TotalAmount);
+
 public sealed class CustomerVipReportService
 {
     private readonly GameNetDbContext _database;
@@ -80,8 +87,8 @@ public sealed class CustomerVipReportService
         var customerIds = customers.Select(item => item.Id).ToList();
 
         var allSessions = customerIds.Count == 0
-            ? []
-            : await _database.Sessions
+            ? new List<CustomerSessionMetric>()
+            : (await _database.Sessions
                 .AsNoTracking()
                 .Where(item => customerIds.Contains(item.CustomerId))
                 .Select(item => new
@@ -92,7 +99,14 @@ public sealed class CustomerVipReportService
                     item.EndAt,
                     item.TotalAmount
                 })
-                .ToListAsync(cancellationToken);
+                .ToListAsync(cancellationToken))
+                .Select(item => new CustomerSessionMetric(
+                    item.Id,
+                    item.CustomerId,
+                    item.StartAt,
+                    item.EndAt,
+                    item.TotalAmount))
+                .ToList();
 
         var debts = customerIds.Count == 0
             ? []
@@ -182,7 +196,7 @@ public sealed class CustomerVipReportService
 
     private static CustomerVipReportRowDto BuildRow(
         Customer customer,
-        IReadOnlyList<dynamic> allSessions,
+        IReadOnlyList<CustomerSessionMetric> allSessions,
         decimal debt,
         DateTimeOffset? from,
         DateTimeOffset? to,
