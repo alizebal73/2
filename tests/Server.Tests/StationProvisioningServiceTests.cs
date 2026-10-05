@@ -19,6 +19,7 @@ public sealed class StationProvisioningServiceTests
 
             await using var database = new GameNetManager.Server.Data.GameNetDbContext(options);
             await database.Database.EnsureCreatedAsync();
+            var appUserId = await SeedAppUserAsync(database);
 
             var service = new GameNetManager.Server.Data.StationProvisioningService(database);
 
@@ -31,7 +32,7 @@ public sealed class StationProvisioningServiceTests
                     "PC",
                     95000m,
                     2),
-                Guid.NewGuid(),
+                appUserId,
                 CancellationToken.None);
 
             Assert.Null(result.ErrorCode);
@@ -74,6 +75,7 @@ public sealed class StationProvisioningServiceTests
 
             await using var database = new GameNetManager.Server.Data.GameNetDbContext(options);
             await database.Database.EnsureCreatedAsync();
+            var appUserId = await SeedAppUserAsync(database);
 
             var service = new GameNetManager.Server.Data.StationProvisioningService(database);
             var created = await service.CreateAsync(
@@ -83,7 +85,7 @@ public sealed class StationProvisioningServiceTests
                     "PC",
                     95000m,
                     1),
-                Guid.NewGuid(),
+                appUserId,
                 CancellationToken.None);
 
             Assert.Null(created.ErrorCode);
@@ -109,7 +111,7 @@ public sealed class StationProvisioningServiceTests
                     station.Network,
                     null,
                     false),
-                Guid.NewGuid(),
+                appUserId,
                 CancellationToken.None);
 
             Assert.Equal("station_has_agent", result.ErrorCode);
@@ -120,4 +122,20 @@ public sealed class StationProvisioningServiceTests
             await connection.DisposeAsync();
         }
     }
+    private static async Task<Guid> SeedAppUserAsync(GameNetManager.Server.Data.GameNetDbContext database)
+    {
+        var user = new GameNetManager.Server.Data.AppUser
+        {
+            FullName = "Test Owner",
+            UserName = "test-owner",
+            Email = "test-owner@gamenet.local",
+            PasswordHash = "test-hash",
+            Role = "Owner",
+            IsActive = true
+        };
+        database.AppUsers.Add(user);
+        await database.SaveChangesAsync();
+        return user.Id;
+    }
+
 }
