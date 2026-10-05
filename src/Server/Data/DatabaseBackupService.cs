@@ -459,10 +459,12 @@ public sealed class DatabaseBackupService
         Directory.CreateDirectory(Path.GetDirectoryName(temp)!);
         try
         {
-            await using var dbStream = databaseEntry.Open();
-            await using var fileStream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None);
-            await dbStream.CopyToAsync(fileStream, cancellationToken);
-            await fileStream.FlushAsync(cancellationToken);
+            {
+                await using var dbStream = databaseEntry.Open();
+                await using var fileStream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None);
+                await dbStream.CopyToAsync(fileStream, cancellationToken);
+                await fileStream.FlushAsync(cancellationToken);
+            }
 
             var hash = await ComputeSha256Async(temp, cancellationToken);
             if (!string.Equals(hash, manifest.DatabaseSha256, StringComparison.OrdinalIgnoreCase))
