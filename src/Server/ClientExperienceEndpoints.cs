@@ -2,6 +2,7 @@ using System.Text.Json;
 using GameNetManager.Server.Data;
 using GameNetManager.Server.Hubs;
 using GameNetManager.Shared.Contracts;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 
@@ -580,6 +581,10 @@ public static class ClientExperienceEndpoints
         GameNetDbContext database,
         CancellationToken cancellationToken)
     {
+        var cookieDevice = await ResolveDeviceFromCookieAsync(context, database, requireOnline: false, cancellationToken);
+        if (cookieDevice is not null)
+            return cookieDevice;
+
         var remoteIp = context.Connection.RemoteIpAddress;
         var local = remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
 
@@ -593,9 +598,12 @@ public static class ClientExperienceEndpoints
                     && item.LastIpAddress == ipText)
                 .ToListAsync(cancellationToken);
 
-            return remoteAgents
+            var resolved = remoteAgents
                 .OrderByDescending(item => item.LastSeenAt)
                 .FirstOrDefault();
+
+            RememberClientDevice(context, resolved);
+            return resolved;
         }
 
         var localAgents = await database.AgentDevices
@@ -604,9 +612,12 @@ public static class ClientExperienceEndpoints
             .Where(item => item.IsActive && item.LastSeenAt.HasValue)
             .ToListAsync(cancellationToken);
 
-        return localAgents
+        var localResolved = localAgents
             .OrderByDescending(item => item.LastSeenAt)
             .FirstOrDefault();
+
+        RememberClientDevice(context, localResolved);
+        return localResolved;
     }
 
     public static async Task<AgentDevice?> ResolveDeviceAsync(
@@ -614,6 +625,10 @@ public static class ClientExperienceEndpoints
         GameNetDbContext database,
         CancellationToken cancellationToken)
     {
+        var cookieDevice = await ResolveDeviceFromCookieAsync(context, database, requireOnline: true, cancellationToken);
+        if (cookieDevice is not null)
+            return cookieDevice;
+
         var remoteIp = context.Connection.RemoteIpAddress;
         var local = remoteIp is not null && System.Net.IPAddress.IsLoopback(remoteIp);
 
@@ -628,9 +643,12 @@ public static class ClientExperienceEndpoints
                     && item.LastIpAddress == ipText)
                 .ToListAsync(cancellationToken);
 
-            return remoteAgents
+            var resolved = remoteAgents
                 .OrderByDescending(item => item.LastSeenAt)
                 .FirstOrDefault();
+
+            RememberClientDevice(context, resolved);
+            return resolved;
         }
 
         var localAgents = await database.AgentDevices
@@ -639,9 +657,87 @@ public static class ClientExperienceEndpoints
             .Where(item => item.IsActive && item.IsOnline && item.LastSeenAt.HasValue)
             .ToListAsync(cancellationToken);
 
-        return localAgents
+        var localResolved = localAgents
             .OrderByDescending(item => item.LastSeenAt)
             .FirstOrDefault();
+
+        RememberClientDevice(context, localResolved);
+        return localResolved;
+    }
+
+    private const string ClientDeviceCookieName = "gamenet_client_device";
+    private const string ClientDeviceProtectorPurpose = "GameNetManager.ClientDeviceIdentity";
+    private static readonly TimeSpan ClientDeviceCookieLifetime = TimeSpan.FromDays(30);
+
+    private static async Task<AgentDevice?> ResolveDeviceFromCookieAsync(
+        HttpContext context,
+        GameNetDbContext database,
+        bool requireOnline,
+        CancellationToken cancellationToken)
+    {
+        var protectedValue = context.Request.Cookies[ClientDeviceCookieName];
+        if (string.IsNullOrWhiteSpace(protectedValue))
+            return null;
+
+        var provider = context.RequestServices.GetService<IDataProtectionProvider>();
+        if (provider is null)
+            return null;
+
+        try
+        {
+            var protector = provider.CreateProtector(ClientDeviceProtectorPurpose);
+            var value = protector.Unprotect(protectedValue);
+            var parts = value.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length != 2
+                || !Guid.TryParse(parts[0], out var deviceId)
+                || !long.TryParse(parts[1], out var issuedTicks))
+                return null;
+
+            var issuedAt = new DateTimeOffset(issuedTicks, TimeSpan.Zero);
+            if (DateTimeOffset.UtcNow - issuedAt > ClientDeviceCookieLifetime)
+                return null;
+
+            var query = database.AgentDevices
+                .AsNoTracking()
+                .Include(item => item.Station)
+                .Where(item => item.Id == deviceId && item.IsActive);
+
+            if (requireOnline)
+                query = query.Where(item => item.IsOnline);
+
+            return await query.FirstOrDefaultAsync(cancellationToken);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void RememberClientDevice(HttpContext context, AgentDevice? device)
+    {
+        if (device is null)
+            return;
+
+        var provider = context.RequestServices.GetService<IDataProtectionProvider>();
+        if (provider is null)
+            return;
+
+        var protector = provider.CreateProtector(ClientDeviceProtectorPurpose);
+        var payload = $"{device.Id:D}|{DateTimeOffset.UtcNow.UtcTicks}";
+        var protectedValue = protector.Protect(payload);
+
+        context.Response.Cookies.Append(
+            ClientDeviceCookieName,
+            protectedValue,
+            new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = context.Request.IsHttps,
+                SameSite = SameSiteMode.Lax,
+                IsEssential = true,
+                MaxAge = ClientDeviceCookieLifetime,
+                Expires = DateTimeOffset.UtcNow.Add(ClientDeviceCookieLifetime)
+            });
     }
 
     private sealed record ClientRequestRequest(
