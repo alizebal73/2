@@ -401,70 +401,23 @@ export function ClientExperience() {
             <span className="client-game-art">{game.icon}</span><span className="client-game-info"><b>{game.name}</b><small>{game.category}</small><small>{game.description}</small></span>{activeGame === game.id && <span className="client-running-badge">در حال اجرا</span>}
           </button>)}
         </div>
-        <aside className="client-side-column">{activeGame && <section className="client-preview"><div className="client-preview-art">{games.find(game => game.id === activeGame)?.icon}</div><div className="client-preview-body"><b>{games.find(game => game.id === activeGame)?.name}</b><p>بازی فعال · اکانت تخصیص‌یافته در زمان توقف آزاد می‌شود.</p><button className="client-button" onClick={() => doContextAction('stop-game')}>■ توقف بازی</button></div></section>}{adVisible && <section className="client-ad"><button className="client-ad-close" onClick={() => setAdVisible(false)} aria-label="بستن تبلیغ">×</button><div className="client-ad-media">🏆</div><div className="client-ad-body"><b>پکیج VIP GameNet</b><p>تخفیف بازی و زمان بیشتر برای اعضای VIP</p><button onClick={() => notify('درخواست فعال‌سازی پکیج VIP ثبت شد')}>درخواست فعال‌سازی</button></div></section>}</aside>
+        <aside className="client-side-column">{activeGame && <section className="client-preview"><div className="client-preview-art">{games.find(game => game.id === activeGame)?.icon}</div><div className="client-preview-body"><b>{games.find(game => game.id === activeGame)?.name}</b><p>بازی فعال · اکانت تخصیص‌یافته در زمان توقف آزاد می‌شود.</p><button className="client-button" onClick={() => doContextAction('stop-game')}>■ توقف بازی</button></div></section>}{adVisible && <section className="client-ad"><button className="client-ad-close" onClick={() => setAdVisible(false)} aria-label="بستن تبلیغ">×</button><div className="client-ad-media">🏆</div><div className="client-ad-body"><b>پکیج VIP GameNet</b><p>تخفیف بازی و زمان بیشتر برای اعضای VIP</p><button onClick={() => setAdVisible(false)}>بعداً</button></div></section>}</aside>
       </main>}
 
       <nav className="client-dock">
-        <button className="hot" onClick={() => { setDockHoverPanel(null); setPanel(null); setPaletteOpen(true); setPaletteQuery(''); }}>⌘ قلنک <kbd>Ctrl+K</kbd></button>
-
-        <div className="client-dock-item client-dock-apps"
-          onMouseEnter={() => scheduleDockHover('apps')}
-          onMouseLeave={() => scheduleDockHover(null)}>
-          <button
-            aria-expanded={dockHoverPanel === 'apps' || panel === 'apps'}
-            onClick={() => {
-              const open = panel !== 'apps';
-              setPanel(open ? 'apps' : null);
-              setDockHoverPanel(open ? 'apps' : null);
-            }}
-          >🧩 نرم‌افزارها</button>
-
-          {(dockHoverPanel === 'apps' || panel === 'apps') && (
-            <section
-              className="client-dock-flyout"
-              onMouseEnter={() => scheduleDockHover('apps')}
-              onMouseLeave={() => scheduleDockHover(null)}
-              onClick={event => event.stopPropagation()}
-            >
-              <header>
-                <div>
-                  <b>نرم‌افزارهای مجاز</b>
-                  <small>اجرا فقط از فهرست تأییدشده کلاینت</small>
-                </div>
-                <span>۶ مورد</span>
-              </header>
-              <div className="client-dock-app-grid">
-                {clientApps.map(app => (
-                  <button
-                    key={app.name}
-                    className="client-dock-app"
-                    onClick={() => notify(`درخواست اجرای ${app.name} برای Agent ثبت شد`)}
-                  >
-                    <span className="client-dock-app-icon">{app.icon}</span>
-                    <span><b>{app.name}</b><small>{app.description}</small></span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-
-        <button onClick={() => { setDockHoverPanel(null); setPanel(panel === 'buffet' ? null : 'buffet'); }}>🛒 منوی بوفه</button>
-        <button onClick={() => notify('مسابقات دمو: جام CS2 · ثبت‌نام از صندوق')}>🏆 مسابقات</button>
-        <button onClick={() => { setMyGamesOnly(true); setPanel(null); setDockHoverPanel(null); }}>🎮 بازی‌های من</button>
-        <button onClick={() => { setDockHoverPanel(null); setPanel(panel === 'account' ? null : 'account'); }}>👤 حساب من</button>
-        <button className="dock-spacer" onClick={() => notify('کنترل‌های اپراتور فقط از Dashboard مدیریت انجام می‌شوند.')}>🛡️ کنترل اپراتور</button>
+        <button className="hot" onClick={() => { setPanel(null); setPaletteOpen(true); setPaletteQuery(''); }}>⌘ قلنک <kbd>Ctrl+K</kbd></button>
+        <button onClick={() => setPanel(panel === 'buffet' ? null : 'buffet')}>🛒 منوی بوفه</button>
+        <button onClick={() => setPanel(panel === 'account' ? null : 'account')}>👤 حساب من</button>
+        <button onClick={() => void requestOperator('charge')}>💳 درخواست شارژ</button>
+        <button onClick={() => void askMessage()}>💬 پیام به اپراتور</button>
         <button onClick={() => setAdVisible(value => !value)}>📢 تبلیغات</button>
-      </nav>
-    </>}
+      </nav>    </>}
 
-    {panel && panel !== 'operator' && panel !== 'apps' && <section className="client-panel"><header><b>{panel === 'buffet' ? 'منوی بوفه' : 'حساب من'}</b><button onClick={() => setPanel(null)}>×</button></header>{panel === 'buffet' ? <div className="client-buffet-list">{buffetItems.map(item => <div key={item.name}><span>{item.icon} {item.name}</span><b>{money(item.price)} ت</b><button onClick={() => notify(`درخواست ${item.name} برای اپراتور ثبت شد`)}>+</button></div>)}</div> : <div className="client-account-info"><div><span>نام کاربری</span><b>{customerCode || 'مهمان'}</b></div><div><span>کیف پول</span><b>{money(wallet)} تومان</b></div><div><span>اعتبار رایگان</span><b>۱۲۰٬۰۰۰ تومان</b></div><div><span>بدهی</span><b>۰ تومان</b></div><div><span>ورود هم‌زمان</span><b>{activeLoginCount.toLocaleString('fa-IR')} / {loginLimit.toLocaleString('fa-IR')}</b></div><button className="client-button" onClick={() => signOut()}>خروج مشتری</button></div>}</section>}
+    {panel && <section className="client-panel"><header><b>{panel === 'buffet' ? 'منوی بوفه' : 'حساب من'}</b><button onClick={() => setPanel(null)}>×</button></header>{panel === 'buffet' ? <div className="client-buffet-list">{buffetItems.map(item => <div key={item.id}><span>{item.icon} {item.name}</span><b>{money(item.price)} ت</b><button onClick={() => void requestBuffet(item.id)}>+</button></div>)}</div> : <div className="client-account-info"><div><span>نام کاربری</span><b>{customerCode || 'مهمان'}</b></div><div><span>کیف پول</span><b>{money(wallet)} تومان</b></div><div><span>اعتبار رایگان</span><b>{money(freeMoney)} تومان</b></div><div><span>ورود هم‌زمان</span><b>{activeLoginCount.toLocaleString('fa-IR')} / {loginLimit.toLocaleString('fa-IR')}</b></div><button className="client-button" onClick={() => void logoutCustomer()}>خروج مشتری و بستن وقت</button></div>}</section>}
 
-    {context && <section className="client-context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}><strong>{activeGame ? `بازی: ${games.find(game => game.id === activeGame)?.name}` : 'ابزار کلاینت'}</strong><button onClick={() => doContextAction('move')}>🔀 جابه‌جایی شناسه به سیستم دیگر <kbd>Ctrl+M</kbd></button><button onClick={() => doContextAction('login')}>🔄 ورود / خروج با شناسه <kbd>Ctrl+L</kbd></button><button onClick={() => doContextAction('charge')}>💰 درخواست شارژ از اپراتور <kbd>Ctrl+R</kbd></button><button onClick={() => doContextAction('message')}>💬 ارسال پیام به اپراتور <kbd>Ctrl+P</kbd></button>{activeGame && <button onClick={() => doContextAction('stop-game')}>■ توقف بازی</button>}<button onClick={() => doContextAction('lock')}>🔒 قفل کردن سیستم <kbd>Win+L</kbd></button><button onClick={() => doContextAction('logout')}>🚪 خروج مشتری و بستن وقت</button></section>}
+    {context && <section className="client-context-menu" style={{ left: context.x, top: context.y }} onClick={event => event.stopPropagation()}><strong>{activeGame ? 'بازی فعال' : 'ابزار کلاینت'}</strong><button onClick={() => void doContextAction('move')}>🔀 جابه‌جایی شناسه به سیستم دیگر <kbd>Ctrl+M</kbd></button><button onClick={() => void doContextAction('login')}>🔄 ورود / خروج با شناسه <kbd>Ctrl+L</kbd></button><button onClick={() => void doContextAction('charge')}>💰 درخواست شارژ از اپراتور <kbd>Ctrl+R</kbd></button><button onClick={() => void doContextAction('message')}>💬 ارسال پیام به اپراتور <kbd>Ctrl+P</kbd></button>{activeGame && <button onClick={() => void doContextAction('stop-game')}>■ توقف بازی</button>}<button onClick={() => void doContextAction('lock')}>🔒 قفل کردن سیستم</button><button onClick={() => void doContextAction('logout')}>🚪 خروج مشتری و بستن وقت</button></section>}
 
     {paletteOpen && <div className="client-overlay" onMouseDown={event => event.target === event.currentTarget && setPaletteOpen(false)}><section className="client-palette" role="dialog" aria-modal="true"><input autoFocus value={paletteQuery} onChange={event => setPaletteQuery(event.target.value)} onKeyDown={event => event.key === 'Enter' && visibleCommands[0] && runCommand(visibleCommands[0].key)} placeholder="جست‌وجوی فرمان یا صفحه…" /><div>{visibleCommands.map(item => <button key={item.key} onClick={() => runCommand(item.key)}><span>{item.icon} {item.title}</span><kbd>Enter</kbd></button>)}</div><small>Ctrl+K باز کردن · Esc بستن</small></section></div>}
-
-    {accountGame && <div className="client-overlay" onMouseDown={event => event.target === event.currentTarget && setAccountGame(null)}><section className="client-account-picker" role="dialog" aria-modal="true"><header><div><b>{accountGame.icon} {accountGame.name}</b><small>روش ورود به بازی را انتخاب کنید</small></div><button onClick={() => setAccountGame(null)}>×</button></header><button className="account-option" onClick={() => launchGame(accountGame, 'own')}><span>👤</span><div><b>اکانت خودم</b><small>با حساب شخصی خود وارد شوید</small></div></button><button className="account-option pool" onClick={() => launchGame(accountGame, 'pool')}><span>🎮</span><div><b>اکانت GameNet</b><small>از Account Pool سرور تخصیص داده شود</small></div></button><p>اطلاعات ورود اکانت‌های مجموعه به مشتری نمایش داده نمی‌شود.</p></section></div>}
 
     {notice && <div className="client-toast" role="status">{notice}<button onClick={() => setNotice('')}>×</button></div>}
     <span className="client-clock" aria-hidden="true">{new Date(now).toLocaleTimeString('fa-IR')}</span>
