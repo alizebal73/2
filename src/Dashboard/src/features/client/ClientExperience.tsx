@@ -72,6 +72,7 @@ export function ClientExperience() {
       .then(identity => {
         if (!active) return;
         setDeviceId(identity.deviceId);
+        setStationName(identity.stationName ?? 'GameNet');
         setClientIdentityReady(true);
       })
       .catch(() => {
@@ -195,6 +196,10 @@ export function ClientExperience() {
       if (password.trim()) { setLoginError('برای مهمان رمز را خالی بگذارید'); return; }
       setCustomerName('مهمان');
       setCustomerId(null);
+      setLoginId(null);
+      setFreeMoney(0);
+      setSessionId(null);
+      setActiveGame(null);
       setLoginId(null);
       setWallet(0);
       setSessionEndAt(null);
