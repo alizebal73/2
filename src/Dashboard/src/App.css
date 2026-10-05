@@ -3994,3 +3994,72 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Stage 14.1 — Settings information architecture */
+.settings-ia-toolbar{
+  margin:0 22px 14px;
+  padding:14px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:var(--panel);
+  display:grid;
+  gap:12px;
+  scroll-margin-top:14px;
+}
+.settings-search-wrap{
+  display:grid;
+  gap:6px;
+}
+.settings-search-wrap>label{
+  color:var(--dim);
+  font-size:9px;
+}
+.settings-search-row{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.settings-search-row input{
+  flex:1;
+  min-width:0;
+}
+.settings-category-nav{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+}
+.settings-category-button{
+  flex:1 1 150px;
+  min-width:150px;
+  display:grid;
+  gap:3px;
+  text-align:right;
+  padding:9px 10px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:var(--panel2);
+  color:var(--text);
+  cursor:pointer;
+}
+.settings-category-button:hover,
+.settings-category-button:focus-visible{
+  border-color:var(--accent);
+  outline:none;
+}
+.settings-category-button strong{
+  font-size:10px;
+}
+.settings-category-button span{
+  color:var(--dim);
+  font-size:8px;
+}
+.settings-local-notice{
+  color:var(--dim);
+  font-size:8.5px;
+  line-height:1.7;
+}
+#settings-section-hotkeys,
+[id^="settings-section-"]{
+  scroll-margin-top:14px;
+}
