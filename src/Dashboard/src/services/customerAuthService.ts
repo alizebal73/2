@@ -22,6 +22,7 @@ export type CustomerSessionState = {
   freeMoney: number;
   freeTimeMinutes: number;
   vipTier: string;
+  isLocked: boolean;
   session: {
     id: string;
     state: string;
