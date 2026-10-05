@@ -1,3 +1,4 @@
+using GameNetManager.Server.Data;
 using Microsoft.EntityFrameworkCore;
 
 namespace GameNetManager.Server;
@@ -84,13 +85,7 @@ public static class ClientExperienceEndpoints
                     price = item.UnitPrice,
                     unit = item.Unit,
                     available = item.StockQuantity > 0,
-                    icon = item.Category.Contains("نوش", StringComparison.OrdinalIgnoreCase)
-                        ? "🥤"
-                        : item.Category.Contains("قهو", StringComparison.OrdinalIgnoreCase)
-                            ? "☕"
-                            : item.Category.Contains("ساند", StringComparison.OrdinalIgnoreCase)
-                                ? "🥪"
-                                : "🛒"
+                    icon = "🛒"
                 })
                 .ToListAsync(cancellationToken);
 
