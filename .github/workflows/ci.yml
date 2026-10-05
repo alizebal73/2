@@ -1794,6 +1794,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gamenet-manager-installers-${{ github.run_number }}
-          path: artifacts/installer/out/*.exe
+          path: |
+            artifacts/installer/out/*.exe
+            artifacts/installer/out/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
