@@ -125,6 +125,24 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Main certification: Run #1462 on merge commit 7dc7d4b8b7cff2e02c4eb302f024161d5ed05049.
 - ✅ All CI gates green, including Build/Test, EF validation, Server startup/migration, Dashboard Build/Lint/Preview and Browser Smoke.
 
+## Slice 14.6 — IN PROGRESS
+
+**Physical 2–3 PC Validation Gate**
+
+### Protocol
+
+- ✅ اجرای رسمی تست در `docs/20-physical-validation-2-3pc-2026-10-05.md` ثبت شد.
+- ✅ سناریوهای Registration/Identity، Lock/Unlock، Customer Login، Session Start/End، Game/Lease، Disconnect/Reconnect، Server outage، Agent restart و همزمانی چند PC تعریف شدند.
+- ✅ معیار خروج و شواهد مورد نیاز مشخص شد.
+
+### Status
+
+- ✅ Protocol ready
+- 🟡 Physical execution pending
+- ⬜ PC-01 + PC-02 PASS
+- ⬜ PC-03 optional PASS
+- ⬜ Stage 14.6 certified
+
 ## Next
 
-After Stage 14.5 certification, perform the physical 2–3 PC validation gate before controlled 40+ PC rollout.
+بعد از PASS شدن Stage 14.6، Gate بعدی **controlled 40+ PC rollout** است.
