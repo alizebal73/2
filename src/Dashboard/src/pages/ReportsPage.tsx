@@ -230,12 +230,35 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
     const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })); link.download = 'gamenet-report.csv'; link.click(); URL.revokeObjectURL(link.href);
   }
 
-  function exportAuditCsv() {
-    const rows = auditResult?.items ?? [];
-    const lines = [['تاریخ', 'کاربر', 'عملیات', 'هدف', 'جزئیات'],
-      ...rows.map(row => [new Date(row.createdAt).toLocaleString('fa-IR'), row.operator, row.action, row.target, row.details])];
-    const csv = lines.map(line => line.map(value => '\"' + String(value).replace(/\"/g, '\"\"') + '\"').join(',')).join('\\r\\n');
-    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })); link.download = 'gamenet-audit.csv'; link.click(); URL.revokeObjectURL(link.href);
+  async function exportAuditCsv() {
+    if (!canExportReports) {
+      setNotice('دسترسی خروجی گزارش ندارید');
+      return;
+    }
+
+    const now = Date.now();
+    const startAt = range
+      ? range.start
+      : period === 'month' ? now - 30 * 86400000
+      : period === 'sixMonths' ? now - 180 * 86400000
+      : period === 'year' ? now - 365 * 86400000
+      : now - 6 * 86400000;
+    const endAt = range?.end ?? now;
+
+    try {
+      await downloadReportCsv('audit', {
+        from: new Date(startAt).toISOString(),
+        to: new Date(endAt).toISOString(),
+        operator: auditOperator,
+        action: auditAction,
+        entityName: auditEntity,
+        search: auditSearch,
+        page: auditPage,
+        pageSize: 50,
+      });
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'خروجی Audit انجام نشد');
+    }
   }
 
   async function registerExpense() {
