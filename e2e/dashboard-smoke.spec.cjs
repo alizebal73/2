@@ -136,6 +136,10 @@ test('dashboard groups PCs by Internet 1/2 without changing station data', async
 
   await groupBy.selectOption('remaining');
   await expect(page.locator('.pc-group-title').first()).toBeVisible();
+
+  await page.setViewportSize({ width: 520, height: 900 });
+  await expect(page.getByRole('button', { name: 'داشبورد' })).toBeVisible();
+  await expect(page.locator('[data-station-id="net-pc-01"]')).toBeVisible();
 });
 
 test('dashboard exposes real Sessions and Stations report', async ({ page }) => {
