@@ -37,7 +37,7 @@ public static class ServerSettingsCatalog
             new("backupAuto", "بکاپ خودکار", "داده و پشتیبان‌گیری", "boolean", true),
             new("backupHour", "ساعت بکاپ", "داده و پشتیبان‌گیری", "string", "04:00"),
             new("backupKeep", "تعداد نسخه", "داده و پشتیبان‌گیری", "integer", 30),
-            new("backupTarget", "مقصد بکاپ", "داده و پشتیبان‌گیری", "string", "App_Data/Backups"),
+            new("backupTarget", "مقصد بکاپ", "داده و پشتیبان‌گیری", "string", "Backups"),
 
             new("dns", "DNS پیش‌فرض", "شبکه و اتصال", "string", "178.22.122.100"),
             new("serverAddress", "آدرس سرور", "شبکه و اتصال", "string", "192.168.1.10:5080"),
