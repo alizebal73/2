@@ -21,4 +21,5 @@ public sealed record StationDto(
     DateTimeOffset? SessionPausedAt = null,
     int SessionPausedMinutes = 0,
     int SessionTimeAdjustmentMinutes = 0,
-    decimal SessionPrepaidAmount = 0);
+    decimal SessionPrepaidAmount = 0,
+    decimal? SessionRate = null);
