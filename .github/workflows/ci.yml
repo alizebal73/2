@@ -1444,20 +1444,31 @@ jobs:
               throw 'Customer history did not include the newly started session.'
             }
 
+            $unauthorizedLoginAcquire = $false
+            try {
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'smoke-unauthorized' } | ConvertTo-Json) | Out-Null
+              throw 'Customer login acquire endpoint allowed an unauthenticated request.'
+            } catch {
+              $status = $_.Exception.Response.StatusCode.value__
+              if ($status -ne 401) { throw }
+              $unauthorizedLoginAcquire = $true
+            }
+            if (-not $unauthorizedLoginAcquire) { throw 'Unauthenticated customer login acquire smoke did not return 401.' }
+
             $loginKeys = @('smoke-a', 'smoke-b', 'smoke-c')
             foreach ($clientKey in $loginKeys) {
-              $loginResult = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json)
+              $loginResult = Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json)
               if (-not $loginResult.acquired) { throw "Concurrent login acquire failed for $clientKey." }
             }
             try {
-              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -ContentType 'application/json' -Body (@{ clientKey = 'smoke-d' } | ConvertTo-Json) | Out-Null
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-acquire") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ clientKey = 'smoke-d' } | ConvertTo-Json) | Out-Null
               throw 'Concurrent login limit was not enforced.'
             } catch {
               $status = $_.Exception.Response.StatusCode.value__
               if ($status -ne 409) { throw }
             }
             foreach ($clientKey in $loginKeys) {
-              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json) | Out-Null
+              Invoke-RestMethod -Uri ("$baseUrl/api/customers/$customerId/login-release") -Method Post -WebSession $adminSession -ContentType 'application/json' -Body (@{ clientKey = $clientKey } | ConvertTo-Json) | Out-Null
             }
 
             $auth = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/login" -Method Post -ContentType 'application/json' -Body (@{
