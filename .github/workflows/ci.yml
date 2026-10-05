@@ -398,6 +398,16 @@ jobs:
                 Write-Host ("Stage 10 rollback diagnostics: commandId={0}; status={1}; delivered={2}; result={3}" -f $rollbackCommand.commandId, $rollbackStatus.status, $rollbackDelivered, $rollbackStatus.resultMessage)
                 Write-Host '--- Agent stdout during rollback ---'
                 if (Test-Path $agentStdout) { Get-Content $agentStdout }
+                Write-Host '--- Watchdog/child stdout during rollback ---'
+                Get-ChildItem -Path $agentData -Filter 'watchdog-*-stdout.log' -File -ErrorAction SilentlyContinue | ForEach-Object {
+                  Write-Host ("### {0}" -f $_.FullName)
+                  Get-Content $_.FullName
+                }
+                Write-Host '--- Watchdog/child stderr during rollback ---'
+                Get-ChildItem -Path $agentData -Filter 'watchdog-*-stderr.log' -File -ErrorAction SilentlyContinue | ForEach-Object {
+                  Write-Host ("### {0}" -f $_.FullName)
+                  Get-Content $_.FullName
+                }
                 Write-Host '--- Agent stderr during rollback ---'
                 if (Test-Path $agentStderr) { Get-Content $agentStderr }
                 Write-Host '--- Persisted Agent state during rollback ---'
