@@ -25,6 +25,8 @@ builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<SessionReportService>();
 builder.Services.AddScoped<NotificationQueueService>();
+builder.Services.AddScoped<DatabaseBackupService>();
+builder.Services.AddHostedService<BackupSchedulerHostedService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
 
@@ -48,6 +50,17 @@ var logger = app.Services.GetRequiredService<ILogger<Program>>();
 
 try
 {
+    await DatabaseBackupService.ApplyPendingRestoreAsync(
+        databasePath,
+        dataProtectionKeysPath,
+        app.Environment.ContentRootPath,
+        logger);
+
+    var bootstrapProtector = app.Services
+        .GetRequiredService<IDataProtectionProvider>()
+        .CreateProtector("GameNetManager.BackupBootstrap");
+    _ = bootstrapProtector.Protect("bootstrap");
+
     await InitializeDatabaseAsync(app.Services, databasePath, logger);
     logger.LogInformation("Database ready at {DatabasePath}", databasePath);
 }
@@ -63,6 +76,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapSettingsEndpoints();
+app.MapBackupEndpoints();
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }))
     .WithName("GetHealth");

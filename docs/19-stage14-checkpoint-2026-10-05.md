@@ -102,6 +102,27 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 - ✅ Main certification: Run #1446 on merge commit `b3a749db8974a7f75cedc0e9168bff94fc38cad9`.
 - ✅ All CI gates green, including EF model validation, Server startup/migration smoke, Dashboard build/lint/preview and Browser Smoke.
 
+## Slice 14.5 — IN PROGRESS
+
+**Real Backup / Restore**
+
+### Delivered
+
+- ✅ SQLite Online Backup-based database archive.
+- ✅ Database + DataProtection Keys packaged together.
+- ✅ SHA-256 + SQLite integrity verification.
+- ✅ Retention, automatic daily schedule and manual backup endpoint.
+- ✅ Separate backup permissions and audited operations.
+- ✅ Pending Restore applied during Server startup before EF Migration, with a pre-restore safety archive.
+- ✅ Settings UI connected to manual backup, Verify and Restore preparation.
+- ✅ Unit coverage for Create/Verify/Prepare/Apply restore.
+- ✅ CI Smoke also exercises a real Server restart and verifies Pending Restore reverts a post-backup settings change.
+
+### Gates
+
+- ⬜ Exact-head CI for Stage 14.5
+- ⬜ Main certification for Stage 14.5
+
 ## Next
 
-Advance to **real Backup/Restore**, then the physical 2–3 PC validation gate.
+After Stage 14.5 certification, perform the physical 2–3 PC validation gate.
