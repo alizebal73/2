@@ -3590,12 +3590,11 @@ app.MapGet("/api/customer-auth/state", async (
     var device = resolvedClientDevice;
 
     var session = device?.StationId is Guid stationId
-        ? await database.Sessions
+        ? (await database.Sessions
             .Where(item => item.CustomerId == customerId
                 && item.CustomerLoginId == loginId
                 && item.StationId == stationId
                 && (item.State == SessionState.Active || item.State == SessionState.Ended))
-            .OrderByDescending(item => item.StartAt)
             .Select(item => new
             {
                 id = item.Id,
@@ -3605,7 +3604,9 @@ app.MapGet("/api/customer-auth/state", async (
                 gameId = item.GameId,
                 stationName = item.Station.Name
             })
-            .FirstOrDefaultAsync(cancellationToken)
+            .ToListAsync(cancellationToken))
+            .OrderByDescending(item => item.startAt)
+            .FirstOrDefault()
         : null;
 
     return Results.Ok(new
@@ -5149,13 +5150,23 @@ app.MapPost("/api/shifts/{shiftId:guid}/close", async (
         return Results.Conflict(new { code = "shift_closed", message = "این شیفت قبلاً بسته شده است." });
 
     var now = DateTimeOffset.UtcNow;
-    var cashSales = await database.InvoicePayments
+    var cashPayments = await database.InvoicePayments
+        .AsNoTracking()
         .Where(item => item.Method == "cash"
             && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null
-            && item.Invoice.PaidAt >= shift.OpenAt
-            && item.Invoice.PaidAt <= now)
-        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+            && item.Invoice.PaidAt != null)
+        .Select(item => new
+        {
+            item.Amount,
+            item.Invoice.PaidAt
+        })
+        .ToListAsync(cancellationToken);
+
+    var cashSales = cashPayments
+        .Where(item => item.PaidAt.HasValue
+            && item.PaidAt.Value >= shift.OpenAt
+            && item.PaidAt.Value <= now)
+        .Sum(item => item.Amount);
 
     var expenseTotal = await database.Expenses
         .Where(item => item.ShiftId == shift.Id)
