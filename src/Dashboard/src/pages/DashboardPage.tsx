@@ -1237,6 +1237,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     try {
       setMessage(pendingMessage);
       const command = await sendAgentCommand(station.agentId, commandType);
+      if (needsPower) {
+        setMessage(successMessage);
+        return;
+      }
       for (let attempt = 0; attempt < 20; attempt += 1) {
         const status = await getAgentCommand(command.commandId);
         if (status.status === 'Succeeded') {
@@ -1583,10 +1587,10 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
       {canManageSession && context.station.state === 'paused' && <button onClick={() => contextAction('resume')}>▶ ادامه جلسه</button>}
       {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('extend')}>⏱ تمدید وقت</button>}
       {canManageSession && (context.station.state === 'busy' || context.station.state === 'paused') && <button onClick={() => contextAction('reduce')}>↘ کاهش زمان</button>}
-      {canControlClient && stationSupportsAgentLock(context.station) && !context.station.agentLocked && <button onClick={() => contextAction('lock')}>🔒 قفل دستگاه</button>}
-      {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentLocked && <button onClick={() => contextAction('unlock')}>🔓 باز کردن قفل</button>}
-      {canControlClient && stationSupportsAgentLock(context.station) && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
-      {canControlClient && stationSupportsAgentLock(context.station) && <button onClick={() => contextAction('kiosk-toggle')}>{context.station.agentKioskEnabled ? '🖥️ غیرفعال‌کردن Kiosk' : '🖥️ فعال‌کردن Kiosk'}</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && !context.station.agentLocked && <button onClick={() => contextAction('lock')}>🔒 قفل دستگاه</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && context.station.agentLocked && <button onClick={() => contextAction('unlock')}>🔓 باز کردن قفل</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && <button onClick={() => contextAction('kiosk-toggle')}>{context.station.agentKioskEnabled ? '🖥️ غیرفعال‌کردن Kiosk' : '🖥️ فعال‌کردن Kiosk'}</button>
       {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && !['Updating', 'UpdatePending'].includes(context.station.agentLifecycleState ?? '') && <button onClick={() => contextAction('agent-update')}>⬆️ به‌روزرسانی Client</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && <button onClick={() => contextAction('agent-ping')}>📡 Ping / بررسی ارتباط Agent</button>}
       {canPowerClient && stationSupportsAgentPower(context.station) && <button onClick={() => contextAction('agent-restart')}>🔄 راه‌اندازی مجدد Client</button>}
