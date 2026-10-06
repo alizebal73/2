@@ -113,3 +113,13 @@
 ## ممیزی فعلی
 
 مرجع ممیزی سراسری Stage 1 تا 12: `docs/17-stage1-12-system-audit-2026-10-03.md`.
+
+
+## تصمیم جدید — Setup-First / ۱۴۰۵/۱۰/۱۴
+- هدف فوری پروژه **First Installable Build** است: ساخت Server Setup + Client Setup، نصب واقعی Server، نصب Client روی PC جدا و تست Agent/Station.
+- پس از اولین نصب، کاربر با برنامه واقعی کار می‌کند و هر باگ واقعی با چرخهٔ **Bug → Reproduce → Smallest Component Fix → Regression → Local Update → Retest** برطرف می‌شود.
+- findings غیرمرتبط با نصب پایه نباید Setup اولیه را متوقف کنند.
+- refactor بزرگ و تکمیل همه Release Readiness Stageها تا بعد از اولین نسخه نصب‌شدنی به تعویق افتاده‌اند.
+- Update فاز اول local/intranet است؛ Cloud URL بعداً اضافه می‌شود.
+- مرجع این مسیر: `docs/setup-first-release-plan.md` و `docs/راه-اصلاح-باگ.md`.
+- **شروع چت بعدی باید از Build Setup باشد، نه از ممیزی دوباره پروژه.**
