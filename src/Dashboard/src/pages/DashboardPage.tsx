@@ -414,19 +414,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     });
   }, [visibleStations, stationSort, customers, now]);
 
-  const sortedPcGroupedStations = useMemo(() => {
-    const pcStations = sortedVisibleStations.filter(item => item.zone === 'pc');
-    const groups = new Map<string, StationDto[]>();
-    for (const station of pcStations) {
-      const key = pcGroupLabel(station);
-      const bucket = groups.get(key) ?? [];
-      bucket.push(station);
-      groups.set(key, bucket);
-    }
-    return Array.from(groups.entries());
-  }, [sortedVisibleStations, customers, pcGroupBy, now, stationSort]);
-
-  const pcGroupLabel = (station: StationDto) => {
+const pcGroupLabel = (station: StationDto) => {
     const customer = customers.find(item => item.username === station.customerCode || item.code === station.customerCode);
     if (pcGroupBy === 'vip') return customer && customer.vip !== 'none' ? 'VIP' : 'عادی';
     if (pcGroupBy === 'network') return station.network === 2 ? 'اینترنت ۲' : 'اینترنت ۱';
@@ -444,7 +432,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     return stateLabels[station.state as StationState] ?? station.state;
   };
 
-  const pcGroupedStations = useMemo(() => {
+const sortedPcGroupedStations = useMemo(() => {
     const pcStations = sortedVisibleStations.filter(item => item.zone === 'pc');
     const groups = new Map<string, StationDto[]>();
     for (const station of pcStations) {
@@ -454,14 +442,15 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
       groups.set(key, bucket);
     }
     return Array.from(groups.entries());
-  }, [visibleStations, customers, pcGroupBy, now]);
+  }, [sortedVisibleStations, customers, pcGroupBy, now, stationSort]);
+
   const selectStationWithModifiers = useCallback((stationId: string, ctrlKey: boolean, shiftKey: boolean) => {
     if (shiftKey && selectionAnchorId) {
-      const anchorIndex = visibleStations.findIndex(item => item.id === selectionAnchorId);
-      const targetIndex = visibleStations.findIndex(item => item.id === stationId);
+      const anchorIndex = sortedVisibleStations.findIndex(item => item.id === selectionAnchorId);
+      const targetIndex = sortedVisibleStations.findIndex(item => item.id === stationId);
       if (anchorIndex >= 0 && targetIndex >= 0) {
         const [from, to] = anchorIndex < targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex];
-        const rangeIds = visibleStations.slice(from, to + 1).map(item => item.id);
+        const rangeIds = sortedVisibleStations.slice(from, to + 1).map(item => item.id);
         setSelectedStationIds(current => ctrlKey ? Array.from(new Set([...current, ...rangeIds])) : rangeIds);
         return;
       }
@@ -472,7 +461,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
       setSelectedStationIds([stationId]);
     }
     setSelectionAnchorId(stationId);
-  }, [selectionAnchorId, visibleStations]);
+  }, [selectionAnchorId, sortedVisibleStations]);
 
   useEffect(() => {
     const onMove = (event: globalThis.MouseEvent) => {
