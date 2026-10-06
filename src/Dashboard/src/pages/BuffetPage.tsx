@@ -96,9 +96,8 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
     }
   }
 
-  async function transferToShowcase(product: ProductRecord) {
+  async function transferToShowcase(product: ProductRecord, quantity = 1) {
     if (!canManageInventory) { setNotice('دسترسی مدیریت موجودی ندارید'); return; }
-    const quantity = numberValue(window.prompt('تعداد انتقال به ویترین', '1') ?? '');
     if (quantity <= 0) { setNotice('تعداد انتقال معتبر نیست'); return; }
     if (quantity > product.warehouseStock) { setNotice('موجودی انبار برای این انتقال کافی نیست'); return; }
     setBusy(true);
@@ -255,7 +254,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
               <button className="btn sm" disabled={busy || product.showcaseStock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
               {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => startEdit(product)}>ویرایش</button>}
               {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void purchaseProduct(product)}>ثبت خرید به انبار</button>}
-              {canManageInventory && <button className="btn sm" disabled={busy || product.warehouseStock === 0} onClick={() => void transferToShowcase(product)}>+ انتقال به ویترین</button>}
+              {canManageInventory && <button className="btn sm" disabled={busy || product.warehouseStock === 0} onClick={() => void transferToShowcase(product, 1)}>+ ویترین</button>}
               <div className="product-stock-actions">
                 {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button>}
                 {canManageInventory && <button className="btn sm" disabled={busy || product.warehouseStock === 0} onClick={() => void adjustStock(product, 'out')}>− انبار</button>}
