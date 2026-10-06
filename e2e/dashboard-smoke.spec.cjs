@@ -1445,6 +1445,7 @@ test('pending payment customer card consolidates charges and buffet with three d
     waitingMinutes: 12,
     timeAmount: 250000,
     buffetTotal: 140000,
+    otherAmount: 0,
     grossAmount: 390000,
     prepaidTotal: 160000,
     prepaidApplied: 160000,

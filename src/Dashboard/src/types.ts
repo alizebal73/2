@@ -108,6 +108,7 @@ export type PendingSettlementAccount = {
   waitingMinutes: number;
   timeAmount: number;
   buffetTotal: number;
+  otherAmount: number;
   grossAmount: number;
   prepaidTotal: number;
   prepaidApplied: number;

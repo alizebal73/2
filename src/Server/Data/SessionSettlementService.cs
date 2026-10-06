@@ -58,6 +58,7 @@ public sealed record PendingSettlementDto(
     int WaitingMinutes,
     decimal TimeAmount,
     decimal BuffetTotal,
+    decimal OtherAmount,
     decimal GrossAmount,
     decimal PrepaidTotal,
     decimal PrepaidApplied,
@@ -1115,7 +1116,15 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
                 .Where(item => item.ProductId is null && item.Amount < 0)
                 .Sum(item => item.Amount));
 
-            var grossAmount = Math.Max(0m, timeAmount + buffetItems.Sum(item => item.Amount));
+            var otherAmount = invoice.Items
+                .Where(item =>
+                    item.Amount > 0
+                    && (item.ProductId.HasValue
+                        ? false
+                        : !item.Description.StartsWith("هزینه جلسه", StringComparison.Ordinal)))
+                .Sum(item => item.Amount);
+
+            var grossAmount = Math.Max(0m, timeAmount + buffetItems.Sum(item => item.Amount) + otherAmount);
             var prepaidTotal = chargeRows.Sum(item => item.Amount);
             var prepaidApplied = Math.Min(prepaidTotal, Math.Max(0m, grossAmount - reduction));
             var prepaidRemaining = Math.Max(0m, prepaidTotal - prepaidApplied);
@@ -1152,6 +1161,7 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
                 waitingMinutes,
                 timeAmount,
                 buffetItems.Sum(item => item.Amount),
+                otherAmount,
                 grossAmount,
                 prepaidTotal,
                 prepaidApplied,

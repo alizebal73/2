@@ -82,6 +82,7 @@ export function PendingPaymentsPanel({ payments, money, onPay }: Props) {
       {calcOpen && <div className="pending-branch-details pending-calc-details">
         <div><span>هزینه بازی</span><small>{money(item.timeAmount)}</small></div>
         <div><span>بوفه</span><small>{money(item.buffetTotal)}</small></div>
+        {item.otherAmount > 0 && <div><span>سایر اقلام</span><small>{money(item.otherAmount)}</small></div>}
         {item.creditOrBenefitReduction > 0 && <div><span>اعتبارات/مزایا</span><small>− {money(item.creditOrBenefitReduction)}</small></div>}
         <div><span>شارژ مصرف‌شده</span><small>− {money(item.prepaidApplied)}</small></div>
         {item.prepaidRemaining > 0 && <div><span>اعتبار شارژ باقی‌مانده</span><small>{money(item.prepaidRemaining)}</small></div>}
