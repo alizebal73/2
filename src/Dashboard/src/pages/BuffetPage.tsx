@@ -248,7 +248,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
             const width = product.maxStock ? Math.min(100, product.showcaseStock / product.maxStock * 100) + '%' : '0%';
             return <article key={product.id} className="product-card">
               <div className="icon">🧃</div><b>{product.name}</b><div className="price">{money(product.price)} تومان</div>
-              <div className="stock">انبار: {product.warehouseStock} {product.unit} · ویترین: {product.showcaseStock} {product.unit}</div>
+              <div className="stock">{canManageInventory ? <>انبار: {product.warehouseStock} {product.unit} · </> : null}ویترین: {product.showcaseStock} {product.unit}</div>
               <div className="progress-bar"><span style={{ width }} /></div>
               {low && <small className="low-stock">هشدار موجودی کم</small>}
               <button className="btn sm" disabled={busy || product.showcaseStock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
