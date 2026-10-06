@@ -97,7 +97,8 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             .FirstOrDefaultAsync(
                 item => item.CustomerId == session.CustomerId
                     && item.Status == InvoiceStatus.Draft
-                    && item.IsCustomerAccount,
+                    && item.IsCustomerAccount
+                    && item.AccountState == CustomerAccountState.PendingPayment,
                 cancellationToken);
 
         var sessionInvoice = await database.Invoices
