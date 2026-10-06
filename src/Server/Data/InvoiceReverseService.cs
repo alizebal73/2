@@ -120,34 +120,96 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
         }
 
         var inventoryRestored = 0;
-        foreach (var item in invoice.Items.Where(item => item.ProductId.HasValue && item.Quantity > 0 && item.Product is not null))
+        var invoiceItemsByProduct = invoice.Items
+            .Where(item => item.ProductId.HasValue && item.Quantity > 0 && item.Product is not null)
+            .GroupBy(item => item.ProductId!.Value);
+
+        foreach (var productGroup in invoiceItemsByProduct)
         {
-            var productId = item.ProductId!.Value;
+            var product = productGroup.First().Product!;
+            var productId = productGroup.Key;
             var saleMovements = await database.InventoryTransactions.AsNoTracking()
                 .Where(movement => movement.ReferenceInvoiceId == invoice.Id
                     && movement.ProductId == productId
                     && movement.Kind == "Sale"
                     && movement.Direction == TransactionDirection.Out)
                 .ToListAsync(cancellationToken);
-            var totalSoldQuantity = saleMovements.Sum(movement => movement.Quantity);
-            var totalSoldCost = saleMovements.Sum(movement => movement.Quantity * movement.UnitCost);
-            var restoredUnitCost = totalSoldQuantity > 0
-                ? totalSoldCost / totalSoldQuantity
-                : item.Product!.CostPrice;
-            item.Product!.StockQuantity += item.Quantity;
-            inventoryRestored += item.Quantity;
-            database.InventoryTransactions.Add(new InventoryTransaction
+
+            var totalItemQuantity = productGroup.Sum(item => item.Quantity);
+            var totalItemAmount = productGroup.Sum(item => item.Quantity * item.UnitPrice);
+            var remainingQuantity = totalItemQuantity;
+
+            var areaBuckets = saleMovements
+                .GroupBy(movement => movement.StockArea)
+                .Select(group => new
+                {
+                    Area = group.Key,
+                    Quantity = group.Sum(movement => movement.Quantity),
+                    UnitCost = group.Sum(movement => movement.Quantity * movement.UnitCost) / Math.Max(1, group.Sum(movement => movement.Quantity))
+                })
+                .OrderByDescending(item => item.Area == StockArea.Showcase)
+                .ToList();
+
+            if (areaBuckets.Count == 0)
             {
-                ProductId = item.ProductId.Value,
-                Quantity = item.Quantity,
-                UnitPrice = item.UnitPrice,
-                UnitCost = restoredUnitCost,
-                ReferenceInvoiceId = invoice.Id,
-                Direction = TransactionDirection.In,
-                Kind = "Return",
-                AppUserId = request.AppUserId,
-                Notes = "برگشت خودکار فروش فاکتور · " + reason
-            });
+                areaBuckets.Add(new
+                {
+                    Area = StockArea.Showcase,
+                    Quantity = totalItemQuantity,
+                    UnitCost = product.CostPrice
+                });
+            }
+
+            foreach (var bucket in areaBuckets)
+            {
+                if (remainingQuantity <= 0)
+                    break;
+
+                var quantity = Math.Min(remainingQuantity, bucket.Quantity);
+                if (quantity <= 0)
+                    continue;
+
+                if (bucket.Area == StockArea.Showcase)
+                    product.ShowcaseStockQuantity += quantity;
+                else
+                    product.StockQuantity += quantity;
+
+                database.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = productId,
+                    Quantity = quantity,
+                    UnitPrice = totalItemQuantity > 0 ? totalItemAmount / totalItemQuantity : product.UnitPrice,
+                    UnitCost = bucket.UnitCost,
+                    ReferenceInvoiceId = invoice.Id,
+                    Direction = TransactionDirection.In,
+                    StockArea = bucket.Area,
+                    Kind = "Return",
+                    AppUserId = request.AppUserId,
+                    Notes = "برگشت خودکار فروش فاکتور · " + reason
+                });
+
+                inventoryRestored += quantity;
+                remainingQuantity -= quantity;
+            }
+
+            if (remainingQuantity > 0)
+            {
+                product.ShowcaseStockQuantity += remainingQuantity;
+                database.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = productId,
+                    Quantity = remainingQuantity,
+                    UnitPrice = totalItemQuantity > 0 ? totalItemAmount / totalItemQuantity : product.UnitPrice,
+                    UnitCost = product.CostPrice,
+                    ReferenceInvoiceId = invoice.Id,
+                    Direction = TransactionDirection.In,
+                    StockArea = StockArea.Showcase,
+                    Kind = "Return",
+                    AppUserId = request.AppUserId,
+                    Notes = "برگشت خودکار فروش فاکتور · " + reason
+                });
+                inventoryRestored += remainingQuantity;
+            }
         }
 
         invoice.Status = InvoiceStatus.Cancelled;
