@@ -113,6 +113,9 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             {
                 account = sessionInvoice;
                 account.IsCustomerAccount = true;
+                account.SessionId = session.Id;
+                foreach (var item in account.Items)
+                    item.SessionId ??= session.Id;
             }
             else
             {
