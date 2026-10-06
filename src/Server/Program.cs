@@ -3997,15 +3997,18 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         await database.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        if (product.StockQuantity <= product.MinimumStock)
+        if (product.ShowcaseStockQuantity <= product.MinimumStock || product.StockQuantity <= product.MinimumStock)
         {
+            var alertStock = product.ShowcaseStockQuantity <= product.MinimumStock
+                ? product.ShowcaseStockQuantity
+                : product.StockQuantity;
             await notifications.PublishToPermissionAsync(
                 "buffet.inventory",
                 new NotificationEvent(
                     "buffet.low-stock",
                     "موجودی بوفه کم شد",
-                    $"موجودی «{product.Name}» به {product.StockQuantity} {product.Unit} رسید؛ حداقل موجودی {product.MinimumStock} است.",
-                    product.StockQuantity == 0 ? NotificationLevel.Critical : NotificationLevel.Warning,
+                    $"موجودی ویترین «{product.Name}» به {product.ShowcaseStockQuantity} {product.Unit} رسید؛ انبار {product.StockQuantity} {product.Unit} است؛ حداقل موجودی {product.MinimumStock} است.",
+                    alertStock == 0 ? NotificationLevel.Critical : NotificationLevel.Warning,
                     "Product",
                     product.Id.ToString()),
                 cancellationToken);
@@ -4074,10 +4077,12 @@ app.MapPut("/api/buffet/products/{productId:guid}", async (HttpContext context,
         category = product.Category,
         price = product.UnitPrice,
         buyPrice = product.CostPrice,
-        stock = product.StockQuantity,
+        stock = product.ShowcaseStockQuantity,
+        warehouseStock = product.StockQuantity,
+        showcaseStock = product.ShowcaseStockQuantity,
         minimumStock = product.MinimumStock,
         unit = product.Unit,
-        lowStock = product.StockQuantity <= product.MinimumStock,
+        lowStock = product.ShowcaseStockQuantity <= product.MinimumStock,
         active = product.IsActive
     });
 })
@@ -4486,8 +4491,8 @@ app.MapPost("/api/buffet/sales", async (
             new NotificationEvent(
                 "buffet.low-stock",
                 "موجودی بوفه کم شد",
-                $"موجودی «{lowStockProduct.Name}» به {lowStockProduct.StockQuantity} {lowStockProduct.Unit} رسید؛ حداقل موجودی {lowStockProduct.MinimumStock} است.",
-                lowStockProduct.StockQuantity == 0 ? NotificationLevel.Critical : NotificationLevel.Warning,
+                $"موجودی ویترین «{lowStockProduct.Name}» به {lowStockProduct.ShowcaseStockQuantity} {lowStockProduct.Unit} رسید؛ انبار {lowStockProduct.StockQuantity} {lowStockProduct.Unit} است؛ حداقل موجودی {lowStockProduct.MinimumStock} است.",
+                lowStockProduct.ShowcaseStockQuantity == 0 ? NotificationLevel.Critical : NotificationLevel.Warning,
                 "Product",
                 lowStockProduct.Id.ToString()),
             cancellationToken);
