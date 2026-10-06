@@ -128,7 +128,10 @@ if not exist "%PREVIEW%\src\Dashboard\node_modules" (
 
 echo [5/5] Cleaning old Preview processes and starting Server and Dashboard...
 "%PS%" -NoProfile -ExecutionPolicy Bypass -Command "$ports=@(5173,5080); foreach($port in $ports){ Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique | ForEach-Object { if($_ -and $_ -ne $PID){ Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue } } }"
-start "GameNet Server" /D "%PREVIEW%\src\Server" "%DOTNET_EXE%" run --urls "http://127.0.0.1:5080" --project "%PREVIEW%\src\Server\GameNetManager.Server.csproj"
+rem Preview is intentionally Development so the demo stations/customers are seeded and the React/Vite development UI can be inspected.
+set "ASPNETCORE_ENVIRONMENT=Development"
+set "GAMENET_DATA_ROOT=%PREVIEW%\src\Server\App_Data"
+start "GameNet Server" /D "%PREVIEW%\src\Server" cmd /d /c "set ASPNETCORE_ENVIRONMENT=Development&&set GAMENET_DATA_ROOT=%PREVIEW%\src\Server\App_Data&&\"%DOTNET_EXE%\" run --urls http://127.0.0.1:5080 --project \"%PREVIEW%\src\Server\GameNetManager.Server.csproj\""
 start "GameNet Dashboard" /D "%PREVIEW%\src\Dashboard" "%NPM_EXE%" run dev -- --host 0.0.0.0 --port 5173
 
 echo Waiting for Dashboard and Server...
