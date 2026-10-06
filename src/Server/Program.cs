@@ -50,6 +50,7 @@ builder.Services.AddScoped<UsersShiftReportService>();
 builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<AuditLogService>();
 builder.Services.AddScoped<SessionReportService>();
+builder.Services.AddScoped<FinanceReportService>();
 builder.Services.AddScoped<NotificationQueueService>();
 builder.Services.AddScoped<DatabaseBackupService>();
 builder.Services.AddScoped<StationProvisioningService>();
@@ -5435,6 +5436,7 @@ app.MapGet("/api/finance/summary", async (HttpContext context,
     DateTimeOffset? from,
     DateTimeOffset? to,
     GameNetDbContext database,
+    FinanceReportService financeReport,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.view", cancellationToken);
@@ -5443,39 +5445,16 @@ app.MapGet("/api/finance/summary", async (HttpContext context,
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
-    var payments = await database.InvoicePayments
-        .AsNoTracking()
-        .Select(item => new { item.CreatedAt, item.Amount })
-        .ToListAsync(cancellationToken);
-
-    var expenses = await database.Expenses
-        .AsNoTracking()
-        .Select(item => new { item.CreatedAt, item.Amount })
-        .ToListAsync(cancellationToken);
-
-    var revenue = payments
-        .Where(item => item.CreatedAt >= start && item.CreatedAt <= end)
-        .Sum(item => item.Amount);
-
-    var expense = expenses
-        .Where(item => item.CreatedAt >= start && item.CreatedAt <= end)
-        .Sum(item => item.Amount);
-
-    return Results.Ok(new FinanceSummaryDto(
-        start,
-        end,
-        revenue,
-        expense,
-        revenue - expense));
+    return Results.Ok(await financeReport.GetSummaryAsync(start, end, cancellationToken));
 })
 .WithName("GetFinanceSummary");
-
 
 
 app.MapGet("/api/finance/transactions", async (HttpContext context,
     DateTimeOffset? from,
     DateTimeOffset? to,
     GameNetDbContext database,
+    FinanceReportService financeReport,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "finance.view", cancellationToken);
@@ -5484,59 +5463,7 @@ app.MapGet("/api/finance/transactions", async (HttpContext context,
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
-    var invoiceRows = await database.Invoices
-        .AsNoTracking()
-        .Include(item => item.Items)
-        .Select(item => new
-        {
-            item.Id,
-            item.IssuedAt,
-            item.TotalAmount,
-            item.Status,
-            Description = item.Items
-                .OrderBy(child => child.Id)
-                .Select(child => child.Description)
-                .FirstOrDefault() ?? "فاکتور"
-        })
-        .ToListAsync(cancellationToken);
-
-    var invoices = invoiceRows
-        .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
-        .OrderByDescending(item => item.IssuedAt)
-        .Take(500)
-        .ToList();
-
-    var invoiceIds = invoices.Select(item => item.Id).ToList();
-    var payments = await database.InvoicePayments
-        .AsNoTracking()
-        .Where(item => invoiceIds.Contains(item.InvoiceId))
-        .Select(item => new { item.InvoiceId, item.Method, item.Amount })
-        .ToListAsync(cancellationToken);
-
-    var result = invoices.Select(invoice =>
-    {
-        var parts = payments.Where(item => item.InvoiceId == invoice.Id).ToList();
-        var methods = string.Join(" + ", parts.Select(item => item.Method).Distinct(StringComparer.OrdinalIgnoreCase));
-        var method = methods switch
-        {
-            "" => "unknown",
-            "cash" => "cash",
-            "card" => "card",
-            "wallet" => "wallet",
-            "gift" => "gift",
-            _ => "mixed"
-        };
-
-        return new FinanceTransactionDto(
-            invoice.Id,
-            invoice.IssuedAt,
-            invoice.Description,
-            invoice.TotalAmount,
-            method,
-            invoice.Status.ToString());
-    }).ToList();
-
-    return Results.Ok(result);
+    return Results.Ok(await financeReport.GetTransactionsAsync(start, end, cancellationToken));
 })
 .WithName("GetFinanceTransactions");
 
