@@ -168,10 +168,10 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
     ForceDirectories(DataRootPage.Values[0]);
-    ConfigureServiceEnvironment(True);
     GrantDataRootAccess;
     ConfigureFirewall;
     RegisterServerService;
+    ConfigureServiceEnvironment(True);
     StartServerService;
     WaitForServerHealth;
     RemoveBootstrapAdminPassword;
