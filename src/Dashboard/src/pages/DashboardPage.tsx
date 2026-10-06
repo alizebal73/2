@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import type { AppUserRecord, CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
-import { createServerCustomerDebt, getServerCustomers } from '../services/customerService';
+import { createServerCustomerDebt, getCustomerHistory, getServerCustomers } from '../services/customerService';
 import { hasPermission } from '../services/authService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { getAgentCommand, requestAgentRollback, requestAgentUpdate, sendAgentCommand, updateAgentPolicy } from '../services/agentService';
@@ -43,6 +43,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   const canManageSession = hasPermission(user, 'session.manage');
   const canSettleSession = hasPermission(user, 'session.settle');
   const canControlClient = hasPermission(user, 'client.control');
+  const canPowerClient = hasPermission(user, 'client.power');
   const [stationOverrides, setStationOverrides] = useState<StationDto[] | null>(null);
   const [zone, setZone] = useState<ZoneKey>('all');
   const [query, setQuery] = useState('');
@@ -167,7 +168,13 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
         setMessage('عملیات کیف پول + بدهی ثبت شد؛ ' + money(remainder) + ' تومان به بدهی منتقل شد');
       }
       const refreshed = await getServerCustomers();
-      setCustomers(refreshed);
+      const history = await getCustomerHistory(customer.id).catch(() => []);
+      const historyText = history.slice(0, 5).map(item => {
+        const amountText = item.amount ? ' · ' + money(item.amount) + ' تومان' : '';
+        const dateText = item.createdAt ? ' · ' + new Date(item.createdAt).toLocaleString('fa-IR') : '';
+        return (item.description || item.type || 'فعالیت مشتری') + amountText + dateText;
+      });
+      setCustomers(refreshed.map(item => item.id === customer.id ? { ...item, transactionHistory: historyText } : item));
       setAmount('');
     } catch (error) {
       setMessage(userErrorMessage(error, 'ثبت تراکنش مشتری انجام نشد'));
@@ -187,6 +194,24 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (!context) return;
+    const close = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('.context-menu')) return;
+      setContext(null);
+    };
+    const closeOnViewportChange = () => setContext(null);
+    document.addEventListener('mousedown', close);
+    window.addEventListener('resize', closeOnViewportChange);
+    window.addEventListener('scroll', closeOnViewportChange, true);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      window.removeEventListener('resize', closeOnViewportChange);
+      window.removeEventListener('scroll', closeOnViewportChange, true);
+    };
+  }, [context]);
+
   useEffect(() => {
     if (!message) return;
     const timer = window.setTimeout(() => setMessage(''), 3200);
@@ -521,11 +546,23 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     setMessage('پروفایل ' + found.name + ' پیدا شد و آماده ورود است.');
   }
 
-  function selectFlowCustomer(customer: CustomerRecord) {
+  async function selectFlowCustomer(customer: CustomerRecord) {
     setFlowCustomerId(customer.id);
     setCustomerCode(customer.username || customer.code || customer.mobile || customer.id);
     setAmount('');
     setFlowStep(2);
+
+    try {
+      const history = await getCustomerHistory(customer.id);
+      const historyText = history.slice(0, 5).map(item => {
+        const amountText = item.amount ? ' · ' + money(item.amount) + ' تومان' : '';
+        const dateText = item.createdAt ? ' · ' + new Date(item.createdAt).toLocaleString('fa-IR') : '';
+        return (item.description || item.type || 'فعالیت مشتری') + amountText + dateText;
+      });
+      setCustomers(current => current.map(item => item.id === customer.id ? { ...item, transactionHistory: historyText } : item));
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'دریافت تاریخچه مشتری انجام نشد'));
+    }
   }
 
   function submitFlowSearch() {
@@ -1061,8 +1098,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   }
 
   function openContextAt(x: number, y: number, station: StationDto) {
-    const width = 280;
-    const height = 430;
+    const width = 300;
+    const height = Math.min(620, window.innerHeight - 16);
     setContext({ x: Math.max(8, Math.min(x, window.innerWidth - width - 8)), y: Math.max(8, Math.min(y, window.innerHeight - height - 8)), station });
   }
 
@@ -1181,9 +1218,46 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     }
   }
 
+  async function runDirectAgentCommand(
+    station: StationDto,
+    commandType: 'ping' | 'restart' | 'shutdown',
+    pendingMessage: string,
+    successMessage: string,
+  ) {
+    const needsPower = commandType === 'restart' || commandType === 'shutdown';
+    if ((needsPower && !canPowerClient) || (!needsPower && !canControlClient)) {
+      setMessage(needsPower ? 'دسترسی روشن/خاموش کردن کلاینت را ندارید.' : 'دسترسی کنترل کلاینت را ندارید.');
+      return;
+    }
+    if (!station.agentId || station.agentOnline !== true) {
+      setMessage('Agent این دستگاه آنلاین نیست؛ فرمان ارسال نشد.');
+      return;
+    }
+
+    try {
+      setMessage(pendingMessage);
+      const command = await sendAgentCommand(station.agentId, commandType);
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const status = await getAgentCommand(command.commandId);
+        if (status.status === 'Succeeded') {
+          setMessage(status.resultMessage || successMessage);
+          return;
+        }
+        if (status.status === 'Failed') {
+          setMessage(status.resultMessage || successMessage + ' ناموفق بود.');
+          return;
+        }
+        await new Promise(resolve => window.setTimeout(resolve, 500));
+      }
+      setMessage('Agent به فرمان پاسخ نداد؛ وضعیت دستگاه را بررسی کنید.');
+    } catch (error) {
+      setMessage(userErrorMessage(error, successMessage + ' انجام نشد'));
+    }
+  }
+
   async function setAgentKioskPolicy(station: StationDto, enabled: boolean) {
-    if (!canControlClient || !station.agentId) {
-      setMessage('دسترسی کنترل Agent ندارید.');
+    if (!canControlClient || !station.agentId || station.agentOnline !== true) {
+      setMessage('Agent این دستگاه آنلاین نیست؛ Policy تغییر نکرد.');
       return;
     }
 
@@ -1218,11 +1292,26 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     if (action === 'kiosk-toggle') { void setAgentKioskPolicy(station, !Boolean(station.agentKioskEnabled)); return; }
     if (action === 'agent-update') { void setAgentUpdate(station); return; }
     if (action === 'agent-rollback') { void setAgentRollback(station); return; }
+    if (action === 'agent-ping') { void runDirectAgentCommand(station, 'ping', 'در حال بررسی ارتباط Agent…', 'ارتباط Agent سالم است.'); return; }
+    if (action === 'agent-restart') {
+      if (!window.confirm('Client این دستگاه Restart شود؟')) return;
+      void runDirectAgentCommand(station, 'restart', 'درخواست راه‌اندازی مجدد Client ارسال شد…', 'Restart Client با موفقیت درخواست شد.');
+      return;
+    }
+    if (action === 'agent-shutdown') {
+      if (!window.confirm('Client این دستگاه خاموش شود؟')) return;
+      void runDirectAgentCommand(station, 'shutdown', 'درخواست خاموش کردن Client ارسال شد…', 'خاموش کردن Client با موفقیت درخواست شد.');
+      return;
+    }
     setMessage('فرمان پشتیبانی‌نشده درخواست شد.');
   }
 
   function stationSupportsAgentLock(station: StationDto) {
     return station.zone === 'pc' && Boolean(station.agentId);
+  }
+
+  function stationSupportsAgentPower(station: StationDto) {
+    return station.zone === 'pc' && Boolean(station.agentId) && station.agentOnline === true;
   }
 
   function renderStation(station: StationDto) {
@@ -1499,6 +1588,9 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
       {canControlClient && stationSupportsAgentLock(context.station) && <button onClick={() => contextAction('logout-lock')}>🚪 خروج یوزر و قفل</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && <button onClick={() => contextAction('kiosk-toggle')}>{context.station.agentKioskEnabled ? '🖥️ غیرفعال‌کردن Kiosk' : '🖥️ فعال‌کردن Kiosk'}</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && !['Updating', 'UpdatePending'].includes(context.station.agentLifecycleState ?? '') && <button onClick={() => contextAction('agent-update')}>⬆️ به‌روزرسانی Client</button>}
+      {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && <button onClick={() => contextAction('agent-ping')}>📡 Ping / بررسی ارتباط Agent</button>}
+      {canPowerClient && stationSupportsAgentPower(context.station) && <button onClick={() => contextAction('agent-restart')}>🔄 راه‌اندازی مجدد Client</button>}
+      {canPowerClient && stationSupportsAgentPower(context.station) && <button onClick={() => contextAction('agent-shutdown')}>⏻ خاموش کردن Client</button>}
       {canControlClient && stationSupportsAgentLock(context.station) && context.station.agentOnline === true && <button onClick={() => contextAction('agent-rollback')}>↩️ Rollback Client</button>}
     </div>}
     {reverseRequest && <ReverseDialog open={Boolean(reverseRequest)} title={reverseRequest.title} detail={reverseRequest.detail} onCancel={() => setReverseRequest(null)} onConfirm={() => reverseTimelineEvent(reverseRequest)} />}
