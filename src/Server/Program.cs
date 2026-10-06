@@ -4857,8 +4857,20 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
         AppUserId = auth.User!.Id
     });
 
-    await database.SaveChangesAsync(cancellationToken);
-    await transaction.CommitAsync(cancellationToken);
+    try
+    {
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        await transaction.RollbackAsync(CancellationToken.None);
+        return Results.Conflict(new
+        {
+            code = "debt_settlement_conflict",
+            message = "این بدهی هم‌زمان توسط عملیات دیگری تغییر کرده یا قبلاً تسویه شده است."
+        });
+    }
 
     var debtRows = await database.Invoices
         .Where(item => item.CustomerId == customerId
