@@ -4506,7 +4506,7 @@ app.MapPost("/api/buffet/sales", async (
     await database.SaveChangesAsync(cancellationToken);
     await transaction.CommitAsync(cancellationToken);
 
-    foreach (var lowStockProduct in products.Where(item => item.StockQuantity <= item.MinimumStock))
+    foreach (var lowStockProduct in products.Where(item => item.ShowcaseStockQuantity <= item.MinimumStock))
     {
         await notifications.PublishToPermissionAsync(
             "buffet.inventory",
