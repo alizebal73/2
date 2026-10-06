@@ -1245,6 +1245,7 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - Endpoint جدید POST /api/pending-settlements/{invoiceId}/mark-debt.
 - مقصد جدید customer برای فروش بوفه، با تشخیص Server-side حساب/Session مشتری.
 - Dashboard Pending دکمهٔ «بدهی» دارد.
+- انتقال Pending به Debt در Server با گارد Session فعال محافظت می‌شود تا بدهی زودتر از پایان Session ایجاد نشود.
 - Workspace مشتری، شارژ Session و بوفه را در یک مسیر اپراتوری یکپارچه می‌کند.
 
 ### Gate
