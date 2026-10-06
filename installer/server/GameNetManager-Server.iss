@@ -30,7 +30,12 @@ RestartApplications=no
 Source: "..\..\artifacts\installer\server-publish\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 [Icons]
-Name: "{group}\GameNet Manager Server Health"; Filename: "{cmd}"; Parameters: "/c start http://127.0.0.1:5080/api/health"
+Name: "{group}\GameNet Manager"; Filename: "{cmd}"; Parameters: "/c start "" ""http://127.0.0.1:5080"""; WorkingDir: "{app}"
+Name: "{group}\GameNet Manager Server Health"; Filename: "{cmd}"; Parameters: "/c start "" ""http://127.0.0.1:5080/api/health"""; WorkingDir: "{app}"
+Name: "{commondesktop}\GameNet Manager"; Filename: "{cmd}"; Parameters: "/c start "" ""http://127.0.0.1:5080"""; WorkingDir: "{app}"
+
+[Run]
+Filename: "{cmd}"; Parameters: "/c start "" ""http://127.0.0.1:5080"""; WorkingDir: "{app}"; Description: "باز کردن GameNet Manager"; Flags: postinstall nowait
 
 [Code]
 var
