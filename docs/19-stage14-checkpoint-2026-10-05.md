@@ -244,3 +244,12 @@ This slice intentionally preserves the existing Product/Invoice model and adds a
 - ✅ Compact view is intentionally dense; Card/Compact/List remain available in the same dashboard section.
 - ✅ Expandable branches expose charges, grouped buffet items and server-derived calculation details without taking over the page.
 - ⬜ Self-hosted Runner certification is still pending. The latest GitHub Actions runs for the pushed commits finish with zero jobs, so no build/test/browser result is being treated as green.
+
+
+## Slice 14.11 Final Model Hardening — 2026-10-06
+- ✅ مدل نهایی Pending به Customer-level Open Account اصلاح شد.
+- ✅ چند Session/PC برای یک مشتری می‌توانند داخل همان Pending Account جمع شوند.
+- ✅ Debt API نیز به همان Customer Account متصل شد و پرداخت‌های قبلی از مبلغ قابل پرداخت کم می‌شوند.
+- ✅ Buffet Pending اکنون به Customer Account بدون وابستگی اجباری به یک Session متصل می‌شود.
+- ✅ Migration برای ادغام Draftهای قبلی بدون از دست دادن child references اضافه شد.
+- ⬜ Self-hosted Runner certification هنوز pending است.
