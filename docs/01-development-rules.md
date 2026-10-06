@@ -187,3 +187,16 @@ Handoff + این فایل = حافظهٔ رسمی پروژه برای چت‌ه�
 این استثنا شامل تغییر محصول، migration، UI یا feature نیست.
 
 پس از تثبیت baseline و اجرای acceptance gate روی همان SHA، ادامه اصلاح باگ‌ها باید دوباره روی branch اختصاصی Stage انجام شود.
+
+
+## 21. اولویت اجرایی Setup-First
+
+تا قبل از First Installable Build، این هدف از ترتیب Stageهای قدیمی مهم‌تر است:
+
+Setup → Install Server → Install Client → Real Test → Bug Fix → Component Update
+
+Stageهای Release Readiness که مستقیماً blocker نصب پایه نیستند می‌توانند موقتاً متوقف بمانند.
+
+قانون «baseline سبز قبل از Stage جدید» در این بازه به این معناست که **قبل از تغییر گسترده محصول، وضعیت واقعی نصب/Build بررسی شود**؛ نه اینکه نصب اولیه تا تکمیل تمام 13 Stage به تعویق بیفتد.
+
+پس از First Installable Build، هر تغییر باید تا حد امکان در کوچک‌ترین component ممکن محدود شود و برای آن regression test و update مستقل داشته باشد.
