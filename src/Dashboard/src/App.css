@@ -1369,7 +1369,7 @@ button:focus-visible {
 .station-card.v-list {
   min-height: 52px;
   display: grid;
-  grid-template-columns: minmax(150px, 1.25fr) minmax(150px, 1.35fr) minmax(110px, .8fr) minmax(86px, auto) minmax(150px, 1fr);
+  grid-template-columns: minmax(150px, 1.25fr) minmax(150px, 1.35fr) minmax(110px, .8fr) minmax(86px, auto) minmax(150px, 1fr) auto;
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
@@ -1410,6 +1410,10 @@ button:focus-visible {
   margin: 0;
 }
 
+.station-card.v-list .person-dots {
+  display: none;
+}
+
 .station-card.v-list .station-hover-actions {
   position: static;
   opacity: 1;
@@ -1440,10 +1444,11 @@ button:focus-visible {
 
 @media (max-width: 900px) {
   .station-card.v-list {
-    grid-template-columns: minmax(120px, 1fr) minmax(130px, 1.2fr) auto auto;
+    grid-template-columns: minmax(120px, 1fr) minmax(130px, 1.2fr) minmax(86px, auto) minmax(110px, 1fr) auto;
   }
 
-  .station-card.v-list .type {
+  .station-card.v-list .type,
+  .station-card.v-list .person-dots {
     display: none;
   }
 }
