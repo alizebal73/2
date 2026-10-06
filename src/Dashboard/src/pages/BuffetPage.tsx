@@ -23,7 +23,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [category, setCategory] = useState('همه');
   const [cart, setCart] = useState<Record<string, number>>({});
-  const [target, setTarget] = useState<'session' | 'standalone'>('session');
+  const [target, setTarget] = useState<'session' | 'pending' | 'standalone'>('session');
   const [notice, setNotice] = useState('');
   const [productFormOpen, setProductFormOpen] = useState(false);
   const [draft, setDraft] = useState({ name: '', category: 'نوشیدنی', price: '', buyPrice: '', stock: '0', minimumStock: '0', unit: 'عدد' });
