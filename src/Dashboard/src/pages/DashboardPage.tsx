@@ -331,7 +331,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [modal, flowStep, applyFlow, hotkeys, visibleStations]);
+  }, [modal, flowStep, applyFlow, hotkeys, stations, zone, query]);
   useEffect(() => {
     const onCommand = (event: Event) => {
       const command = (event as CustomEvent<string>).detail;
@@ -1845,10 +1845,10 @@ const sortedPcGroupedStations = useMemo(() => {
           const items = visibleStations.filter(item => item.zone === key);
           if (!items.length) return null;
           if (key === 'pc') {
-            return <section key={key}><div className="section-title">{title} · {items.length}</div>{pcGroupedStations.map(([groupName, groupItems]) => <div key={groupName} className="pc-group"><div className="pc-group-title">{groupName} · {groupItems.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{groupItems.map(renderStation)}</div></div>)}</section>;
+            return <section key={key}><div className="section-title">{title} · {items.length}</div>{sortedPcGroupedStations.map(([groupName, groupItems]) => <div key={groupName} className="pc-group"><div className="pc-group-title">{groupName} · {groupItems.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{groupItems.map(renderStation)}</div></div>)}</section>;
           }
           return <section key={key}><div className="section-title">{title} · {items.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{items.map(renderStation)}</div></section>;
-        }) : zone === 'pc' ? <div>{pcGroupedStations.map(([groupName, groupItems]) => <div key={groupName} className="pc-group"><div className="pc-group-title">{groupName} · {groupItems.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{groupItems.map(renderStation)}</div></div>)}</div> : <div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{sortedVisibleStations.map(renderStation)}</div>}
+        }) : zone === 'pc' ? <div>{sortedPcGroupedStations.map(([groupName, groupItems]) => <div key={groupName} className="pc-group"><div className="pc-group-title">{groupName} · {groupItems.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{groupItems.map(renderStation)}</div></div>)}</div> : <div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{sortedVisibleStations.map(renderStation)}</div>}
       </main>
       {selectionRect && <div
         className="station-selection-rect"
