@@ -4618,6 +4618,7 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (HttpContext context,
     Guid customerId,
     CustomerDebtRequest request,
     GameNetDbContext database,
+    SessionSettlementService settlement,
     CancellationToken cancellationToken) =>
 {
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.debt", cancellationToken);
@@ -4640,6 +4641,22 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (HttpContext context,
                 && item.Status == InvoiceStatus.Draft
                 && item.IsCustomerAccount,
             cancellationToken);
+
+    if (invoice is not null && invoice.AccountState == CustomerAccountState.PendingPayment)
+    {
+        try
+        {
+            await settlement.EnsurePendingAccountCanBecomeDebtAsync(customerId, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Conflict(new
+            {
+                code = "pending_active_session",
+                message = ex.Message
+            });
+        }
+    }
 
     if (invoice is null)
     {
