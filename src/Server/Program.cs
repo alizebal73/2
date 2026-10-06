@@ -6116,11 +6116,10 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
 
     var targetAgent = await database.AgentDevices
         .FirstOrDefaultAsync(
-            item => item.StationId == target.Id && item.IsActive,
+            item => item.StationId == target.Id && item.IsActive && item.IsOnline,
             cancellationToken);
 
-    if (session.AgentDeviceId.HasValue
-        && (targetAgent is null || !targetAgent.IsOnline))
+    if (session.AgentDeviceId.HasValue && targetAgent is null)
     {
         return Results.Conflict(new
         {
