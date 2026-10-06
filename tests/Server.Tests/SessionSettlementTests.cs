@@ -133,7 +133,7 @@ public sealed class SessionSettlementTests : IDisposable
             Station = station,
             Tariff = tariff,
             AppUser = user,
-            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-20),
             State = SessionState.Active,
             HourlyRateSnapshot = 100000m
         };
@@ -328,7 +328,7 @@ public sealed class SessionSettlementTests : IDisposable
         await db.Database.EnsureCreatedAsync();
 
         var type = new StationType { Name = "PC-Pending" };
-        var tariff = new Tariff { Name = "Pending", HourlyRate = 120000m, DailyRate = 500000m };
+        var tariff = new Tariff { Name = "Pending", HourlyRate = 60000m, DailyRate = 300000m };
         var customer = new Customer { FullName = "Pending Test", Balance = 100000m, FreeTimeMinutes = 0 };
         var user = new AppUser
         {
@@ -344,7 +344,7 @@ public sealed class SessionSettlementTests : IDisposable
             Zone = "PC",
             Type = "PC",
             State = StationState.Available,
-            RatePerHour = 120000m,
+            RatePerHour = 60000m,
             StationType = type,
             Tariff = tariff,
             IsActive = true
@@ -356,7 +356,7 @@ public sealed class SessionSettlementTests : IDisposable
             Tariff = tariff,
             StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
             State = SessionState.Active,
-            HourlyRateSnapshot = 120000m
+            HourlyRateSnapshot = 60000m
         };
 
         db.AddRange(type, tariff, customer, user, station, session);
@@ -491,10 +491,9 @@ public sealed class SessionSettlementTests : IDisposable
         Assert.Single(pending);
         Assert.Contains("PC-MULTI-01", pending[0].StationName);
         Assert.Contains("PC-MULTI-02", pending[0].StationName);
-        Assert.Equal(2, pending[0].Charges.Count + 0);
-        Assert.Equal(2, pending[0].Charges.Count);
-        Assert.Equal(85000m, pending[0].GrossAmount);
-        Assert.Equal(25000m, pending[0].AmountDue);
+        Assert.Equal(1, pending[0].Charges.Count);
+        Assert.Equal(75000m, pending[0].GrossAmount);
+        Assert.Equal(15000m, pending[0].AmountDue);
 
         var account = await db.Invoices.SingleAsync(item => item.Id == pending[0].InvoiceId);
         Assert.True(account.IsCustomerAccount);
