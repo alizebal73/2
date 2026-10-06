@@ -1532,3 +1532,266 @@ test('pending payment customer card consolidates charges and buffet with three d
   await expect(page.getByText('حساب علی رضایی تسویه شد.')).toBeVisible();
   await expect(page.getByText('علی رضایی')).toHaveCount(0);
 });
+
+
+test('customer operations workspace unifies double-click, session charge and buffet', async ({ page }) => {
+  const customerId = '55555555-5555-4555-8555-555555555555';
+  const sessionId = '66666666-6666-4666-8666-666666666666';
+  let buffetPosted = false;
+  let chargePosted = false;
+
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-customer-ops',
+      fullName: 'اپراتور عملیات مشتری',
+      userName: 'customer_ops',
+      email: 'customer-ops@gamenet.local',
+      role: 'Operator',
+      isActive: true,
+      permissions: ['customer.wallet', 'customer.debt', 'session.manage', 'session.settle', 'buffet.sell'],
+    }),
+  }));
+
+  await page.route('**/api/customers', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: customerId,
+      code: '1006',
+      username: 'ali123',
+      name: 'علی رضایی',
+      alias: 'Ali',
+      nationalId: '0012345678',
+      mobile: '09121234567',
+      vip: 'gold',
+      wallet: 250000,
+      debt: 0,
+      giftCredit: 0,
+      freeTimeMinutes: 0,
+      discountLevel: 0,
+      lastSeen: new Date().toISOString(),
+      status: 'active',
+      concurrentLoginLimit: 1,
+      vipPackageName: 'VIP Gold',
+      notes: 'تست عملیات مشتری',
+    }]),
+  }));
+
+  await page.route('**/api/customers/' + customerId + '/history', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([]),
+  }));
+
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      totalStations: 1,
+      generatedAt: new Date().toISOString(),
+      stations: [{
+        id: 'pc-21',
+        name: 'PC ۲۱',
+        zone: 'pc',
+        type: 'PC',
+        ratePerHour: 95000,
+        state: 'busy',
+        network: 1,
+        customerCode: '1006',
+        customerUsername: 'ali123',
+        customerFullName: 'علی رضایی',
+        remainingMinutes: 60,
+        serverSessionId: sessionId,
+      }],
+    }),
+  }));
+
+  await page.route('**/api/dashboard/pending-settlements', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([]),
+  }));
+
+  await page.route('**/api/sessions/' + sessionId + '/charge', async route => {
+    chargePosted = true;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        invoiceId: 'invoice-customer-ops',
+        sessionId,
+        amount: 100000,
+        method: 'cash',
+        prepaidTotal: 100000,
+        sessionEndAt: new Date(Date.now() + 70 * 60000).toISOString(),
+        walletBalanceAfter: 250000,
+      }),
+    });
+  });
+
+  await page.route('**/api/buffet/products', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: 'cola-customer-ops',
+      name: 'نوشابه',
+      category: 'نوشیدنی',
+      price: 35000,
+      buyPrice: 20000,
+      stock: 2,
+      warehouseStock: 10,
+      showcaseStock: 2,
+      minimumStock: 1,
+      unit: 'عدد',
+      lowStock: false,
+      active: true,
+    }]),
+  }));
+
+  await page.route('**/api/buffet/sales', async route => {
+    const body = await route.request().postDataJSON();
+    expect(body.target).toBe('session');
+    expect(body.sessionId).toBe(sessionId);
+    expect(body.customerId).toBe(customerId);
+    expect(body.items).toEqual([{ productId: 'cola-customer-ops', quantity: 1 }]);
+    buffetPosted = true;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        total: 35000,
+        target: 'session',
+        sessionId,
+        invoiceId: 'invoice-customer-ops',
+        buffetTotal: 35000,
+      }),
+    });
+  });
+
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-station-id="pc-21"]').waitFor();
+
+  await page.locator('[data-station-id="pc-21"]').dblclick();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog).toContainText('عملیات مشتری · F1');
+  await expect(dialog).toContainText('علی رضایی');
+  await expect(dialog.getByRole('button', { name: '💳 شارژ' })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: '🥤 بوفه' })).toBeVisible();
+
+  await dialog.locator('#flow-amount').fill('100000');
+  await dialog.getByRole('button', { name: /ثبت شارژ/ }).click();
+  await expect.poll(() => chargePosted).toBe(true);
+
+  await dialog.getByRole('button', { name: '🥤 بوفه' }).click();
+  await expect(dialog.getByText('نوشابه')).toBeVisible();
+  await dialog.getByText('نوشابه').dblclick();
+  await expect(dialog.getByText('انتخاب‌های مشتری')).toBeVisible();
+  await expect(dialog.getByText(/نوشابه/).last()).toBeVisible();
+  await dialog.getByRole('button', { name: 'افزودن به پروفایل مشتری' }).click();
+  await expect.poll(() => buffetPosted).toBe(true);
+  await expect(dialog.getByText('بوفه به همان حساب مشتری اضافه شد.')).toBeVisible();
+});
+
+test('pending account can be handed off to customer debt without creating a second invoice', async ({ page }) => {
+  const invoiceId = 'pending-debt-1';
+  let pendingVisible = true;
+
+  const pending = {
+    invoiceId,
+    sessionId: 'pending-debt-session',
+    customerId: 'pending-debt-customer',
+    customerName: 'مشتری بدهکار',
+    customerCode: '2001',
+    username: 'debt_customer',
+    stationName: 'PC ۲۲',
+    closedAt: new Date(Date.now() - 60 * 60000).toISOString(),
+    waitingMinutes: 60,
+    timeAmount: 200000,
+    buffetTotal: 50000,
+    otherAmount: 0,
+    grossAmount: 250000,
+    prepaidTotal: 0,
+    prepaidApplied: 0,
+    prepaidRemaining: 0,
+    creditOrBenefitReduction: 0,
+    amountDue: 250000,
+    charges: [],
+    buffetItems: [{ productId: 'cola', productName: 'نوشابه', quantity: 1, amount: 50000 }],
+  };
+
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-debt-handoff',
+      fullName: 'اپراتور بدهی',
+      userName: 'debt_handoff',
+      email: 'debt-handoff@gamenet.local',
+      role: 'Operator',
+      isActive: true,
+      permissions: ['session.settle', 'customer.debt'],
+    }),
+  }));
+
+  await page.route('**/api/customers', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: pending.customerId,
+      code: pending.customerCode,
+      username: pending.username,
+      name: pending.customerName,
+      vip: 'none',
+      wallet: 0,
+      debt: 0,
+      giftCredit: 0,
+      freeTimeMinutes: 0,
+      discountLevel: 0,
+      status: 'warning',
+      concurrentLoginLimit: 1,
+      notes: 'تست انتقال بدهی',
+    }]),
+  }));
+
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] }),
+  }));
+
+  await page.route('**/api/dashboard/pending-settlements', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(pendingVisible ? [pending] : []),
+  }));
+
+  await page.route('**/api/pending-settlements/' + invoiceId + '/mark-debt', async route => {
+    pendingVisible = false;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        invoiceId,
+        customerId: pending.customerId,
+        customerName: pending.customerName,
+        amountDue: pending.amountDue,
+        accountState: 'Debt',
+      }),
+    });
+  });
+
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  const card = page.locator('.pending-payment-card');
+  await expect(card).toContainText('مشتری بدهکار');
+  await expect(card).toContainText('۲۵۰٬۰۰۰ تومان');
+
+  await card.getByRole('button', { name: 'بدهی' }).click();
+  await expect(page.getByText('حساب مشتری بدهکار با مبلغ ۲۵۰٬۰۰۰ تومان به بدهی منتقل شد.')).toBeVisible();
+  await expect(page.locator('.pending-payment-card')).toHaveCount(0);
+});
