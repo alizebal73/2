@@ -168,7 +168,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
       category: product.category,
       price: String(product.price),
       buyPrice: String(product.buyPrice),
-      stock: String(product.stock),
+      stock: String(product.warehouseStock),
       minimumStock: String(product.minimumStock),
       unit: product.unit,
     });
