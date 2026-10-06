@@ -110,13 +110,11 @@ public sealed class UsersShiftReportService
 
         var payments = await _database.InvoicePayments
             .AsNoTracking()
-            .Where(item => item.Invoice.Status == InvoiceStatus.Paid
-                && item.Invoice.PaidAt != null)
             .Select(item => new
             {
                 item.Method,
                 item.Amount,
-                PaidAt = item.Invoice.PaidAt!.Value
+                PaidAt = item.CreatedAt
             })
             .ToListAsync(cancellationToken);
 
