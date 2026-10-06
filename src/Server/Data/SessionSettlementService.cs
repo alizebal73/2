@@ -142,6 +142,8 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
                     item.InvoiceId = account.Id;
                     if (!item.SessionId.HasValue)
                         item.SessionId = session.Id;
+                    if (!account.Items.Contains(item))
+                        account.Items.Add(item);
                 }
 
                 var payments = await database.InvoicePayments
