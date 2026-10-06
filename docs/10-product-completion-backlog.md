@@ -1248,6 +1248,8 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - انتقال Pending به Debt در Server با گارد Session فعال محافظت می‌شود تا بدهی زودتر از پایان Session ایجاد نشود.
 - ثبت بدهی مستقیم نیز همین گارد Server-side را برای Customer Accountهای PendingPayment استفاده می‌کند.
 - حساب Debt و حساب PendingPayment اکنون می‌توانند هم‌زمان برای یک مشتری وجود داشته باشند؛ Session جدید هرگز اقلام مالی خود را به حساب Debt قبلی متصل نمی‌کند.
+- ثبت بدهی مستقیم، در صورت وجود Debt باز، همان Debt را به‌روزرسانی می‌کند و Pending جاری را دست‌نخورده نگه می‌دارد.
+- تسویهٔ هم‌زمان Debt در Server به‌واسطهٔ concurrency token کنترل می‌شود و در تعارض، خطای 409 فارسی برمی‌گردد.
 - حساب‌های Pending با مبلغ قابل‌پرداخت صفر دیگر در Pending View نمایش داده نمی‌شوند و قابل انتقال به Debt نیستند.
 - Workspace مشتری، شارژ Session و بوفه را در یک مسیر اپراتوری یکپارچه می‌کند.
 
