@@ -4408,7 +4408,25 @@ app.MapPost("/api/buffet/sales", async (
 
         invoice = await database.Invoices
             .Include(item => item.Items)
-            .FirstOrDefaultAsync(item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft, cancellationToken);
+            .FirstOrDefaultAsync(
+                item => item.CustomerId == session.CustomerId
+                    && item.Status == InvoiceStatus.Draft
+                    && item.IsCustomerAccount,
+                cancellationToken);
+
+        if (invoice is null)
+        {
+            invoice = await database.Invoices
+                .Include(item => item.Items)
+                .FirstOrDefaultAsync(
+                    item => item.SessionId == session.Id
+                        && item.Status == InvoiceStatus.Draft
+                        && !item.IsCustomerAccount,
+                    cancellationToken);
+
+            if (invoice is not null)
+                invoice.IsCustomerAccount = true;
+        }
 
         if (invoice is null)
         {
@@ -4419,10 +4437,14 @@ app.MapPost("/api/buffet/sales", async (
                 AppUserId = auth.User!.Id,
                 TotalAmount = 0m,
                 Status = InvoiceStatus.Draft,
+                IsCustomerAccount = true,
                 IssuedAt = DateTimeOffset.UtcNow
             };
             database.Invoices.Add(invoice);
         }
+
+        invoice.SessionId = session.Id;
+        invoice.AppUserId ??= auth.User!.Id;
     }
     else if (target == "pending")
     {
