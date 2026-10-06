@@ -693,7 +693,7 @@ app.MapPost("/api/games/{gameId:guid}/sync", async (
 
         try
         {
-            await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
+            await agentHub.Clients.Client(device.ConnectionId!).SendAsync(
                 "AgentCommand",
                 new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
                 cancellationToken);
@@ -1200,7 +1200,7 @@ app.MapPut("/api/agent/devices/{deviceId:guid}/policy", async (
 
     if (!string.IsNullOrWhiteSpace(device.ConnectionId))
     {
-        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
+        await agentHub.Clients.Client(device.ConnectionId!).SendAsync(
             "AgentPolicyChanged",
             new AgentPolicyDto(device.Id, device.KioskEnabled, device.LockOnDisconnect),
             cancellationToken);
@@ -1423,7 +1423,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/update", async (
 
     try
     {
-        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
+        await agentHub.Clients.Client(device.ConnectionId!).SendAsync(
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
@@ -1495,7 +1495,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/rollback", async (
 
     try
     {
-        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
+        await agentHub.Clients.Client(device.ConnectionId!).SendAsync(
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
@@ -1583,7 +1583,7 @@ app.MapPost("/api/agent/devices/{deviceId:guid}/commands", async (
 
     try
     {
-        await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
+        await agentHub.Clients.Client(device.ConnectionId!).SendAsync(
             "AgentCommand",
             new AgentCommandEnvelope(command.Id, command.CommandType, command.PayloadJson, command.RequestedAt),
             cancellationToken);
