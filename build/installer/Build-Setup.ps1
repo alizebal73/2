@@ -70,11 +70,20 @@ New-Item -ItemType Directory -Path $serverPublish,$clientPublish,$outputRoot -Fo
 
 Push-Location $repoRoot
 try {
-    dotnet restore GameNetManager.sln
+    dotnet restore GameNetManager.sln --runtime win-x64
+    if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed." }
+
     npm ci --prefix src/Dashboard
+    if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
+
     npm run build --prefix src/Dashboard
+    if ($LASTEXITCODE -ne 0) { throw "Dashboard build failed." }
+
     dotnet publish src/Server/GameNetManager.Server.csproj --configuration $Configuration --runtime win-x64 --self-contained true --output $serverPublish --no-restore
+    if ($LASTEXITCODE -ne 0) { throw "Server publish failed." }
+
     dotnet publish src/Client/GameNetManager.Client.csproj --configuration $Configuration --runtime win-x64 --self-contained true --output $clientPublish --no-restore
+    if ($LASTEXITCODE -ne 0) { throw "Client publish failed." }
     Set-Content -Path (Join-Path $serverPublish "server-version.txt") -Value $Version -Encoding ascii
     Set-Content -Path (Join-Path $clientPublish "client-version.txt") -Value $Version -Encoding ascii
     & $iscc "/DAppVersion=$Version" "/O$outputRoot" (Join-Path $repoRoot "installer\server\GameNetManager-Server.iss")
