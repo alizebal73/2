@@ -4616,23 +4616,21 @@ app.MapGet("/api/customers/{customerId:guid}/debts", async (HttpContext context,
         .ToListAsync(cancellationToken);
 
     var invoiceIds = invoices.Select(item => item.Id).ToList();
-    var paid = invoiceIds.Count == 0
-        ? new List<(Guid InvoiceId, decimal Amount)>()
+    var paidRows = invoiceIds.Count == 0
+        ? new List<InvoicePayment>()
         : await database.InvoicePayments
             .AsNoTracking()
             .Where(item => invoiceIds.Contains(item.InvoiceId))
-            .GroupBy(item => item.InvoiceId)
-            .Select(group => new { InvoiceId = group.Key, Amount = group.Sum(item => item.Amount) })
-            .AsEnumerable()
-            .Select(item => (item.InvoiceId, item.Amount))
             .ToListAsync(cancellationToken);
 
-    var paidByInvoice = paid.ToDictionary(item => item.InvoiceId, item => item.Amount);
+    var paid = paidRows
+        .GroupBy(item => item.InvoiceId)
+        .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
 
     return Results.Ok(invoices.Select(item => new
     {
         id = item.Id,
-        amount = Math.Max(0m, item.TotalAmount - (paidByInvoice.TryGetValue(item.Id, out var paidAmount) ? paidAmount : 0m)),
+        amount = Math.Max(0m, item.TotalAmount - (paid.TryGetValue(item.Id, out var paidAmount) ? paidAmount : 0m)),
         issuedAt = item.IssuedAt,
         description = item.Items.Select(line => line.Description).FirstOrDefault() ?? "بدهی مشتری",
         isCustomerAccount = item.IsCustomerAccount

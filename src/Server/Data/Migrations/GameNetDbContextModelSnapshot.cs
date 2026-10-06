@@ -1182,7 +1182,7 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsCustomerAccount")
-                        .HasColumnType("TEXT");
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("TEXT");
@@ -2204,9 +2204,16 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("GameNetManager.Server.Data.Session", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Invoice");
 
                     b.Navigation("Product");
+
+                    b.Navigation("Session");
 
                     b.Navigation("Session");
                 });

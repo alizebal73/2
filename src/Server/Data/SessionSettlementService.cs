@@ -605,11 +605,28 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         if (session is null)
             throw new InvalidOperationException("جلسه فعال پیدا نشد.");
 
-        var invoice = await GetOrCreateCustomerAccountAsync(
-            session,
-            appUserId,
-            DateTimeOffset.UtcNow,
-            cancellationToken);
+        var invoice = await database.Invoices
+            .FirstOrDefaultAsync(
+                item => item.SessionId == session.Id
+                    && item.Status == InvoiceStatus.Draft
+                    && !item.IsCustomerAccount,
+                cancellationToken);
+
+        if (invoice is null)
+        {
+            invoice = new Invoice
+            {
+                CustomerId = session.CustomerId,
+                SessionId = session.Id,
+                AppUserId = appUserId,
+                TotalAmount = 0m,
+                Status = InvoiceStatus.Draft,
+                IsCustomerAccount = false,
+                IssuedAt = DateTimeOffset.UtcNow
+            };
+            database.Invoices.Add(invoice);
+            await database.SaveChangesAsync(cancellationToken);
+        }
 
         if (normalizedMethod == "wallet")
         {
