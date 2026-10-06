@@ -227,3 +227,13 @@ This slice intentionally preserves the existing Product/Invoice model and adds a
 - ✅ Unit regression test covers Operator/Manager denied and Admin/Owner allowed.
 - ✅ Browser Smoke covers operator buffet view and absence of inventory mutation controls.
 - 🟡 Self-hosted Windows Runner Build/Test/Browser Smoke certification required.
+
+## Slice 14.11 — Pending Payment / Open Customer Account — 2026-10-06
+
+- ✅ مشخصات قطعی Product Completion برای حساب باز مشتری ثبت شد.
+- ✅ مدل مورد تأیید: یک مشتری = یک Draft Invoice باز مرتبط با Session؛ یک کارت/ردیف فشرده؛ Viewهای Card/Compact/List؛ شاخه‌های بازشونده برای شارژ، بوفه و محاسبه.
+- ✅ قرار است شارژهای زمان به‌صورت Server-backed ledger مجزا از Session.PrepaidAmount ثبت شوند تا چند شارژ قابل ردیابی باشند.
+- ✅ «پرداخت بعداً» Session را نهایی و Station را آزاد می‌کند ولی Invoice را تا زمان پرداخت Draft نگه می‌دارد.
+- ✅ خرید بوفه روی Pending Invoice همان مشتری تجمیع می‌شود و کارت موجود را Update می‌کند.
+- ⬜ پیاده‌سازی و تست این Slice.
+- ⬜ self-hosted Windows Runner certification.
