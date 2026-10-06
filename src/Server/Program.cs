@@ -56,6 +56,7 @@ builder.Services.AddScoped<StationProvisioningService>();
 builder.Services.AddHostedService<BackupSchedulerHostedService>();
 builder.Services.AddSingleton<GameCredentialProtectionService>();
 builder.Services.AddHostedService<AgentPresenceMonitor>();
+builder.Services.AddSingleton<AgentPairingService>();
 
 var dataRoot = StoragePaths.ResolveDataRoot(builder.Configuration, builder.Environment);
 Directory.CreateDirectory(dataRoot);
@@ -1009,21 +1010,60 @@ app.MapGet("/api/account-pool/leases", async (
     return Results.Ok(leases);
 }).WithName("GetActiveAccountLeases");
 
+app.MapPost("/api/agent/pairing-code", async (
+    HttpContext context,
+    GameNetDbContext database,
+    AgentPairingService pairing,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(
+        context,
+        database,
+        "client.control",
+        cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    var result = pairing.Create(TimeSpan.FromMinutes(30));
+    database.AuditLogs.Add(new AuditLog
+    {
+        Action = "AgentPairingCodeCreated",
+        EntityName = "AgentPairing",
+        EntityId = result.Code,
+        AppUserId = auth.User!.Id,
+        Details = "ایجاد کد اتصال موقت برای Agentها"
+    });
+    await database.SaveChangesAsync(cancellationToken);
+
+    return Results.Ok(new
+    {
+        code = result.Code,
+        expiresAt = result.ExpiresAt,
+        maxUses = result.MaxUses
+    });
+})
+.WithName("CreateAgentPairingCode");
+
 app.MapPost("/api/agent/register", async (
     AgentRegistrationRequest request,
     HttpContext context,
     GameNetDbContext database,
     IConfiguration configuration,
+    AgentPairingService pairing,
     CancellationToken cancellationToken) =>
 {
     var configuredToken = configuration["Agent:RegistrationToken"];
     var suppliedToken = context.Request.Headers["X-GameNet-Registration-Token"].ToString().Trim();
+    var suppliedPairingCode = context.Request.Headers["X-GameNet-Agent-Pairing-Code"].ToString().Trim();
 
-    if (string.IsNullOrWhiteSpace(configuredToken)
-        || string.IsNullOrWhiteSpace(suppliedToken)
-        || !CryptographicOperations.FixedTimeEquals(
+    var legacyTokenValid = !string.IsNullOrWhiteSpace(configuredToken)
+        && !string.IsNullOrWhiteSpace(suppliedToken)
+        && CryptographicOperations.FixedTimeEquals(
             Encoding.UTF8.GetBytes(configuredToken),
-            Encoding.UTF8.GetBytes(suppliedToken)))
+            Encoding.UTF8.GetBytes(suppliedToken));
+
+    var pairingCodeValid = pairing.TryUse(suppliedPairingCode);
+
+    if (!legacyTokenValid && !pairingCodeValid)
         return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     var deviceId = request.DeviceId?.Trim();
