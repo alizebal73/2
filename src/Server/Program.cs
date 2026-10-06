@@ -49,6 +49,7 @@ builder.Services.AddScoped<CustomerVipReportService>();
 builder.Services.AddScoped<UsersShiftReportService>();
 builder.Services.AddScoped<SessionPricingService>();
 builder.Services.AddScoped<AuditLogService>();
+builder.Services.AddScoped<SessionRevenueService>();
 builder.Services.AddScoped<SessionReportService>();
 builder.Services.AddScoped<FinanceReportService>();
 builder.Services.AddScoped<CustomerHistoryService>();
