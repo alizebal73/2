@@ -837,6 +837,20 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         return pending.First(item => item.InvoiceId == invoice.Id);
     }
 
+    public async Task EnsurePendingAccountCanBecomeDebtAsync(
+        Guid customerId,
+        CancellationToken cancellationToken)
+    {
+        var hasActiveSession = await database.Sessions
+            .AnyAsync(
+                item => item.CustomerId == customerId
+                    && item.State == SessionState.Active,
+                cancellationToken);
+
+        if (hasActiveSession)
+            throw new InvalidOperationException("تا وقتی جلسه فعالی برای این مشتری وجود دارد، حساب را نمی‌توان به بدهی منتقل کرد.");
+    }
+
     public async Task<object> MarkPendingAsDebtAsync(
         Guid invoiceId,
         Guid? appUserId,
@@ -856,14 +870,7 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         if (invoice is null)
             throw new InvalidOperationException("حساب در انتظار پرداخت پیدا نشد یا قبلاً به بدهی منتقل شده است.");
 
-        var hasActiveSession = await database.Sessions
-            .AnyAsync(
-                item => item.CustomerId == invoice.CustomerId
-                    && item.State == SessionState.Active,
-                cancellationToken);
-
-        if (hasActiveSession)
-            throw new InvalidOperationException("تا وقتی جلسه فعالی برای این مشتری وجود دارد، حساب را نمی‌توان به بدهی منتقل کرد.");
+        await EnsurePendingAccountCanBecomeDebtAsync(invoice.CustomerId, cancellationToken);
 
         var paid = await database.InvoicePayments
             .Where(item => item.InvoiceId == invoice.Id)
