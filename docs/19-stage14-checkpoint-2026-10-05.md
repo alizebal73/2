@@ -237,3 +237,10 @@ This slice intentionally preserves the existing Product/Invoice model and adds a
 - ✅ خرید بوفه روی Pending Invoice همان مشتری تجمیع می‌شود و کارت موجود را Update می‌کند.
 - ⬜ پیاده‌سازی و تست این Slice.
 - ⬜ self-hosted Windows Runner certification.
+
+
+## Slice 14.11 Implementation Checkpoint — 2026-10-06
+- ✅ Feature implementation now spans Server settlement/account flow, Dashboard pending-payment UI, and Buffet-to-pending-account sales.
+- ✅ Compact view is intentionally dense; Card/Compact/List remain available in the same dashboard section.
+- ✅ Expandable branches expose charges, grouped buffet items and server-derived calculation details without taking over the page.
+- ⬜ Self-hosted Runner certification is still pending. The latest GitHub Actions runs for the pushed commits finish with zero jobs, so no build/test/browser result is being treated as green.
