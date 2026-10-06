@@ -886,6 +886,79 @@ public sealed class SessionSettlementTests : IDisposable
     }
 
     [Fact]
+    public async Task SettlementPreviewIgnoresDraftDebtAccount()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "PC-PREVIEW-DEBT" };
+        var tariff = new Tariff { Name = "Preview Debt", HourlyRate = 60000m, DailyRate = 300000m };
+        var customer = new Customer { FullName = "Preview Debt Customer", FreeTimeMinutes = 0 };
+        var station = new Station
+        {
+            Name = "PC-PREVIEW-DEBT-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 60000m,
+            StationType = type,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 60000m
+        };
+        var product = new Product
+        {
+            Name = "Debt Buffet Item",
+            Category = "Test",
+            UnitPrice = 90000m,
+            CostPrice = 30000m,
+            StockQuantity = 10
+        };
+        var debtAccount = new Invoice
+        {
+            Customer = customer,
+            TotalAmount = 90000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.Debt,
+            IssuedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            Items =
+            {
+                new InvoiceItem
+                {
+                    Session = session,
+                    Product = product,
+                    Description = product.Name,
+                    Quantity = 1,
+                    UnitPrice = product.UnitPrice,
+                    Amount = product.UnitPrice
+                }
+            }
+        };
+
+        db.AddRange(type, tariff, customer, station, session, product, debtAccount);
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+        var preview = await service.PreviewAsync(session.Id, 0, 0m, 0m, CancellationToken.None);
+
+        Assert.Equal(0m, preview.BuffetTotal);
+        Assert.Equal(preview.TimeAmount, preview.TotalAmount);
+    }
+
+    [Fact]
     public async Task PendingAccountCannotBeMarkedAsDebtWhileCustomerHasActiveSession()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
