@@ -58,6 +58,64 @@ public sealed class ConcurrencyTests : IDisposable
 
 
     [Fact]
+    public async Task ConcurrentDebtSettlementWritesAreRejectedByInvoiceConcurrencyToken()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        Guid invoiceId;
+        await using (var seed = new GameNetDbContext(options))
+        {
+            await seed.Database.EnsureCreatedAsync();
+
+            var customer = new Customer
+            {
+                FullName = "مشتری تسویه هم‌زمان",
+                Code = "DEBT-CONFLICT",
+                Username = "debt-conflict-user",
+                ConcurrentLoginLimit = 1,
+                VipTier = "none"
+            };
+            var invoice = new Invoice
+            {
+                Customer = customer,
+                TotalAmount = 80000m,
+                IsCustomerAccount = true,
+                AccountState = CustomerAccountState.Debt,
+                Status = InvoiceStatus.Draft,
+                IssuedAt = DateTimeOffset.UtcNow
+            };
+
+            seed.Add(invoice);
+            await seed.SaveChangesAsync();
+            invoiceId = invoice.Id;
+        }
+
+        await using var db1 = new GameNetDbContext(options);
+        await using var db2 = new GameNetDbContext(options);
+
+        var first = await db1.Invoices.SingleAsync(item => item.Id == invoiceId);
+        var second = await db2.Invoices.SingleAsync(item => item.Id == invoiceId);
+
+        first.Status = InvoiceStatus.Paid;
+        first.PaidAt = DateTimeOffset.UtcNow;
+        await db1.SaveChangesAsync();
+
+        second.Status = InvoiceStatus.Paid;
+        second.PaidAt = DateTimeOffset.UtcNow;
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+            () => db2.SaveChangesAsync());
+
+        var saved = await db1.Invoices
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == invoiceId);
+
+        Assert.Equal(InvoiceStatus.Paid, saved.Status);
+    }
+
+    [Fact]
     public async Task ActiveSessionsCannotShareCustomerLoginOrStation()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
