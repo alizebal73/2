@@ -64,10 +64,12 @@ public sealed record CustomerSessionMetric(
 public sealed class CustomerVipReportService
 {
     private readonly GameNetDbContext _database;
+    private readonly SessionRevenueService _sessionRevenue;
 
-    public CustomerVipReportService(GameNetDbContext database)
+    public CustomerVipReportService(GameNetDbContext database, SessionRevenueService? sessionRevenue = null)
     {
         _database = database;
+        _sessionRevenue = sessionRevenue ?? new SessionRevenueService(database);
     }
 
     public async Task<CustomerVipReportPageDto> QueryAsync(
@@ -108,6 +110,16 @@ public sealed class CustomerVipReportService
                     item.EndAt,
                     item.TotalAmount))
                 .ToList();
+
+        var sessionRevenueById = await _sessionRevenue.GetLedgerRevenueBySessionAsync(
+            allSessions.Select(item => item.Id).ToArray(),
+            cancellationToken);
+
+        allSessions = allSessions
+            .Select(item => sessionRevenueById.TryGetValue(item.Id, out var ledgerRevenue)
+                ? item with { TotalAmount = ledgerRevenue }
+                : item)
+            .ToList();
 
         var draftDebtInvoices = customerIds.Count == 0
             ? []
