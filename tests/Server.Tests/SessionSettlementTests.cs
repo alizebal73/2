@@ -886,6 +886,83 @@ public sealed class SessionSettlementTests : IDisposable
     }
 
     [Fact]
+    public async Task PendingAccountCannotBeMarkedAsDebtWhileCustomerHasActiveSession()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "PC-DEBT-GUARD" };
+        var tariff = new Tariff { Name = "Debt Guard", HourlyRate = 60000m, DailyRate = 300000m };
+        var customer = new Customer { FullName = "Debt Guard Customer", FreeTimeMinutes = 0 };
+        var user = new AppUser
+        {
+            FullName = "Debt Guard Admin",
+            UserName = "debt-guard-admin",
+            Email = "debt-guard@test.local",
+            PasswordHash = "hash",
+            Role = "Admin"
+        };
+        var station = new Station
+        {
+            Name = "PC-DEBT-GUARD-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 60000m,
+            StationType = type,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 60000m
+        };
+        var invoice = new Invoice
+        {
+            Customer = customer,
+            Session = session,
+            TotalAmount = 50000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.PendingPayment,
+            IssuedAt = DateTimeOffset.UtcNow,
+            Items =
+            {
+                new InvoiceItem
+                {
+                    Session = session,
+                    Description = "هزینه جلسه Debt Guard",
+                    Quantity = 1,
+                    UnitPrice = 50000m,
+                    Amount = 50000m
+                }
+            }
+        };
+
+        db.AddRange(type, tariff, customer, user, station, session, invoice);
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.MarkPendingAsDebtAsync(invoice.Id, user.Id, CancellationToken.None));
+
+        Assert.Equal("تا وقتی جلسه فعالی برای این مشتری وجود دارد، حساب را نمی‌توان به بدهی منتقل کرد.", error.Message);
+        var saved = await db.Invoices.SingleAsync(item => item.Id == invoice.Id);
+        Assert.Equal(CustomerAccountState.PendingPayment, saved.AccountState);
+        Assert.Equal(InvoiceStatus.Draft, saved.Status);
+    }
+
+    [Fact]
     public async Task PendingAccountBuffetSaleIsIncludedOnceInPendingTotal()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
