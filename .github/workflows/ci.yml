@@ -1,8 +1,8 @@
 name: GameNet Manager CI
+# Automatic CI is intentionally disabled during Release Readiness stabilization.
+# Run this workflow manually only when a CI/acceptance gate is actually required.
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: gamenet-ci-${{ github.head_ref || github.ref_name }}
