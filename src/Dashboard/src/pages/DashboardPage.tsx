@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
-import type { AppUserRecord, CustomerRecord, DashboardSnapshotDto, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
+import type { AppUserRecord, CustomerRecord, DashboardSnapshotDto, PendingSettlementAccount, ServerInfoDto, SessionTimelineEvent, StationDto, StationState, ZoneKey } from '../types';
 import { createServerCustomerDebt, getCustomerHistory, getServerCustomers } from '../services/customerService';
 import { hasPermission } from '../services/authService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { getAgentCommand, requestAgentRollback, requestAgentUpdate, sendAgentCommand, updateAgentPolicy } from '../services/agentService';
 import { calculateBilling } from '../services/billingEngine';
-import { adjustServerSessionTime, isServerGuid, pauseServerSession, requestServerInvoiceReverseApproval, resumeServerSession, settleServerSession, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
+import { adjustServerSessionTime, chargeServerSession, getPendingSettlementAccounts, isServerGuid, pauseServerSession, requestServerInvoiceReverseApproval, resumeServerSession, settlePendingSettlement, settleServerSession, settleServerSessionLater, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
 import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem } from '../features/attention/DashboardAttentionSidebar';
@@ -64,6 +64,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   const [chargeTarget, setChargeTarget] = useState<'session' | 'wallet' | 'discount'>('session');
   const [context, setContext] = useState<ContextMenu>(null);
   const [sessionFollowUps, setSessionFollowUps] = useState<SessionFollowUp[]>([]);
+  const [pendingSettlements, setPendingSettlements] = useState<PendingSettlementAccount[]>([]);
   const [sessionTimeline, setSessionTimeline] = useState<SessionTimelineEvent[]>([]);
   const [message, setMessage] = useState('');
   const [reverseRequest, setReverseRequest] = useState<SessionTimelineEvent | null>(null);
@@ -127,6 +128,11 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   const updateStation = useCallback((id: string, update: Partial<StationDto>) => {
     setStationOverrides(items => (items ?? snapshot?.stations ?? emptyStations).map(item => item.id === id ? { ...item, ...update } : item));
   }, [snapshot?.stations]);
+  const refreshPendingSettlements = useCallback(async () => {
+    const rows = await getPendingSettlementAccounts();
+    setPendingSettlements(rows);
+  }, []);
+
   const duration = useCallback((station: StationDto) => {
     const startedAt = station.startedAt ?? station.sessionStartedAt ?? undefined;
     if (!startedAt) return station.sessionMinutes ?? 0;
@@ -189,10 +195,17 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     void getServerCustomers()
       .then(setCustomers)
       .catch(error => setMessage(userErrorMessage(error, 'دریافت مشتریان از سرور انجام نشد')));
+    void refreshPendingSettlements().catch(() => undefined);
+    const pendingTimer = window.setInterval(() => {
+      void refreshPendingSettlements().catch(() => undefined);
+    }, 3500);
     const onHotkeys = (event: Event) => setHotkeys((event as CustomEvent<Record<string,string>>).detail || {});
     window.addEventListener('gamenet-hotkeys-changed', onHotkeys);
-    return () => window.removeEventListener('gamenet-hotkeys-changed', onHotkeys);
-  }, []);
+    return () => {
+      window.clearInterval(pendingTimer);
+      window.removeEventListener('gamenet-hotkeys-changed', onHotkeys);
+    };
+  }, [refreshPendingSettlements]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
@@ -319,7 +332,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   }, [stations, duration, updateStation]);
   useEffect(() => {
     const onBuffetSale = (event: Event) => {
-      const detail = (event as CustomEvent<{ total: number; sessionId?: string; buffetTotal?: number }>).detail;
+      const detail = (event as CustomEvent<{ total: number; sessionId?: string; invoiceId?: string; buffetTotal?: number }>).detail;
       const station = detail.sessionId
         ? stations.find(item => item.serverSessionId === detail.sessionId)
         : undefined;
@@ -328,11 +341,14 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
         updateStation(station.id, { buffetTotal });
         addSessionTimeline(station.id, 'buffet', 'افزودن بوفه', money(detail.total) + ' تومان به فاکتور جلسه اضافه شد', detail.total);
         setMessage('فروش ' + money(detail.total) + ' تومان به فاکتور ' + station.name + ' اضافه شد');
+      } else if (detail.invoiceId) {
+        void refreshPendingSettlements().catch(() => undefined);
+        setMessage('فروش بوفه به حساب باز مشتری اضافه شد');
       } else setMessage('جلسه مقصد در داشبورد پیدا نشد؛ داشبورد را تازه‌سازی کنید');
     };
     window.addEventListener('gamenet-buffet-sale', onBuffetSale);
     return () => window.removeEventListener('gamenet-buffet-sale', onBuffetSale);
-  }, [stations, updateStation]);
+  }, [stations, updateStation, refreshPendingSettlements]);
 
   const visibleStations = useMemo(() => stations.filter(station =>
     (zone === 'all' || station.zone === zone) && station.name.toLowerCase().includes(query.trim().toLowerCase())), [stations, zone, query]);
@@ -813,6 +829,54 @@ const sortedPcGroupedStations = useMemo(() => {
   }
 
   async function finishSession(method: string) {
+    if (method === 'debt') {
+      if (!canSettleSession) {
+        setMessage('دسترسی تسویه جلسه ندارید');
+        return;
+      }
+      if (!activeStation || !activeStation.serverSessionId || !isServerGuid(activeStation.serverSessionId)) {
+        setMessage('جلسه سروری برای ثبت پرداخت بعداً لازم است.');
+        return;
+      }
+
+      const customer = customers.find(item =>
+        item.code === activeStation.customerCode ||
+        item.username === activeStation.customerCode ||
+        item.id === activeStation.customerCode);
+      const freeTimeMinutes = Math.min(
+        customer?.freeTimeMinutes ?? 0,
+        Math.ceil(duration(activeStation)),
+      );
+
+      try {
+        await settleServerSessionLater(activeStation.serverSessionId, freeTimeMinutes);
+        updateStation(activeStation.id, {
+          state: 'free',
+          startedAt: undefined,
+          sessionMinutes: undefined,
+          sessionRate: undefined,
+          amountSoFar: undefined,
+          customerCode: undefined,
+          persons: undefined,
+          buffetTotal: undefined,
+          sessionCredit: undefined,
+          sessionPrepaidAmount: undefined,
+          prepaidEndsAt: undefined,
+          pausedAt: undefined,
+          pausedMinutes: undefined,
+          serverSessionId: undefined,
+        });
+        await refreshPendingSettlements();
+        setModal(null);
+        setSessionCenterStation(null);
+        setMessage('جلسه بسته شد و حساب مشتری در «در انتظار پرداخت» ثبت شد.');
+      } catch (error) {
+        setMessage(userErrorMessage(error, 'ثبت پرداخت بعداً انجام نشد'));
+      }
+      return;
+    }
+
+
     if (!canSettleSession) { setMessage('دسترسی تسویه جلسه ندارید'); return; }
     if (!activeStation) return;
     const elapsed = duration(activeStation);
@@ -1048,56 +1112,115 @@ const sortedPcGroupedStations = useMemo(() => {
 
   async function applyCharge(method: string) {
     const value = number(amount);
-    if (!value || !activeStation) { setMessage('مبلغ معتبر وارد کنید'); return; }
-
-    if (method === 'debt' && !hasPermission(user, 'customer.debt')) {
-      setMessage('دسترسی ثبت بدهی مشتری را ندارید');
+    if (!value || !activeStation) {
+      setMessage('مبلغ معتبر وارد کنید');
       return;
     }
 
-    if ((chargeTarget === 'wallet' || chargeTarget === 'discount') && !hasPermission(user, 'customer.wallet')) {
-      setMessage('دسترسی مدیریت کیف پول مشتری را ندارید');
+    if (chargeTarget === 'session') {
+      if (!['cash', 'card', 'wallet'].includes(method)) {
+        setMessage('شارژ زمان فقط از مسیر نقدی، کارتخوان یا کیف پول ثبت می‌شود.');
+        return;
+      }
+      if (!hasPermission(user, 'session.manage')) {
+        setMessage('دسترسی مدیریت مالی جلسه را ندارید');
+        return;
+      }
+      if (!activeStation.serverSessionId || !isServerGuid(activeStation.serverSessionId)) {
+        setMessage('جلسه باید روی Server ثبت شده باشد.');
+        return;
+      }
+
+      try {
+        const result = await chargeServerSession(
+          activeStation.serverSessionId,
+          value,
+          method as 'cash' | 'card' | 'wallet',
+        );
+
+        updateStation(activeStation.id, {
+          sessionCredit: result.prepaidTotal,
+          sessionPrepaidAmount: result.prepaidTotal,
+          prepaidEndsAt: result.sessionEndAt ?? undefined,
+        });
+
+        if (method === 'wallet') {
+          const customer = customers.find(item =>
+            item.code === activeStation.customerCode ||
+            item.username === activeStation.customerCode ||
+            item.id === activeStation.customerCode);
+          if (customer) {
+            setCustomers(current => current.map(item =>
+              item.id === customer.id
+                ? { ...item, wallet: result.walletBalanceAfter }
+                : item));
+          }
+        }
+
+        addSessionTimeline(
+          activeStation.id,
+          'charge',
+          'شارژ جلسه',
+          money(value) + ' تومان شارژ شد',
+          value,
+          result.invoiceId,
+        );
+        await refreshPendingSettlements();
+        setModal(null);
+        setMessage(money(value) + ' تومان شارژ شد؛ حساب مالی مشتری روی Server به‌روز شد.');
+      } catch (error) {
+        setMessage(userErrorMessage(error, 'ثبت شارژ انجام نشد'));
+      }
       return;
     }
 
-    if (chargeTarget === 'session' && !hasPermission(user, 'session.manage')) {
-      setMessage('دسترسی مدیریت مالی جلسه را ندارید');
-      return;
-    }
+    if (chargeTarget === 'wallet' || chargeTarget === 'discount') {
+      if (!hasPermission(user, 'customer.wallet')) {
+        setMessage('دسترسی مدیریت کیف پول مشتری را ندارید');
+        return;
+      }
+      const customer = customers.find(item =>
+        item.code === activeStation.customerCode ||
+        item.username === activeStation.customerCode ||
+        item.id === activeStation.customerCode);
+      if (!customer) {
+        setMessage('جلسه به مشتری وصل نیست');
+        return;
+      }
+      if (method === 'wallet') {
+        setMessage('برای شارژ کیف پول، نقد یا کارت را انتخاب کنید');
+        return;
+      }
 
-    const customer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
-    try {
-      if (method === 'debt') {
-        if (!customer) { setMessage('جلسه مشتری ثبت‌شده ندارد'); return; }
-        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['ثبت بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
-        setMessage('بدهی ' + money(value) + ' تومان ثبت شد');
-      } else if (chargeTarget === 'wallet' || chargeTarget === 'discount') {
-        if (!customer) { setMessage('جلسه به مشتری وصل نیست'); return; }
-        if (method === 'wallet') { setMessage('برای شارژ کیف پول، نقد یا کارت را انتخاب کنید'); return; }
-        const entry = await recordWalletTransaction(customer.id, { amount: value, type: 'credit', description: chargeTarget === 'discount' ? 'شارژ + تخفیف' : 'شارژ کیف پول' });
-        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: entry.balanceAfter, discountLevel: chargeTarget === 'discount' ? item.discountLevel + 1 : item.discountLevel, transactionHistory: [(chargeTarget === 'discount' ? 'شارژ + تخفیف' : 'شارژ کیف پول') + ' · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+      try {
+        const entry = await recordWalletTransaction(customer.id, {
+          amount: value,
+          type: 'credit',
+          description: chargeTarget === 'discount' ? 'شارژ + تخفیف' : 'شارژ کیف پول',
+        });
+        setCustomers(current => current.map(item =>
+          item.id === customer.id
+            ? {
+                ...item,
+                wallet: entry.balanceAfter,
+                discountLevel: chargeTarget === 'discount' ? item.discountLevel + 1 : item.discountLevel,
+                transactionHistory: [
+                  (chargeTarget === 'discount' ? 'شارژ + تخفیف' : 'شارژ کیف پول') + ' · ' + money(value) + ' تومان',
+                  ...(item.transactionHistory ?? []),
+                ],
+              }
+            : item));
+        setModal(null);
         setMessage(chargeTarget === 'discount' ? 'شارژ + تخفیف ثبت شد' : 'کیف پول شارژ شد');
-      } else if (activeStation.state === 'busy') {
-      const rate = activeStation.sessionRate ?? activeStation.ratePerHour;
-      const extraMinutes = rate > 0 ? value / (rate / 60) : 0;
-      const currentEnd = activeStation.prepaidEndsAt ? new Date(activeStation.prepaidEndsAt).getTime() : Date.now();
-      const base = Math.max(Date.now(), currentEnd);
-      const prepaidEndsAt = new Date(base + Math.max(0, extraMinutes) * 60000).toISOString();
-      updateStation(activeStation.id, {
-        sessionMinutes: duration(activeStation) + extraMinutes,
-        startedAt: new Date(Date.now() - (duration(activeStation) + extraMinutes) * 60000).toISOString(),
-        sessionCredit: (activeStation.sessionCredit ?? 0) + value,
-        prepaidEndsAt,
-      });
-      setSessionFollowUps(current => [...current, { id: crypto.randomUUID(), stationId: activeStation.id, stationName: activeStation.name, customerCode: activeStation.customerCode ?? customer?.code ?? 'مهمان', amount: value, createdAt: new Date().toISOString(), status: 'watching' }]);
-      addSessionTimeline(activeStation.id, 'charge', 'شارژ جلسه', money(value) + ' تومان شارژ شد', value);
-      setMessage(money(value) + ' تومان شارژ شد؛ پیگیری آن در «نیازمند توجه» ثبت شد');
-      } else setMessage('شارژ ' + money(value) + ' تومان ثبت شد');
-      setModal(null);
-    } catch (error) {
-      setMessage(userErrorMessage(error, 'ثبت شارژ انجام نشد'));
+      } catch (error) {
+        setMessage(userErrorMessage(error, 'ثبت شارژ کیف پول انجام نشد'));
+      }
+      return;
     }
+
+    setMessage('هدف شارژ معتبر نیست');
   }
+
   async function reverseTimelineEvent(event: SessionTimelineEvent) {
     if (event.serverReferenceId) {
       if (!hasPermission(user, 'finance.manage')) {
@@ -1551,13 +1674,40 @@ const sortedPcGroupedStations = useMemo(() => {
       }}
     >
       <DashboardAttentionSidebar
-        payments={[]}
+        payments={pendingSettlements}
         attentions={sidebarAttentions}
         recentActions={sidebarRecentActions}
         money={money}
-        onCardPaid={() => setMessage('پرداخت معوق فقط از جریان Server-backed قابل ثبت است.')}
-        onWallet={() => setMessage('پرداخت معوق فقط از جریان Server-backed قابل ثبت است.')}
-        onDebt={() => setMessage('بدهی فقط از جریان Server-backed قابل ثبت است.')}
+        onPay={async (invoiceId, method) => {
+          const account = pendingSettlements.find(item => item.invoiceId === invoiceId);
+          if (!account) {
+            await refreshPendingSettlements().catch(() => undefined);
+            setMessage('حساب باز پیدا نشد؛ فهرست به‌روزرسانی شد.');
+            return;
+          }
+
+          try {
+            const amountDue = Math.max(0, account.amountDue);
+            const result = await settlePendingSettlement(invoiceId, {
+              totalAmount: amountDue,
+              parts: amountDue > 0 ? [{ method, amount: amountDue }] : [],
+            });
+
+            if (method === 'wallet') {
+              setCustomers(current => current.map(item =>
+                item.id === account.customerId
+                  ? { ...item, wallet: result.walletBalanceAfter }
+                  : item));
+            }
+
+            await refreshPendingSettlements();
+            setMessage(amountDue > 0
+              ? 'حساب ' + account.customerName + ' تسویه شد.'
+              : 'حساب ' + account.customerName + ' بسته شد.');
+          } catch (error) {
+            setMessage(userErrorMessage(error, 'تسویه حساب باز انجام نشد'));
+          }
+        }}
         onAttention={id => {
           const item = attentionItems.find(row => row.id === id);
           if (item) focusAttentionItem(item);
@@ -1740,7 +1890,7 @@ const sortedPcGroupedStations = useMemo(() => {
         </div>
       </>}
       {modal === 'flow' && <div className="customer-flow-modal"><h2>⚡ عملیات مشتری · F1</h2><CustomerOperationsWorkspace customers={customers} stations={stations} hotkeys={hotkeys} customerId={flowCustomerId} search={customerCode} amount={amount} busy={flowBusy} onSearchChange={setCustomerCode} onSearchSubmit={submitFlowSearch} onSelectCustomer={selectFlowCustomer} onAmountChange={setAmount} onAction={applyFlow} /></div>}
-      {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول'], ['debt', 'ثبت در بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
+      {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
       {modal === 'settle' && activeStation && (() => {
       const settlementCustomer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
       const preview = calculateBilling({
@@ -1804,7 +1954,7 @@ const sortedPcGroupedStations = useMemo(() => {
           {!splitPaymentEnabled && <button className="btn" onClick={() => finishSession('wallet')}>کیف پول</button>}
           {!splitPaymentEnabled && <button className="btn" onClick={() => finishSession('gift')}>اعتبار رایگان</button>}
           {splitPaymentEnabled && <button className="btn primary" onClick={() => finishSplitSession(finalTotal)}>ثبت تسویه ترکیبی</button>}
-          <button className="btn danger" onClick={() => finishSession('debt')}>پرداخت بعداً / ثبت بدهی</button>
+          <button className="btn danger" onClick={() => finishSession('debt')}>پرداخت بعداً / انتقال به حساب باز</button>
           <button className="btn" onClick={() => window.print()}>چاپ فاکتور</button>
         </div>
       </>;
