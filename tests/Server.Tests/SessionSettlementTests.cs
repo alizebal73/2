@@ -885,5 +885,82 @@ public sealed class SessionSettlementTests : IDisposable
             preview.TotalAmount);
     }
 
+    [Fact]
+    public async Task PendingAccountBuffetSaleIsIncludedOnceInPendingTotal()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var customer = new Customer
+        {
+            FullName = "Pending Buffet Customer",
+            FreeTimeMinutes = 0
+        };
+        var invoice = new Invoice
+        {
+            Customer = customer,
+            TotalAmount = 100000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.PendingPayment,
+            IssuedAt = DateTimeOffset.UtcNow,
+            Items =
+            {
+                new InvoiceItem
+                {
+                    Description = "هزینه جلسه Pending Buffet",
+                    Quantity = 1,
+                    UnitPrice = 100000m,
+                    Amount = 100000m
+                }
+            }
+        };
+        var product = new Product
+        {
+            Name = "Pending Cola",
+            UnitPrice = 30000m,
+            CostPrice = 10000m,
+            StockQuantity = 10,
+            ShowcaseStockQuantity = 10,
+            IsActive = true
+        };
+
+        db.AddRange(customer, invoice, product);
+        db.InvoicePayments.Add(new InvoicePayment
+        {
+            InvoiceId = invoice.Id,
+            Method = "cash",
+            Amount = 60000m
+        });
+        await db.SaveChangesAsync();
+
+        invoice.Items.Add(new InvoiceItem
+        {
+            InvoiceId = invoice.Id,
+            ProductId = product.Id,
+            Description = product.Name,
+            Quantity = 1,
+            UnitPrice = product.UnitPrice,
+            Amount = product.UnitPrice
+        });
+        invoice.TotalAmount += product.UnitPrice;
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+        var pending = await service.GetPendingAsync(CancellationToken.None);
+
+        var row = Assert.Single(pending);
+        Assert.Equal(invoice.Id, row.InvoiceId);
+        Assert.Equal(30000m, row.BuffetTotal);
+        Assert.Equal(130000m, row.GrossAmount);
+        Assert.Equal(70000m, row.AmountDue);
+        Assert.Single(row.BuffetItems);
+        Assert.Equal(product.Id, row.BuffetItems[0].ProductId);
+    }
+
     public void Dispose() => _connection.Dispose();
 }
