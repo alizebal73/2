@@ -158,6 +158,113 @@ test('dashboard station sort strip orders visible PCs by selected field', async 
   await expect(page.locator('[data-station-id="sort-02"]')).toBeVisible();
 });
 
+test('buffet separates warehouse, showcase and today sales', async ({ page }) => {
+  let warehouseStock = 5;
+  let showcaseStock = 2;
+
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-buffet-flow',
+      fullName: 'مدیر بوفه',
+      userName: 'buffet_admin',
+      email: 'buffet@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      permissions: ['buffet.sell', 'buffet.inventory']
+    })
+  }));
+
+  const productsPayload = () => [{
+    id: 'product-cola',
+    name: 'نوشابه',
+    category: 'نوشیدنی',
+    price: 35000,
+    buyPrice: 20000,
+    stock: showcaseStock,
+    warehouseStock,
+    showcaseStock,
+    minimumStock: 1,
+    unit: 'عدد',
+    lowStock: showcaseStock <= 1,
+    active: true
+  }];
+
+  await page.route('**/api/buffet/products', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(productsPayload())
+  }));
+
+  await page.route('**/api/buffet/inventory-transactions', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([])
+  }));
+
+  await page.route('**/api/buffet/reports/today-sales', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      date: new Date().toISOString().slice(0, 10),
+      totalQuantity: 7,
+      totalRevenue: 245000,
+      products: [{
+        productId: 'product-cola',
+        productName: 'نوشابه',
+        unit: 'عدد',
+        quantity: 7,
+        revenue: 245000
+      }]
+    })
+  }));
+
+  await page.route('**/api/sessions/active', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([])
+  }));
+
+  await page.route('**/api/buffet/products/product-cola/showcase-transfer', async route => {
+    const body = await route.request().postDataJSON();
+    const quantity = Number(body.quantity);
+    if (quantity <= 0 || quantity > warehouseStock) {
+      return route.fulfill({
+        status: 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'موجودی انبار کافی نیست.' })
+      });
+    }
+    warehouseStock -= quantity;
+    showcaseStock += quantity;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        id: 'product-cola',
+        warehouseStock,
+        showcaseStock
+      })
+    });
+  });
+
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'بوفه' }).click();
+
+  await expect(page.getByText('موجودی انبار')).toBeVisible();
+  await expect(page.getByText('موجودی ویترین')).toBeVisible();
+  await expect(page.getByText('فروش امروز هر محصول')).toBeVisible();
+  await expect(page.getByText(/فروش امروز: ۷ عدد/)).toBeVisible();
+  await expect(page.getByText(/انبار: ۵ عدد · ویترین: ۲ عدد/)).toBeVisible();
+
+  await page.getByRole('button', { name: '+ ویترین' }).click();
+  await expect(page.getByText(/انبار: ۴ عدد · ویترین: ۳ عدد/)).toBeVisible();
+  await expect(page.getByText(/موجودی انبار/)).toBeVisible();
+});
+
 test('F1 customer workspace and station right-click Agent controls stay wired', async ({ page }) => {
   const customerId = '11111111-1111-4111-8111-111111111111';
   const agentId = '22222222-2222-4222-8222-222222222222';
