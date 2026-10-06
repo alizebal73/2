@@ -3908,14 +3908,12 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         return Results.BadRequest(new { code = "invalid_direction", message = "نوع حرکت موجودی معتبر نیست." });
 
     var kind = string.IsNullOrWhiteSpace(request.Kind) ? "Adjustment" : request.Kind.Trim();
-    StockArea? area = StockArea.Warehouse;
-    if (!string.IsNullOrWhiteSpace(request.StockArea)
-        && !Enum.TryParse<StockArea>(request.StockArea.Trim(), true, out var parsedArea))
-        return Results.BadRequest(new { code = "invalid_stock_area", message = "محل موجودی معتبر نیست." });
-    else if (!string.IsNullOrWhiteSpace(request.StockArea))
-        area = parsedArea;
-    if (!area.HasValue)
-        return Results.BadRequest(new { code = "invalid_stock_area", message = "محل موجودی معتبر نیست." });
+    var area = StockArea.Warehouse;
+    if (!string.IsNullOrWhiteSpace(request.StockArea))
+    {
+        if (!Enum.TryParse<StockArea>(request.StockArea.Trim(), true, out area))
+            return Results.BadRequest(new { code = "invalid_stock_area", message = "محل موجودی معتبر نیست." });
+    }
     if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase) && area.Value != StockArea.Warehouse)
         return Results.BadRequest(new { code = "purchase_must_use_warehouse", message = "خرید باید وارد موجودی انبار شود." });
     if (!new[] { "Adjustment", "Purchase", "Sale", "Waste", "Return" }.Contains(kind, StringComparer.OrdinalIgnoreCase))
