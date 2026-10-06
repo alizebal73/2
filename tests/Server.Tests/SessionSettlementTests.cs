@@ -1045,6 +1045,96 @@ public sealed class SessionSettlementTests : IDisposable
     }
 
     [Fact]
+    public async Task ActiveSessionChargeDoesNotAttachToExistingCustomerDebtAccount()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "PC-DEBT-SEPARATION" };
+        var tariff = new Tariff { Name = "Debt Separation", HourlyRate = 60000m, DailyRate = 300000m };
+        var customer = new Customer { FullName = "Debt Separation Customer", FreeTimeMinutes = 0 };
+        var user = new AppUser
+        {
+            FullName = "Debt Separation Admin",
+            UserName = "debt-separation-admin",
+            Email = "debt-separation@test.local",
+            PasswordHash = "hash",
+            Role = "Admin"
+        };
+        var station = new Station
+        {
+            Name = "PC-DEBT-SEPARATION-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 60000m,
+            StationType = type,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 60000m
+        };
+        var debt = new Invoice
+        {
+            Customer = customer,
+            TotalAmount = 50000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.Debt,
+            IssuedAt = DateTimeOffset.UtcNow.AddHours(-1),
+            Items =
+            {
+                new InvoiceItem
+                {
+                    Description = "بدهی قبلی",
+                    Quantity = 1,
+                    UnitPrice = 50000m,
+                    Amount = 50000m
+                }
+            }
+        };
+
+        db.AddRange(type, tariff, customer, user, station, session, debt);
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+        var charge = await service.ChargeAsync(
+            session.Id,
+            30000m,
+            "cash",
+            user.Id,
+            CancellationToken.None);
+
+        Assert.NotEqual(debt.Id, charge.InvoiceId);
+
+        var accounts = await db.Invoices
+            .Where(item => item.CustomerId == customer.Id && item.Status == InvoiceStatus.Draft && item.IsCustomerAccount)
+            .ToListAsync();
+
+        Assert.Equal(2, accounts.Count);
+        Assert.Single(accounts.Where(item => item.AccountState == CustomerAccountState.Debt));
+        Assert.Single(accounts.Where(item => item.AccountState == CustomerAccountState.PendingPayment));
+
+        var savedDebt = accounts.Single(item => item.AccountState == CustomerAccountState.Debt);
+        Assert.Equal(50000m, savedDebt.TotalAmount);
+
+        var pendingAccount = accounts.Single(item => item.AccountState == CustomerAccountState.PendingPayment);
+        Assert.Equal(pendingAccount.Id, charge.InvoiceId);
+        Assert.Equal(30000m, pendingAccount.TotalAmount);
+    }
+
+    [Fact]
     public async Task FullyPaidPendingAccountCannotBecomeDebtAndIsHiddenFromPending()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
