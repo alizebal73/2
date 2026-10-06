@@ -18,6 +18,8 @@ const stateLabels: Record<StationState, string> = { free: 'آماده استفا
 const emptyStations: StationDto[] = [];
 type ViewMode = 'v-card' | 'v-compact' | 'v-list';
 type PcGroupBy = 'state' | 'vip' | 'network' | 'remaining';
+type StationSortKey = 'computer' | 'identifier' | 'surname' | 'remaining' | 'debt' | 'note' | 'status';
+type StationSortDirection = 'asc' | 'desc';
 type ModalKind = 'start' | 'flow' | 'charge' | 'settle' | 'extend' | 'reduce' | null;
 
 function money(value: number) { return new Intl.NumberFormat('fa-IR').format(Math.round(value)); }
@@ -49,6 +51,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   const [query, setQuery] = useState('');
   const [pcGroupBy, setPcGroupBy] = useState<PcGroupBy>('state');
   const [view, setView] = useState<ViewMode>('v-card');
+  const [stationSort, setStationSort] = useState<{ key: StationSortKey; direction: StationSortDirection }>({ key: 'computer', direction: 'asc' });
   const [zoom, setZoom] = useState(100);
   const [now, setNow] = useState(Date.now());
   const [modal, setModal] = useState<ModalKind>(null);
@@ -334,6 +337,95 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   const visibleStations = useMemo(() => stations.filter(station =>
     (zone === 'all' || station.zone === zone) && station.name.toLowerCase().includes(query.trim().toLowerCase())), [stations, zone, query]);
 
+  const stationSortLabels: Record<StationSortKey, string> = {
+    computer: 'رایانه',
+    identifier: 'شناسه',
+    surname: 'نام خانوادگی',
+    remaining: 'زمان باقی‌مانده',
+    debt: 'بدهکاری',
+    note: 'توضیحات',
+    status: 'وضعیت رایانه',
+  };
+
+  const stationSortButtons = (Object.keys(stationSortLabels) as StationSortKey[]);
+
+  function lastNameForStation(station: StationDto) {
+    const customer = customers.find(item =>
+      item.username === station.customerCode ||
+      item.code === station.customerCode ||
+      item.id === station.customerCode
+    );
+    const fullName = (station.customerFullName || customer?.name || '').trim();
+    if (!fullName) return '';
+    const pieces = fullName.split(/\\s+/).filter(Boolean);
+    return pieces[pieces.length - 1] || '';
+  }
+
+  function identifierForStation(station: StationDto) {
+    return (station.customerUsername || station.customerCode || '').trim();
+  }
+
+  function noteForStation(station: StationDto) {
+    const customer = customers.find(item =>
+      item.username === station.customerCode ||
+      item.code === station.customerCode ||
+      item.id === station.customerCode
+    );
+    return (station.customerNote || customer?.notes || customer?.alias || '').trim();
+  }
+
+  function remainingForStation(station: StationDto) {
+    if (station.prepaidEndsAt) return Math.max(0, Math.ceil((new Date(station.prepaidEndsAt).getTime() - now) / 60000));
+    return station.remainingMinutes ?? (station.state === 'busy' ? duration(station) : 0);
+  }
+
+  function debtForStation(station: StationDto) {
+    const customer = customers.find(item =>
+      item.username === station.customerCode ||
+      item.code === station.customerCode ||
+      item.id === station.customerCode
+    );
+    return station.customerDebt ?? customer?.debt ?? 0;
+  }
+
+  function compareStationValues(a: StationDto, b: StationDto, key: StationSortKey) {
+    if (key === 'computer') return a.name.localeCompare(b.name, 'fa', { numeric: true });
+    if (key === 'identifier') return identifierForStation(a).localeCompare(identifierForStation(b), 'fa', { numeric: true });
+    if (key === 'surname') return lastNameForStation(a).localeCompare(lastNameForStation(b), 'fa', { numeric: true });
+    if (key === 'remaining') return remainingForStation(a) - remainingForStation(b);
+    if (key === 'debt') return debtForStation(a) - debtForStation(b);
+    if (key === 'note') return noteForStation(a).localeCompare(noteForStation(b), 'fa', { numeric: true });
+    const statusRank: Record<StationState, number> = { free: 1, busy: 2, paused: 3, reserved: 4, off: 5 };
+    return (statusRank[a.state as StationState] ?? 99) - (statusRank[b.state as StationState] ?? 99);
+  }
+
+  function toggleStationSort(key: StationSortKey) {
+    setStationSort(current => current.key === key
+      ? { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+      : { key, direction: 'asc' });
+  }
+
+  const sortedVisibleStations = useMemo(() => {
+    const items = [...visibleStations];
+    const direction = stationSort.direction === 'asc' ? 1 : -1;
+    return items.sort((a, b) => {
+      const primary = compareStationValues(a, b, stationSort.key) * direction;
+      return primary || a.name.localeCompare(b.name, 'fa', { numeric: true });
+    });
+  }, [visibleStations, stationSort, customers, now]);
+
+  const sortedPcGroupedStations = useMemo(() => {
+    const pcStations = sortedVisibleStations.filter(item => item.zone === 'pc');
+    const groups = new Map<string, StationDto[]>();
+    for (const station of pcStations) {
+      const key = pcGroupLabel(station);
+      const bucket = groups.get(key) ?? [];
+      bucket.push(station);
+      groups.set(key, bucket);
+    }
+    return Array.from(groups.entries());
+  }, [sortedVisibleStations, customers, pcGroupBy, now, stationSort]);
+
   const pcGroupLabel = (station: StationDto) => {
     const customer = customers.find(item => item.username === station.customerCode || item.code === station.customerCode);
     if (pcGroupBy === 'vip') return customer && customer.vip !== 'none' ? 'VIP' : 'عادی';
@@ -353,7 +445,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   };
 
   const pcGroupedStations = useMemo(() => {
-    const pcStations = visibleStations.filter(item => item.zone === 'pc');
+    const pcStations = sortedVisibleStations.filter(item => item.zone === 'pc');
     const groups = new Map<string, StationDto[]>();
     for (const station of pcStations) {
       const key = pcGroupLabel(station);
@@ -1538,6 +1630,21 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
           {canStartSession && <button type="button" className="btn primary" onClick={() => open('start', stations.find(item => item.state === 'free') ?? null)}>+ شروع جلسه</button>}
           {selectedStationIds.length > 0 && <div className="station-selection-tools"><span>{selectedStationIds.length.toLocaleString('fa-IR')} ایستگاه انتخاب شده</span><button type="button" className="btn sm" onClick={() => { setSelectedStationIds([]); setSelectionAnchorId(null); }}>لغو انتخاب</button></div>}
         </div>
+        {(zone === 'pc' || zone === 'all') && <div className="station-sort-strip" role="group" aria-label="مرتب‌سازی رایانه‌ها">
+          <span className="station-sort-caption">مرتب‌سازی</span>
+          {stationSortButtons.map(key => {
+            const active = stationSort.key === key;
+            const arrow = active ? (stationSort.direction === 'asc' ? '↑' : '↓') : '';
+            return <button
+              key={key}
+              type="button"
+              className={active ? 'active' : ''}
+              aria-pressed={active}
+              onClick={() => toggleStationSort(key)}
+              title={active ? 'مرتب‌سازی ' + stationSortLabels[key] + (stationSort.direction === 'asc' ? ' صعودی' : ' نزولی') : 'مرتب‌سازی بر اساس ' + stationSortLabels[key]}
+            >{stationSortLabels[key]}{arrow && <span aria-hidden="true"> {arrow}</span>}</button>;
+          })}
+        </div>
         {apiState === 'loading' && <p className="empty-state">در حال دریافت اطلاعات از سرور…</p>}
         {apiState === 'online' && !visibleStations.length && <p className="empty-state">ایستگاهی با این جست‌وجو پیدا نشد.</p>}
         {zone === 'all' ? groups.map(([key, title]) => {
@@ -1547,7 +1654,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
             return <section key={key}><div className="section-title">{title} · {items.length}</div>{pcGroupedStations.map(([groupName, groupItems]) => <div key={groupName} className="pc-group"><div className="pc-group-title">{groupName} · {groupItems.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{groupItems.map(renderStation)}</div></div>)}</section>;
           }
           return <section key={key}><div className="section-title">{title} · {items.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{items.map(renderStation)}</div></section>;
-        }) : zone === 'pc' ? <div>{pcGroupedStations.map(([groupName, groupItems]) => <div key={groupName} className="pc-group"><div className="pc-group-title">{groupName} · {groupItems.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{groupItems.map(renderStation)}</div></div>)}</div> : <div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{visibleStations.map(renderStation)}</div>}
+        }) : zone === 'pc' ? <div>{pcGroupedStations.map(([groupName, groupItems]) => <div key={groupName} className="pc-group"><div className="pc-group-title">{groupName} · {groupItems.length}</div><div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{groupItems.map(renderStation)}</div></div>)}</div> : <div className={'station-grid ' + view} style={{ '--card-min': ((view === 'v-compact' ? 128 : 168) * zoom / 100) + 'px' } as CSSProperties}>{sortedVisibleStations.map(renderStation)}</div>}
       </main>
       {selectionRect && <div
         className="station-selection-rect"
