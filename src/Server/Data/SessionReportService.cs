@@ -136,8 +136,23 @@ public sealed class SessionReportService
             .ThenByDescending(item => item.Id)
             .ToList();
 
+        var sessionIds = ordered.Select(item => item.Id).ToList();
+        var sessionRevenue = sessionIds.Count == 0
+            ? new Dictionary<Guid, decimal>()
+            : (await _database.InvoiceItems
+                .AsNoTracking()
+                .Where(item => item.SessionId.HasValue && sessionIds.Contains(item.SessionId.Value))
+                .GroupBy(item => item.SessionId!.Value)
+                .Select(group => new { SessionId = group.Key, Amount = group.Sum(item => item.Amount) })
+                .ToListAsync(cancellationToken))
+                .ToDictionary(item => item.SessionId, item => item.Amount);
+
         var mapped = ordered
-            .Select(item => ToRow(item))
+            .Select(item => ToRow(
+                item,
+                sessionRevenue.TryGetValue(item.Id, out var ledgerAmount)
+                    ? ledgerAmount
+                    : item.TotalAmount))
             .ToList();
 
         var total = mapped.Count;
@@ -151,7 +166,7 @@ public sealed class SessionReportService
         return new SessionReportPageDto(page, pageSize, total, summary, items);
     }
 
-    private static SessionReportRowDto ToRow(Session session)
+    private static SessionReportRowDto ToRow(Session session, decimal reportedAmount)
     {
         var end = session.EndAt ?? DateTimeOffset.UtcNow;
         var billableMinutes = SessionTiming.GetBillableMinutes(session, end);
@@ -175,7 +190,7 @@ public sealed class SessionReportService
             session.Game?.Name,
             session.Persons,
             billableMinutes,
-            session.TotalAmount);
+            reportedAmount);
     }
 
     private static SessionReportSummaryDto BuildSummary(
