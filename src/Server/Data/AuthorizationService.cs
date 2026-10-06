@@ -102,6 +102,10 @@ public static class AuthorizationService
         return user.Permissions.Any(item => string.Equals(item.Permission.Name, permission, StringComparison.OrdinalIgnoreCase));
     }
 
+    public static bool CanMutateBuffetInventory(AppUser user)
+        => string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(user.Role, "Owner", StringComparison.OrdinalIgnoreCase);
+
     public static async Task<(AppUser? User, IResult? Error)> RequireInventoryMutationAsync(
         HttpContext context,
         GameNetDbContext database,
@@ -111,10 +115,7 @@ public static class AuthorizationService
         if (user is null)
             return (null, Results.Unauthorized());
 
-        var isPrivileged = string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(user.Role, "Owner", StringComparison.OrdinalIgnoreCase);
-
-        if (!isPrivileged)
+        if (!CanMutateBuffetInventory(user))
             return (user, Results.Json(
                 new
                 {
