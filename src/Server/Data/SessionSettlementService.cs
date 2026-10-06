@@ -532,7 +532,15 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
 
         var accountDueAfterPayment = Math.Max(0m, invoice.TotalAmount - allPayments);
-        invoice.Status = accountDueAfterPayment <= 0.01m
+        var hasOtherActiveSessions = await database.Sessions
+            .AsNoTracking()
+            .AnyAsync(
+                item => item.CustomerId == session.CustomerId
+                    && item.Id != session.Id
+                    && item.State == SessionState.Active,
+                cancellationToken);
+
+        invoice.Status = accountDueAfterPayment <= 0.01m && !hasOtherActiveSessions
             ? InvoiceStatus.Paid
             : InvoiceStatus.Draft;
         invoice.PaidAt = invoice.Status == InvoiceStatus.Paid
