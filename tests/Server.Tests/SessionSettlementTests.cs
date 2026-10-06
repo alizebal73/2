@@ -953,6 +953,11 @@ public sealed class SessionSettlementTests : IDisposable
 
         var service = new SessionSettlementService(db, new SessionPricingService(db));
 
+        var guardError = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.EnsurePendingAccountCanBecomeDebtAsync(customer.Id, CancellationToken.None));
+
+        Assert.Equal("تا وقتی جلسه فعالی برای این مشتری وجود دارد، حساب را نمی‌توان به بدهی منتقل کرد.", guardError.Message);
+
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.MarkPendingAsDebtAsync(invoice.Id, user.Id, CancellationToken.None));
 
