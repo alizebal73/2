@@ -238,3 +238,10 @@ partial class CustomerOpenAccount
 partial class InvoicePaymentSessionAllocation
 {
 }
+
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261006190000_CustomerAccountDebtState")]
+partial class CustomerAccountDebtState
+{
+}

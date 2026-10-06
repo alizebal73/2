@@ -426,6 +426,11 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<Guid?>("AppUserId")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("AccountState")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 

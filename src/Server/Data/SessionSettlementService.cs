@@ -792,6 +792,7 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
 
         invoice.AppUserId ??= appUserId;
         invoice.SessionId = session.Id;
+        invoice.AccountState = CustomerAccountState.PendingPayment;
         invoice.TotalAmount = Math.Max(0m, invoice.Items.Sum(item => item.Amount));
 
         session.EndAt ??= now;
@@ -825,6 +826,55 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         return pending.First(item => item.InvoiceId == invoice.Id);
     }
 
+    public async Task<object> MarkPendingAsDebtAsync(
+        Guid invoiceId,
+        Guid? appUserId,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+        var invoice = await database.Invoices
+            .Include(item => item.Customer)
+            .FirstOrDefaultAsync(
+                item => item.Id == invoiceId
+                    && item.Status == InvoiceStatus.Draft
+                    && item.IsCustomerAccount
+                    && item.AccountState == CustomerAccountState.PendingPayment,
+                cancellationToken);
+
+        if (invoice is null)
+            throw new InvalidOperationException("حساب در انتظار پرداخت پیدا نشد یا قبلاً به بدهی منتقل شده است.");
+
+        var paid = await database.InvoicePayments
+            .Where(item => item.InvoiceId == invoice.Id)
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+        var due = Math.Max(0m, invoice.TotalAmount - paid);
+        invoice.AccountState = CustomerAccountState.Debt;
+        invoice.AppUserId ??= appUserId;
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "PendingAccountMarkedAsDebt",
+            EntityName = "Invoice",
+            EntityId = invoice.Id.ToString(),
+            AppUserId = appUserId,
+            Details = "انتقال حساب در انتظار پرداخت به بدهی مشتری · " + invoice.Customer.FullName + " · " + due.ToString("0.##") + " تومان"
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new
+        {
+            invoiceId = invoice.Id,
+            customerId = invoice.CustomerId,
+            customerName = invoice.Customer.FullName,
+            amountDue = due,
+            accountState = invoice.AccountState.ToString()
+        };
+    }
+
     public async Task<SettlementResult> SettlePendingAsync(
         Guid invoiceId,
         PendingSettlementPaymentRequest request,
@@ -841,7 +891,8 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             .FirstOrDefaultAsync(
                 item => item.Id == invoiceId
                     && item.Status == InvoiceStatus.Draft
-                    && item.IsCustomerAccount,
+                    && item.IsCustomerAccount
+                    && item.AccountState == CustomerAccountState.PendingPayment,
                 cancellationToken);
 
         if (invoice is null)
@@ -1023,7 +1074,9 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             .Include(item => item.Items)
                 .ThenInclude(item => item.Session)
                     .ThenInclude(item => item!.Station)
-            .Where(item => item.Status == InvoiceStatus.Draft && item.IsCustomerAccount)
+            .Where(item => item.Status == InvoiceStatus.Draft
+                && item.IsCustomerAccount
+                && item.AccountState == CustomerAccountState.PendingPayment)
             .OrderBy(item => item.IssuedAt)
             .ToListAsync(cancellationToken);
 

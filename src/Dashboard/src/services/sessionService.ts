@@ -160,6 +160,21 @@ export async function getPendingSettlementAccounts(): Promise<PendingSettlementD
   return await response.json() as PendingSettlementDto[];
 }
 
+export async function markPendingSettlementAsDebt(
+  invoiceId: string,
+): Promise<{ invoiceId: string; customerId: string; customerName: string; amountDue: number; accountState: string }> {
+  const response = await fetch('/api/pending-settlements/' + invoiceId + '/mark-debt', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'انتقال حساب به بدهی روی سرور انجام نشد');
+  }
+  return await response.json() as { invoiceId: string; customerId: string; customerName: string; amountDue: number; accountState: string };
+}
+
 export async function settlePendingSettlement(
   invoiceId: string,
   input: PendingSettlementPaymentInput,

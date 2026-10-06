@@ -5156,3 +5156,7 @@ button:focus-visible {
     padding-inline: 8%;
   }
 }
+
+
+.customer-buffet-cart{order:-1}
+.customer-buffet-notice{margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(80,180,120,.1);font-size:12px}

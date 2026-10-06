@@ -28,6 +28,12 @@ public enum InvoiceStatus
     Cancelled
 }
 
+public enum CustomerAccountState
+{
+    PendingPayment,
+    Debt
+}
+
 public enum ReservationStatus
 {
     Pending,
@@ -369,6 +375,7 @@ public sealed class Invoice : BaseEntity
     public AppUser? AppUser { get; set; }
     public decimal TotalAmount { get; set; }
     public bool IsCustomerAccount { get; set; }
+    public CustomerAccountState AccountState { get; set; } = CustomerAccountState.PendingPayment;
     public InvoiceStatus Status { get; set; } = InvoiceStatus.Draft;
     public DateTimeOffset IssuedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? PaidAt { get; set; }

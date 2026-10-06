@@ -3174,7 +3174,10 @@ app.MapGet("/api/customers", async (HttpContext context,
             wallet = canReadWallet ? item.Balance : 0m,
             debt = canReadDebt
                 ? database.Invoices
-                    .Where(invoice => invoice.CustomerId == item.Id && invoice.Status == InvoiceStatus.Draft)
+                    .Where(invoice => invoice.CustomerId == item.Id
+                        && invoice.Status == InvoiceStatus.Draft
+                        && ((invoice.IsCustomerAccount && invoice.AccountState == CustomerAccountState.Debt)
+                            || (!invoice.IsCustomerAccount && invoice.SessionId == null)))
                     .Select(invoice => (decimal?)invoice.TotalAmount)
                     .Sum() ?? 0m
                 : 0m,
@@ -4359,7 +4362,7 @@ app.MapPost("/api/buffet/sales", async (
         return Results.BadRequest(new { code = "duplicate_sale_product", message = "یک کالا بیش از یک بار در سبد فروش ثبت شده است." });
 
     var target = request.Target?.Trim().ToLowerInvariant();
-    if (target is not ("session" or "pending" or "standalone"))
+    if (target is not ("session" or "pending" or "customer" or "standalone"))
         return Results.BadRequest(new { code = "invalid_sale_target", message = "نوع مقصد فروش معتبر نیست." });
 
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
@@ -4457,13 +4460,71 @@ app.MapPost("/api/buffet/sales", async (
             .FirstOrDefaultAsync(
                 item => item.Id == request.InvoiceId.Value
                     && item.Status == InvoiceStatus.Draft
-                    && item.IsCustomerAccount,
+                    && item.IsCustomerAccount
+                    && item.AccountState == CustomerAccountState.PendingPayment,
                 cancellationToken);
 
         if (invoice is null)
             return Results.Conflict(new { code = "pending_invoice_not_available", message = "حساب باز موردنظر برای فروش بوفه در دسترس نیست." });
 
         session = invoice.Session;
+    }
+    else if (target == "customer")
+    {
+        if (!request.CustomerId.HasValue || request.CustomerId.Value == Guid.Empty)
+            return Results.BadRequest(new { code = "missing_customer", message = "مشتری مقصد مشخص نشده است." });
+
+        var customer = await database.Customers
+            .FirstOrDefaultAsync(item => item.Id == request.CustomerId.Value, cancellationToken);
+
+        if (customer is null)
+            return Results.NotFound(new { code = "customer_not_found", message = "مشتری مقصد پیدا نشد." });
+
+        session = await database.Sessions
+            .Where(item => item.CustomerId == customer.Id
+                && (item.State == SessionState.Active || item.State == SessionState.Ended))
+            .OrderByDescending(item => item.StartAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        invoice = await database.Invoices
+            .Include(item => item.Items)
+            .FirstOrDefaultAsync(
+                item => item.CustomerId == customer.Id
+                    && item.Status == InvoiceStatus.Draft
+                    && item.IsCustomerAccount,
+                cancellationToken);
+
+        if (invoice is null && session is not null)
+        {
+            invoice = await database.Invoices
+                .Include(item => item.Items)
+                .FirstOrDefaultAsync(
+                    item => item.SessionId == session.Id
+                        && item.Status == InvoiceStatus.Draft
+                        && !item.IsCustomerAccount,
+                    cancellationToken);
+
+            if (invoice is not null)
+                invoice.IsCustomerAccount = true;
+        }
+
+        if (invoice is null)
+        {
+            invoice = new Invoice
+            {
+                CustomerId = customer.Id,
+                AppUserId = auth.User!.Id,
+                TotalAmount = 0m,
+                Status = InvoiceStatus.Draft,
+                IsCustomerAccount = true,
+                AccountState = CustomerAccountState.PendingPayment,
+                IssuedAt = DateTimeOffset.UtcNow
+            };
+            database.Invoices.Add(invoice);
+        }
+
+        invoice.AppUserId ??= auth.User!.Id;
+        invoice.SessionId = session?.Id ?? invoice.SessionId;
     }
 
     var ids = saleProductIds;
@@ -4495,7 +4556,7 @@ app.MapPost("/api/buffet/sales", async (
             StockArea = StockArea.Showcase,
             Kind = "Sale",
             AppUserId = auth.User!.Id,
-            Notes = target == "session" ? "فروش به جلسه" : target == "pending" ? "فروش به حساب باز" : "فروش مستقل"
+            Notes = target == "session" ? "فروش به جلسه" : target == "pending" ? "فروش به حساب باز" : target == "customer" ? "فروش به پروفایل مشتری" : "فروش مستقل"
         });
 
         if (invoice is not null)
@@ -4519,7 +4580,7 @@ app.MapPost("/api/buffet/sales", async (
     database.AuditLogs.Add(new AuditLog
     {
         Action = "BuffetSale",
-        EntityName = target == "session" ? "Invoice" : "Buffet",
+        EntityName = target is "session" or "pending" or "customer" ? "Invoice" : "Buffet",
         EntityId = invoice?.Id.ToString() ?? Guid.NewGuid().ToString(),
         Details = target + " · " + total.ToString("0.##") + " تومان",
         AppUserId = auth.User!.Id
@@ -4583,12 +4644,14 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (HttpContext context,
             TotalAmount = 0m,
             Status = InvoiceStatus.Draft,
             IsCustomerAccount = true,
+            AccountState = CustomerAccountState.Debt,
             IssuedAt = DateTimeOffset.UtcNow
         };
         database.Invoices.Add(invoice);
     }
 
     invoice.AppUserId ??= auth.User!.Id;
+    invoice.AccountState = CustomerAccountState.Debt;
     invoice.TotalAmount += request.Amount;
 
     invoice.Items.Add(new InvoiceItem
@@ -4633,7 +4696,8 @@ app.MapGet("/api/customers/{customerId:guid}/debts", async (HttpContext context,
         .AsNoTracking()
         .Where(item => item.CustomerId == customerId
             && item.Status == InvoiceStatus.Draft
-            && (item.IsCustomerAccount || item.SessionId == null))
+            && ((item.IsCustomerAccount && item.AccountState == CustomerAccountState.Debt)
+                || (!item.IsCustomerAccount && item.SessionId == null))
         .OrderBy(item => item.IssuedAt)
         .ToListAsync(cancellationToken);
 
@@ -4680,7 +4744,13 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
 
     var invoice = await database.Invoices
         .Include(item => item.Customer)
-        .FirstOrDefaultAsync(item => item.Id == invoiceId && item.CustomerId == customerId && item.Status == InvoiceStatus.Draft, cancellationToken);
+        .FirstOrDefaultAsync(
+            item => item.Id == invoiceId
+                && item.CustomerId == customerId
+                && item.Status == InvoiceStatus.Draft
+                && ((item.IsCustomerAccount && item.AccountState == CustomerAccountState.Debt)
+                    || (!item.IsCustomerAccount && item.SessionId == null)),
+            cancellationToken);
 
     if (invoice is null)
         return Results.NotFound(new { code = "debt_not_found", message = "حساب باز موردنظر پیدا نشد یا قبلاً تسویه شده است." });
@@ -5679,6 +5749,27 @@ app.MapGet("/api/dashboard/pending-settlements", async (
 })
 .WithName("GetPendingSettlements");
 
+app.MapPost("/api/pending-settlements/{invoiceId:guid}/mark-debt", async (
+    Guid invoiceId,
+    HttpContext context,
+    GameNetDbContext database,
+    SessionSettlementService settlement,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.settle", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    try
+    {
+        return Results.Ok(await settlement.MarkPendingAsDebtAsync(invoiceId, auth.User!.Id, cancellationToken));
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "pending_debt_conflict", message = exception.Message });
+    }
+})
+.WithName("MarkPendingAsDebt");
+
 app.MapPost("/api/sessions/{sessionId:guid}/charge", async (
     Guid sessionId,
     SessionChargeRequest request,
@@ -6418,7 +6509,13 @@ public sealed record UpdateBuffetProductRequest(string Name, string Category, de
 public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment", decimal? UnitCost = null, string? StockArea = null);
 public sealed record ShowcaseTransferRequest(int Quantity, string? Notes = null, Guid? AppUserId = null);
 public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
-public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId, Guid? SessionId = null, Guid? InvoiceId = null);
+public sealed record BuffetSaleRequest(
+    IReadOnlyList<BuffetSaleItem> Items,
+    string Target,
+    Guid? AppUserId,
+    Guid? SessionId = null,
+    Guid? InvoiceId = null,
+    Guid? CustomerId = null);
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
 public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
 public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);

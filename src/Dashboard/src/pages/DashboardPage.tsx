@@ -6,7 +6,7 @@ import { hasPermission } from '../services/authService';
 import { recordWalletTransaction } from '../services/walletLedgerService';
 import { getAgentCommand, requestAgentRollback, requestAgentUpdate, sendAgentCommand, updateAgentPolicy } from '../services/agentService';
 import { calculateBilling } from '../services/billingEngine';
-import { adjustServerSessionTime, chargeServerSession, getPendingSettlementAccounts, isServerGuid, pauseServerSession, requestServerInvoiceReverseApproval, resumeServerSession, settlePendingSettlement, settleServerSession, settleServerSessionLater, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
+import { adjustServerSessionTime, chargeServerSession, getPendingSettlementAccounts, isServerGuid, markPendingSettlementAsDebt, pauseServerSession, requestServerInvoiceReverseApproval, resumeServerSession, settlePendingSettlement, settleServerSession, settleServerSessionLater, startServerSession, transferServerSession, updateServerSessionDetails } from '../services/sessionService';
 import { SessionCenter } from '../features/session/SessionCenter';
 import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem } from '../features/attention/DashboardAttentionSidebar';
@@ -148,6 +148,37 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   function addSessionTimeline(stationId: string, kind: SessionTimelineEvent['kind'], title: string, detail: string, amount?: number, serverReferenceId?: string) {
     setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId, createdAt: new Date().toISOString(), kind, title, detail, amount, serverReferenceId }, ...current].slice(0, 300));
   }
+
+  const chargeFlowSession = useCallback(async (station: StationDto, value: number, method: 'cash' | 'card' | 'wallet'): Promise<boolean> => {
+    if (!station.serverSessionId || !isServerGuid(station.serverSessionId)) {
+      throw new Error('جلسه باید روی Server ثبت شده باشد.');
+    }
+    try {
+      const result = await chargeServerSession(station.serverSessionId, value, method);
+      updateStation(station.id, {
+        sessionCredit: result.prepaidTotal,
+        sessionPrepaidAmount: result.prepaidTotal,
+        prepaidEndsAt: result.sessionEndAt ?? undefined,
+      });
+      if (method === 'wallet') {
+        const customer = customers.find(item =>
+          item.code === station.customerCode ||
+          item.username === station.customerCode ||
+          item.id === station.customerCode);
+        if (customer) {
+          setCustomers(current => current.map(item =>
+            item.id === customer.id ? { ...item, wallet: result.walletBalanceAfter } : item));
+        }
+      }
+      addSessionTimeline(station.id, 'charge', 'شارژ جلسه', money(value) + ' تومان شارژ شد', value, result.invoiceId);
+      await refreshPendingSettlements();
+      setMessage(money(value) + ' تومان شارژ شد؛ حساب مالی مشتری روی Server به‌روز شد.');
+      return true;
+    } catch (error) {
+      setMessage(userErrorMessage(error, 'ثبت شارژ انجام نشد'));
+      return false;
+    }
+  }, [customers, refreshPendingSettlements, updateStation]);
 
   const applyFlow = useCallback(async (action: 'walletAdd' | 'debtAdd' | 'walletDeduct' | 'walletDebt') => {
     const value = number(amount);
@@ -1292,6 +1323,19 @@ const sortedPcGroupedStations = useMemo(() => {
     setMessage('برگشت عملیات ثبت شد');
   }
 
+  function openCustomerFlowForStation(station: StationDto) {
+    const customer = customers.find(item =>
+      item.username === station.customerUsername ||
+      item.code === station.customerCode ||
+      item.id === station.customerCode);
+    setActiveStation(station);
+    setFlowCustomerId(customer?.id ?? null);
+    setCustomerCode(customer ? (customer.username || customer.code || customer.mobile || customer.id) : station.customerUsername || station.customerCode || '');
+    setAmount('');
+    setFlowStep(customer ? 2 : 1);
+    setModal('flow');
+  }
+
   function openSessionCenter(station: StationDto) {
     if (!['busy', 'paused'].includes(station.state)) {
       setMessage('این ایستگاه جلسه فعالی ندارد');
@@ -1579,7 +1623,7 @@ const sortedPcGroupedStations = useMemo(() => {
       onSelect={event => event.preventDefault()}
       onDoubleClick={event => {
         event.preventDefault();
-        if (station.state === 'busy') open('charge', station);
+        if (station.state === 'busy' || station.state === 'paused') openCustomerFlowForStation(station);
       }}
       onContextMenu={event => showContext(event, station)}
     >
@@ -1678,6 +1722,17 @@ const sortedPcGroupedStations = useMemo(() => {
         attentions={sidebarAttentions}
         recentActions={sidebarRecentActions}
         money={money}
+        onMarkDebt={async invoiceId => {
+          try {
+            const result = await markPendingSettlementAsDebt(invoiceId);
+            await refreshPendingSettlements();
+            const refreshed = await getServerCustomers();
+            setCustomers(refreshed);
+            setMessage('حساب ' + result.customerName + ' با مبلغ ' + money(result.amountDue) + ' تومان به بدهی منتقل شد.');
+          } catch (error) {
+            setMessage(userErrorMessage(error, 'انتقال حساب به بدهی انجام نشد'));
+          }
+        }}
         onPay={async (invoiceId, method) => {
           const account = pendingSettlements.find(item => item.invoiceId === invoiceId);
           if (!account) {
@@ -1889,7 +1944,41 @@ const sortedPcGroupedStations = useMemo(() => {
           <button className="btn" onClick={() => setModal(null)}>لغو</button>
         </div>
       </>}
-      {modal === 'flow' && <div className="customer-flow-modal"><h2>⚡ عملیات مشتری · F1</h2><CustomerOperationsWorkspace customers={customers} stations={stations} hotkeys={hotkeys} customerId={flowCustomerId} search={customerCode} amount={amount} busy={flowBusy} onSearchChange={setCustomerCode} onSearchSubmit={submitFlowSearch} onSelectCustomer={selectFlowCustomer} onAmountChange={setAmount} onAction={applyFlow} /></div>}
+      {modal === 'flow' && <div className="customer-flow-modal"><h2>⚡ عملیات مشتری · F1</h2><CustomerOperationsWorkspace
+  customers={customers}
+  stations={stations}
+  pendingAccounts={pendingSettlements}
+  hotkeys={hotkeys}
+  customerId={flowCustomerId}
+  search={customerCode}
+  amount={amount}
+  busy={flowBusy}
+  canSellBuffet={hasPermission(user, 'buffet.sell')}
+  onSearchChange={setCustomerCode}
+  onSearchSubmit={submitFlowSearch}
+  onSelectCustomer={selectFlowCustomer}
+  onAmountChange={setAmount}
+  onAction={applyFlow}
+  onSessionCharge={chargeFlowSession}
+  onDataChanged={async customerId => {
+    const refreshed = await getServerCustomers();
+    const history = await getCustomerHistory(customerId).catch(() => []);
+    const historyText = history.slice(0, 5).map(item => {
+      const amountText = item.amount ? ' · ' + money(item.amount) + ' تومان' : '';
+      const dateText = item.createdAt ? ' · ' + new Date(item.createdAt).toLocaleString('fa-IR') : '';
+      return (item.description || item.type || 'فعالیت مشتری') + amountText + dateText;
+    });
+    setCustomers(refreshed.map(item => item.id === customerId ? { ...item, transactionHistory: historyText } : item));
+    await refreshPendingSettlements();
+  }}
+  onBuffetAdded={(stationId, buffetAmount) => {
+    const station = stations.find(item => item.id === stationId);
+    if (station) {
+      updateStation(station.id, { buffetTotal: (station.buffetTotal ?? 0) + buffetAmount });
+      addSessionTimeline(station.id, 'buffet', 'افزودن بوفه', money(buffetAmount) + ' تومان به فاکتور جلسه اضافه شد', buffetAmount);
+    }
+  }}
+/></div>}
       {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
       {modal === 'settle' && activeStation && (() => {
       const settlementCustomer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);

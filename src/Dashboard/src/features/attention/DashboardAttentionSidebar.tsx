@@ -16,6 +16,7 @@ type Props = {
   recentActions: Array<{ id: string; title: string; station: string; detail: string; createdAt: string; kind: string; canReverse?: boolean }>;
   money: (value: number) => string;
   onPay: (invoiceId: string, method: 'cash' | 'card' | 'wallet') => void;
+  onMarkDebt: (invoiceId: string) => void;
   onAttention: (id: string) => void;
   onReverse: (id: string) => void;
   children?: ReactNode;
@@ -27,6 +28,7 @@ export function DashboardAttentionSidebar({
   recentActions,
   money,
   onPay,
+  onMarkDebt,
   onAttention,
   onReverse,
 }: Props) {
@@ -42,7 +44,7 @@ export function DashboardAttentionSidebar({
         </span>
       </div>
 
-      <PendingPaymentsPanel payments={payments} money={money} onPay={onPay} />
+      <PendingPaymentsPanel payments={payments} money={money} onPay={onPay} onMarkDebt={onMarkDebt} />
 
       <section className="sidebar-section">
         <div className="sidebar-section-title">

@@ -549,6 +549,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         var invoice = modelBuilder.Entity<Invoice>();
         invoice.HasKey(item => item.Id);
         invoice.Property(item => item.TotalAmount).HasColumnType("decimal(18,2)");
+        invoice.Property(item => item.AccountState).HasConversion<string>().HasMaxLength(20).IsRequired();
         invoice.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
         invoice.HasIndex(item => item.SessionId).IsUnique(false);
         invoice.HasIndex(item => item.CustomerId)

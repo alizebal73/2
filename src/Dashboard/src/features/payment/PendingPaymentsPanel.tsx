@@ -9,6 +9,7 @@ type Props = {
   payments: PendingSettlementAccount[];
   money: (value: number) => string;
   onPay: (invoiceId: string, method: 'cash' | 'card' | 'wallet') => void;
+  onMarkDebt: (invoiceId: string) => void;
 };
 
 function compare(a: PendingSettlementAccount, b: PendingSettlementAccount, key: SortKey) {
@@ -21,7 +22,7 @@ function compare(a: PendingSettlementAccount, b: PendingSettlementAccount, key: 
   return 0;
 }
 
-export function PendingPaymentsPanel({ payments, money, onPay }: Props) {
+export function PendingPaymentsPanel({ payments, money, onPay, onMarkDebt }: Props) {
   const [view, setView] = useState<ViewMode>('v-card');
   const [sort, setSort] = useState<{ key: SortKey; direction: SortDirection }>({ key: 'waiting', direction: 'asc' });
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -129,6 +130,7 @@ export function PendingPaymentsPanel({ payments, money, onPay }: Props) {
               <button type="button" className="btn primary sm" onClick={() => onPay(item.invoiceId, 'cash')}>نقد</button>
               <button type="button" className="btn sm" onClick={() => onPay(item.invoiceId, 'card')}>کارت</button>
               <button type="button" className="btn sm" onClick={() => onPay(item.invoiceId, 'wallet')}>کیف</button>
+              <button type="button" className="btn danger sm" onClick={() => onMarkDebt(item.invoiceId)}>بدهی</button>
             </> : <button type="button" className="btn primary sm" onClick={() => onPay(item.invoiceId, 'cash')}>بستن</button>}
           </div>
           <div className="pending-payment-row-details">{branches(item)}</div>
@@ -142,6 +144,7 @@ export function PendingPaymentsPanel({ payments, money, onPay }: Props) {
               <button type="button" className="btn primary sm" onClick={() => onPay(item.invoiceId, 'cash')}>نقد</button>
               <button type="button" className="btn sm" onClick={() => onPay(item.invoiceId, 'card')}>کارت</button>
               <button type="button" className="btn sm" onClick={() => onPay(item.invoiceId, 'wallet')}>کیف</button>
+              <button type="button" className="btn danger sm" onClick={() => onMarkDebt(item.invoiceId)}>بدهی</button>
             </> : <button type="button" className="btn primary sm" onClick={() => onPay(item.invoiceId, 'cash')}>بستن</button>}
           </div>
           <div className="pending-payment-row-details">{branches(item)}</div>
@@ -156,6 +159,7 @@ export function PendingPaymentsPanel({ payments, money, onPay }: Props) {
               <button type="button" className="btn primary sm" onClick={() => onPay(item.invoiceId, 'cash')}>نقد</button>
               <button type="button" className="btn sm" onClick={() => onPay(item.invoiceId, 'card')}>کارت</button>
               <button type="button" className="btn sm" onClick={() => onPay(item.invoiceId, 'wallet')}>کیف</button>
+              <button type="button" className="btn danger sm" onClick={() => onMarkDebt(item.invoiceId)}>بدهی</button>
             </> : <button type="button" className="btn primary sm" onClick={() => onPay(item.invoiceId, 'cash')}>بستن حساب</button>}
           </div>
         </article>;

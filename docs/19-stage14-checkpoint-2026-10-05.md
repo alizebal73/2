@@ -264,3 +264,34 @@ This slice intentionally preserves the existing Product/Invoice model and adds a
 - ✅ Pending calculation now includes time, buffet, other charges/debts, reductions, prepaid usage and remaining amount.
 - ✅ Existing draft customer/debt/completed-session records are consolidated by the new database migration without dropping child financial references.
 - 🟡 Build/Test/Browser Smoke certification is still blocked by the repository's self-hosted runner: current workflow runs complete with zero jobs.
+
+
+## Slice 14.12 — Unified Customer Operations + Debt Handoff — 2026-10-06
+
+### قرارداد محصول
+- ✅ دوبار کلیک روی PC مشغول/متوقف، همان Workspace عملیات مشتری را باز می‌کند؛ مسیر F1 نیز به همین Workspace می‌رسد.
+- ✅ Workspace دو تب عملیاتی «شارژ» و «بوفه» دارد.
+- ✅ در Session فعال، تب شارژ مستقیماً «شارژ زمان همین جلسه» را با نقد/کارتخوان/کیف پول ثبت می‌کند.
+- ✅ محصولات بوفه از Server خوانده می‌شوند؛ دوبارکلیک روی هر محصول یک واحد را به انتخاب‌های مشتری اضافه می‌کند و دکمهٔ نهایی همهٔ اقلام را یکجا روی Server ثبت می‌کند.
+- ✅ مقصد بوفه هوشمند است: Session فعال ← همان Session/Account، حساب باز ← همان Customer Account، بدون Session و بدون حساب باز ← با تأیید اپراتور حساب جدید مشتری.
+- ✅ برای یک مشتری، تفاوت مسیر UI باعث ساخت Invoice دوم نمی‌شود.
+- ✅ Pending در پایان شیفت می‌تواند با دکمهٔ «بدهی» به Debt تبدیل شود، بدون ساخت Invoice دوم.
+- ✅ Pending فقط Customer Accountهای حالت PendingPayment را نشان می‌دهد؛ Debt در پروفایل/بخش بدهی مشتری دیده می‌شود.
+- ✅ مبلغ بدهی مشتری دیگر از حساب‌های PendingPayment یا Session فعال محاسبه نمی‌شود.
+- ✅ تمام تغییرات حساس Server-authoritative و Audit-friendly باقی می‌مانند.
+
+### قرارداد فنی
+- Invoice.AccountState دو حالت PendingPayment و Debt را از هم جدا می‌کند.
+- Migration جدید 20261006190000_CustomerAccountDebtState.
+- Endpoint جدید POST /api/pending-settlements/{invoiceId}/mark-debt.
+- مقصد جدید customer برای فروش بوفه، با تشخیص Server-side حساب/Session مشتری.
+- Dashboard Pending دکمهٔ «بدهی» دارد.
+- Workspace مشتری، شارژ Session و بوفه را در یک مسیر اپراتوری یکپارچه می‌کند.
+
+### Gate
+- ⬜ Self-hosted Build
+- ⬜ .NET Tests
+- ⬜ EF/Migration validation
+- ⬜ Dashboard Build/Lint
+- ⬜ Browser Smoke سناریوی دوکلیک → مشتری → شارژ → بوفه → Pending → بدهی
+- ⬜ Real GameNet validation
