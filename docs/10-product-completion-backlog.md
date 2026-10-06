@@ -1252,6 +1252,7 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - تسویهٔ هم‌زمان Debt در Server به‌واسطهٔ concurrency token کنترل می‌شود و در تعارض، خطای 409 فارسی برمی‌گردد.
 - گزارش مشتریان فقط ماندهٔ واقعی Customer Accountهای Debt را گزارش می‌کند و Pending/پرداخت‌های قبلی را دوباره بدهی حساب نمی‌کند.
 - Shift Report پرداخت‌ها را با زمان واقعی ثبت `InvoicePayment` و حتی برای Invoiceهای Draft دارای شارژ/پرداخت ثبت‌شده در نظر می‌گیرد.
+- Snapshot و Endpoint بستن شیفت نیز از همان زمان واقعی `InvoicePayment.CreatedAt` استفاده می‌کنند تا اختلاف بین گزارش و صندوق ایجاد نشود.
 - Session Report درآمد تاریخی را از `InvoiceItem`های متعلق به همان Session می‌گیرد و فقط برای داده‌های قدیمی بدون Ledger به `Session.TotalAmount` fallback می‌کند.
 - حساب‌های Pending با مبلغ قابل‌پرداخت صفر دیگر در Pending View نمایش داده نمی‌شوند و قابل انتقال به Debt نیستند.
 - Workspace مشتری، شارژ Session و بوفه را در یک مسیر اپراتوری یکپارچه می‌کند.
