@@ -21,7 +21,7 @@ export type StartServerSessionResult = {
 
 export type ServerSettlementResult = {
   invoiceId: string;
-  sessionId: string;
+  sessionId: string | null;
   totalAmount: number;
   parts: SessionPaymentPart[];
   walletBalanceAfter: number;
