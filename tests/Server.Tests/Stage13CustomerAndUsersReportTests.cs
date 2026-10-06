@@ -95,6 +95,67 @@ public sealed class Stage13CustomerAndUsersReportTests
     }
 
     [Fact]
+    public async Task CustomerVipReportExcludesPendingAndSubtractsDebtPayments()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<GameNetDbContext>().UseSqlite(connection).Options;
+        await using var database = new GameNetDbContext(options);
+        await database.Database.EnsureCreatedAsync();
+
+        var debtCustomer = new Customer
+        {
+            FullName = "مشتری بدهکار گزارش",
+            Code = "DEBTREPORT01",
+            Username = "debtreport01"
+        };
+        var pendingCustomer = new Customer
+        {
+            FullName = "مشتری pending گزارش",
+            Code = "PENDINGREPORT01",
+            Username = "pendingreport01"
+        };
+
+        var debtInvoice = new Invoice
+        {
+            Customer = debtCustomer,
+            TotalAmount = 100000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.Debt,
+            IssuedAt = DateTimeOffset.UtcNow.AddHours(-2)
+        };
+        var pendingInvoice = new Invoice
+        {
+            Customer = pendingCustomer,
+            TotalAmount = 90000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.PendingPayment,
+            IssuedAt = DateTimeOffset.UtcNow.AddHours(-1)
+        };
+
+        database.AddRange(debtCustomer, pendingCustomer, debtInvoice, pendingInvoice);
+        database.InvoicePayments.Add(new InvoicePayment
+        {
+            Invoice = debtInvoice,
+            Method = "cash",
+            Amount = 40000m
+        });
+        await database.SaveChangesAsync();
+
+        var service = new CustomerVipReportService(database);
+        var result = await service.QueryAsync(
+            new CustomerVipReportQuery(null, null, null, null, "debtor", null, 1, 10),
+            CancellationToken.None);
+
+        var row = Assert.Single(result.Items);
+        Assert.Equal("DEBTREPORT01", row.Code);
+        Assert.Equal(60000m, row.Debt);
+        Assert.Equal(60000m, result.Summary.DebtTotal);
+    }
+
+    [Fact]
     public async Task UsersShiftReportCombinesShiftPaymentsExpensesSessionsAndApprovedPayroll()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
