@@ -550,7 +550,10 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         invoice.HasKey(item => item.Id);
         invoice.Property(item => item.TotalAmount).HasColumnType("decimal(18,2)");
         invoice.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
-        invoice.HasIndex(item => item.SessionId).IsUnique();
+        invoice.HasIndex(item => item.SessionId).IsUnique(false);
+        invoice.HasIndex(item => item.CustomerId)
+            .IsUnique()
+            .HasFilter("Status = 'Draft' AND IsCustomerAccount = 1");
         invoice.HasOne(item => item.Customer)
             .WithMany(item => item.Invoices)
             .HasForeignKey(item => item.CustomerId)
@@ -584,6 +587,11 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany(item => item.Items)
             .HasForeignKey(item => item.InvoiceId)
             .OnDelete(DeleteBehavior.Cascade);
+        item.HasOne(item => item.Session)
+            .WithMany()
+            .HasForeignKey(item => item.SessionId)
+            .OnDelete(DeleteBehavior.SetNull);
+        item.HasIndex(item => item.SessionId);
         item.HasOne(item => item.Product)
             .WithMany(item => item.InvoiceItems)
             .HasForeignKey(item => item.ProductId)

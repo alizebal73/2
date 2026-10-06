@@ -368,6 +368,7 @@ public sealed class Invoice : BaseEntity
     public Guid? AppUserId { get; set; }
     public AppUser? AppUser { get; set; }
     public decimal TotalAmount { get; set; }
+    public bool IsCustomerAccount { get; set; }
     public InvoiceStatus Status { get; set; } = InvoiceStatus.Draft;
     public DateTimeOffset IssuedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? PaidAt { get; set; }
@@ -386,6 +387,8 @@ public sealed class InvoiceItem : BaseEntity
 {
     public Guid InvoiceId { get; set; }
     public Invoice Invoice { get; set; } = default!;
+    public Guid? SessionId { get; set; }
+    public Session? Session { get; set; }
     public Guid? ProductId { get; set; }
     public Product? Product { get; set; }
     public required string Description { get; set; }

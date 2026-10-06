@@ -997,6 +997,9 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsCustomerAccount")
+                        .HasColumnType("INTEGER");
+
                     b.Property<Guid?>("SessionId")
                         .HasColumnType("TEXT");
 
@@ -1025,6 +1028,10 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasIndex("SessionId");
 
                     b.ToTable("AccountLeases");
+                    b.HasIndex("CustomerId")
+                        .IsUnique()
+                        .HasFilter("Status = 'Draft' AND IsCustomerAccount = 1");
+
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.AccountPoolEntry", b =>
@@ -1227,6 +1234,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<Guid>("InvoiceId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<Guid?>("ProductId")
                         .HasColumnType("TEXT");
 
@@ -1243,6 +1253,8 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("InvoiceId");
+
+                    b.HasIndex("SessionId");
 
                     b.HasIndex("ProductId");
 

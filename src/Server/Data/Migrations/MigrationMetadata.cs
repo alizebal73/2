@@ -226,3 +226,9 @@ partial class BuffetWarehouseShowcaseFlow
 partial class SessionChargeLedger
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261006170000_CustomerOpenAccount")]
+partial class CustomerOpenAccount
+{
+}
