@@ -120,6 +120,27 @@ public sealed class CustomerLoginService(GameNetDbContext database)
         }
     }
 
+    public async Task<CustomerLogin?> ResolveActiveAsync(
+        Guid customerId,
+        Guid loginId,
+        string clientKey,
+        CancellationToken cancellationToken)
+    {
+        var normalizedClientKey = clientKey.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedClientKey))
+            return null;
+
+        return await database.CustomerLogins
+            .Include(item => item.Customer)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                item => item.Id == loginId
+                    && item.CustomerId == customerId
+                    && item.ClientKey == normalizedClientKey
+                    && item.IsActive,
+                cancellationToken);
+    }
+
     public async Task<(Guid LoginId, int ActiveCount)> ReleaseAsync(
         Guid customerId,
         string clientKey,
