@@ -69,8 +69,10 @@ export type FinanceTransaction = {
   closedAt: string;
   description: string;
   amount: number;
+  financialImpact: number;
   method: string;
   status: string;
+  kind: 'payment' | 'wallet-settlement' | 'gift-settlement' | 'wallet-topup' | 'refund' | string;
 };
 
 export async function getFinanceTransactions(from?: Date, to?: Date): Promise<FinanceTransaction[]> {
