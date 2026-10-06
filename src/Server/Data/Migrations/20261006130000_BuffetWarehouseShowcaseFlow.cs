@@ -15,6 +15,9 @@ public partial class BuffetWarehouseShowcaseFlow : Migration
             nullable: false,
             defaultValue: 0);
 
+        migrationBuilder.Sql(
+            "UPDATE Products SET ShowcaseStockQuantity = StockQuantity, StockQuantity = 0;");
+
         migrationBuilder.AddColumn<string>(
             name: "StockArea",
             table: "InventoryTransactions",
