@@ -116,6 +116,50 @@ public sealed class ConcurrencyTests : IDisposable
     }
 
     [Fact]
+    public async Task ConcurrentWalletChangesAreRejectedByCustomerConcurrencyToken()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        Guid customerId;
+        await using (var seed = new GameNetDbContext(options))
+        {
+            await seed.Database.EnsureCreatedAsync();
+            var customer = new Customer
+            {
+                FullName = "مشتری تعارض کیف پول",
+                Code = "WALLET-CONFLICT",
+                Username = "wallet-conflict-user",
+                Balance = 100000m
+            };
+            seed.Customers.Add(customer);
+            await seed.SaveChangesAsync();
+            customerId = customer.Id;
+        }
+
+        await using var db1 = new GameNetDbContext(options);
+        await using var db2 = new GameNetDbContext(options);
+
+        var first = await db1.Customers.SingleAsync(item => item.Id == customerId);
+        var second = await db2.Customers.SingleAsync(item => item.Id == customerId);
+
+        first.Balance += 20000m;
+        await db1.SaveChangesAsync();
+
+        second.Balance += 30000m;
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+            () => db2.SaveChangesAsync());
+
+        var saved = await db1.Customers
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == customerId);
+
+        Assert.Equal(120000m, saved.Balance);
+    }
+
+    [Fact]
     public async Task ActiveSessionsCannotShareCustomerLoginOrStation()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
