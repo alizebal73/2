@@ -45,6 +45,24 @@ public sealed class AgentHub(
 
         Context.Items[AgentDeviceContextKey] = device.Id;
 
+        // A device has one effective SignalR connection. A duplicate connection
+        // would otherwise remain in the group and receive every command twice.
+        var previousConnectionId = device.ConnectionId;
+        if (!string.IsNullOrWhiteSpace(previousConnectionId)
+            && !string.Equals(previousConnectionId, Context.ConnectionId, StringComparison.Ordinal))
+        {
+            await Groups.RemoveFromGroupAsync(
+                previousConnectionId,
+                DeviceGroup(device.Id),
+                CancellationToken.None);
+
+            logger.LogWarning(
+                "Superseded duplicate Agent connection. DeviceId={DeviceId}, PreviousConnectionId={PreviousConnectionId}, NewConnectionId={NewConnectionId}",
+                device.DeviceId,
+                previousConnectionId,
+                Context.ConnectionId);
+        }
+
         // Re-add the active connection to the durable per-device group from inside
         // the already-established bidirectional hub channel.
         await Groups.AddToGroupAsync(
