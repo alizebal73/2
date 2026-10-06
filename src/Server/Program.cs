@@ -5443,10 +5443,9 @@ app.MapGet("/api/finance/summary", async (HttpContext context,
     var start = from ?? DateTimeOffset.UtcNow.Date;
     var end = to ?? DateTimeOffset.UtcNow;
 
-    var paidInvoices = await database.Invoices
+    var payments = await database.InvoicePayments
         .AsNoTracking()
-        .Where(item => item.Status == InvoiceStatus.Paid)
-        .Select(item => new { item.IssuedAt, item.TotalAmount })
+        .Select(item => new { item.CreatedAt, item.Amount })
         .ToListAsync(cancellationToken);
 
     var expenses = await database.Expenses
@@ -5454,9 +5453,9 @@ app.MapGet("/api/finance/summary", async (HttpContext context,
         .Select(item => new { item.CreatedAt, item.Amount })
         .ToListAsync(cancellationToken);
 
-    var revenue = paidInvoices
-        .Where(item => item.IssuedAt >= start && item.IssuedAt <= end)
-        .Sum(item => item.TotalAmount);
+    var revenue = payments
+        .Where(item => item.CreatedAt >= start && item.CreatedAt <= end)
+        .Sum(item => item.Amount);
 
     var expense = expenses
         .Where(item => item.CreatedAt >= start && item.CreatedAt <= end)
