@@ -1153,7 +1153,7 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 این برش مورد تأیید محصول برای «در انتظار پرداخت» است و باید به‌صورت یک قابلیت یکپارچه Server-backed اجرا شود؛ کارت‌های موقت مرورگر مجاز نیستند.
 
 ### قرارداد محصول
-1. **یک مشتری = یک حساب باز = یک کارت/ردیف**؛ شارژ جدید، خرید جدید بوفه یا اصلاحات همان حساب را به‌روزرسانی می‌کند و آیتم جدید برای همان مشتری ساخته نمی‌شود.
+1. **برای هر مشتری حداکثر یک حساب PendingPayment و حداکثر یک حساب Debt وجود دارد**؛ شارژ جدید، خرید بوفه و اصلاحات به حساب PendingPayment همان مشتری می‌روند، و Debt حساب مستقل بدهی است. تفاوت مسیر UI نباید باعث ساخت حساب تکراری در همان AccountState شود.
 2. حساب باز از **Customer-level Draft Invoice** به‌عنوان منبع حقیقت استفاده می‌کند؛ در صورت ورود از یک Session، Invoice به‌صورت Customer Account علامت‌گذاری می‌شود و Session فقط منشأ اقلام همان Session است. بعد از «پرداخت بعداً»، Session نهایی شده ولی Customer Account تا زمان پرداخت Draft می‌ماند.
 3. کارت پیش‌فرض باید بسیار فشرده باشد تا ۱۰–۲۰ مشتری هم‌زمان قابل مدیریت باشند.
 4. سه View هم‌راستا با رایانه‌ها: **کارتی / فشرده / لیستی**.
@@ -1206,7 +1206,7 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 
 ## Slice 14.11 Final Model Hardening — 2026-10-06
 - ✅ حساب باز اکنون Customer-level است، نه Session-level.
-- ✅ برای هر Customer حداکثر یک Draft Customer Account وجود دارد؛ debt و pay-later و buffet pending همان حساب را استفاده می‌کنند.
+- ✅ برای هر Customer حداکثر یک Draft Customer Account در هر `AccountState` وجود دارد؛ یک PendingPayment Account و یک Debt Account می‌توانند هم‌زمان وجود داشته باشند.
 - ✅ چند Session/چند PC برای یک مشتری در یک حساب جمع می‌شوند و Stationهای مرتبط در Pending View تجمیع می‌شوند.
 - ✅ قلم‌های Invoice به Session منشأ خود لینک دارند و شارژها نیز SessionId مستقل خود را حفظ می‌کنند.
 - ✅ Sessionهای فعال همچنان فاکتور Session-scoped خود را نگه می‌دارند؛ تبدیل به Customer Account هنگام pay-later انجام می‌شود تا تسویه یک Session فعال باعث بستن کل حساب مشتری نشود.
@@ -1215,7 +1215,7 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 
 
 ## Slice 14.11 Finalization — Customer Account + Session Allocation — 2026-10-06
-- ✅ Customer Account is the single Draft account for a customer's open balance.
+- ✅ Customer Account is the single Draft account for a customer's open PendingPayment balance; a separate Draft Debt account may coexist for outstanding Debt.
 - ✅ Live Session charges can post into that account while retaining SessionId allocation.
 - ✅ InvoicePayments now carry optional SessionId, so a settlement can pay only the selected Session's due without consuming another Session's balance.
 - ✅ A Session settlement keeps the Customer Account Draft when another Session for the same customer is still active.
@@ -1225,6 +1225,14 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - 🟡 Build/Test/Browser Smoke certification is still blocked by the repository's self-hosted runner: current workflow runs complete with zero jobs.
 
 
+## Canonical Financial / Customer Account Rules — 2026-10-06
+
+موارد این بخش، قانون جاری محصول هستند و هر wording قدیمی‌تر دربارهٔ «یک Draft واحد برای کل Customer» یا «Income = همهٔ InvoicePaymentها» را supersede می‌کنند.
+
+- PendingPayment و Debt دو AccountState مستقل‌اند و می‌توانند هم‌زمان وجود داشته باشند.
+- در هر AccountState فقط یک Draft Customer Account برای هر Customer مجاز است.
+- Revenue با Cash/Card یا Wallet Top-up سنجیده می‌شود؛ Wallet/Gift settlement صرفاً مصرف اعتبار داخلی است.
+- گزارش‌های Session باید `InvoiceItem.SessionId` را منبع تاریخی قرار دهند و فقط برای دادهٔ legacy بدون Ledger fallback کنند.
 ## Slice 14.12 — Unified Customer Operations + Debt Handoff — 2026-10-06
 
 ### قرارداد محصول
@@ -1259,6 +1267,10 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - صفحهٔ گزارش مالی بازهٔ انتخاب‌شده را به‌صورت Server-side به Finance Ledger می‌فرستد؛ بنابراین هفته/ماه/سال فقط روی دادهٔ امروز محدود نمی‌شود.
 - تاریخچهٔ مشتری اکنون `InvoicePayment` را با زمان، مبلغ، روش و Invoice مرجع نمایش می‌دهد.
 - Reverse مالی اکنون در زمان `InvoiceReversal.CreatedAt` یک رکورد منفی در Finance Ledger ایجاد می‌کند؛ بنابراین برگشت فاکتور فروش قبلی را به‌صورت درآمد باقی‌مانده نشان نمی‌دهد.
+- ✅ Finance Transactions علاوه بر مبلغ تراکنش، `FinancialImpact` و `Kind` دارد تا پرداخت داخلی Wallet/Gift با دریافت پول واقعی اشتباه نشود.
+- ✅ Session revenue در `SessionReport`، `CustomerVipReport` و `UsersShiftReport` از یک `SessionRevenueService` مشترک و `InvoiceItem.SessionId` خوانده می‌شود؛ `Session.TotalAmount` فقط fallback دادهٔ legacy بدون Ledger است.
+- ✅ آیتم‌های Invoice متعلق به Invoiceهای Cancelled در Session revenue تاریخی شمرده نمی‌شوند.
+- ⚠️ قرارداد فعلی Wallet Credit بدون `ReferenceInvoiceId` به‌عنوان Top-up مالی تلقی می‌شود؛ Credit دارای `ReferenceInvoiceId` (مانند Refund) درآمد جدید محسوب نمی‌شود.
 
 - Session Report درآمد تاریخی را از `InvoiceItem`های متعلق به همان Session می‌گیرد و فقط برای داده‌های قدیمی بدون Ledger به `Session.TotalAmount` fallback می‌کند.
 - حساب‌های Pending با مبلغ قابل‌پرداخت صفر دیگر در Pending View نمایش داده نمی‌شوند و قابل انتقال به Debt نیستند.
