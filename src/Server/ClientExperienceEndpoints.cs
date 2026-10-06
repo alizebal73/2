@@ -494,7 +494,7 @@ public static class ClientExperienceEndpoints
 
         try
         {
-            await agentHub.Clients.Group(AgentHub.DeviceGroup(device.Id)).SendAsync(
+            await agentHub.Clients.Client(device.ConnectionId!).SendAsync(
                 "AgentCommand",
                 new AgentCommandEnvelope(
                     command.Id,
