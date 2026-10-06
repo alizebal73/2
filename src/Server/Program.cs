@@ -5003,6 +5003,17 @@ app.MapGet("/api/customers/{customerId:guid}/history", async (HttpContext contex
         .Select(item => new CustomerHistoryItemDto(item.Id, "benefit", item.Description, item.MoneyAmount, item.CreatedAt, item.ReferenceInvoiceId))
         .ToListAsync(cancellationToken);
 
+    var payments = await database.InvoicePayments.AsNoTracking()
+        .Where(item => item.Invoice.CustomerId == customerId)
+        .Select(item => new CustomerHistoryItemDto(
+            item.Id,
+            "payment",
+            "پرداخت " + item.Method,
+            item.Amount,
+            item.CreatedAt,
+            item.InvoiceId))
+        .ToListAsync(cancellationToken);
+
     var invoices = await database.Invoices.AsNoTracking()
         .Where(item => item.CustomerId == customerId)
         .Select(item => new CustomerHistoryItemDto(item.Id, "invoice", item.Status.ToString(), item.TotalAmount, item.IssuedAt, item.SessionId))
@@ -5013,7 +5024,7 @@ app.MapGet("/api/customers/{customerId:guid}/history", async (HttpContext contex
         .Select(item => new CustomerHistoryItemDto(item.Id, "session", "جلسه", item.TotalAmount, item.StartAt, item.Id))
         .ToListAsync(cancellationToken);
 
-    return Results.Ok(wallet.Concat(benefits).Concat(invoices).Concat(sessions)
+    return Results.Ok(wallet.Concat(benefits).Concat(payments).Concat(invoices).Concat(sessions)
         .OrderByDescending(item => item.CreatedAt)
         .Take(100)
         .ToList());
