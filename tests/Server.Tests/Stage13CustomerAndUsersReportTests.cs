@@ -64,6 +64,8 @@ public sealed class Stage13CustomerAndUsersReportTests
             Customer = customer,
             TotalAmount = 95000,
             Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.Debt,
             IssuedAt = now.AddHours(-2)
         };
 
