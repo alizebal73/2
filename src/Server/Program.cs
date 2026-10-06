@@ -4429,7 +4429,8 @@ app.MapPost("/api/buffet/sales", async (
             .FirstOrDefaultAsync(
                 item => item.CustomerId == session.CustomerId
                     && item.Status == InvoiceStatus.Draft
-                    && item.IsCustomerAccount,
+                    && item.IsCustomerAccount
+                    && item.AccountState == CustomerAccountState.PendingPayment,
                 cancellationToken);
 
         if (invoice is null)
@@ -4509,7 +4510,8 @@ app.MapPost("/api/buffet/sales", async (
             .FirstOrDefaultAsync(
                 item => item.CustomerId == customer.Id
                     && item.Status == InvoiceStatus.Draft
-                    && item.IsCustomerAccount,
+                    && item.IsCustomerAccount
+                    && item.AccountState == CustomerAccountState.PendingPayment,
                 cancellationToken);
 
         if (invoice is null && session is not null)
