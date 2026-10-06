@@ -684,5 +684,96 @@ public sealed class SessionSettlementTests : IDisposable
         Assert.Equal(100000m, savedInvoice.TotalAmount);
     }
 
+    [Fact]
+    public async Task ReparentingLegacySessionInvoicePreservesPaymentSessionAllocation()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "PC-LEGACY-PAYMENT" };
+        var tariff = new Tariff { Name = "Legacy Payment", HourlyRate = 60000m, DailyRate = 300000m };
+        var customer = new Customer { FullName = "Legacy Payment Allocation", FreeTimeMinutes = 0 };
+        var user = new AppUser
+        {
+            FullName = "Legacy Admin",
+            UserName = "legacy-payment-admin",
+            Email = "legacy-payment-admin@test.local",
+            PasswordHash = "hash",
+            Role = "Admin"
+        };
+        var station = new Station
+        {
+            Name = "PC-LEGACY-PAYMENT-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 60000m,
+            StationType = type,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 60000m
+        };
+        var legacyInvoice = new Invoice
+        {
+            Customer = customer,
+            Session = session,
+            TotalAmount = 40000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = false,
+            Items =
+            {
+                new InvoiceItem
+                {
+                    Session = session,
+                    Description = "هزینه جلسه قدیمی",
+                    Quantity = 1,
+                    UnitPrice = 30000m,
+                    Amount = 30000m
+                },
+                new InvoiceItem
+                {
+                    Session = session,
+                    Description = "بوفه قدیمی",
+                    Quantity = 1,
+                    UnitPrice = 10000m,
+                    Amount = 10000m
+                }
+            }
+        };
+
+        db.AddRange(type, tariff, customer, user, station, session, legacyInvoice);
+        await db.SaveChangesAsync();
+
+        db.InvoicePayments.Add(new InvoicePayment
+        {
+            InvoiceId = legacyInvoice.Id,
+            SessionId = null,
+            Method = "cash",
+            Amount = 10000m
+        });
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+        await service.PreparePendingAsync(session.Id, 0, user.Id, CancellationToken.None);
+
+        var payment = await db.InvoicePayments.SingleAsync();
+        var account = await db.Invoices.SingleAsync(item => item.IsCustomerAccount && item.CustomerId == customer.Id);
+
+        Assert.Equal(account.Id, payment.InvoiceId);
+        Assert.Equal(session.Id, payment.SessionId);
+    }
+
     public void Dispose() => _connection.Dispose();
 }
