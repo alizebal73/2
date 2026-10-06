@@ -475,13 +475,12 @@ public sealed class SessionSettlementTests : IDisposable
 
         var account = await db.Invoices.SingleAsync(item => item.Id == result.InvoiceId);
         Assert.True(account.IsCustomerAccount);
-        Assert.Equal(15000m, await db.InvoicePayments
+        Assert.Equal(5000m, await db.InvoicePayments
             .Where(item => item.InvoiceId == account.Id && item.SessionId == session2.Id)
             .SumAsync(item => item.Amount));
-        Assert.Equal(1, await db.InvoicePayments
+        Assert.Equal(30000m, await db.InvoicePayments
             .Where(item => item.InvoiceId == account.Id && item.SessionId == session1.Id)
-            .Where(item => item.Amount > 10000m)
-            .CountAsync());
+            .SumAsync(item => item.Amount));
     }
 
     [Fact]
