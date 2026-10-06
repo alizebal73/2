@@ -60,10 +60,12 @@ public sealed record SessionReportPageDto(
 public sealed class SessionReportService
 {
     private readonly GameNetDbContext _database;
+    private readonly SessionRevenueService _sessionRevenue;
 
-    public SessionReportService(GameNetDbContext database)
+    public SessionReportService(GameNetDbContext database, SessionRevenueService? sessionRevenue = null)
     {
         _database = database;
+        _sessionRevenue = sessionRevenue ?? new SessionRevenueService(database);
     }
 
     public async Task<SessionReportPageDto> QueryAsync(
@@ -136,16 +138,9 @@ public sealed class SessionReportService
             .ThenByDescending(item => item.Id)
             .ToList();
 
-        var sessionIds = ordered.Select(item => item.Id).ToList();
-        var sessionRevenue = sessionIds.Count == 0
-            ? new Dictionary<Guid, decimal>()
-            : (await _database.InvoiceItems
-                .AsNoTracking()
-                .Where(item => item.SessionId.HasValue && sessionIds.Contains(item.SessionId.Value))
-                .GroupBy(item => item.SessionId!.Value)
-                .Select(group => new { SessionId = group.Key, Amount = group.Sum(item => item.Amount) })
-                .ToListAsync(cancellationToken))
-                .ToDictionary(item => item.SessionId, item => item.Amount);
+        var sessionRevenue = await _sessionRevenue.GetLedgerRevenueBySessionAsync(
+            ordered.Select(item => item.Id).ToArray(),
+            cancellationToken);
 
         var mapped = ordered
             .Select(item => ToRow(
