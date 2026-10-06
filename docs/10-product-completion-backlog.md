@@ -1200,6 +1200,7 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - ✅ Dashboard pending payments wired to Server with Card / Compact / List views and inline expandable details.
 - ✅ Pending payment sorting and direct cash/card/wallet settlement wired.
 - ✅ Buffet can target an existing pending customer account; the same account is refreshed after the sale.
+- ✅ Server regression coverage now verifies that a buffet item added to a Pending Customer Account appears once in the pending total and does not duplicate the amount due.
 - ✅ Self-hosted CI workflow is configured for this repo, but current runs are failing before job creation, so this slice is not certified green yet.
 
 
