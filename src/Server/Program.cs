@@ -6129,12 +6129,11 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
     if (session.State != SessionState.Active)
         return Results.Conflict(new { code = "session_not_active", message = "جلسه فعال نیست." });
 
-    var target = await database.Stations.FirstOrDefaultAsync(item => item.Id == request.TargetStationId, cancellationToken);
+    var target = await database.Stations
+        .FirstOrDefaultAsync(item => item.Id == request.TargetStationId, cancellationToken);
+
     if (target is null)
         return Results.NotFound(new { code = "station_not_found", message = "ایستگاه مقصد پیدا نشد." });
-
-    if (target.State != StationState.Available)
-        return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد آزاد نیست." });
 
     var targetAgent = await database.AgentDevices
         .FirstOrDefaultAsync(
@@ -6154,11 +6153,31 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
                 && item.IsActive,
             cancellationToken);
 
+    // Atomically claim the destination. Two concurrent transfers must not both
+    // observe Available and both move onto the same station.
+    var claimed = await database.Stations
+        .Where(item => item.Id == target.Id && item.State == StationState.Available)
+        .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.State, StationState.Occupied), cancellationToken);
+
+    if (claimed != 1)
+        return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد هم‌زمان توسط عملیات دیگری گرفته شد." });
+
+    if (session.CustomerLoginId.HasValue && targetCustomerLogin is null)
+    {
+        return Results.Conflict(new
+        {
+            code = "customer_login_not_available_on_target",
+            message = "ورود مشتری روی رایانه مقصد فعال نیست؛ انتقال بدون از دست رفتن مالکیت ورود انجام نشد."
+        });
+    }
+
+    target = await database.Stations
+        .FirstAsync(item => item.Id == request.TargetStationId, cancellationToken);
+
     var source = session.Station;
     var sourceCustomerLoginId = session.CustomerLoginId;
 
     source.State = StationState.Available;
-    target.State = StationState.Occupied;
     session.StationId = target.Id;
     session.AgentDeviceId = targetAgent.Id;
     session.CustomerLoginId = targetCustomerLogin?.Id;
