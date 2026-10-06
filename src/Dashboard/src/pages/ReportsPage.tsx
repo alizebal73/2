@@ -73,7 +73,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
     setFinanceError('');
     void Promise.all([getFinanceTransactions(), getFinanceSummary(), getFinanceExpenses()])
       .then(([transactions, finance, costs]) => {
-        const items = transactions.filter(item => item.status === 'Paid').map(item => ({
+        const items = transactions.filter(item => item.amount > 0).map(item => ({
           id: item.id,
           closedAt: item.closedAt,
           station: item.description,
