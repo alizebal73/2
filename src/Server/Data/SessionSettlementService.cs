@@ -1076,7 +1076,10 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
                     .ThenInclude(item => item!.Station)
             .Where(item => item.Status == InvoiceStatus.Draft
                 && item.IsCustomerAccount
-                && item.AccountState == CustomerAccountState.PendingPayment)
+                && item.AccountState == CustomerAccountState.PendingPayment
+                && !database.Sessions.Any(session =>
+                    session.CustomerId == item.CustomerId
+                    && session.State == SessionState.Active))
             .OrderBy(item => item.IssuedAt)
             .ToListAsync(cancellationToken);
 
