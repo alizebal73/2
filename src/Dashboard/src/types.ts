@@ -167,10 +167,14 @@ export type ProductRecord = {
   price: number;
   buyPrice: number;
   stock: number;
+  warehouseStock: number;
+  showcaseStock: number;
   minimumStock: number;
   unit: string;
   lowStock: boolean;
   maxStock: number;
+  todaySold?: number;
+  todayRevenue?: number;
 };
 
 export type AppUserRecord = {
@@ -428,9 +432,25 @@ export type InventoryTransactionRecord = {
   unitCost?: number;
   referenceInvoiceId?: string | null;
   direction: 'In' | 'Out';
-  kind: 'Initial' | 'Adjustment' | 'Purchase' | 'Sale' | 'Waste' | 'Return' | string;
+  stockArea?: 'Warehouse' | 'Showcase' | string;
+  kind: 'Initial' | 'Adjustment' | 'Purchase' | 'Sale' | 'Waste' | 'Return' | 'ShowcaseTransfer' | string;
   notes?: string;
   createdAt: string;
+};
+
+export type BuffetTodaySaleRecord = {
+  productId: string;
+  productName: string;
+  unit: string;
+  quantity: number;
+  revenue: number;
+};
+
+export type BuffetTodaySalesReport = {
+  date: string;
+  totalQuantity: number;
+  totalRevenue: number;
+  products: BuffetTodaySaleRecord[];
 };
 
 export type BuffetProfitReport = {
