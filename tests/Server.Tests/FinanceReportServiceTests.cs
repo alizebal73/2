@@ -91,6 +91,72 @@ public sealed class FinanceReportServiceTests
     }
 
     [Fact]
+    public async Task FinanceSummaryDoesNotTreatWalletOrGiftSettlementAsNewRevenue()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var database = new GameNetDbContext(options);
+        await database.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var customer = new Customer { FullName = "مشتری روش پرداخت", Code = "FIN-METHOD" };
+        var invoice = new Invoice
+        {
+            Customer = customer,
+            TotalAmount = 100000m,
+            Status = InvoiceStatus.Paid,
+            IssuedAt = now.AddMinutes(-30)
+        };
+        invoice.Items.Add(new InvoiceItem
+        {
+            Invoice = invoice,
+            Description = "فروش ترکیبی",
+            Quantity = 1,
+            UnitPrice = 100000m,
+            Amount = 100000m
+        });
+        database.Add(invoice);
+        database.InvoicePayments.AddRange(
+            new InvoicePayment { Invoice = invoice, Method = "cash", Amount = 50000m, CreatedAt = now.AddMinutes(-20) },
+            new InvoicePayment { Invoice = invoice, Method = "wallet", Amount = 30000m, CreatedAt = now.AddMinutes(-19) },
+            new InvoicePayment { Invoice = invoice, Method = "gift", Amount = 20000m, CreatedAt = now.AddMinutes(-18) });
+
+        database.WalletTransactions.Add(new WalletTransaction
+        {
+            Customer = customer,
+            Amount = 120000m,
+            Type = WalletTransactionType.Credit,
+            Description = "شارژ کیف پول توسط مشتری",
+            CreatedAt = now.AddMinutes(-10)
+        });
+
+        await database.SaveChangesAsync();
+
+        var service = new FinanceReportService(database);
+        var summary = await service.GetSummaryAsync(now.AddHours(-1), now, CancellationToken.None);
+        var transactions = await service.GetTransactionsAsync(now.AddHours(-1), now, CancellationToken.None);
+
+        Assert.Equal(170000m, summary.Revenue);
+
+        var walletSettlement = Assert.Single(transactions.Where(item => item.Kind == "wallet-settlement"));
+        Assert.Equal(30000m, walletSettlement.Amount);
+        Assert.Equal(0m, walletSettlement.FinancialImpact);
+
+        var giftSettlement = Assert.Single(transactions.Where(item => item.Kind == "gift-settlement"));
+        Assert.Equal(20000m, giftSettlement.Amount);
+        Assert.Equal(0m, giftSettlement.FinancialImpact);
+
+        var walletTopUp = Assert.Single(transactions.Where(item => item.Kind == "wallet-topup"));
+        Assert.Equal(120000m, walletTopUp.Amount);
+        Assert.Equal(120000m, walletTopUp.FinancialImpact);
+    }
+
+    [Fact]
     public async Task FinanceReportsRecordInvoiceReversalAsNegativeRevenue()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
