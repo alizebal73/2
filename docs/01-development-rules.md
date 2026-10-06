@@ -179,3 +179,11 @@ PR = مسیر ورود تغییرات به Main.
 CI سبز همان SHA = شرط پذیرش.
 Vertical Slice واقعی = واحد اصلی پیشرفت.
 Handoff + این فایل = حافظهٔ رسمی پروژه برای چت‌های بعدی.
+
+## 20. استثنای Bootstrap برای Release Readiness
+
+تا وقتی baseline قابل‌اعتماد فعلی تثبیت نشده، فقط تغییرات بسیار محدودِ مربوط به CI trigger، Release Readiness roadmap و governance bootstrap می‌توانند برای جلوگیری از Runهای بی‌دلیل مستقیماً روی main ثبت شوند.
+
+این استثنا شامل تغییر محصول، migration، UI یا feature نیست.
+
+پس از تثبیت baseline و اجرای acceptance gate روی همان SHA، ادامه اصلاح باگ‌ها باید دوباره روی branch اختصاصی Stage انجام شود.
