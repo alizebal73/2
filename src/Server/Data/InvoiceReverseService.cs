@@ -147,11 +147,6 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
                 .OrderByDescending(group => group.Sum(movement => movement.Quantity))
                 .ToList();
 
-            if (groupedAreas.Count == 0)
-                groupedAreas.Add(Array.Empty<InventoryTransaction>()
-                    .GroupBy(_ => StockArea.Showcase)
-                    .First());
-
             foreach (var areaGroup in groupedAreas)
             {
                 if (remaining <= 0)
