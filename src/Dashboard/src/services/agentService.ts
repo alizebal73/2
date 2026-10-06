@@ -92,3 +92,17 @@ export async function requestAgentRollback(agentId: string): Promise<AgentComman
 
   return await response.json() as AgentCommandStatusDto;
 }
+
+export async function createAgentPairingCode(): Promise<{ code: string; expiresAt: string; maxUses: number }> {
+  const response = await fetch('/api/agent/pairing-code', {
+    method: 'POST',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(body?.message || 'ساخت کد اتصال Agent انجام نشد.');
+  }
+
+  return await response.json() as { code: string; expiresAt: string; maxUses: number };
+}
