@@ -399,7 +399,7 @@ public sealed class SessionSettlementTests : IDisposable
 
         var type1 = new StationType { Name = "PC-MULTI-01" };
         var type2 = new StationType { Name = "PC-MULTI-02" };
-        var tariff = new Tariff { Name = "Multi Pending", HourlyRate = 120000m, DailyRate = 500000m };
+        var tariff = new Tariff { Name = "Multi Pending", HourlyRate = 60000m, DailyRate = 300000m };
         var customer = new Customer { FullName = "مشتری چند دستگاه", FreeTimeMinutes = 0 };
         var user = new AppUser
         {
@@ -415,7 +415,7 @@ public sealed class SessionSettlementTests : IDisposable
             Zone = "PC",
             Type = "PC",
             State = StationState.Available,
-            RatePerHour = 120000m,
+            RatePerHour = 60000m,
             StationType = type1,
             Tariff = tariff,
             IsActive = true
@@ -426,7 +426,7 @@ public sealed class SessionSettlementTests : IDisposable
             Zone = "PC",
             Type = "PC",
             State = StationState.Available,
-            RatePerHour = 120000m,
+            RatePerHour = 60000m,
             StationType = type2,
             Tariff = tariff,
             IsActive = true
@@ -437,9 +437,9 @@ public sealed class SessionSettlementTests : IDisposable
             Customer = customer,
             Station = station1,
             Tariff = tariff,
-            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-20),
             State = SessionState.Active,
-            HourlyRateSnapshot = 120000m
+            HourlyRateSnapshot = 60000m
         };
         var session2 = new Session
         {
@@ -448,7 +448,7 @@ public sealed class SessionSettlementTests : IDisposable
             Tariff = tariff,
             StartAt = DateTimeOffset.UtcNow.AddMinutes(-30),
             State = SessionState.Active,
-            HourlyRateSnapshot = 120000m
+            HourlyRateSnapshot = 60000m
         };
 
         db.AddRange(type1, type2, tariff, customer, user, station1, station2, session1, session2);
@@ -548,6 +548,7 @@ public sealed class SessionSettlementTests : IDisposable
             Session = session,
             TotalAmount = 100000m,
             Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
             IssuedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
             Items =
             {
