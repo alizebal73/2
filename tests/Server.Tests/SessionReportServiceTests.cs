@@ -111,6 +111,70 @@ public sealed class SessionReportServiceTests
     }
 
     [Fact]
+    public async Task QueryUsesSessionInvoiceLedgerInsteadOfMutableSessionTotalAmount()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        var options = new DbContextOptionsBuilder<GameNetDbContext>().UseSqlite(connection).Options;
+        await using var database = new GameNetDbContext(options);
+        await database.Database.EnsureCreatedAsync();
+
+        var stationType = new StationType { Name = "PC-Ledger-Test" };
+        var station = new Station { Name = "PC LEDGER", Zone = "pc", Type = "PC", StationType = stationType };
+        var customer = new Customer { FullName = "مشتری Ledger", Code = "LEDGER01", Username = "ledger01" };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            StartAt = DateTimeOffset.UtcNow.AddHours(-2),
+            EndAt = DateTimeOffset.UtcNow.AddHours(-1),
+            State = SessionState.Completed,
+            TotalAmount = 20000m
+        };
+        var invoice = new Invoice
+        {
+            Customer = customer,
+            Session = session,
+            TotalAmount = 100000m,
+            Status = InvoiceStatus.Paid,
+            PaidAt = DateTimeOffset.UtcNow.AddHours(-1),
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.PendingPayment
+        };
+        invoice.Items.Add(new InvoiceItem
+        {
+            Invoice = invoice,
+            Session = session,
+            Description = "هزینه جلسه Ledger",
+            Quantity = 1,
+            UnitPrice = 70000m,
+            Amount = 70000m
+        });
+        invoice.Items.Add(new InvoiceItem
+        {
+            Invoice = invoice,
+            Session = session,
+            Description = "بوفه Ledger",
+            Quantity = 1,
+            UnitPrice = 30000m,
+            Amount = 30000m
+        });
+
+        database.AddRange(stationType, station, customer, session, invoice);
+        await database.SaveChangesAsync();
+
+        var service = new SessionReportService(database);
+        var result = await service.QueryAsync(
+            new SessionReportQuery(null, null, null, null, null, "Completed", null, 1, 10),
+            CancellationToken.None);
+
+        var row = Assert.Single(result.Items);
+        Assert.Equal(100000m, row.TotalAmount);
+        Assert.Equal(100000m, result.Summary.Revenue);
+    }
+
+    [Fact]
     public async Task QueryPaginatesByNewestSessionWithoutChangingSummary()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
