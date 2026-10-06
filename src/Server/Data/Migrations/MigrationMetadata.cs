@@ -214,3 +214,9 @@ partial class ServerBackedSettings
 {
 }
 
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261006130000_BuffetWarehouseShowcaseFlow")]
+partial class BuffetWarehouseShowcaseFlow
+{
+}
