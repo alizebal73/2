@@ -39,6 +39,15 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+    options.AddPolicy("agent-registration", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
@@ -1152,6 +1161,7 @@ app.MapPost("/api/agent/register", async (
         heartbeatInterval,
         offlineAfter));
 })
+.RequireRateLimiting("agent-registration")
 .WithName("RegisterAgent");
 
 app.MapPut("/api/agent/devices/{deviceId:guid}/policy", async (
@@ -3587,6 +3597,14 @@ app.MapPost("/api/customer-auth/login", async (
     if (string.IsNullOrWhiteSpace(key) || string.IsNullOrWhiteSpace(request.Password) || string.IsNullOrWhiteSpace(clientKey))
         return Results.BadRequest(new { code = "missing_credentials", message = "نام کاربری، رمز و شناسه دستگاه الزامی است." });
 
+    var resolvedClientDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(
+        context,
+        database,
+        cancellationToken);
+    if (resolvedClientDevice is null
+        || !string.Equals(resolvedClientDevice.DeviceId, clientKey, StringComparison.Ordinal))
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+
     var customer = await database.Customers
         .FirstOrDefaultAsync(item => item.Username == key || item.Code == key, cancellationToken);
 
@@ -3645,12 +3663,8 @@ app.MapGet("/api/customer-auth/state", async (
         if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, normalizedClientKey, StringComparison.Ordinal))
             return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-    var customer = await database.Customers
-        .FirstOrDefaultAsync(item => item.Id == customerId, cancellationToken);
-    if (customer is null)
-        return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
-
     var login = await database.CustomerLogins
+        .Include(item => item.Customer)
         .FirstOrDefaultAsync(
             item => item.Id == loginId
                 && item.CustomerId == customerId
@@ -3661,18 +3675,10 @@ app.MapGet("/api/customer-auth/state", async (
     if (login is null)
         return Results.Ok(new
         {
-            authenticated = false,
-            customerId,
-            loginId,
-            username = customer.Username,
-            fullName = customer.FullName,
-            balance = customer.Balance,
-            freeMoney = customer.FreeMoney,
-            freeTimeMinutes = customer.FreeTimeMinutes,
-            vipTier = customer.VipTier,
-            session = (object?)null
+            authenticated = false
         });
 
+    var customer = login.Customer;
     var device = resolvedClientDevice;
 
     var session = device?.StationId is Guid stationId
