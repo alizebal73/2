@@ -78,7 +78,17 @@ export function CustomerOperationsWorkspace({
         station.customerCode === customer.username
       ) ?? null
     : null;
-  const actions = actionDefinitions.map(item => ({ ...item, hotkey: hotkeys[item.hotkeyKey] || item.key === 'walletAdd' ? hotkeys.walletAdd || 'F5' : item.key === 'debtAdd' ? hotkeys.debtAdd || 'F6' : item.key === 'walletDeduct' ? hotkeys.walletDeduct || 'F7' : hotkeys.walletDebt || 'F8' }));
+  const actions = actionDefinitions.map(item => ({
+    ...item,
+    hotkey: hotkeys[item.hotkeyKey] ||
+      (item.key === 'walletAdd'
+        ? hotkeys.walletAdd || 'F5'
+        : item.key === 'debtAdd'
+          ? hotkeys.debtAdd || 'F6'
+          : item.key === 'walletDeduct'
+            ? hotkeys.walletDeduct || 'F7'
+            : hotkeys.walletDebt || 'F8'),
+  }));
 
   return (
     <div className="customer-flow-workspace">
