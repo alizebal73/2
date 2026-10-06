@@ -196,7 +196,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   }, []);
   useEffect(() => {
     if (!context) return;
-    const close = (event: MouseEvent) => {
+    const close = (event: globalThis.MouseEvent) => {
       const target = event.target;
       if (target instanceof Element && target.closest('.context-menu')) return;
       setContext(null);
