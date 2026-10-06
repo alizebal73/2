@@ -40,14 +40,15 @@ public sealed class FinanceReportServiceTests
         });
 
         database.Add(invoice);
+        var inRangePayment = new InvoicePayment
+        {
+            Invoice = invoice,
+            Method = "cash",
+            Amount = 30000m,
+            CreatedAt = now.AddHours(-2)
+        };
         database.InvoicePayments.AddRange(
-            new InvoicePayment
-            {
-                Invoice = invoice,
-                Method = "cash",
-                Amount = 30000m,
-                CreatedAt = now.AddHours(-2)
-            },
+            inRangePayment,
             new InvoicePayment
             {
                 Invoice = invoice,
@@ -59,7 +60,6 @@ public sealed class FinanceReportServiceTests
         {
             Shift = new Shift
             {
-                Customer = null,
                 OpenAt = now.AddHours(-3),
                 CashOpening = 0m
             },
@@ -85,7 +85,7 @@ public sealed class FinanceReportServiceTests
         var row = Assert.Single(transactions);
         Assert.Equal(30000m, row.Amount);
         Assert.Equal("cash", row.Method);
-        Assert.Equal(invoice.Id == row.Id ? row.Id : row.Id, row.Id);
+        Assert.Equal(inRangePayment.Id, row.Id);
         Assert.Equal(InvoiceStatus.Draft.ToString(), row.Status);
         Assert.Equal(invoice.Items.Single().Description, row.Description);
     }
