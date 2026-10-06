@@ -232,3 +232,9 @@ partial class SessionChargeLedger
 partial class CustomerOpenAccount
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261006173000_InvoicePaymentSessionAllocation")]
+partial class InvoicePaymentSessionAllocation
+{
+}

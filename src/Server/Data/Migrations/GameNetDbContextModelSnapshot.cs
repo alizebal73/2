@@ -1282,6 +1282,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<Guid>("InvoiceId")
                         .HasColumnType("TEXT");
 
+                    b.Property<Guid?>("SessionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Method")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -1294,6 +1297,8 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("InvoiceId");
+
+                    b.HasIndex("SessionId");
 
                     b.ToTable("InvoicePayments");
                 });
@@ -2219,7 +2224,14 @@ namespace GameNetManager.Server.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("GameNetManager.Server.Data.Session", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Invoice");
+
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.InvoiceReversal", b =>

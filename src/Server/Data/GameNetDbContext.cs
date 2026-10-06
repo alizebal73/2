@@ -574,6 +574,11 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .WithMany()
             .HasForeignKey(item => item.InvoiceId)
             .OnDelete(DeleteBehavior.Cascade);
+        payment.HasOne(item => item.Session)
+            .WithMany()
+            .HasForeignKey(item => item.SessionId)
+            .OnDelete(DeleteBehavior.SetNull);
+        payment.HasIndex(item => item.SessionId);
     }
 
     private static void ConfigureInvoiceItem(ModelBuilder modelBuilder)

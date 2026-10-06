@@ -379,6 +379,8 @@ public sealed class InvoicePayment : BaseEntity
 {
     public Guid InvoiceId { get; set; }
     public Invoice Invoice { get; set; } = default!;
+    public Guid? SessionId { get; set; }
+    public Session? Session { get; set; }
     public required string Method { get; set; }
     public decimal Amount { get; set; }
 }
