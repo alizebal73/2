@@ -58,6 +58,7 @@ function Find-Iscc {
 
     return $iscc
 }
+
 Require-Command "dotnet"
 Require-Command "node"
 Require-Command "npm"
@@ -68,17 +69,37 @@ New-Item -ItemType Directory -Path $serverPublish,$clientPublish,$outputRoot -Fo
 
 Push-Location $repoRoot
 try {
-    dotnet restore GameNetManager.sln
+    dotnet restore GameNetManager.sln --runtime win-x64
+    if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed with exit code $LASTEXITCODE." }
+
     npm ci --prefix src/Dashboard
+    if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE." }
+
     npm run build --prefix src/Dashboard
+    if ($LASTEXITCODE -ne 0) { throw "Dashboard build failed with exit code $LASTEXITCODE." }
+
     dotnet publish src/Server/GameNetManager.Server.csproj --configuration $Configuration --runtime win-x64 --self-contained true --output $serverPublish --no-restore
+    if ($LASTEXITCODE -ne 0) { throw "Server publish failed with exit code $LASTEXITCODE." }
+    $serverExe = Join-Path $serverPublish "GameNetManager.Server.exe"
+    if (-not (Test-Path $serverExe)) { throw "Server publish completed without GameNetManager.Server.exe." }
+
     dotnet publish src/Client/GameNetManager.Client.csproj --configuration $Configuration --runtime win-x64 --self-contained true --output $clientPublish --no-restore
+    if ($LASTEXITCODE -ne 0) { throw "Client publish failed with exit code $LASTEXITCODE." }
+    $clientExe = Join-Path $clientPublish "GameNetManager.Client.exe"
+    if (-not (Test-Path $clientExe)) { throw "Client publish completed without GameNetManager.Client.exe." }
+
     Set-Content -Path (Join-Path $serverPublish "server-version.txt") -Value $Version -Encoding ascii
     Set-Content -Path (Join-Path $clientPublish "client-version.txt") -Value $Version -Encoding ascii
+
+    Write-Host "Server publish verified: $serverExe"
+    Write-Host "Client publish verified: $clientExe"
+
     & $iscc "/DAppVersion=$Version" "/O$outputRoot" (Join-Path $repoRoot "installer\server\GameNetManager-Server.iss")
     if ($LASTEXITCODE -ne 0) { throw "Server Setup compilation failed." }
+
     & $iscc "/DAppVersion=$Version" "/O$outputRoot" (Join-Path $repoRoot "installer\client\GameNetManager-Client.iss")
     if ($LASTEXITCODE -ne 0) { throw "Client Setup compilation failed." }
+
     $serverSetup = Join-Path $outputRoot "GameNetManager-Server-Setup-$Version.exe"
     $clientSetup = Join-Path $outputRoot "GameNetManager-Client-Setup-$Version.exe"
     foreach ($file in @($serverSetup,$clientSetup)) {
