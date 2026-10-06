@@ -95,6 +95,70 @@ public sealed class Stage13CustomerAndUsersReportTests
     }
 
     [Fact]
+    [Fact]
+    public async Task UsersShiftReportCountsDraftInvoicePaymentAtPaymentTime()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<GameNetDbContext>().UseSqlite(connection).Options;
+        await using var database = new GameNetDbContext(options);
+        await database.Database.EnsureCreatedAsync();
+
+        var user = new AppUser
+        {
+            FullName = "اپراتور پرداخت Draft",
+            UserName = "draft-payment-report-user",
+            Email = "draft-payment-report@gamenet.local",
+            PasswordHash = PasswordSecurity.Hash("StrongPass123!"),
+            Role = "Operator",
+            IsActive = true
+        };
+        var shift = new Shift
+        {
+            AppUser = user,
+            OpenAt = DateTimeOffset.UtcNow.AddHours(-4),
+            CloseAt = DateTimeOffset.UtcNow.AddHours(-1),
+            CashOpening = 100000m,
+            CashClosing = 150000m
+        };
+        var customer = new Customer { FullName = "مشتری پرداخت Draft" };
+        var invoice = new Invoice
+        {
+            Customer = customer,
+            TotalAmount = 50000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.PendingPayment,
+            IssuedAt = DateTimeOffset.UtcNow.AddHours(-3)
+        };
+        var payment = new InvoicePayment
+        {
+            Invoice = invoice,
+            Method = "cash",
+            Amount = 50000m,
+            CreatedAt = DateTimeOffset.UtcNow.AddHours(-2)
+        };
+
+        database.AddRange(user, shift, customer, invoice, payment);
+        await database.SaveChangesAsync();
+
+        var service = new UsersShiftReportService(database);
+        var result = await service.QueryAsync(
+            new UsersShiftReportQuery(
+                DateTimeOffset.UtcNow.AddHours(-5),
+                DateTimeOffset.UtcNow,
+                "draft-payment-report-user",
+                "closed",
+                1,
+                10),
+            CancellationToken.None);
+
+        var row = Assert.Single(result.Items);
+        Assert.Equal(50000m, row.ShiftRevenue);
+        Assert.Equal(50000m, row.ShiftCashSales);
+        Assert.Equal(50000m, row.ShiftDifference);
+    }
+
     public async Task CustomerVipReportExcludesPendingAndSubtractsDebtPayments()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
@@ -205,9 +269,15 @@ public sealed class Stage13CustomerAndUsersReportTests
             TotalAmount = 150000,
             Status = InvoiceStatus.Paid,
             IssuedAt = DateTimeOffset.UtcNow.AddHours(-2),
-            PaidAt = DateTimeOffset.UtcNow.AddHours(-2)
+            PaidAt = DateTimeOffset.UtcNow.AddHours(-1)
         };
-        var payment = new InvoicePayment { Invoice = invoice, Method = "cash", Amount = 150000 };
+        var payment = new InvoicePayment
+        {
+            Invoice = invoice,
+            Method = "cash",
+            Amount = 150000,
+            CreatedAt = DateTimeOffset.UtcNow.AddHours(-2)
+        };
         var session = new Session
         {
             Customer = customer,
