@@ -70,8 +70,24 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
 
   useEffect(() => {
     if (!canViewFinance) return;
+
+    const now = Date.now();
+    const start = range
+      ? range.start
+      : period === 'month' ? now - 30 * 86400000
+      : period === 'sixMonths' ? now - 180 * 86400000
+      : period === 'year' ? now - 365 * 86400000
+      : now - 6 * 86400000;
+    const end = range?.end ?? now;
+    const fromDate = new Date(start);
+    const toDate = new Date(end);
+
     setFinanceError('');
-    void Promise.all([getFinanceTransactions(), getFinanceSummary(), getFinanceExpenses()])
+    void Promise.all([
+      getFinanceTransactions(fromDate, toDate),
+      getFinanceSummary(fromDate, toDate),
+      getFinanceExpenses(fromDate, toDate),
+    ])
       .then(([transactions, finance, costs]) => {
         const items = transactions.filter(item => item.amount > 0).map(item => ({
           id: item.id,
@@ -93,7 +109,7 @@ export function ReportsPage({ user }: { user: AppUserRecord }) {
     const onRole = (event: Event) => setRole((event as CustomEvent<Role>).detail);
     window.addEventListener('gamenet-role-change', onRole);
     return () => window.removeEventListener('gamenet-role-change', onRole);
-  }, []);
+  }, [canViewFinance, period, range]);
 
   useEffect(() => {
     if (reportCategory !== 'buffet') return;
