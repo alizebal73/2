@@ -1154,7 +1154,7 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 
 ### قرارداد محصول
 1. **یک مشتری = یک حساب باز = یک کارت/ردیف**؛ شارژ جدید، خرید جدید بوفه یا اصلاحات همان حساب را به‌روزرسانی می‌کند و آیتم جدید برای همان مشتری ساخته نمی‌شود.
-2. حساب باز از **Draft Invoice مرتبط با Session** به‌عنوان منبع حقیقت استفاده می‌کند؛ بعد از «پرداخت بعداً»، Session نهایی شده ولی Invoice تا زمان پرداخت Draft می‌ماند.
+2. حساب باز از **Customer-level Draft Invoice** به‌عنوان منبع حقیقت استفاده می‌کند؛ در صورت ورود از یک Session، Invoice به‌صورت Customer Account علامت‌گذاری می‌شود و Session فقط منشأ اقلام همان Session است. بعد از «پرداخت بعداً»، Session نهایی شده ولی Customer Account تا زمان پرداخت Draft می‌ماند.
 3. کارت پیش‌فرض باید بسیار فشرده باشد تا ۱۰–۲۰ مشتری هم‌زمان قابل مدیریت باشند.
 4. سه View هم‌راستا با رایانه‌ها: **کارتی / فشرده / لیستی**.
 5. در حالت عادی فقط هویت مشتری، ایستگاه، خلاصهٔ شارژ، خلاصهٔ بوفه، مبلغ قابل پرداخت و عملیات پرداخت دیده شود.
@@ -1201,3 +1201,13 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - ✅ Pending payment sorting and direct cash/card/wallet settlement wired.
 - ✅ Buffet can target an existing pending customer account; the same account is refreshed after the sale.
 - ✅ Self-hosted CI workflow is configured for this repo, but current runs are failing before job creation, so this slice is not certified green yet.
+
+
+## Slice 14.11 Final Model Hardening — 2026-10-06
+- ✅ حساب باز اکنون Customer-level است، نه Session-level.
+- ✅ برای هر Customer حداکثر یک Draft Customer Account وجود دارد؛ debt و pay-later و buffet pending همان حساب را استفاده می‌کنند.
+- ✅ چند Session/چند PC برای یک مشتری در یک حساب جمع می‌شوند و Stationهای مرتبط در Pending View تجمیع می‌شوند.
+- ✅ قلم‌های Invoice به Session منشأ خود لینک دارند و شارژها نیز SessionId مستقل خود را حفظ می‌کنند.
+- ✅ Sessionهای فعال همچنان فاکتور Session-scoped خود را نگه می‌دارند؛ تبدیل به Customer Account هنگام pay-later انجام می‌شود تا تسویه یک Session فعال باعث بستن کل حساب مشتری نشود.
+- ✅ مهاجرت دیتابیس، Draftهای بدهی و Sessionهای تمام‌شدهٔ قدیمی را بدون از دست دادن اقلام/پرداخت/ارجاع مالی به یک حساب مشتری ادغام می‌کند.
+- ✅ فروش بوفه روی Customer Account حتی در حسابی که Session جاری ندارد مجاز است.
