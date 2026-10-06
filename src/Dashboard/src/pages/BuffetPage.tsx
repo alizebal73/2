@@ -202,7 +202,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
         destination === 'session' ? sessionTargetId : undefined,
         destination === 'pending' ? pendingTargetId : undefined,
       );
-      if (destination === 'session') {
+      if (destination === 'session' || destination === 'pending') {
         window.dispatchEvent(new CustomEvent('gamenet-buffet-sale', {
           detail: {
             total: sale.total,
@@ -215,7 +215,12 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
       }
       setCart({});
       await refresh();
-      setNotice(destination === 'session' ? 'فروش بوفه ثبت و موجودی سرور به‌روزرسانی شد' : 'فروش مستقل ثبت و موجودی سرور به‌روزرسانی شد');
+      setNotice(
+        destination === 'session'
+          ? 'فروش بوفه به فاکتور جلسه اضافه شد و موجودی سرور به‌روزرسانی شد'
+          : destination === 'pending'
+            ? 'فروش بوفه به همان حساب باز مشتری اضافه شد'
+            : 'فروش مستقل ثبت و موجودی سرور به‌روزرسانی شد');
     } catch (error) {
       setNotice(userErrorMessage(error, 'ثبت فروش بوفه انجام نشد'));
     } finally {
