@@ -87,13 +87,14 @@ export async function adjustServerStock(productId: string, quantity: number, dir
 
 export async function recordServerBuffetSale(
   items: Array<{ productId: string; quantity: number }>,
-  target: 'session' | 'standalone',
+  target: 'session' | 'pending' | 'standalone',
   sessionId?: string,
+  invoiceId?: string,
 ) {
   const response = await fetch('/api/buffet/sales', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items, target, sessionId: sessionId || null }),
+    body: JSON.stringify({ items, target, sessionId: sessionId || null, invoiceId: invoiceId || null }),
   });
   if (!response.ok) throw new Error(await readError(response, 'ثبت فروش بوفه انجام نشد'));
   return await response.json() as {

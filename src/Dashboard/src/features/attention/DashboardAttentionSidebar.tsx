@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import type { PendingSettlementAccount } from '../../types';
+import { PendingPaymentsPanel } from '../payment/PendingPaymentsPanel';
 
 export type SidebarAttentionItem = {
   id: string;
@@ -8,23 +10,12 @@ export type SidebarAttentionItem = {
   actionLabel: string;
 };
 
-export type SidebarPaymentItem = {
-  id: string;
-  customerName: string;
-  customerCode: string;
-  stationName: string;
-  amount: number;
-  createdAt: string;
-};
-
 type Props = {
-  payments: SidebarPaymentItem[];
+  payments: PendingSettlementAccount[];
   attentions: SidebarAttentionItem[];
   recentActions: Array<{ id: string; title: string; station: string; detail: string; createdAt: string; kind: string; canReverse?: boolean }>;
   money: (value: number) => string;
-  onCardPaid: (id: string) => void;
-  onWallet: (id: string) => void;
-  onDebt: (id: string) => void;
+  onPay: (invoiceId: string, method: 'cash' | 'card' | 'wallet') => void;
   onAttention: (id: string) => void;
   onReverse: (id: string) => void;
   children?: ReactNode;
@@ -35,9 +26,7 @@ export function DashboardAttentionSidebar({
   attentions,
   recentActions,
   money,
-  onCardPaid,
-  onWallet,
-  onDebt,
+  onPay,
   onAttention,
   onReverse,
 }: Props) {
@@ -53,35 +42,7 @@ export function DashboardAttentionSidebar({
         </span>
       </div>
 
-      <section className="sidebar-section">
-        <div className="sidebar-section-title">
-          <strong>پرداخت‌های در انتظار</strong>
-          <span>{payments.length.toLocaleString('fa-IR')}</span>
-        </div>
-        {payments.length === 0 ? (
-          <div className="sidebar-empty">مبلغ پرداخت‌نشده‌ای در انتظار نیست.</div>
-        ) : (
-          <div className="sidebar-payment-list">
-            {payments.map(item => (
-              <article className="sidebar-payment-card" key={item.id}>
-                <div className="sidebar-payment-head">
-                  <div>
-                    <strong>{item.customerName}</strong>
-                    <small>{item.customerCode || 'مهمان'} · {item.stationName}</small>
-                  </div>
-                  <b>{money(item.amount)} تومان</b>
-                </div>
-                <small className="sidebar-payment-time">{new Date(item.createdAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })} · پایان بازی</small>
-                <div className="sidebar-payment-actions">
-                  <button type="button" className="btn primary sm" onClick={() => onCardPaid(item.id)}>تسویه شد</button>
-                  <button type="button" className="btn sm" onClick={() => onWallet(item.id)}>از کیف پول</button>
-                  <button type="button" className="btn danger sm" onClick={() => onDebt(item.id)}>ثبت بدهی</button>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+      <PendingPaymentsPanel payments={payments} money={money} onPay={onPay} />
 
       <section className="sidebar-section">
         <div className="sidebar-section-title">

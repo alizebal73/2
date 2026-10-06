@@ -82,6 +82,42 @@ export type SessionInvoice = {
   closedAt: string;
 };
 
+export type PendingSettlementCharge = {
+  id: string;
+  amount: number;
+  method: 'cash' | 'card' | 'wallet';
+  createdAt: string;
+};
+
+export type PendingSettlementBuffetItem = {
+  productId: string;
+  productName: string;
+  quantity: number;
+  amount: number;
+};
+
+export type PendingSettlementAccount = {
+  invoiceId: string;
+  sessionId: string;
+  customerId: string;
+  customerName: string;
+  customerCode?: string;
+  username?: string;
+  stationName: string;
+  closedAt: string;
+  waitingMinutes: number;
+  timeAmount: number;
+  buffetTotal: number;
+  grossAmount: number;
+  prepaidTotal: number;
+  prepaidApplied: number;
+  prepaidRemaining: number;
+  creditOrBenefitReduction: number;
+  amountDue: number;
+  charges: PendingSettlementCharge[];
+  buffetItems: PendingSettlementBuffetItem[];
+};
+
 export type DashboardSnapshotDto = {
   totalStations: number;
   stations: StationDto[];

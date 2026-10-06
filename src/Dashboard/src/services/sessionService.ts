@@ -31,6 +31,24 @@ export type ServerSettlementResult = {
   paidAt: string;
 };
 
+type PendingSettlementDto = import('../types').PendingSettlementAccount;
+
+export type SessionChargeResult = {
+  chargeId: string;
+  invoiceId: string;
+  amount: number;
+  prepaidTotal: number;
+  method: 'cash' | 'card' | 'wallet';
+  walletBalanceAfter: number;
+  sessionEndAt?: string | null;
+};
+
+export type PendingSettlementPaymentInput = {
+  totalAmount: number;
+  parts: SessionPaymentPart[];
+  discountAmount?: number;
+};
+
 function isGuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -99,6 +117,68 @@ export async function settleServerSession(
   return await response.json() as ServerSettlementResult;
 }
 
+
+export async function chargeServerSession(
+  sessionId: string,
+  amount: number,
+  method: 'cash' | 'card' | 'wallet',
+): Promise<SessionChargeResult> {
+  const response = await fetch('/api/sessions/' + sessionId + '/charge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount, method }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'شارژ زمان روی سرور ثبت نشد');
+  }
+  return await response.json() as SessionChargeResult;
+}
+
+export async function settleServerSessionLater(
+  sessionId: string,
+  freeTimeMinutes = 0,
+): Promise<PendingSettlementDto> {
+  const response = await fetch('/api/sessions/' + sessionId + '/settle-later', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ freeTimeMinutes }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'ثبت پرداخت بعداً روی سرور انجام نشد');
+  }
+  return await response.json() as PendingSettlementDto;
+}
+
+export async function getPendingSettlementAccounts(): Promise<PendingSettlementDto[]> {
+  const response = await fetch('/api/dashboard/pending-settlements');
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'حساب‌های در انتظار پرداخت از سرور دریافت نشد');
+  }
+  return await response.json() as PendingSettlementDto[];
+}
+
+export async function settlePendingSettlement(
+  invoiceId: string,
+  input: PendingSettlementPaymentInput,
+): Promise<ServerSettlementResult> {
+  const response = await fetch('/api/pending-settlements/' + invoiceId + '/settle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      totalAmount: input.totalAmount,
+      parts: input.parts,
+      discountAmount: input.discountAmount ?? null,
+    }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    throw new Error(payload?.message || 'تسویه حساب باز روی سرور انجام نشد');
+  }
+  return await response.json() as ServerSettlementResult;
+}
 
 export async function updateServerSessionDetails(
   sessionId: string,
