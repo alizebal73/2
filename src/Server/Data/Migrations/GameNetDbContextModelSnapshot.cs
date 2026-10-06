@@ -1117,11 +1117,16 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.Property<string>("Kind")
                         .IsRequired()
-                        .HasMaxLength(20)
+                        .HasMaxLength(30)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Notes")
                         .HasMaxLength(250)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StockArea")
+                        .IsRequired()
+                        .HasMaxLength(20)
                         .HasColumnType("TEXT");
 
                     b.Property<Guid>("ProductId")
@@ -1437,6 +1442,9 @@ namespace GameNetManager.Server.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("ShowcaseStockQuantity")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("StockQuantity")
                         .HasColumnType("INTEGER");
