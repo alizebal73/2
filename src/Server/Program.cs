@@ -3809,7 +3809,9 @@ app.MapGet("/api/buffet/products", async (HttpContext context,
             category = item.Category,
             price = item.UnitPrice,
             buyPrice = item.CostPrice,
-            stock = item.StockQuantity,
+            stock = item.ShowcaseStockQuantity,
+            warehouseStock = item.StockQuantity,
+            showcaseStock = item.ShowcaseStockQuantity,
             minimumStock = item.MinimumStock,
             unit = item.Unit,
             lowStock = item.StockQuantity <= item.MinimumStock,
@@ -3839,6 +3841,7 @@ app.MapPost("/api/buffet/products", async (HttpContext context,
         UnitPrice = request.UnitPrice,
         CostPrice = request.CostPrice,
         StockQuantity = request.InitialStock,
+        ShowcaseStockQuantity = 0,
         MinimumStock = Math.Max(0, request.MinimumStock),
         Unit = string.IsNullOrWhiteSpace(request.Unit) ? "عدد" : request.Unit.Trim(),
         IsActive = true
@@ -3853,6 +3856,7 @@ app.MapPost("/api/buffet/products", async (HttpContext context,
             UnitPrice = product.UnitPrice,
             UnitCost = product.CostPrice,
             Direction = TransactionDirection.In,
+            StockArea = StockArea.Warehouse,
             Kind = "Initial",
             AppUserId = auth.User!.Id,
             Notes = "موجودی اولیه"
@@ -3874,10 +3878,12 @@ app.MapPost("/api/buffet/products", async (HttpContext context,
         category = product.Category,
         price = product.UnitPrice,
         buyPrice = product.CostPrice,
-        stock = product.StockQuantity,
+        stock = product.ShowcaseStockQuantity,
+        warehouseStock = product.StockQuantity,
+        showcaseStock = product.ShowcaseStockQuantity,
         minimumStock = product.MinimumStock,
         unit = product.Unit,
-        lowStock = product.StockQuantity <= product.MinimumStock,
+        lowStock = product.ShowcaseStockQuantity <= product.MinimumStock,
         active = product.IsActive
     });
 })
@@ -3902,6 +3908,11 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         return Results.BadRequest(new { code = "invalid_direction", message = "نوع حرکت موجودی معتبر نیست." });
 
     var kind = string.IsNullOrWhiteSpace(request.Kind) ? "Adjustment" : request.Kind.Trim();
+    var area = string.IsNullOrWhiteSpace(request.StockArea) ? StockArea.Warehouse : Enum.TryParse<StockArea>(request.StockArea.Trim(), true, out var parsedArea) ? parsedArea : (StockArea?)null;
+    if (!area.HasValue)
+        return Results.BadRequest(new { code = "invalid_stock_area", message = "محل موجودی معتبر نیست." });
+    if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase) && area.Value != StockArea.Warehouse)
+        return Results.BadRequest(new { code = "purchase_must_use_warehouse", message = "خرید باید وارد موجودی انبار شود." });
     if (!new[] { "Adjustment", "Purchase", "Sale", "Waste", "Return" }.Contains(kind, StringComparer.OrdinalIgnoreCase))
         return Results.BadRequest(new { code = "invalid_inventory_kind", message = "نوع حرکت موجودی معتبر نیست." });
 
@@ -3935,21 +3946,30 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         var product = await database.Products
             .FirstAsync(item => item.Id == productId && item.IsActive, cancellationToken);
 
-        if (direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
-            return Results.Conflict(new { code = "insufficient_stock", message = "موجودی برای این خروج کافی نیست." });
-
         var unitCost = request.UnitCost ?? product.CostPrice;
         var oldStock = product.StockQuantity;
+        var oldShowcaseStock = product.ShowcaseStockQuantity;
         var oldCost = product.CostPrice;
 
-        product.StockQuantity += direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
-
-        if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase))
+        if (area.Value == StockArea.Warehouse)
         {
-            var newStock = product.StockQuantity;
-            product.CostPrice = newStock <= 0
-                ? unitCost
-                : ((oldStock * oldCost) + (request.Quantity * unitCost)) / newStock;
+            if (direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
+                return Results.Conflict(new { code = "insufficient_warehouse_stock", message = "موجودی انبار برای این خروج کافی نیست." });
+            product.StockQuantity += direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
+
+            if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase))
+            {
+                var newStock = product.StockQuantity;
+                product.CostPrice = newStock <= 0
+                    ? unitCost
+                    : ((oldStock * oldCost) + (request.Quantity * unitCost)) / newStock;
+            }
+        }
+        else
+        {
+            if (direction == TransactionDirection.Out && product.ShowcaseStockQuantity < request.Quantity)
+                return Results.Conflict(new { code = "insufficient_showcase_stock", message = "موجودی ویترین برای این خروج کافی نیست." });
+            product.ShowcaseStockQuantity += direction == TransactionDirection.In ? request.Quantity : -request.Quantity;
         }
 
         database.InventoryTransactions.Add(new InventoryTransaction
@@ -3959,6 +3979,7 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
             UnitPrice = product.UnitPrice,
             UnitCost = unitCost,
             Direction = direction,
+            StockArea = area.Value,
             Kind = kind,
             AppUserId = auth.User!.Id,
             Notes = request.Notes
@@ -3993,8 +4014,10 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         return Results.Ok(new
         {
             id = product.Id,
-            stock = product.StockQuantity,
-            lowStock = product.StockQuantity <= product.MinimumStock,
+            stock = product.ShowcaseStockQuantity,
+            warehouseStock = product.StockQuantity,
+            showcaseStock = product.ShowcaseStockQuantity,
+            lowStock = product.ShowcaseStockQuantity <= product.MinimumStock,
             kind
         });
     }
@@ -4060,6 +4083,98 @@ app.MapPut("/api/buffet/products/{productId:guid}", async (HttpContext context,
 })
 .WithName("UpdateBuffetProduct");
 
+app.MapPost("/api/buffet/products/{productId:guid}/showcase-transfer", async (
+    Guid productId,
+    ShowcaseTransferRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+
+    if (request.Quantity <= 0)
+        return Results.BadRequest(new { code = "invalid_quantity", message = "تعداد انتقال باید بیشتر از صفر باشد." });
+
+    await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+    try
+    {
+        var product = await database.Products
+            .FirstOrDefaultAsync(item => item.Id == productId && item.IsActive, cancellationToken);
+
+        if (product is null)
+            return Results.NotFound(new { code = "product_not_found", message = "محصول پیدا نشد." });
+
+        if (product.StockQuantity < request.Quantity)
+            return Results.Conflict(new { code = "insufficient_warehouse_stock", message = "موجودی انبار برای انتقال به ویترین کافی نیست." });
+
+        product.StockQuantity -= request.Quantity;
+        product.ShowcaseStockQuantity += request.Quantity;
+
+        var now = DateTimeOffset.UtcNow;
+        var note = string.IsNullOrWhiteSpace(request.Notes)
+            ? "انتقال از انبار به ویترین"
+            : request.Notes.Trim();
+
+        database.InventoryTransactions.AddRange(
+            new InventoryTransaction
+            {
+                ProductId = product.Id,
+                Quantity = request.Quantity,
+                UnitPrice = product.UnitPrice,
+                UnitCost = product.CostPrice,
+                Direction = TransactionDirection.Out,
+                StockArea = StockArea.Warehouse,
+                Kind = "ShowcaseTransfer",
+                AppUserId = auth.User!.Id,
+                Notes = note
+            },
+            new InventoryTransaction
+            {
+                ProductId = product.Id,
+                Quantity = request.Quantity,
+                UnitPrice = product.UnitPrice,
+                UnitCost = product.CostPrice,
+                Direction = TransactionDirection.In,
+                StockArea = StockArea.Showcase,
+                Kind = "ShowcaseTransfer",
+                AppUserId = auth.User!.Id,
+                Notes = note
+            });
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "BuffetShowcaseTransfer",
+            EntityName = "Product",
+            EntityId = product.Id.ToString(),
+            Details = $"{product.Name} · انتقال {request.Quantity} {product.Unit} از انبار به ویترین",
+            AppUserId = auth.User!.Id
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            id = product.Id,
+            warehouseStock = product.StockQuantity,
+            showcaseStock = product.ShowcaseStockQuantity
+        });
+    }
+    catch (SqliteException ex) when (ex.SqliteErrorCode is 5 or 6)
+    {
+        await transaction.RollbackAsync(CancellationToken.None);
+        return Results.Conflict(new
+        {
+            code = "inventory_busy",
+            message = "هم‌زمانی انتقال موجودی رخ داد؛ عملیات بدون تغییر داده متوقف شد. دوباره تلاش کنید."
+        });
+    }
+})
+.WithName("TransferBuffetStockToShowcase");
+
+
 app.MapGet("/api/buffet/inventory-transactions", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
@@ -4081,6 +4196,7 @@ app.MapGet("/api/buffet/inventory-transactions", async (HttpContext context,
             unitCost = item.UnitCost,
             referenceInvoiceId = item.ReferenceInvoiceId,
             direction = item.Direction.ToString(),
+            stockArea = item.StockArea.ToString(),
             kind = item.Kind,
             notes = item.Notes,
             createdAt = item.CreatedAt
@@ -4093,6 +4209,65 @@ app.MapGet("/api/buffet/inventory-transactions", async (HttpContext context,
         .ToList());
 })
 .WithName("GetInventoryTransactions");
+
+
+app.MapGet("/api/buffet/reports/today-sales", async (HttpContext context,
+    GameNetDbContext database,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "buffet.sell", "buffet.inventory");
+    if (auth.Error is not null) return auth.Error;
+
+    // "Today" follows the Server's local calendar; CreatedAt is compared as DateTimeOffset.
+    var localNow = DateTimeOffset.Now;
+    var start = new DateTimeOffset(localNow.Date, localNow.Offset);
+    var end = start.AddDays(1);
+
+    var products = await database.Products
+        .AsNoTracking()
+        .Where(item => item.IsActive)
+        .Select(item => new { item.Id, item.Name, item.Unit })
+        .OrderBy(item => item.Name)
+        .ToListAsync(cancellationToken);
+
+    var sales = await database.InventoryTransactions
+        .AsNoTracking()
+        .Where(item => item.Kind == "Sale"
+            && item.StockArea == StockArea.Showcase
+            && item.CreatedAt >= start
+            && item.CreatedAt < end)
+        .GroupBy(item => item.ProductId)
+        .Select(group => new
+        {
+            productId = group.Key,
+            quantity = group.Sum(item => item.Quantity),
+            revenue = group.Sum(item => item.Quantity * item.UnitPrice)
+        })
+        .ToListAsync(cancellationToken);
+
+    var salesMap = sales.ToDictionary(item => item.productId);
+    var rows = products.Select(product =>
+    {
+        salesMap.TryGetValue(product.Id, out var sale);
+        return new
+        {
+            productId = product.Id,
+            productName = product.Name,
+            unit = product.Unit,
+            quantity = sale?.quantity ?? 0,
+            revenue = sale?.revenue ?? 0m
+        };
+    }).ToList();
+
+    return Results.Ok(new
+    {
+        date = start.Date,
+        totalQuantity = rows.Sum(item => item.quantity),
+        totalRevenue = rows.Sum(item => item.revenue),
+        products = rows
+    });
+})
+.WithName("GetBuffetTodaySales");
 
 
 app.MapGet("/api/buffet/reports/profit", async (HttpContext context,
@@ -4163,6 +4338,18 @@ app.MapPost("/api/buffet/sales", async (
 
     if (request.Items is null || request.Items.Count == 0)
         return Results.BadRequest(new { code = "empty_sale", message = "سبد فروش خالی است." });
+
+    if (request.Items.Any(item => item.Quantity <= 0))
+        return Results.BadRequest(new { code = "invalid_sale_quantity", message = "تعداد فروش باید بیشتر از صفر باشد." });
+
+    var duplicateProductIds = request.Items
+        .GroupBy(item => item.ProductId)
+        .Where(group => group.Count() > 1)
+        .Select(group => group.Key)
+        .ToList();
+
+    if (duplicateProductIds.Count > 0)
+        return Results.BadRequest(new { code = "duplicate_sale_product", message = "یک کالا بیش از یک بار در سبد فروش ثبت شده است." });
 
     var target = request.Target?.Trim().ToLowerInvariant();
     if (target is not ("session" or "standalone"))
@@ -4240,15 +4427,15 @@ app.MapPost("/api/buffet/sales", async (
     {
         if (item.Quantity <= 0 || !byId.TryGetValue(item.ProductId, out var product))
             return Results.BadRequest(new { code = "invalid_sale_item", message = "یکی از اقلام فروش معتبر نیست." });
-        if (product.StockQuantity < item.Quantity)
-            return Results.Conflict(new { code = "insufficient_stock", message = "موجودی «" + product.Name + "» کافی نیست." });
+        if (product.ShowcaseStockQuantity < item.Quantity)
+            return Results.Conflict(new { code = "insufficient_showcase_stock", message = "موجودی ویترین «" + product.Name + "» کافی نیست." });
         total += product.UnitPrice * item.Quantity;
     }
 
     foreach (var item in request.Items)
     {
         var product = byId[item.ProductId];
-        product.StockQuantity -= item.Quantity;
+        product.ShowcaseStockQuantity -= item.Quantity;
         database.InventoryTransactions.Add(new InventoryTransaction
         {
             ProductId = product.Id,
@@ -4257,6 +4444,7 @@ app.MapPost("/api/buffet/sales", async (
             UnitCost = product.CostPrice,
             ReferenceInvoiceId = invoice?.Id,
             Direction = TransactionDirection.Out,
+            StockArea = StockArea.Showcase,
             Kind = "Sale",
             AppUserId = auth.User!.Id,
             Notes = target == "session" ? "فروش به جلسه" : "فروش مستقل"
