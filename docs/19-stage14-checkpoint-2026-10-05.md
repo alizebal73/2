@@ -178,3 +178,16 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 ### Boundary
 
 This slice is a completion/hardening pass over existing Stage 14 functionality. It does not replace the existing Session Center, Agent command transport, permission model, or Server-as-source-of-truth architecture.
+
+
+## Slice 14.8 — Dashboard Station Sort Strip
+
+- ✅ Added compact station sort row to the main dashboard workspace.
+- ✅ Criteria: رایانه، شناسه، نام خانوادگی، زمان باقی‌مانده، بدهکاری، توضیحات، وضعیت رایانه.
+- ✅ Active criterion is visually highlighted.
+- ✅ Re-clicking the active criterion toggles ascending/descending order.
+- ✅ Sorting is applied to the visible station collection and remains consistent across card, compact and list views.
+- ✅ When PC grouping is enabled, the selected sort order is preserved inside the groups.
+- ✅ Shift-range selection follows the current sorted visible order.
+- ✅ Browser Smoke added for all seven sort controls, direction toggle and list view interaction.
+- 🟡 Self-hosted Windows Runner certification pending for this slice.
