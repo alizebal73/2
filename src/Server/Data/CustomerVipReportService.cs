@@ -109,14 +109,40 @@ public sealed class CustomerVipReportService
                     item.TotalAmount))
                 .ToList();
 
-        var debts = customerIds.Count == 0
+        var draftDebtInvoices = customerIds.Count == 0
             ? []
             : await _database.Invoices
                 .AsNoTracking()
-                .Where(item => customerIds.Contains(item.CustomerId) && item.Status == InvoiceStatus.Draft)
-                .GroupBy(item => item.CustomerId)
-                .Select(group => new { CustomerId = group.Key, Amount = group.Sum(item => item.TotalAmount) })
+                .Where(item => customerIds.Contains(item.CustomerId)
+                    && item.Status == InvoiceStatus.Draft
+                    && item.IsCustomerAccount
+                    && item.AccountState == CustomerAccountState.Debt)
+                .Select(item => new { item.Id, item.CustomerId, item.TotalAmount })
                 .ToListAsync(cancellationToken);
+
+        var debtInvoiceIds = draftDebtInvoices.Select(item => item.Id).ToList();
+        var debtPayments = debtInvoiceIds.Count == 0
+            ? []
+            : await _database.InvoicePayments
+                .AsNoTracking()
+                .Where(item => debtInvoiceIds.Contains(item.InvoiceId))
+                .Select(item => new { item.InvoiceId, item.Amount })
+                .ToListAsync(cancellationToken);
+
+        var paidByInvoice = debtPayments
+            .GroupBy(item => item.InvoiceId)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
+
+        var debts = draftDebtInvoices
+            .Select(item => new
+            {
+                item.CustomerId,
+                Amount = Math.Max(0m, item.TotalAmount - paidByInvoice.GetValueOrDefault(item.Id))
+            })
+            .Where(item => item.Amount > 0.01m)
+            .GroupBy(item => item.CustomerId)
+            .Select(group => new { CustomerId = group.Key, Amount = group.Sum(item => item.Amount) })
+            .ToList();
 
         var debtByCustomer = debts.ToDictionary(item => item.CustomerId, item => item.Amount);
 
