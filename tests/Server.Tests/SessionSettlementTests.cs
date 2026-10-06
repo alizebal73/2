@@ -386,6 +386,121 @@ public sealed class SessionSettlementTests : IDisposable
     }
 
 
+
+    [Fact]
+    public async Task TwoSessionsForSameCustomerCollapseIntoOnePendingAccount()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type1 = new StationType { Name = "PC-MULTI-01" };
+        var type2 = new StationType { Name = "PC-MULTI-02" };
+        var tariff = new Tariff { Name = "Multi Pending", HourlyRate = 120000m, DailyRate = 500000m };
+        var customer = new Customer { FullName = "مشتری چند دستگاه", FreeTimeMinutes = 0 };
+        var user = new AppUser
+        {
+            FullName = "مدیر تست",
+            UserName = "multi-pending-admin",
+            Email = "multi-pending-admin@test.local",
+            PasswordHash = "hash",
+            Role = "Admin"
+        };
+        var station1 = new Station
+        {
+            Name = "PC-MULTI-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Available,
+            RatePerHour = 120000m,
+            StationType = type1,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var station2 = new Station
+        {
+            Name = "PC-MULTI-02",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Available,
+            RatePerHour = 120000m,
+            StationType = type2,
+            Tariff = tariff,
+            IsActive = true
+        };
+
+        var session1 = new Session
+        {
+            Customer = customer,
+            Station = station1,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 120000m
+        };
+        var session2 = new Session
+        {
+            Customer = customer,
+            Station = station2,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 120000m
+        };
+
+        db.AddRange(type1, type2, tariff, customer, user, station1, station2, session1, session2);
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+
+        await service.ChargeAsync(session1.Id, 60000m, "cash", user.Id, CancellationToken.None);
+
+        var pending1 = await service.PreparePendingAsync(session1.Id, 0, user.Id, CancellationToken.None);
+
+        var session2Invoice = new Invoice
+        {
+            CustomerId = customer.Id,
+            SessionId = session2.Id,
+            AppUserId = user.Id,
+            TotalAmount = 25000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = false,
+            IssuedAt = DateTimeOffset.UtcNow,
+            Items =
+            {
+                new InvoiceItem
+                {
+                    SessionId = session2.Id,
+                    Description = "هزینه جلسه PC-MULTI-02",
+                    Quantity = 1,
+                    UnitPrice = 25000m,
+                    Amount = 25000m
+                }
+            }
+        };
+        db.Invoices.Add(session2Invoice);
+        await db.SaveChangesAsync();
+
+        var pending2 = await service.PreparePendingAsync(session2.Id, 0, user.Id, CancellationToken.None);
+        var pending = await service.GetPendingAsync(CancellationToken.None);
+
+        Assert.Equal(pending1.InvoiceId, pending2.InvoiceId);
+        Assert.Single(pending);
+        Assert.Contains("PC-MULTI-01", pending[0].StationName);
+        Assert.Contains("PC-MULTI-02", pending[0].StationName);
+        Assert.Equal(2, pending[0].Charges.Count + 0);
+        Assert.Equal(2, pending[0].Charges.Count);
+        Assert.Equal(85000m, pending[0].GrossAmount);
+        Assert.Equal(25000m, pending[0].AmountDue);
+
+        var account = await db.Invoices.SingleAsync(item => item.Id == pending[0].InvoiceId);
+        Assert.True(account.IsCustomerAccount);
+        Assert.Equal(3, await db.InvoiceItems.CountAsync(item => item.InvoiceId == account.Id));
+    }
+
     [Fact]
     public async Task OperatorCannotExceedConfiguredDiscountLimitOnPendingSettlement()
     {
