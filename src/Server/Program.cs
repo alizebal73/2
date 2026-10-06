@@ -1111,6 +1111,13 @@ app.MapPost("/api/agent/register", async (
         .Include(item => item.Station)
         .FirstOrDefaultAsync(item => item.DeviceId == deviceId, cancellationToken);
 
+    if (device is not null
+        && !string.IsNullOrWhiteSpace(device.AgentTokenHash)
+        && !pairingCodeValid)
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
+
     if (device is null)
     {
         device = new AgentDevice
