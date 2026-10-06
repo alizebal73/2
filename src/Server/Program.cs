@@ -3814,7 +3814,7 @@ app.MapGet("/api/buffet/products", async (HttpContext context,
             showcaseStock = item.ShowcaseStockQuantity,
             minimumStock = item.MinimumStock,
             unit = item.Unit,
-            lowStock = item.StockQuantity <= item.MinimumStock,
+            lowStock = item.ShowcaseStockQuantity <= item.MinimumStock,
             active = item.IsActive
         })
         .ToListAsync(cancellationToken);
@@ -3908,7 +3908,12 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         return Results.BadRequest(new { code = "invalid_direction", message = "نوع حرکت موجودی معتبر نیست." });
 
     var kind = string.IsNullOrWhiteSpace(request.Kind) ? "Adjustment" : request.Kind.Trim();
-    var area = string.IsNullOrWhiteSpace(request.StockArea) ? StockArea.Warehouse : Enum.TryParse<StockArea>(request.StockArea.Trim(), true, out var parsedArea) ? parsedArea : (StockArea?)null;
+    StockArea? area = StockArea.Warehouse;
+    if (!string.IsNullOrWhiteSpace(request.StockArea)
+        && !Enum.TryParse<StockArea>(request.StockArea.Trim(), true, out var parsedArea))
+        return Results.BadRequest(new { code = "invalid_stock_area", message = "محل موجودی معتبر نیست." });
+    else if (!string.IsNullOrWhiteSpace(request.StockArea))
+        area = parsedArea;
     if (!area.HasValue)
         return Results.BadRequest(new { code = "invalid_stock_area", message = "محل موجودی معتبر نیست." });
     if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase) && area.Value != StockArea.Warehouse)
@@ -3948,7 +3953,6 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
 
         var unitCost = request.UnitCost ?? product.CostPrice;
         var oldStock = product.StockQuantity;
-        var oldShowcaseStock = product.ShowcaseStockQuantity;
         var oldCost = product.CostPrice;
 
         if (area.Value == StockArea.Warehouse)
@@ -4117,7 +4121,6 @@ app.MapPost("/api/buffet/products/{productId:guid}/showcase-transfer", async (
         product.StockQuantity -= request.Quantity;
         product.ShowcaseStockQuantity += request.Quantity;
 
-        var now = DateTimeOffset.UtcNow;
         var note = string.IsNullOrWhiteSpace(request.Notes)
             ? "انتقال از انبار به ویترین"
             : request.Notes.Trim();
