@@ -243,7 +243,8 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             .AsNoTracking()
             .Where(item => item.CustomerId == session.CustomerId
                 && item.Status == InvoiceStatus.Draft
-                && item.IsCustomerAccount)
+                && item.IsCustomerAccount
+                && item.AccountState == CustomerAccountState.PendingPayment)
             .Select(item => (Guid?)item.Id)
             .FirstOrDefaultAsync(cancellationToken)
             ?? await database.Invoices
