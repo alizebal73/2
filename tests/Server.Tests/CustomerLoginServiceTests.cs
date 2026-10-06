@@ -57,6 +57,65 @@ public sealed class CustomerLoginServiceTests
             && ex.Message.StartsWith("CONCURRENT_LOGIN_LIMIT:", StringComparison.Ordinal)));
     }
 
+    [Fact]
+    public async Task ActiveLoginResolutionRequiresExactCustomerLoginAndClientBinding()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+
+        await using var db = CreateContext(connection);
+        await db.Database.EnsureCreatedAsync();
+
+        var customer = new Customer
+        {
+            FullName = "Auth State Customer",
+            Code = "AUTH-1",
+            Username = "auth-state",
+            Balance = 250000m,
+            FreeMoney = 50000m
+        };
+        var matchingLogin = new CustomerLogin
+        {
+            Customer = customer,
+            ClientKey = "agent-01",
+            IsActive = true
+        };
+        var otherDeviceLogin = new CustomerLogin
+        {
+            Customer = customer,
+            ClientKey = "agent-02",
+            IsActive = true
+        };
+
+        db.AddRange(customer, matchingLogin, otherDeviceLogin);
+        await db.SaveChangesAsync();
+
+        var service = new CustomerLoginService(db);
+
+        var wrongLogin = await service.ResolveActiveAsync(
+            customer.Id,
+            Guid.NewGuid(),
+            "agent-01",
+            CancellationToken.None);
+        var wrongDevice = await service.ResolveActiveAsync(
+            customer.Id,
+            matchingLogin.Id,
+            "agent-02",
+            CancellationToken.None);
+        var valid = await service.ResolveActiveAsync(
+            customer.Id,
+            matchingLogin.Id,
+            "agent-01",
+            CancellationToken.None);
+
+        Assert.Null(wrongLogin);
+        Assert.Null(wrongDevice);
+        Assert.NotNull(valid);
+        Assert.Equal(customer.Id, valid!.CustomerId);
+        Assert.Equal(250000m, valid.Customer.Balance);
+        Assert.Equal(50000m, valid.Customer.FreeMoney);
+    }
+
     private static GameNetDbContext CreateContext(SqliteConnection connection)
         => new(new DbContextOptionsBuilder<GameNetDbContext>()
             .UseSqlite(connection)
