@@ -3796,6 +3796,7 @@ app.MapGet("/api/buffet/products", async (HttpContext context,
 {
     var auth = await AuthorizationService.RequireAnyPermissionAsync(context, database, cancellationToken, "buffet.sell", "buffet.inventory");
     if (auth.Error is not null) return auth.Error;
+    var canViewInventoryDetails = AuthorizationService.CanMutateBuffetInventory(auth.User!);
 
     var products = await database.Products
         .AsNoTracking()
@@ -3808,9 +3809,9 @@ app.MapGet("/api/buffet/products", async (HttpContext context,
             name = item.Name,
             category = item.Category,
             price = item.UnitPrice,
-            buyPrice = item.CostPrice,
+            buyPrice = canViewInventoryDetails ? item.CostPrice : (decimal?)null,
             stock = item.ShowcaseStockQuantity,
-            warehouseStock = item.StockQuantity,
+            warehouseStock = canViewInventoryDetails ? item.StockQuantity : (int?)null,
             showcaseStock = item.ShowcaseStockQuantity,
             minimumStock = item.MinimumStock,
             unit = item.Unit,
@@ -4185,7 +4186,7 @@ app.MapGet("/api/buffet/inventory-transactions", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    var auth = await AuthorizationService.RequireInventoryMutationAsync(context, database, cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
     var rows = await database.InventoryTransactions
