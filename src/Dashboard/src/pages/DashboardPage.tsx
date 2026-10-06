@@ -357,12 +357,12 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     );
     const fullName = (station.customerFullName || customer?.name || '').trim();
     if (!fullName) return '';
-    const pieces = fullName.split(/\\s+/).filter(Boolean);
+    const pieces = fullName.split(/\s+/).filter(Boolean);
     return pieces[pieces.length - 1] || '';
   }
 
   function identifierForStation(station: StationDto) {
-    return (station.customerUsername || station.customerCode || '').trim();
+    return (station.customerCode || station.customerUsername || '').trim();
   }
 
   function noteForStation(station: StationDto) {
