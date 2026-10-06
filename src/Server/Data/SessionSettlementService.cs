@@ -240,9 +240,18 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
 
         var invoiceId = await database.Invoices
             .AsNoTracking()
-            .Where(item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft)
+            .Where(item => item.CustomerId == session.CustomerId
+                && item.Status == InvoiceStatus.Draft
+                && item.IsCustomerAccount)
             .Select(item => (Guid?)item.Id)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? await database.Invoices
+                .AsNoTracking()
+                .Where(item => item.SessionId == session.Id
+                    && item.Status == InvoiceStatus.Draft
+                    && !item.IsCustomerAccount)
+                .Select(item => (Guid?)item.Id)
+                .FirstOrDefaultAsync(cancellationToken);
 
         var buffetTotal = invoiceId.HasValue
             ? await database.InvoiceItems
