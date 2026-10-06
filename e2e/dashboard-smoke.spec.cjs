@@ -91,6 +91,170 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await expect(page.getByText('وضعیت مالی')).toBeVisible();
 });
 
+test('F1 customer workspace and station right-click Agent controls stay wired', async ({ page }) => {
+  const customerId = '11111111-1111-4111-8111-111111111111';
+  const agentId = '22222222-2222-4222-8222-222222222222';
+
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-f1-context',
+      fullName: 'اپراتور تست',
+      userName: 'operator_f1',
+      email: 'operator-f1@gamenet.local',
+      role: 'Operator',
+      isActive: true,
+      permissions: ['customer.wallet', 'customer.debt', 'client.control', 'client.power', 'session.manage', 'session.settle']
+    })
+  }));
+
+  await page.route('**/api/customers', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: customerId,
+      code: '1006',
+      username: 'ali123',
+      name: 'علی رضایی',
+      alias: 'Ali',
+      nationalId: '0012345678',
+      mobile: '09121234567',
+      vip: 'gold',
+      wallet: 350000,
+      debt: 120000,
+      giftCredit: 20000,
+      freeTimeMinutes: 30,
+      discountLevel: 10,
+      lastSeen: new Date().toISOString(),
+      status: 'active',
+      concurrentLoginLimit: 2,
+      vipPackageName: 'VIP Gold',
+      notes: 'مشتری ثابت'
+    }])
+  }));
+
+  await page.route(\`**/api/customers/\${customerId}/history\`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([
+      {
+        id: 'history-1',
+        type: 'charge',
+        description: 'شارژ کیف پول',
+        amount: 200000,
+        createdAt: new Date(Date.now() - 3600000).toISOString()
+      }
+    ])
+  }));
+
+  await page.route('**/api/agent/devices', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      agentId,
+      deviceId: 'device-f1-01',
+      name: 'PC-03 Client',
+      stationId: 'pc-03',
+      stationName: 'PC ۰۳',
+      isOnline: true,
+      isLocked: false,
+      kioskEnabled: false,
+      lockOnDisconnect: true,
+      lastSeenAt: new Date().toISOString(),
+      connectedAt: new Date().toISOString(),
+      agentVersion: '1.0.0',
+      lifecycleState: 'Running'
+    }])
+  }));
+
+  await page.route(\`**/api/agent/devices/\${agentId}/commands\`, route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      commandId: '33333333-3333-4333-8333-333333333333',
+      agentDeviceId: agentId,
+      commandType: 'ping',
+      status: 'Sent',
+      requestedAt: new Date().toISOString(),
+      sentAt: new Date().toISOString(),
+      succeeded: null
+    })
+  }));
+
+  await page.route('**/api/agent/commands/33333333-3333-4333-8333-333333333333', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      commandId: '33333333-3333-4333-8333-333333333333',
+      agentDeviceId: agentId,
+      commandType: 'ping',
+      status: 'Succeeded',
+      requestedAt: new Date().toISOString(),
+      sentAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      succeeded: true,
+      resultMessage: 'ارتباط Agent سالم است.'
+    })
+  }));
+
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      totalStations: 1,
+      generatedAt: new Date().toISOString(),
+      stations: [{
+        id: 'pc-03',
+        name: 'PC ۰۳',
+        zone: 'pc',
+        type: 'PC',
+        ratePerHour: 95000,
+        state: 'busy',
+        network: 1,
+        customerCode: '1006',
+        customerUsername: 'ali123',
+        customerFullName: 'علی رضایی',
+        customerDebt: 120000,
+        customerNote: 'مشتری ثابت',
+        remainingMinutes: 84,
+        serverSessionId: '44444444-4444-4444-8444-444444444444',
+        agentId,
+        agentOnline: true,
+        agentLocked: false,
+        agentKioskEnabled: false,
+        agentLockOnDisconnect: true,
+        agentLifecycleState: 'Running'
+      }]
+    })
+  }));
+
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-station-id="pc-03"]').waitFor();
+
+  await page.keyboard.press('F1');
+  await expect(page.getByRole('dialog')).toContainText('عملیات مشتری · F1');
+
+  const search = page.getByPlaceholder('مثلاً 1006 یا ali123 یا 0912...');
+  await search.fill('ali123');
+  await page.getByRole('button', { name: 'نمایش مشتری' }).click();
+  await expect(page.getByRole('dialog')).toContainText('علی رضایی');
+  await expect(page.getByRole('dialog')).toContainText('۳۵۰٬۰۰۰ تومان');
+  await expect(page.getByRole('dialog')).toContainText('شارژ کیف پول');
+
+  await page.keyboard.press('Escape');
+  await page.locator('[data-station-id="pc-03"]').click({ button: 'right' });
+  await expect(page.locator('.context-menu')).toBeVisible();
+  await expect(page.locator('.context-menu')).toContainText('Ping / بررسی ارتباط Agent');
+  await expect(page.locator('.context-menu')).toContainText('راه‌اندازی مجدد Client');
+  await expect(page.locator('.context-menu')).toContainText('خاموش کردن Client');
+
+  await page.getByRole('button', { name: /Ping \/ بررسی ارتباط Agent/ }).click();
+  await expect(page.getByText('ارتباط Agent سالم است.')).toBeVisible();
+});
+
 test('dashboard exposes accessible navigation, notifications and stale-state semantics', async ({ page }) => {
   await page.route('**/api/auth/me', route => route.fulfill({
     status: 200,
