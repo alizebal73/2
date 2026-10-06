@@ -35,6 +35,10 @@ function money(value: number) {
   return new Intl.NumberFormat('fa-IR').format(Math.round(value));
 }
 
+function decimal(value: number) {
+  return new Intl.NumberFormat('fa-IR', { maximumFractionDigits: 1 }).format(value);
+}
+
 function minutes(value: number | null | undefined) {
   if (value == null) return '—';
   const total = Math.max(0, Math.round(value));
@@ -259,7 +263,7 @@ export function CustomerOperationsWorkspace({
               </div>
               <div>
                 <span>مصرف امروز</span>
-                <strong>{customer.hoursUsedToday != null ? money(customer.hoursUsedToday) + ' ساعت' : '—'}</strong>
+                <strong>{customer.hoursUsedToday != null ? decimal(customer.hoursUsedToday) + ' ساعت' : '—'}</strong>
               </div>
             </div>
           </section>
