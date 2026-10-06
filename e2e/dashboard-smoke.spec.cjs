@@ -158,6 +158,59 @@ test('dashboard station sort strip orders visible PCs by selected field', async 
   await expect(page.locator('[data-station-id="sort-02"]')).toBeVisible();
 });
 
+test('operator buffet view exposes sales only, not inventory mutation controls', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-buffet-operator',
+      fullName: 'اپراتور بوفه',
+      userName: 'buffet_operator',
+      email: 'buffet-operator@gamenet.local',
+      role: 'Operator',
+      isActive: true,
+      permissions: ['buffet.sell', 'buffet.inventory']
+    })
+  }));
+
+  await page.route('**/api/buffet/products', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([{
+      id: 'operator-cola',
+      name: 'نوشابه',
+      category: 'نوشیدنی',
+      price: 35000,
+      buyPrice: 20000,
+      stock: 3,
+      warehouseStock: 10,
+      showcaseStock: 3,
+      minimumStock: 1,
+      unit: 'عدد',
+      lowStock: false,
+      active: true
+    }])
+  }));
+  await page.route('**/api/buffet/reports/today-sales', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ date: new Date().toISOString().slice(0, 10), totalQuantity: 0, totalRevenue: 0, products: [] })
+  }));
+  await page.route('**/api/sessions/active', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'بوفه' }).click();
+
+  await expect(page.getByText('نوشابه')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'افزودن به سبد' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'ثبت خرید به انبار' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '+ ویترین' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '− انبار' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /ضایعات انبار/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'ویرایش' })).toHaveCount(0);
+});
+
 test('buffet separates warehouse, showcase and today sales', async ({ page }) => {
   let warehouseStock = 5;
   let showcaseStock = 2;
