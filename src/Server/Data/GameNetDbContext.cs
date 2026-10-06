@@ -544,6 +544,28 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
             .OnDelete(DeleteBehavior.SetNull);
     }
 
+    private static void ConfigureSessionCharge(ModelBuilder modelBuilder)
+    {
+        var charge = modelBuilder.Entity<SessionCharge>();
+        charge.HasKey(item => item.Id);
+        charge.Property(item => item.Amount).HasColumnType("decimal(18,2)");
+        charge.Property(item => item.Method).HasMaxLength(20).IsRequired();
+        charge.HasOne(item => item.AppUser)
+            .WithMany()
+            .HasForeignKey(item => item.AppUserId)
+            .OnDelete(DeleteBehavior.SetNull);
+        charge.HasOne(item => item.Invoice)
+            .WithMany()
+            .HasForeignKey(item => item.InvoiceId)
+            .OnDelete(DeleteBehavior.Cascade);
+        charge.HasOne(item => item.Session)
+            .WithMany()
+            .HasForeignKey(item => item.SessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+        charge.HasIndex(item => item.InvoiceId);
+        charge.HasIndex(item => new { item.SessionId, item.CreatedAt });
+    }
+
     private static void ConfigureInvoice(ModelBuilder modelBuilder)
     {
         var invoice = modelBuilder.Entity<Invoice>();

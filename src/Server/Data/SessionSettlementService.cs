@@ -1098,8 +1098,6 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         var invoices = await database.Invoices
             .AsNoTracking()
             .Include(item => item.Customer)
-            .Include(item => item.Session)
-                .ThenInclude(item => item.Station)
             .Include(item => item.Items)
                 .ThenInclude(item => item.Product)
             .Include(item => item.Items)
@@ -1147,6 +1145,20 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             .ToDictionary(group => group.Key, group => group.ToList());
         var chargeSessionsById = chargeSessions.ToDictionary(item => item.Id);
 
+        var invoiceSessionIds = invoices
+            .Where(item => item.SessionId.HasValue)
+            .Select(item => item.SessionId!.Value)
+            .Distinct()
+            .ToList();
+        var invoiceSessions = invoiceSessionIds.Count == 0
+            ? new List<Session>()
+            : await database.Sessions
+                .AsNoTracking()
+                .Include(item => item.Station)
+                .Where(item => invoiceSessionIds.Contains(item.Id))
+                .ToListAsync(cancellationToken);
+        var invoiceSessionsById = invoiceSessions.ToDictionary(item => item.Id);
+
         var now = DateTimeOffset.UtcNow;
 
         return invoices.Select(invoice =>
@@ -1160,8 +1172,9 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
                 : new List<InvoicePayment>();
 
             var sessions = new List<Session>();
-            if (invoice.Session is not null)
-                sessions.Add(invoice.Session);
+            if (invoice.SessionId.HasValue
+                && invoiceSessionsById.TryGetValue(invoice.SessionId.Value, out var invoiceSession))
+                sessions.Add(invoiceSession);
 
             sessions.AddRange(
                 invoice.Items

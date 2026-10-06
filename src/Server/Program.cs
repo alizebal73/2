@@ -3927,7 +3927,7 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         if (!Enum.TryParse<StockArea>(request.StockArea.Trim(), true, out area))
             return Results.BadRequest(new { code = "invalid_stock_area", message = "محل موجودی معتبر نیست." });
     }
-    if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase) && area.Value != StockArea.Warehouse)
+    if (kind.Equals("Purchase", StringComparison.OrdinalIgnoreCase) && area != StockArea.Warehouse)
         return Results.BadRequest(new { code = "purchase_must_use_warehouse", message = "خرید باید وارد موجودی انبار شود." });
     if (!new[] { "Adjustment", "Purchase", "Sale", "Waste", "Return" }.Contains(kind, StringComparer.OrdinalIgnoreCase))
         return Results.BadRequest(new { code = "invalid_inventory_kind", message = "نوع حرکت موجودی معتبر نیست." });
@@ -3966,7 +3966,7 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
         var oldStock = product.StockQuantity;
         var oldCost = product.CostPrice;
 
-        if (area.Value == StockArea.Warehouse)
+        if (area == StockArea.Warehouse)
         {
             if (direction == TransactionDirection.Out && product.StockQuantity < request.Quantity)
                 return Results.Conflict(new { code = "insufficient_warehouse_stock", message = "موجودی انبار برای این خروج کافی نیست." });
@@ -3994,7 +3994,7 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
             UnitPrice = product.UnitPrice,
             UnitCost = unitCost,
             Direction = direction,
-            StockArea = area.Value,
+            StockArea = area,
             Kind = kind,
             AppUserId = auth.User!.Id,
             Notes = request.Notes
@@ -4465,7 +4465,6 @@ app.MapPost("/api/buffet/sales", async (
 
         invoice = await database.Invoices
             .Include(item => item.Items)
-            .Include(item => item.Session)
             .FirstOrDefaultAsync(
                 item => item.Id == request.InvoiceId.Value
                     && item.Status == InvoiceStatus.Draft
@@ -4476,7 +4475,11 @@ app.MapPost("/api/buffet/sales", async (
         if (invoice is null)
             return Results.Conflict(new { code = "pending_invoice_not_available", message = "حساب باز موردنظر برای فروش بوفه در دسترس نیست." });
 
-        session = invoice.Session;
+        session = invoice.SessionId.HasValue
+            ? await database.Sessions
+                .Include(item => item.Station)
+                .FirstOrDefaultAsync(item => item.Id == invoice.SessionId.Value, cancellationToken)
+            : null;
     }
     else if (target == "customer")
     {
