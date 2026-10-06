@@ -216,3 +216,14 @@ This slice intentionally preserves the existing Product/Invoice model and adds a
 
 - 🟡 Changes committed to `main`.
 - 🟡 Self-hosted Windows Runner Build/Test/Browser Smoke certification still required.
+## Slice 14.10 — Buffet Inventory Anti-Abuse / Operator Boundary
+
+- ✅ Buffet sales remain available through `buffet.sell`.
+- ✅ Inventory mutation is now Server-side restricted to `Admin` / `Owner`; old `buffet.inventory` permission cannot bypass this boundary.
+- ✅ Product creation, editing, stock adjustment and warehouse→showcase transfer all use the same primary-manager authorization gate.
+- ✅ Operator UI hides purchase, edit, warehouse add/remove, waste, return and showcase replenishment controls.
+- ✅ Operator product API response does not expose real warehouse quantity or purchase cost.
+- ✅ Inventory transaction history endpoint is also restricted to the primary-manager boundary.
+- ✅ Unit regression test covers Operator/Manager denied and Admin/Owner allowed.
+- ✅ Browser Smoke covers operator buffet view and absence of inventory mutation controls.
+- 🟡 Self-hosted Windows Runner Build/Test/Browser Smoke certification required.
