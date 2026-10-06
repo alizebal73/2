@@ -7,6 +7,8 @@ type ProductDto = {
   price: number;
   buyPrice: number;
   stock: number;
+  warehouseStock: number;
+  showcaseStock: number;
   minimumStock: number;
   unit: string;
   lowStock: boolean;
@@ -25,11 +27,13 @@ function mapProduct(row: ProductDto): ProductRecord {
     category: row.category,
     price: row.price,
     buyPrice: row.buyPrice,
-    stock: row.stock,
+    stock: row.showcaseStock ?? row.stock,
+    warehouseStock: row.warehouseStock ?? row.stock,
+    showcaseStock: row.showcaseStock ?? row.stock,
     minimumStock: row.minimumStock,
     unit: row.unit,
     lowStock: row.lowStock,
-    maxStock: Math.max(row.stock, row.minimumStock * 3, 10),
+    maxStock: Math.max(row.showcaseStock ?? row.stock, row.minimumStock * 3, 10),
   };
 }
 
@@ -102,6 +106,16 @@ export async function recordServerBuffetSale(
 }
 
 
+export async function transferServerStockToShowcase(productId: string, quantity: number, notes?: string) {
+  const response = await fetch('/api/buffet/products/' + productId + '/showcase-transfer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ quantity, notes: notes || null }),
+  });
+  if (!response.ok) throw new Error(await readError(response, 'انتقال کالا به ویترین انجام نشد'));
+  return await response.json() as { id: string; warehouseStock: number; showcaseStock: number };
+}
+
 export async function updateServerProduct(productId: string, input: {
   name: string;
   category: string;
@@ -134,6 +148,12 @@ export async function getServerInventoryTransactions(): Promise<InventoryTransac
   return await response.json() as InventoryTransactionRecord[];
 }
 
+
+export async function getServerBuffetTodaySales(): Promise<import('../types').BuffetTodaySalesReport> {
+  const response = await fetch('/api/buffet/reports/today-sales');
+  if (!response.ok) throw new Error(await readError(response, 'گزارش فروش امروز بوفه دریافت نشد'));
+  return await response.json() as import('../types').BuffetTodaySalesReport;
+}
 
 export async function getServerBuffetProfit(from?: string, to?: string): Promise<BuffetProfitReport> {
   const query = new URLSearchParams();
