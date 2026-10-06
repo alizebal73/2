@@ -385,5 +385,93 @@ public sealed class SessionSettlementTests : IDisposable
         Assert.Empty(await service.GetPendingAsync(CancellationToken.None));
     }
 
+
+    [Fact]
+    public async Task OperatorCannotExceedConfiguredDiscountLimitOnPendingSettlement()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "PC-Pending-Discount" };
+        var tariff = new Tariff { Name = "Pending-Discount", HourlyRate = 100000m, DailyRate = 500000m };
+        var customer = new Customer { FullName = "Pending Discount Test" };
+        var user = new AppUser
+        {
+            FullName = "Operator",
+            UserName = "pending-discount-operator",
+            Email = "pending-discount-operator@test.local",
+            PasswordHash = "hash",
+            Role = "Operator"
+        };
+        var station = new Station
+        {
+            Name = "PC-PENDING-DISCOUNT-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Available,
+            RatePerHour = 100000m,
+            StationType = type,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            EndAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            State = SessionState.Completed,
+            HourlyRateSnapshot = 100000m
+        };
+        var invoice = new Invoice
+        {
+            Customer = customer,
+            Session = session,
+            TotalAmount = 100000m,
+            Status = InvoiceStatus.Draft,
+            IssuedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
+            Items =
+            {
+                new InvoiceItem
+                {
+                    Description = "هزینه جلسه PC-PENDING-DISCOUNT-01",
+                    Quantity = 1,
+                    UnitPrice = 100000m,
+                    Amount = 100000m
+                }
+            }
+        };
+
+        db.AddRange(type, tariff, customer, user, station, session, invoice);
+        db.AppSettings.Add(new AppSetting
+        {
+            Key = "operatorDiscount",
+            ScopeKey = ServerSettingsCatalog.GlobalScope,
+            ValueJson = "10"
+        });
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.SettlePendingAsync(
+                invoice.Id,
+                new PendingSettlementPaymentRequest(
+                    50000m,
+                    new[] { new SettlementPart("cash", 50000m) },
+                    user.Id,
+                    50001m),
+                CancellationToken.None));
+
+        var savedInvoice = await db.Invoices.SingleAsync(item => item.Id == invoice.Id);
+        Assert.Equal(InvoiceStatus.Draft, savedInvoice.Status);
+        Assert.Equal(100000m, savedInvoice.TotalAmount);
+    }
+
     public void Dispose() => _connection.Dispose();
 }
