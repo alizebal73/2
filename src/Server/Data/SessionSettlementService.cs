@@ -877,6 +877,9 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
 
         var due = Math.Max(0m, invoice.TotalAmount - paid);
+        if (due <= 0.01m)
+            throw new InvalidOperationException("این حساب مبلغ بدهی قابل انتقال ندارد.");
+
         invoice.AccountState = CustomerAccountState.Debt;
         invoice.AppUserId ??= appUserId;
 
@@ -1257,7 +1260,9 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
                     item.Method,
                     item.CreatedAt)).ToList(),
                 buffetItems);
-        }).ToList();
+        })
+        .Where(item => item.AmountDue > 0.01m)
+        .ToList();
     }
 
 
