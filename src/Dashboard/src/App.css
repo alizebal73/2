@@ -2978,6 +2978,197 @@ button:focus-visible {
   font-size: 9px;
 }
 
+
+.pending-payment-section-head > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.pending-payment-section-head small {
+  color: var(--dim);
+  font-size: 8px;
+}
+.pending-payment-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 5px;
+}
+.pending-payment-view-switch {
+  width: 100%;
+}
+.pending-payment-view-switch button {
+  flex: 1;
+  min-width: 0;
+}
+.pending-payment-sort {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 6px;
+}
+.pending-payment-sort button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 4px 6px;
+  background: #0c1424;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 7.5px;
+}
+.pending-payment-sort button.active {
+  border-color: rgba(255, 180, 84, .34);
+  background: rgba(255, 180, 84, .10);
+  color: #f3d39b;
+}
+.pending-payment-list {
+  display: grid;
+  gap: 5px;
+}
+.pending-payment-card {
+  padding: 7px;
+}
+.pending-payment-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 7px;
+  margin-top: 4px;
+}
+.pending-payment-summary span {
+  color: var(--dim);
+  font-size: 7.5px;
+}
+.pending-payment-branches {
+  display: grid;
+  gap: 3px;
+  margin-top: 5px;
+}
+.pending-branch-toggle {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto 14px;
+  gap: 5px;
+  align-items: center;
+  border: 1px solid #1a2841;
+  border-radius: 6px;
+  padding: 5px 6px;
+  background: #0b1322;
+  color: var(--txt);
+  text-align: right;
+  cursor: pointer;
+}
+.pending-branch-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8px;
+}
+.pending-branch-toggle strong {
+  font-size: 8px;
+}
+.pending-branch-toggle b {
+  color: var(--orange);
+  font-size: 10px;
+}
+.pending-branch-details {
+  display: grid;
+  gap: 2px;
+  padding: 4px 6px 5px;
+  border-inline: 1px solid #18253c;
+  border-bottom: 1px solid #18253c;
+  border-radius: 0 0 6px 6px;
+  background: #0d1526;
+}
+.pending-branch-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 7.5px;
+}
+.pending-branch-details small {
+  color: var(--dim);
+  font-size: 7px;
+}
+.pending-calc-details .pending-calc-total {
+  margin-top: 2px;
+  padding-top: 4px;
+  border-top: 1px solid #223150;
+}
+.pending-calc-total strong {
+  color: var(--orange);
+}
+.pending-payment-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  margin-top: 5px;
+}
+.pending-payment-actions .btn {
+  min-width: 0;
+  padding-inline: 4px;
+  font-size: 8px;
+}
+.pending-payment-row {
+  display: grid;
+  grid-template-columns: minmax(90px,1.2fr) minmax(95px,1.4fr) auto auto;
+  gap: 5px;
+  align-items: center;
+  padding: 5px 6px;
+  border: 1px solid rgba(255,180,84,.22);
+  border-radius: 7px;
+  background: rgba(255,180,84,.05);
+}
+.pending-payment-row-main,
+.pending-payment-row-main strong,
+.pending-payment-row-main small {
+  min-width: 0;
+}
+.pending-payment-row-main strong,
+.pending-payment-row-main small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pending-payment-row-main strong {
+  font-size: 8.5px;
+}
+.pending-payment-row-main small {
+  margin-top: 2px;
+  color: var(--dim);
+  font-size: 7px;
+}
+.pending-payment-row-amount {
+  color: var(--orange);
+  white-space: nowrap;
+  font-size: 8px;
+}
+.pending-payment-row-actions {
+  display: flex;
+  gap: 2px;
+}
+.pending-payment-row-actions .btn {
+  padding-inline: 4px;
+  font-size: 7.5px;
+}
+.pending-payment-row-details {
+  grid-column: 1 / -1;
+}
+.pending-payment-row-details .pending-payment-branches {
+  margin-top: 0;
+}
+@media (max-width: 820px) {
+  .pending-payment-row {
+    grid-template-columns: 1fr auto;
+  }
+  .pending-payment-row > div:nth-child(2) {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+  .pending-payment-row-actions {
+    grid-column: 1 / -1;
+    order: 4;
+  }
+}
 .sidebar-attention-item {
   width: 100%;
   display: grid;

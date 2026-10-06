@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AppUserRecord, ProductRecord } from '../types';
 import { hasPermission } from '../services/authService';
 import { adjustServerStock, createServerProduct, getServerBuffetTodaySales, getServerInventoryTransactions, getServerProducts, recordServerBuffetSale, transferServerStockToShowcase, updateServerProduct } from '../services/buffetService';
-import { getServerActiveSessions, type ActiveServerSession } from '../services/sessionService';
+import { getPendingSettlementAccounts, getServerActiveSessions, type ActiveServerSession } from '../services/sessionService';
+import type { PendingSettlementAccount } from '../types';
 import { userErrorMessage } from '../utils/userError';
 
 function money(value: number) {
@@ -16,7 +17,9 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
   const [inventoryHistory, setInventoryHistory] = useState<import('../types').InventoryTransactionRecord[]>([]);
   const [todaySales, setTodaySales] = useState<import('../types').BuffetTodaySalesReport | null>(null);
   const [activeSessions, setActiveSessions] = useState<ActiveServerSession[]>([]);
+  const [pendingSettlements, setPendingSettlements] = useState<PendingSettlementAccount[]>([]);
   const [sessionTargetId, setSessionTargetId] = useState('');
+  const [pendingTargetId, setPendingTargetId] = useState('');
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [category, setCategory] = useState('همه');
   const [cart, setCart] = useState<Record<string, number>>({});
@@ -29,18 +32,24 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
   async function refresh() {
     try {
       const serverProducts = await getServerProducts();
-      const [serverHistory, serverTodaySales, serverSessions] = await Promise.all([
+      const [serverHistory, serverTodaySales, serverSessions, serverPending] = await Promise.all([
         canManageInventory ? getServerInventoryTransactions() : Promise.resolve([]),
         (canManageInventory || canSellBuffet) ? getServerBuffetTodaySales() : Promise.resolve(null),
         canSellBuffet ? getServerActiveSessions() : Promise.resolve([]),
+        canSellBuffet ? getPendingSettlementAccounts() : Promise.resolve([]),
       ]);
       setProducts(serverProducts);
       setInventoryHistory(serverHistory);
       setTodaySales(serverTodaySales);
       setActiveSessions(serverSessions);
+      setPendingSettlements(serverPending);
       setSessionTargetId(current => {
         if (current && serverSessions.some(item => item.id === current)) return current;
         return serverSessions[0]?.id ?? '';
+      });
+      setPendingTargetId(current => {
+        if (current && serverPending.some(item => item.invoiceId === current)) return current;
+        return serverPending[0]?.invoiceId ?? '';
       });
     } catch (error) {
       setNotice(userErrorMessage(error, 'دریافت موجودی بوفه انجام نشد'));
@@ -174,11 +183,15 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
     setProductFormOpen(true);
   }
 
-  async function checkout(destination: 'session' | 'standalone') {
+  async function checkout(destination: 'session' | 'pending' | 'standalone') {
     if (!canSellBuffet) { setNotice('دسترسی فروش بوفه ندارید'); return; }
     if (cartTotal <= 0) { setNotice('سبد فروش خالی است'); return; }
     if (destination === 'session' && !sessionTargetId) {
       setNotice('ابتدا جلسه فعال مقصد را انتخاب کنید');
+      return;
+    }
+    if (destination === 'pending' && !pendingTargetId) {
+      setNotice('ابتدا حساب باز مقصد را انتخاب کنید');
       return;
     }
     setBusy(true);
@@ -187,6 +200,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
         cartItems.map(item => ({ productId: item.id, quantity: cart[item.id] ?? 0 })),
         destination,
         destination === 'session' ? sessionTargetId : undefined,
+        destination === 'pending' ? pendingTargetId : undefined,
       );
       if (destination === 'session') {
         window.dispatchEvent(new CustomEvent('gamenet-buffet-sale', {
@@ -194,6 +208,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
             total: sale.total,
             sessionId: sale.sessionId,
             buffetTotal: sale.buffetTotal,
+            invoiceId: sale.invoiceId,
             items: cartItems.map(item => ({ name: item.name, quantity: cart[item.id] ?? 0 })),
           },
         }));
@@ -270,6 +285,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
         <h3>🛒 سبد فروش سریع</h3>
         <div className="target-switch">
           <button className={target === 'session' ? 'active' : ''} onClick={() => setTarget('session')}>افزودن به فاکتور جلسه</button>
+          <button className={target === 'pending' ? 'active' : ''} onClick={() => setTarget('pending')}>افزودن به حساب باز</button>
           <button className={target === 'standalone' ? 'active' : ''} onClick={() => setTarget('standalone')}>فروش مستقل</button>
         </div>
         {target === 'session' && (
@@ -285,9 +301,24 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
             </select>
           </label>
         )}
+        {target === 'pending' && (
+          <label style={{ marginTop: 10 }}>
+            مشتری / حساب باز مقصد
+            <select value={pendingTargetId} onChange={event => setPendingTargetId(event.target.value)} disabled={busy}>
+              {pendingSettlements.length === 0 && <option value="">حساب باز وجود ندارد</option>}
+              {pendingSettlements.map(account => (
+                <option key={account.invoiceId} value={account.invoiceId}>
+                  {account.customerName} · {account.stationName} · {money(account.amountDue)} تومان
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="cart-items">{cartItems.length ? cartItems.map(item => <div className="cart-item" key={item.id}><span>{item.name} · {money(item.price)}</span><div><button onClick={() => changeQuantity(item.id, -1)} aria-label="کاهش تعداد">−</button><b>{cart[item.id]}</b><button onClick={() => changeQuantity(item.id, 1)} aria-label="افزایش تعداد">+</button></div></div>) : <p className="empty-state">از فهرست کالا انتخاب کنید</p>}</div>
         <div className="cart-total"><span>جمع سبد</span><b>{money(cartTotal)} تومان</b></div>
-        <div className="modal-actions">{canSellBuffet && <><button className="btn primary" disabled={busy} onClick={() => void checkout('session')}>افزودن به فاکتور</button><button className="btn" disabled={busy} onClick={() => void checkout('standalone')}>ثبت فروش مستقل</button></>}</div>
+        <div className="modal-actions">{canSellBuffet && <button className="btn primary" disabled={busy} onClick={() => void checkout(target)}>
+          {target === 'session' ? 'افزودن به فاکتور' : target === 'pending' ? 'افزودن به حساب باز' : 'ثبت فروش مستقل'}
+        </button>}</div>
       </section>
     </div>
 
