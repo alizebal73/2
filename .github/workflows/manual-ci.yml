@@ -422,6 +422,19 @@ jobs:
 
               Write-Host ("Stage 8 Agent heartbeat smoke passed: deviceId={0}; lastSeen={1}" -f $agentRow.deviceId, $agentRow.lastSeenAt)
 
+              # Regression: a valid client identity must not expose another customer's
+              # financial profile when the presented CustomerLogin is missing/invalid.
+              $probeCustomers = Invoke-RestMethod -Uri "$baseUrl/api/customers" -Method Get -WebSession $adminSession
+              $probeCustomer = @($probeCustomers | Where-Object { $_.code -eq '1050' })[0]
+              if (-not $probeCustomer) { throw 'Customer-auth IDOR regression smoke could not find seeded customer 1050.' }
+              $probeLoginId = [guid]::NewGuid().ToString()
+              $probeState = Invoke-RestMethod -Uri "$baseUrl/api/customer-auth/state?customerId=$($probeCustomer.id)&loginId=$probeLoginId&clientKey=$($agentRow.deviceId)" -Method Get
+              if ($probeState.authenticated -ne $false -or $null -ne $probeState.balance -or $null -ne $probeState.freeMoney -or $null -ne $probeState.fullName) {
+                throw 'Customer-auth IDOR regression: invalid CustomerLogin exposed customer profile or financial data.'
+              }
+              Write-Host 'Customer-auth IDOR regression smoke passed: invalid login exposes no customer data.'
+
+
               $lifecycleStatus = Invoke-RestMethod -Uri "$baseUrl/api/agent/devices/$($agentRow.agentId)/lifecycle" -Method Get -WebSession $adminSession
               if ($lifecycleStatus.lifecycleState -ne 'Running') {
                 throw "Agent lifecycle state was not Running after healthy connection: $($lifecycleStatus.lifecycleState)"
