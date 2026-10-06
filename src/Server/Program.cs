@@ -3828,7 +3828,7 @@ app.MapPost("/api/buffet/products", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    var auth = await AuthorizationService.RequireInventoryMutationAsync(context, database, cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
     if (string.IsNullOrWhiteSpace(request.Name) || request.UnitPrice < 0 || request.CostPrice < 0 || request.InitialStock < 0)
@@ -3897,7 +3897,7 @@ app.MapPost("/api/buffet/products/{productId:guid}/stock", async (
     NotificationQueueService notifications,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    var auth = await AuthorizationService.RequireInventoryMutationAsync(context, database, cancellationToken);
     if (auth.Error is not null) return auth.Error;
     request = request with { AppUserId = auth.User!.Id };
 
@@ -4044,7 +4044,7 @@ app.MapPut("/api/buffet/products/{productId:guid}", async (HttpContext context,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    var auth = await AuthorizationService.RequireInventoryMutationAsync(context, database, cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
     var product = await database.Products.FirstOrDefaultAsync(item => item.Id == productId, cancellationToken);
@@ -4097,7 +4097,7 @@ app.MapPost("/api/buffet/products/{productId:guid}/showcase-transfer", async (
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
-    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "buffet.inventory", cancellationToken);
+    var auth = await AuthorizationService.RequireInventoryMutationAsync(context, database, cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
     if (request.Quantity <= 0)
