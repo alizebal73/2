@@ -18,6 +18,14 @@ function Require-Command([string]$Name) {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) { throw "$Name is required." }
 }
 
+function Invoke-NativeChecked([string]$FilePath, [string[]]$Arguments, [string]$Description) {
+    & $FilePath @Arguments
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+        throw "$Description failed with exit code $exitCode."
+    }
+}
+
 function Find-Iscc {
     $candidates = @(
         "$env:ProgramFiles\Inno Setup 7\ISCC.exe",
@@ -70,20 +78,14 @@ New-Item -ItemType Directory -Path $serverPublish,$clientPublish,$outputRoot -Fo
 
 Push-Location $repoRoot
 try {
-    dotnet restore GameNetManager.sln --runtime win-x64
-    if ($LASTEXITCODE -ne 0) { throw "dotnet restore failed." }
+    Invoke-NativeChecked "dotnet" @("restore", "src/Server/GameNetManager.Server.csproj", "--runtime", "win-x64", "--force") "Server restore"
+    Invoke-NativeChecked "dotnet" @("restore", "src/Client/GameNetManager.Client.csproj", "--runtime", "win-x64", "--force") "Client restore"
 
-    npm ci --prefix src/Dashboard
-    if ($LASTEXITCODE -ne 0) { throw "npm ci failed." }
+    Invoke-NativeChecked "npm.cmd" @("ci", "--prefix", "src/Dashboard") "Dashboard npm ci"
+    Invoke-NativeChecked "npm.cmd" @("run", "build", "--prefix", "src/Dashboard") "Dashboard build"
 
-    npm run build --prefix src/Dashboard
-    if ($LASTEXITCODE -ne 0) { throw "Dashboard build failed." }
-
-    dotnet publish src/Server/GameNetManager.Server.csproj --configuration $Configuration --runtime win-x64 --self-contained true --output $serverPublish --no-restore
-    if ($LASTEXITCODE -ne 0) { throw "Server publish failed." }
-
-    dotnet publish src/Client/GameNetManager.Client.csproj --configuration $Configuration --runtime win-x64 --self-contained true --output $clientPublish --no-restore
-    if ($LASTEXITCODE -ne 0) { throw "Client publish failed." }
+    Invoke-NativeChecked "dotnet" @("publish", "src/Server/GameNetManager.Server.csproj", "--configuration", $Configuration, "--runtime", "win-x64", "--self-contained", "true", "--output", $serverPublish, "--no-restore") "Server publish"
+    Invoke-NativeChecked "dotnet" @("publish", "src/Client/GameNetManager.Client.csproj", "--configuration", $Configuration, "--runtime", "win-x64", "--self-contained", "true", "--output", $clientPublish, "--no-restore") "Client publish"
     Set-Content -Path (Join-Path $serverPublish "server-version.txt") -Value $Version -Encoding ascii
     Set-Content -Path (Join-Path $clientPublish "client-version.txt") -Value $Version -Encoding ascii
     & $iscc "/DAppVersion=$Version" "/O$outputRoot" (Join-Path $repoRoot "installer\server\GameNetManager-Server.iss")
