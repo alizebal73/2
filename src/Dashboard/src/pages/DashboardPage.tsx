@@ -1838,7 +1838,7 @@ const sortedPcGroupedStations = useMemo(() => {
               title={active ? 'مرتب‌سازی ' + stationSortLabels[key] + (stationSort.direction === 'asc' ? ' صعودی' : ' نزولی') : 'مرتب‌سازی بر اساس ' + stationSortLabels[key]}
             >{stationSortLabels[key]}{arrow && <span aria-hidden="true"> {arrow}</span>}</button>;
           })}
-        </div>
+        </div>}
         {apiState === 'loading' && <p className="empty-state">در حال دریافت اطلاعات از سرور…</p>}
         {apiState === 'online' && !visibleStations.length && <p className="empty-state">ایستگاهی با این جست‌وجو پیدا نشد.</p>}
         {zone === 'all' ? groups.map(([key, title]) => {
