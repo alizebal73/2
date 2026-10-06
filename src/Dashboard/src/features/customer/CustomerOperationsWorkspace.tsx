@@ -205,7 +205,7 @@ export function CustomerOperationsWorkspace({
       ? 'جلسه فعال'
       : pendingAccount
         ? 'حساب باز'
-        : customer.debt > 0
+        : customer?.debt > 0
           ? 'بدهی موجود'
           : 'حساب جدید';
 
