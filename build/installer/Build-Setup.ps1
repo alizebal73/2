@@ -8,6 +8,8 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $artifactsRoot = Join-Path $repoRoot "artifacts\installer"
+$runnerTemp = if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { Join-Path $env:TEMP "GameNetManager-InstallerTemp" } else { $env:RUNNER_TEMP }
+New-Item -ItemType Directory -Path $runnerTemp -Force | Out-Null
 $serverPublish = Join-Path $artifactsRoot "server-publish"
 $clientPublish = Join-Path $artifactsRoot "client-publish"
 $outputRoot = Join-Path $artifactsRoot "out"
@@ -22,13 +24,13 @@ function Find-Iscc {
         "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
         "$env:ProgramFiles(x86)\Inno Setup 7\ISCC.exe",
         "$env:ProgramFiles(x86)\Inno Setup 6\ISCC.exe",
-        (Join-Path $env:RUNNER_TEMP "InnoSetup\ISCC.exe")
+        (Join-Path $runnerTemp "InnoSetup\ISCC.exe")
     ) | Where-Object { $_ -and (Test-Path $_) }
 
     if ($candidates.Count -gt 0) { return $candidates[0] }
 
-    $tempInstaller = Join-Path $env:RUNNER_TEMP "innosetup-7.1.0-x64.exe"
-    $installDir = Join-Path $env:RUNNER_TEMP "InnoSetup"
+    $tempInstaller = Join-Path $runnerTemp "innosetup-7.1.0-x64.exe"
+    $installDir = Join-Path $runnerTemp "InnoSetup"
     New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 
     Write-Host "Inno Setup 7.1.0 was not found. Downloading the official signed x64 installer."
