@@ -1190,3 +1190,14 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - ⬜ Dashboard Lint/Build
 - ⬜ Dashboard Browser Smoke
 - 🟡 physical validation remains separate from this software slice.
+
+
+## Slice 14.11 Implementation Status — 2026-10-06
+- ✅ Server-backed pending customer account endpoints implemented.
+- ✅ Durable SessionCharge ledger added for multiple time charges with payment method and timestamp.
+- ✅ Pay-later closes the Session/Station while keeping the Draft Invoice open.
+- ✅ Pending dashboard data includes charge breakdown, grouped buffet items, calculation summary and amount due.
+- ✅ Dashboard pending payments wired to Server with Card / Compact / List views and inline expandable details.
+- ✅ Pending payment sorting and direct cash/card/wallet settlement wired.
+- ✅ Buffet can target an existing pending customer account; the same account is refreshed after the sale.
+- ✅ Self-hosted CI workflow is configured for this repo, but current runs are failing before job creation, so this slice is not certified green yet.
