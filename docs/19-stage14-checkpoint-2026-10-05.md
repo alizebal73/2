@@ -191,3 +191,28 @@ This slice is a completion/hardening pass over existing Stage 14 functionality. 
 - ✅ Shift-range selection follows the current sorted visible order.
 - ✅ Browser Smoke added for all seven sort controls, direction toggle and list view interaction.
 - 🟡 Self-hosted Windows Runner certification pending for this slice.
+
+## Slice 14.9 — Buffet Warehouse → Showcase → Sale Flow
+
+### Delivered
+
+- ✅ Buffet inventory is now explicitly separated into warehouse stock and showcase stock.
+- ✅ Existing pre-split product stock is migrated into showcase stock so existing sellable inventory is not lost; warehouse stock starts at zero for those legacy rows.
+- ✅ New purchases and initial stock enter the warehouse.
+- ✅ A dedicated atomic transfer-to-showcase operation moves quantity from warehouse to showcase and records paired inventory transactions.
+- ✅ Buffet sales consume showcase stock only; warehouse stock cannot silently satisfy a sale.
+- ✅ One-click `+ ویترین` moves one unit from warehouse to showcase.
+- ✅ Buffet UI shows warehouse and showcase quantities per product.
+- ✅ Daily server-backed per-product sales report added, including quantity and revenue.
+- ✅ Inventory history now records whether a movement belongs to Warehouse or Showcase.
+- ✅ Existing sale/inventory audit and transaction persistence remain Server-authoritative.
+- ✅ Browser Smoke added for warehouse/showcase separation, one-click transfer and today's sales display.
+
+### Boundary
+
+This slice intentionally preserves the existing Product/Invoice model and adds a stock-location boundary rather than creating a parallel buffet system. Sales, inventory changes, audit and today's report continue to derive from Server state.
+
+### Validation
+
+- 🟡 Changes committed to `main`.
+- 🟡 Self-hosted Windows Runner Build/Test/Browser Smoke certification still required.
