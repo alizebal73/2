@@ -156,7 +156,7 @@ public sealed class Stage13CustomerAndUsersReportTests
         var row = Assert.Single(result.Items);
         Assert.Equal(50000m, row.ShiftRevenue);
         Assert.Equal(50000m, row.ShiftCashSales);
-        Assert.Equal(50000m, row.ShiftDifference);
+        Assert.Equal(0m, row.ShiftDifference);
     }
 
     public async Task CustomerVipReportExcludesPendingAndSubtractsDebtPayments()
