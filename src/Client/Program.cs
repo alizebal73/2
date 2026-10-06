@@ -18,6 +18,7 @@ if (args.Length > 0 && string.Equals(args[0], "--gamenet-update-watchdog", Strin
 const string defaultServerUrl = "http://localhost:5080";
 var serverUrl = Environment.GetEnvironmentVariable("GAMENET_SERVER_URL") ?? defaultServerUrl;
 var registrationToken = Environment.GetEnvironmentVariable("GAMENET_AGENT_REGISTRATION_TOKEN");
+var pairingCode = Environment.GetEnvironmentVariable("GAMENET_AGENT_PAIRING_CODE");
 var stationText = Environment.GetEnvironmentVariable("GAMENET_STATION_ID");
 var configuredName = Environment.GetEnvironmentVariable("GAMENET_AGENT_NAME");
 var configuredDeviceId = Environment.GetEnvironmentVariable("GAMENET_AGENT_DEVICE_ID");
@@ -91,12 +92,13 @@ try
 
     if (string.IsNullOrWhiteSpace(state.AgentToken))
     {
-        if (string.IsNullOrWhiteSpace(registrationToken))
-            throw new InvalidOperationException("توکن ثبت اولیه Agent در تنظیمات سیستم وارد نشده است.");
+        if (string.IsNullOrWhiteSpace(pairingCode) && string.IsNullOrWhiteSpace(registrationToken))
+            throw new InvalidOperationException("کد اتصال Agent یا تنظیمات ثبت اولیه در سیستم وارد نشده است.");
 
         state = await RegisterAgentAsync(
             httpClient,
             state,
+            pairingCode,
             registrationToken,
             agentVersion,
             osVersion,
@@ -439,13 +441,17 @@ static HubConnection CreateConnection(string hubUrl, AgentState state)
 static async Task<AgentState> RegisterAgentAsync(
     HttpClient httpClient,
     AgentState state,
-    string registrationToken,
+    string? pairingCode,
+    string? registrationToken,
     string agentVersion,
     string osVersion,
     CancellationToken cancellationToken)
 {
     using var request = new HttpRequestMessage(HttpMethod.Post, "api/agent/register");
-    request.Headers.Add("X-GameNet-Registration-Token", registrationToken);
+    if (!string.IsNullOrWhiteSpace(pairingCode))
+        request.Headers.Add("X-GameNet-Agent-Pairing-Code", pairingCode);
+    else if (!string.IsNullOrWhiteSpace(registrationToken))
+        request.Headers.Add("X-GameNet-Registration-Token", registrationToken);
     request.Content = JsonContent.Create(new AgentRegistrationRequest(
         state.DeviceId,
         state.Name,
