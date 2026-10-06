@@ -31,7 +31,8 @@ public sealed record SessionChargeResult(
     decimal Amount,
     decimal PrepaidTotal,
     string Method,
-    decimal WalletBalanceAfter);
+    decimal WalletBalanceAfter,
+    DateTimeOffset? SessionEndAt);
 
 public sealed record PendingSettlementChargeDto(
     Guid Id,
@@ -493,6 +494,8 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
 
         var session = await database.Sessions
             .Include(item => item.Customer)
+                .ThenInclude(item => item.VipPackage)
+            .Include(item => item.Station)
             .FirstOrDefaultAsync(
                 item => item.Id == sessionId && item.State == SessionState.Active,
                 cancellationToken);
@@ -536,6 +539,23 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             });
         }
 
+        var pricing = await pricingService.GetPricingAsync(
+            session.CustomerId,
+            session.StationId,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+        var hourlyRate = session.HourlyRateOverride
+            ?? session.HourlyRateSnapshot
+            ?? pricing.HourlyRate;
+        if (hourlyRate <= 0)
+            throw new InvalidOperationException("نرخ جلسه برای محاسبه شارژ معتبر نیست.");
+
+        var chargeNow = DateTimeOffset.UtcNow;
+        var extraMinutes = amount / (hourlyRate / 60m);
+        var currentEnd = session.EndAt.HasValue && session.EndAt.Value > chargeNow
+            ? session.EndAt.Value
+            : chargeNow;
+        session.EndAt = currentEnd.AddMinutes((double)extraMinutes);
         session.PrepaidAmount += amount;
 
         var charge = new SessionCharge
@@ -571,7 +591,8 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             amount,
             session.PrepaidAmount,
             normalizedMethod,
-            session.Customer.Balance);
+            session.Customer.Balance,
+            session.EndAt);
     }
 
     public async Task<PendingSettlementDto> PreparePendingAsync(
