@@ -51,6 +51,12 @@ public enum TransactionDirection
     Out
 }
 
+public enum StockArea
+{
+    Warehouse,
+    Showcase
+}
+
 public sealed class StationType : BaseEntity
 {
     public required string Name { get; set; }
@@ -134,6 +140,7 @@ public sealed class Product : BaseEntity
     public decimal UnitPrice { get; set; }
     public decimal CostPrice { get; set; }
     public int StockQuantity { get; set; }
+    public int ShowcaseStockQuantity { get; set; }
     public int MinimumStock { get; set; } = 0;
     public string Unit { get; set; } = "عدد";
     public bool IsActive { get; set; } = true;
@@ -407,6 +414,7 @@ public sealed class InventoryTransaction : BaseEntity
     public decimal UnitCost { get; set; }
     public Guid? ReferenceInvoiceId { get; set; }
     public TransactionDirection Direction { get; set; }
+    public StockArea StockArea { get; set; } = StockArea.Warehouse;
     public string Kind { get; set; } = "Adjustment";
     public string? Notes { get; set; }
 }
