@@ -1253,6 +1253,9 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - گزارش مشتریان فقط ماندهٔ واقعی Customer Accountهای Debt را گزارش می‌کند و Pending/پرداخت‌های قبلی را دوباره بدهی حساب نمی‌کند.
 - Shift Report پرداخت‌ها را با زمان واقعی ثبت `InvoicePayment` و حتی برای Invoiceهای Draft دارای شارژ/پرداخت ثبت‌شده در نظر می‌گیرد.
 - Snapshot و Endpoint بستن شیفت نیز از همان زمان واقعی `InvoicePayment.CreatedAt` استفاده می‌کنند تا اختلاف بین گزارش و صندوق ایجاد نشود.
+- Finance Summary اکنون درآمد را از `InvoicePayment.CreatedAt` و مبلغ پرداخت‌شدهٔ واقعی محاسبه می‌کند، نه از زمان صدور و کل مبلغ Invoice.
+- Finance Transactions اکنون Payment-level است؛ هر `InvoicePayment` زمان، مبلغ و روش واقعی خود را دارد و پرداخت روی Invoice Draft نیز گم نمی‌شود.
+- Wallet Transaction در تعارض هم‌زمانی با Customer، به‌جای خطای 500 با 409 فارسی متوقف می‌شود و موجودی دوباره‌نویسی نمی‌شود.
 - Session Report درآمد تاریخی را از `InvoiceItem`های متعلق به همان Session می‌گیرد و فقط برای داده‌های قدیمی بدون Ledger به `Session.TotalAmount` fallback می‌کند.
 - حساب‌های Pending با مبلغ قابل‌پرداخت صفر دیگر در Pending View نمایش داده نمی‌شوند و قابل انتقال به Debt نیستند.
 - Workspace مشتری، شارژ Session و بوفه را در یک مسیر اپراتوری یکپارچه می‌کند.
