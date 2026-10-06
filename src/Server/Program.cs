@@ -4435,10 +4435,10 @@ app.MapPost("/api/buffet/sales", async (
             .FirstOrDefaultAsync(
                 item => item.Id == request.InvoiceId.Value
                     && item.Status == InvoiceStatus.Draft
-                    && item.SessionId.HasValue,
+                    && item.IsCustomerAccount,
                 cancellationToken);
 
-        if (invoice is null || invoice.Session is null || invoice.Session.State != SessionState.Completed)
+        if (invoice is null)
             return Results.Conflict(new { code = "pending_invoice_not_available", message = "حساب باز موردنظر برای فروش بوفه در دسترس نیست." });
 
         session = invoice.Session;
@@ -4481,6 +4481,7 @@ app.MapPost("/api/buffet/sales", async (
             database.InvoiceItems.Add(new InvoiceItem
             {
                 Invoice = invoice,
+                SessionId = session?.Id ?? invoice.SessionId,
                 ProductId = product.Id,
                 Description = product.Name,
                 Quantity = item.Quantity,
@@ -4544,37 +4545,57 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (HttpContext context,
     if (customer is null)
         return Results.NotFound(new { code = "customer_not_found", message = "مشتری پیدا نشد." });
 
-    var invoice = new Invoice
-    {
-        CustomerId = customer.Id,
-        AppUserId = auth.User!.Id,
-        TotalAmount = request.Amount,
-        Status = InvoiceStatus.Draft,
-        IssuedAt = DateTimeOffset.UtcNow,
-        Items =
-        {
-            new InvoiceItem
-            {
-                Description = description,
-                Quantity = 1,
-                UnitPrice = request.Amount,
-                Amount = request.Amount
-            }
-        }
-    };
+    var invoice = await database.Invoices
+        .FirstOrDefaultAsync(
+            item => item.CustomerId == customerId
+                && item.Status == InvoiceStatus.Draft
+                && item.IsCustomerAccount,
+            cancellationToken);
 
-    database.Invoices.Add(invoice);
+    if (invoice is null)
+    {
+        invoice = new Invoice
+        {
+            CustomerId = customer.Id,
+            AppUserId = auth.User!.Id,
+            TotalAmount = 0m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            IssuedAt = DateTimeOffset.UtcNow
+        };
+        database.Invoices.Add(invoice);
+    }
+
+    invoice.AppUserId ??= auth.User!.Id;
+    invoice.TotalAmount += request.Amount;
+
+    invoice.Items.Add(new InvoiceItem
+    {
+        InvoiceId = invoice.Id,
+        Description = description,
+        Quantity = 1,
+        UnitPrice = request.Amount,
+        Amount = request.Amount
+    });
+
     database.AuditLogs.Add(new AuditLog
     {
         Action = "CustomerDebtCreated",
         EntityName = "Invoice",
         EntityId = invoice.Id.ToString(),
-        Details = request.Amount.ToString("0.##") + " تومان · " + description,
+        Details = customer.FullName + " · " + request.Amount.ToString("0.##") + " تومان · " + description,
         AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
-    return Results.Ok(new { invoiceId = invoice.Id, customerId = customer.Id, amount = request.Amount, description });
+    return Results.Ok(new
+    {
+        invoiceId = invoice.Id,
+        customerId = customer.Id,
+        amount = request.Amount,
+        accountTotal = invoice.TotalAmount,
+        description
+    });
 })
 .WithName("CreateCustomerDebt");
 
@@ -4586,19 +4607,38 @@ app.MapGet("/api/customers/{customerId:guid}/debts", async (HttpContext context,
     var auth = await AuthorizationService.RequirePermissionAsync(context, database, "customer.debt", cancellationToken);
     if (auth.Error is not null) return auth.Error;
 
-    var debts = await database.Invoices
+    var invoices = await database.Invoices
         .AsNoTracking()
-        .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
-        .Select(item => new
-        {
-            id = item.Id,
-            amount = item.TotalAmount,
-            issuedAt = item.IssuedAt,
-            description = item.Items.Select(line => line.Description).FirstOrDefault() ?? "بدهی مشتری"
-        })
+        .Where(item => item.CustomerId == customerId
+            && item.Status == InvoiceStatus.Draft
+            && (item.IsCustomerAccount || item.SessionId == null))
+        .OrderBy(item => item.IssuedAt)
         .ToListAsync(cancellationToken);
 
-    return Results.Ok(debts.OrderBy(item => item.issuedAt).ToList());
+    var invoiceIds = invoices.Select(item => item.Id).ToList();
+    var paid = invoiceIds.Count == 0
+        ? new List<(Guid InvoiceId, decimal Amount)>()
+        : await database.InvoicePayments
+            .AsNoTracking()
+            .Where(item => invoiceIds.Contains(item.InvoiceId))
+            .GroupBy(item => item.InvoiceId)
+            .Select(group => new { InvoiceId = group.Key, Amount = group.Sum(item => item.Amount) })
+            .AsEnumerable()
+            .Select(item => (item.InvoiceId, item.Amount))
+            .ToListAsync(cancellationToken);
+
+    var paidByInvoice = paid.ToDictionary(item => item.InvoiceId, item => item.Amount);
+
+    return Results.Ok(invoices.Select(item => new
+    {
+        id = item.Id,
+        amount = Math.Max(0m, item.TotalAmount - (paidByInvoice.TryGetValue(item.Id, out var paidAmount) ? paidAmount : 0m)),
+        issuedAt = item.IssuedAt,
+        description = item.Items.Select(line => line.Description).FirstOrDefault() ?? "بدهی مشتری",
+        isCustomerAccount = item.IsCustomerAccount
+    })
+    .Where(item => item.amount > 0m)
+    .ToList());
 })
 .WithName("GetCustomerDebts");
 
@@ -4623,21 +4663,46 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
         .FirstOrDefaultAsync(item => item.Id == invoiceId && item.CustomerId == customerId && item.Status == InvoiceStatus.Draft, cancellationToken);
 
     if (invoice is null)
-        return Results.NotFound(new { code = "debt_not_found", message = "بدهی موردنظر پیدا نشد یا قبلاً تسویه شده است." });
+        return Results.NotFound(new { code = "debt_not_found", message = "حساب باز موردنظر پیدا نشد یا قبلاً تسویه شده است." });
+
+    var alreadyPaid = await database.InvoicePayments
+        .Where(item => item.InvoiceId == invoice.Id)
+        .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+    var due = Math.Max(0m, invoice.TotalAmount - alreadyPaid);
+    if (due <= 0m)
+    {
+        invoice.Status = InvoiceStatus.Paid;
+        invoice.PaidAt = DateTimeOffset.UtcNow;
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Results.Ok(new
+        {
+            invoiceId = invoice.Id,
+            customerId,
+            amount = 0m,
+            method,
+            debtRemaining = await database.Invoices
+                .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
+                .Select(item => (decimal?)item.TotalAmount)
+                .SumAsync() ?? 0m,
+            walletBalanceAfter = invoice.Customer.Balance
+        });
+    }
 
     if (method == "wallet")
     {
-        if (invoice.Customer.Balance < invoice.TotalAmount)
+        if (invoice.Customer.Balance < due)
             return Results.Conflict(new { code = "insufficient_balance", message = "موجودی کیف پول برای تسویه این بدهی کافی نیست." });
 
-        invoice.Customer.Balance -= invoice.TotalAmount;
+        invoice.Customer.Balance -= due;
         database.WalletTransactions.Add(new WalletTransaction
         {
             CustomerId = customerId,
-            Amount = invoice.TotalAmount,
+            Amount = due,
             Type = WalletTransactionType.Debit,
             ReferenceInvoiceId = invoice.Id,
-            Description = "تسویه بدهی از کیف پول"
+            Description = "تسویه حساب باز مشتری از کیف پول"
         });
     }
 
@@ -4647,30 +4712,31 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
     {
         InvoiceId = invoice.Id,
         Method = method,
-        Amount = invoice.TotalAmount
+        Amount = due
     });
     database.AuditLogs.Add(new AuditLog
     {
         Action = "CustomerDebtSettled",
         EntityName = "Invoice",
         EntityId = invoice.Id.ToString(),
-        Details = invoice.TotalAmount.ToString("0.##") + " تومان · " + method,
+        Details = due.ToString("0.##") + " تومان · " + method,
         AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
     await transaction.CommitAsync(cancellationToken);
 
+    var remaining = await database.Invoices
+        .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
+        .SumAsync(item => (decimal?)item.TotalAmount, cancellationToken) ?? 0m;
+
     return Results.Ok(new
     {
         invoiceId = invoice.Id,
         customerId,
-        amount = invoice.TotalAmount,
+        amount = due,
         method,
-        debtRemaining = await database.Invoices
-            .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
-            .Select(item => (decimal?)item.TotalAmount)
-            .SumAsync() ?? 0m,
+        debtRemaining = Math.Max(0m, remaining),
         walletBalanceAfter = invoice.Customer.Balance
     });
 })
