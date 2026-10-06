@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getAgentCommand, getAgentStatuses, requestAgentRollback, requestAgentUpdate, sendAgentCommand, updateAgentPolicy, type AgentCommandType } from '../services/agentService';
+import { createAgentPairingCode, getAgentCommand, getAgentStatuses, requestAgentRollback, requestAgentUpdate, sendAgentCommand, updateAgentPolicy, type AgentCommandType } from '../services/agentService';
 import { getServerCustomers } from '../services/customerService';
 import { acquireCustomerLogin } from '../services/customerLoginService';
 import type { AgentStatusDto, CustomerRecord } from '../types';
@@ -20,9 +20,23 @@ export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
   const [policy, setPolicy] = useState({ kioskEnabled: false, lockOnDisconnect: true });
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState('');
+  const [pairing, setPairing] = useState<{ code: string; expiresAt: string; maxUses: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const dragRef = useRef<{ startX: number; startY: number; dragging: boolean } | null>(null);
   const [selectionRect, setSelectionRect] = useState<{ startX:number; startY:number; endX:number; endY:number } | null>(null);
+
+  async function generatePairingCode() {
+    setLoading(true);
+    try {
+      const result = await createAgentPairingCode();
+      setPairing(result);
+      setNotice('کد اتصال جدید ساخته شد و تا ۳۰ دقیقه معتبر است.');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'ساخت کد اتصال Agent انجام نشد'));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function loadAgents() {
     try {
@@ -225,6 +239,7 @@ export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
 
       <div className="toolbar client-toolbar">
         <div className="search-box"><input aria-label="جستجوی کلاینت" value={query} onChange={event => setQuery(event.target.value)} placeholder="نام Agent، DeviceId یا ایستگاه…" /></div>
+        <button className="btn primary" disabled={loading} onClick={() => void generatePairingCode()}>🔗 ساخت کد اتصال</button>
         <button className="btn" disabled={!selectedAgents.length || loading} onClick={() => selectedAgents.forEach(agent => void runCommand(agent, 'ping'))}>📡 Ping</button>
         <button className="btn" disabled={!selectedAgents.length || loading} onClick={() => selectedAgents.forEach(agent => void runCommand(agent, 'lock'))}>🔒 قفل</button>
         <button className="btn primary" disabled={!selectedAgents.length || loading} onClick={() => selectedAgents.forEach(agent => void runCommand(agent, 'unlock'))}>🔓 بازکردن</button>
@@ -260,6 +275,24 @@ export function ClientShellPage({ canPower = false }: { canPower?: boolean }) {
       </div>
 
       {selectionRect && <div className="selection-rect" style={{ left: Math.min(selectionRect.startX, selectionRect.endX), top: Math.min(selectionRect.startY, selectionRect.endY), width: Math.abs(selectionRect.endX - selectionRect.startX), height: Math.abs(selectionRect.endY - selectionRect.startY) }} />}
+
+      {pairing && (
+        <div className="modal-backdrop" onMouseDown={event => event.target === event.currentTarget && setPairing(null)}>
+          <section className="operation-modal" role="dialog" aria-modal="true" aria-labelledby="agent-pairing-title">
+            <button className="modal-close" onClick={() => setPairing(null)}>×</button>
+            <h2 id="agent-pairing-title">کد اتصال Agent</h2>
+            <p>این کد را داخل Client Setup همین شبکه وارد کنید. سیستم‌هایی که Agent روی آن‌ها نصب نشده‌اند، بدون اجرای Agent هیچ ثبت خودکاری ندارند.</p>
+            <div className="pairing-code" style={{ fontSize: '2rem', fontWeight: 800, letterSpacing: '0.35rem', textAlign: 'center', direction: 'ltr', padding: '1rem' }}>
+              {pairing.code}
+            </div>
+            <p>اعتبار تا: {new Date(pairing.expiresAt).toLocaleString('fa-IR')} · حداکثر {pairing.maxUses.toLocaleString('fa-IR')} ثبت</p>
+            <div className="modal-actions">
+              <button className="btn primary" onClick={() => void navigator.clipboard?.writeText(pairing.code)}>کپی کد</button>
+              <button className="btn" onClick={() => setPairing(null)}>بستن</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {menuAgent && (
         <div
