@@ -132,7 +132,20 @@ export function PendingPaymentsPanel({ payments, money, onPay }: Props) {
           </div>
           <div className="pending-payment-row-details">{branches(item)}</div>
         </div>;
-        return <article className={'sidebar-payment-card pending-payment-card ' + view} key={item.invoiceId}>
+        if (view === 'v-compact') return <div className="pending-payment-compact-row" key={item.invoiceId}>
+          <div className="pending-payment-row-main"><strong>{item.customerName}</strong><small>{item.stationName} · {item.customerCode || item.username || 'مهمان'}</small></div>
+          <div className="pending-payment-compact-summary">{summary}</div>
+          <strong className="pending-payment-row-amount">{money(item.amountDue)} تومان</strong>
+          <div className="pending-payment-row-actions">
+            {item.amountDue > 0 ? <>
+              <button type="button" className="btn primary sm" onClick={() => onPay(item.invoiceId, 'cash')}>نقد</button>
+              <button type="button" className="btn sm" onClick={() => onPay(item.invoiceId, 'card')}>کارت</button>
+              <button type="button" className="btn sm" onClick={() => onPay(item.invoiceId, 'wallet')}>کیف</button>
+            </> : <button type="button" className="btn primary sm" onClick={() => onPay(item.invoiceId, 'cash')}>بستن</button>}
+          </div>
+          <div className="pending-payment-row-details">{branches(item)}</div>
+        </div>;
+        return <article className="sidebar-payment-card pending-payment-card" key={item.invoiceId}>
           <div className="sidebar-payment-head"><div><strong>{item.customerName}</strong><small>{item.customerCode || item.username || 'مهمان'} · {item.stationName}</small></div><b>{money(item.amountDue)} تومان</b></div>
           <small className="sidebar-payment-time">در انتظار {item.waitingMinutes.toLocaleString('fa-IR')} دقیقه · پایان بازی {new Date(item.closedAt).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</small>
           {summary}
