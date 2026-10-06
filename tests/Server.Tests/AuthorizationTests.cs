@@ -166,6 +166,59 @@ public sealed class AuthorizationTests : IDisposable
     }
 
     [Fact]
+    public void BuffetInventoryMutationIsRestrictedToAdminAndOwner()
+    {
+        var operatorUser = new AppUser
+        {
+            FullName = "اپراتور بوفه",
+            UserName = "buffet-operator",
+            Email = "buffet-operator@test.local",
+            PasswordHash = "hash",
+            Role = "Operator"
+        };
+        var managerUser = new AppUser
+        {
+            FullName = "مدیر بوفه",
+            UserName = "buffet-manager",
+            Email = "buffet-manager@test.local",
+            PasswordHash = "hash",
+            Role = "Manager"
+        };
+        var adminUser = new AppUser
+        {
+            FullName = "مدیر اصلی",
+            UserName = "buffet-admin",
+            Email = "buffet-admin@test.local",
+            PasswordHash = "hash",
+            Role = "Admin"
+        };
+        var ownerUser = new AppUser
+        {
+            FullName = "صاحب",
+            UserName = "buffet-owner",
+            Email = "buffet-owner@test.local",
+            PasswordHash = "hash",
+            Role = "Owner"
+        };
+
+        operatorUser.Permissions.Add(new AppUserPermission
+        {
+            AppUser = operatorUser,
+            Permission = new Permission { Name = "buffet.inventory" }
+        });
+        managerUser.Permissions.Add(new AppUserPermission
+        {
+            AppUser = managerUser,
+            Permission = new Permission { Name = "buffet.inventory" }
+        });
+
+        Assert.False(AuthorizationService.CanMutateBuffetInventory(operatorUser));
+        Assert.False(AuthorizationService.CanMutateBuffetInventory(managerUser));
+        Assert.True(AuthorizationService.CanMutateBuffetInventory(adminUser));
+        Assert.True(AuthorizationService.CanMutateBuffetInventory(ownerUser));
+    }
+
+    [Fact]
     public void AdminAndOwnerHaveGlobalPermission()
     {
         var admin = new AppUser
