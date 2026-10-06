@@ -69,7 +69,27 @@ public sealed class Stage13CustomerAndUsersReportTests
             IssuedAt = now.AddHours(-2)
         };
 
-        database.AddRange(stationType, station, vip, customer, inRange, outsideRange, debt);
+        var sessionInvoice = new Invoice
+        {
+            Customer = customer,
+            Session = inRange,
+            TotalAmount = 140000m,
+            Status = InvoiceStatus.Paid,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.PendingPayment,
+            IssuedAt = now.AddMinutes(-40)
+        };
+        sessionInvoice.Items.Add(new InvoiceItem
+        {
+            Invoice = sessionInvoice,
+            Session = inRange,
+            Description = "درآمد Ledger گزارش مشتری",
+            Quantity = 1,
+            UnitPrice = 140000m,
+            Amount = 140000m
+        });
+
+        database.AddRange(stationType, station, vip, customer, inRange, outsideRange, debt, sessionInvoice);
         await database.SaveChangesAsync();
 
         var service = new CustomerVipReportService(database);
@@ -88,15 +108,14 @@ public sealed class Stage13CustomerAndUsersReportTests
         var row = Assert.Single(result.Items);
         Assert.Equal("CVIP01", row.Code);
         Assert.Equal(95000m, row.Debt);
-        Assert.Equal(120000m, row.SessionRevenue);
+        Assert.Equal(140000m, row.SessionRevenue);
         Assert.Equal(1, row.SessionCount);
         Assert.Equal(1, result.Summary.ActiveVipCount);
         Assert.Equal(95000m, result.Summary.DebtTotal);
-        Assert.Equal(120000m, result.Summary.SessionRevenue);
+        Assert.Equal(140000m, result.Summary.SessionRevenue);
         Assert.True(row.UsedTotalMinutes >= 59);
     }
 
-    [Fact]
     [Fact]
     public async Task UsersShiftReportCountsDraftInvoicePaymentAtPaymentTime()
     {
@@ -290,6 +309,26 @@ public sealed class Stage13CustomerAndUsersReportTests
             State = SessionState.Completed,
             TotalAmount = 150000
         };
+
+        var sessionLedgerInvoice = new Invoice
+        {
+            Customer = customer,
+            Session = session,
+            TotalAmount = 165000m,
+            Status = InvoiceStatus.Paid,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.PendingPayment,
+            IssuedAt = DateTimeOffset.UtcNow.AddHours(-2.4)
+        };
+        sessionLedgerInvoice.Items.Add(new InvoiceItem
+        {
+            Invoice = sessionLedgerInvoice,
+            Session = session,
+            Description = "درآمد Ledger شیفت",
+            Quantity = 1,
+            UnitPrice = 165000m,
+            Amount = 165000m
+        });
         var payroll = new PayrollLedgerEntry
         {
             EmployeeProfile = profile,
@@ -314,6 +353,7 @@ public sealed class Stage13CustomerAndUsersReportTests
             invoice,
             payment,
             session,
+            sessionLedgerInvoice,
             payroll);
 
         await database.SaveChangesAsync();
@@ -338,7 +378,7 @@ public sealed class Stage13CustomerAndUsersReportTests
         Assert.Equal(20000m, row.ShiftExpenses);
         Assert.Equal(0m, row.ShiftDifference);
         Assert.Equal(1, row.SessionCount);
-        Assert.Equal(150000m, row.SessionRevenue);
+        Assert.Equal(165000m, row.SessionRevenue);
         Assert.Equal(80000m, row.PaidThisPeriod);
         Assert.Equal(80000m, result.Summary.PayrollPaid);
     }
