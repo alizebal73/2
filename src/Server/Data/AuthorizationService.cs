@@ -18,7 +18,8 @@ public static class AuthorizationService
             ["customer.wallet"] = "شارژ و عملیات کیف پول",
             ["customer.debt"] = "ثبت و تسویه بدهی",
             ["buffet.sell"] = "فروش بوفه",
-            ["buffet.inventory"] = "مدیریت انبار",
+            ["buffet.inventory"] = "مشاهده موجودی بوفه",
+            ["buffet.inventory.manage"] = "افزودن، کاهش و انتقال موجودی بوفه",
             ["finance.view"] = "مشاهده گزارش مالی",
             ["finance.manage"] = "ثبت و مدیریت هزینه",
             ["shift.manage"] = "باز و بسته کردن شیفت",
@@ -100,6 +101,30 @@ public static class AuthorizationService
             return true;
 
         return user.Permissions.Any(item => string.Equals(item.Permission.Name, permission, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public static async Task<(AppUser? User, IResult? Error)> RequireInventoryMutationAsync(
+        HttpContext context,
+        GameNetDbContext database,
+        CancellationToken cancellationToken)
+    {
+        var user = await ResolveUserAsync(context, database, cancellationToken);
+        if (user is null)
+            return (null, Results.Unauthorized());
+
+        var isPrivileged = string.Equals(user.Role, "Admin", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(user.Role, "Owner", StringComparison.OrdinalIgnoreCase);
+
+        if (!isPrivileged)
+            return (user, Results.Json(
+                new
+                {
+                    code = "buffet_inventory_manager_only",
+                    message = "افزودن، کاهش یا انتقال موجودی فقط برای مدیر اصلی مجاز است."
+                },
+                statusCode: StatusCodes.Status403Forbidden));
+
+        return (user, null);
     }
 
     public static async Task<(AppUser? User, IResult? Error)> RequireAnyPermissionAsync(
