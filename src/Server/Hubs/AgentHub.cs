@@ -43,6 +43,16 @@ public sealed class AgentHub(
         if (device is null || !device.IsActive)
             throw new HubException("دستگاه مجاز نیست.");
 
+        var now = DateTimeOffset.UtcNow;
+        if (device.IsOnline
+            && !string.IsNullOrWhiteSpace(device.ConnectionId)
+            && !string.Equals(device.ConnectionId, Context.ConnectionId, StringComparison.Ordinal)
+            && device.LastSeenAt.HasValue
+            && now - device.LastSeenAt.Value <= TimeSpan.FromSeconds(OfflineAfterSeconds()))
+        {
+            throw new HubException("این Agent از قبل با یک اتصال فعال دیگر متصل است.");
+        }
+
         Context.Items[AgentDeviceContextKey] = device.Id;
 
         // Re-add the active connection to the durable per-device group from inside
@@ -51,8 +61,6 @@ public sealed class AgentHub(
             Context.ConnectionId,
             DeviceGroup(device.Id),
             Context.ConnectionAborted);
-
-        var now = DateTimeOffset.UtcNow;
         device.IsOnline = true;
         device.LastSeenAt = now;
         device.ConnectedAt = now;
