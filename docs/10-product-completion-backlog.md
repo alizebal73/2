@@ -1211,3 +1211,14 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - ✅ Sessionهای فعال همچنان فاکتور Session-scoped خود را نگه می‌دارند؛ تبدیل به Customer Account هنگام pay-later انجام می‌شود تا تسویه یک Session فعال باعث بستن کل حساب مشتری نشود.
 - ✅ مهاجرت دیتابیس، Draftهای بدهی و Sessionهای تمام‌شدهٔ قدیمی را بدون از دست دادن اقلام/پرداخت/ارجاع مالی به یک حساب مشتری ادغام می‌کند.
 - ✅ فروش بوفه روی Customer Account حتی در حسابی که Session جاری ندارد مجاز است.
+
+
+## Slice 14.11 Finalization — Customer Account + Session Allocation — 2026-10-06
+- ✅ Customer Account is the single Draft account for a customer's open balance.
+- ✅ Live Session charges can post into that account while retaining SessionId allocation.
+- ✅ InvoicePayments now carry optional SessionId, so a settlement can pay only the selected Session's due without consuming another Session's balance.
+- ✅ A Session settlement keeps the Customer Account Draft when another Session for the same customer is still active.
+- ✅ Multiple sessions/PCs, debts and buffet items can coexist on the same Customer Account.
+- ✅ Pending calculation now includes time, buffet, other charges/debts, reductions, prepaid usage and remaining amount.
+- ✅ Existing draft customer/debt/completed-session records are consolidated by the new database migration without dropping child financial references.
+- 🟡 Build/Test/Browser Smoke certification is still blocked by the repository's self-hosted runner: current workflow runs complete with zero jobs.
