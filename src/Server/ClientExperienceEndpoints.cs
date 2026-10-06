@@ -92,7 +92,7 @@ public static class ClientExperienceEndpoints
                     category = item.Category,
                     price = item.UnitPrice,
                     unit = item.Unit,
-                    available = item.StockQuantity > 0,
+                    available = item.ShowcaseStockQuantity > 0,
                     icon = "🛒"
                 })
                 .ToListAsync(cancellationToken);
@@ -195,11 +195,11 @@ public static class ClientExperienceEndpoints
                         message = "محصول بوفه پیدا نشد."
                     });
 
-                if (product.StockQuantity < quantity)
+                if (product.ShowcaseStockQuantity < quantity)
                     return Results.Conflict(new
                     {
                         code = "product_out_of_stock",
-                        message = "موجودی این محصول برای درخواست شما کافی نیست."
+                        message = "موجودی ویترین این محصول برای درخواست شما کافی نیست."
                     });
 
                 database.AuditLogs.Add(new AuditLog
