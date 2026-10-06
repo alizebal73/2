@@ -130,7 +130,8 @@ public sealed class InvoiceReverseTests : IDisposable
             Category = "نوشیدنی",
             UnitPrice = 30000m,
             CostPrice = 12000m,
-            StockQuantity = 0
+            StockQuantity = 0,
+            ShowcaseStockQuantity = 0
         };
         var invoice = new Invoice
         {
@@ -172,6 +173,7 @@ public sealed class InvoiceReverseTests : IDisposable
             ReferenceInvoiceId = invoice.Id,
             Direction = TransactionDirection.Out,
             Kind = "Sale",
+            StockArea = StockArea.Showcase,
             Notes = "فروش آزمایشی"
         });
         await db.SaveChangesAsync();
@@ -185,7 +187,8 @@ public sealed class InvoiceReverseTests : IDisposable
 
         Assert.Equal(2, result.InventoryRestored);
         Assert.Equal(30, result.FreeTimeRestored);
-        Assert.Equal(2, savedProduct.StockQuantity);
+        Assert.Equal(0, savedProduct.StockQuantity);
+        Assert.Equal(2, savedProduct.ShowcaseStockQuantity);
         Assert.Equal(30, savedCustomer.FreeTimeMinutes);
         Assert.Equal(TransactionDirection.In, returnMovement.Direction);
         Assert.Equal(30000m, returnMovement.UnitPrice);
