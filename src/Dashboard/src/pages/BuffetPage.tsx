@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AppUserRecord, ProductRecord } from '../types';
 import { hasPermission } from '../services/authService';
-import { adjustServerStock, createServerProduct, getServerInventoryTransactions, getServerProducts, recordServerBuffetSale, updateServerProduct } from '../services/buffetService';
+import { adjustServerStock, createServerProduct, getServerBuffetTodaySales, getServerInventoryTransactions, getServerProducts, recordServerBuffetSale, transferServerStockToShowcase, updateServerProduct } from '../services/buffetService';
 import { getServerActiveSessions, type ActiveServerSession } from '../services/sessionService';
 import { userErrorMessage } from '../utils/userError';
 
@@ -14,6 +14,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
   const canManageInventory = hasPermission(user, 'buffet.inventory');
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [inventoryHistory, setInventoryHistory] = useState<import('../types').InventoryTransactionRecord[]>([]);
+  const [todaySales, setTodaySales] = useState<import('../types').BuffetTodaySalesReport | null>(null);
   const [activeSessions, setActiveSessions] = useState<ActiveServerSession[]>([]);
   const [sessionTargetId, setSessionTargetId] = useState('');
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
@@ -28,12 +29,14 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
   async function refresh() {
     try {
       const serverProducts = await getServerProducts();
-      const [serverHistory, serverSessions] = await Promise.all([
+      const [serverHistory, serverTodaySales, serverSessions] = await Promise.all([
         canManageInventory ? getServerInventoryTransactions() : Promise.resolve([]),
+        (canManageInventory || canSellBuffet) ? getServerBuffetTodaySales() : Promise.resolve(null),
         canSellBuffet ? getServerActiveSessions() : Promise.resolve([]),
       ]);
       setProducts(serverProducts);
       setInventoryHistory(serverHistory);
+      setTodaySales(serverTodaySales);
       setActiveSessions(serverSessions);
       setSessionTargetId(current => {
         if (current && serverSessions.some(item => item.id === current)) return current;
@@ -57,7 +60,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
   function changeQuantity(id: string, delta: number) {
     const product = products.find(item => item.id === id);
     if (!product) return;
-    setCart(current => ({ ...current, [id]: Math.max(0, Math.min(product.stock, (current[id] ?? 0) + delta)) }));
+    setCart(current => ({ ...current, [id]: Math.max(0, Math.min(product.showcaseStock, (current[id] ?? 0) + delta)) }));
   }
 
   async function purchaseProduct(product: ProductRecord) {
@@ -70,7 +73,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
     try {
       await adjustServerStock(product.id, quantity, 'in', 'ثبت خرید بوفه', 'Purchase', unitCost);
       await refresh();
-      setNotice('خرید ثبت شد و بهای میانگین موجودی به‌روزرسانی شد');
+      setNotice('خرید ثبت شد؛ کالا به موجودی انبار اضافه شد و بهای میانگین به‌روزرسانی شد');
     } catch (error) {
       setNotice(userErrorMessage(error, 'ثبت خرید انجام نشد'));
     } finally {
@@ -93,6 +96,22 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
     }
   }
 
+  async function transferToShowcase(product: ProductRecord) {
+    if (!canManageInventory) { setNotice('دسترسی مدیریت موجودی ندارید'); return; }
+    const quantity = numberValue(window.prompt('تعداد انتقال به ویترین', '1') ?? '');
+    if (quantity <= 0) { setNotice('تعداد انتقال معتبر نیست'); return; }
+    if (quantity > product.warehouseStock) { setNotice('موجودی انبار برای این انتقال کافی نیست'); return; }
+    setBusy(true);
+    try {
+      await transferServerStockToShowcase(product.id, quantity, 'انتقال دستی اپراتور به ویترین');
+      await refresh();
+      setNotice(quantity.toLocaleString('fa-IR') + ' ' + product.unit + ' از انبار به ویترین منتقل شد');
+    } catch (error) {
+      setNotice(userErrorMessage(error, 'انتقال به ویترین انجام نشد'));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function saveProduct() {
     if (!canManageInventory) { setNotice('دسترسی مدیریت موجودی ندارید'); return; }
     const price = numberValue(draft.price);
@@ -208,39 +227,39 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
         <label>دسته<select value={draft.category} onChange={event => setDraft(current => ({ ...current, category: event.target.value }))}>{['نوشیدنی','غذا','تنقلات','لوازم جانبی','سایر'].map(item => <option key={item}>{item}</option>)}</select></label>
         <label>قیمت فروش<input inputMode="numeric" value={draft.price} onChange={event => setDraft(current => ({ ...current, price: event.target.value }))} /></label>
         <label>قیمت خرید<input inputMode="numeric" value={draft.buyPrice} onChange={event => setDraft(current => ({ ...current, buyPrice: event.target.value }))} /></label>
-        <label>موجودی اولیه<input inputMode="numeric" value={draft.stock} onChange={event => setDraft(current => ({ ...current, stock: event.target.value }))} /></label>
+        <label>موجودی اولیه انبار<input inputMode="numeric" value={draft.stock} onChange={event => setDraft(current => ({ ...current, stock: event.target.value }))} /></label>
         <label>حداقل موجودی<input inputMode="numeric" value={draft.minimumStock} onChange={event => setDraft(current => ({ ...current, minimumStock: event.target.value }))} /></label>
         <label>واحد شمارش<input value={draft.unit} onChange={event => setDraft(current => ({ ...current, unit: event.target.value }))} /></label>
       </div>
       <div className="modal-actions"><button className="btn primary" disabled={busy} onClick={() => void saveProduct()}>{editingProductId ? 'ذخیره تغییرات' : 'ثبت محصول'}</button><button className="btn" onClick={() => { setEditingProductId(null); setProductFormOpen(false); }}>انصراف</button></div>
     </section>}
 
-    <div className="summary-grid">
-      <div className="summary-card"><div className="label">تعداد کالا</div><div className="value blue">{products.length}</div></div>
-      <div className="summary-card"><div className="label">کالای کم‌موجود</div><div className="value red">{lowStockCount}</div></div>
-      <div className="summary-card"><div className="label">ارزش فروش سبد</div><div className="value orange">{money(cartTotal)} تومان</div></div>
-      <div className="summary-card"><div className="label">سبد فعال</div><div className="value green">{cartItems.length} کالا</div></div>
+    <div className="summary-grid buffet-flow-summary">
+      <div className="summary-card"><div className="label">موجودی انبار</div><div className="value blue">{products.reduce((sum, item) => sum + item.warehouseStock, 0).toLocaleString('fa-IR')} واحد</div></div>
+      <div className="summary-card"><div className="label">موجودی ویترین</div><div className="value green">{products.reduce((sum, item) => sum + item.showcaseStock, 0).toLocaleString('fa-IR')} واحد</div></div>
+      <div className="summary-card"><div className="label">فروش امروز</div><div className="value orange">{(todaySales?.totalQuantity ?? 0).toLocaleString('fa-IR')} واحد</div></div>
+      <div className="summary-card"><div className="label">فروش امروز (مبلغ)</div><div className="value orange">{money(todaySales?.totalRevenue ?? 0)} تومان</div></div>
     </div>
-
     <div className="buffet-layout">
       <section className="panel-box buffet-products">
         <div className="category-tabs">{['همه','نوشیدنی','غذا','تنقلات','لوازم جانبی','سایر'].map(item => <button key={item} className={category === item ? 'active' : ''} onClick={() => setCategory(item)}>{item}</button>)}</div>
         <div className="product-grid">
           {visibleProducts.map(product => {
             const low = product.lowStock;
-            const width = product.maxStock ? Math.min(100, product.stock / product.maxStock * 100) + '%' : '0%';
+            const width = product.maxStock ? Math.min(100, product.showcaseStock / product.maxStock * 100) + '%' : '0%';
             return <article key={product.id} className="product-card">
               <div className="icon">🧃</div><b>{product.name}</b><div className="price">{money(product.price)} تومان</div>
-              <div className="stock">موجودی: {product.stock} {product.unit} · حداقل {product.minimumStock}</div>
+              <div className="stock">انبار: {product.warehouseStock} {product.unit} · ویترین: {product.showcaseStock} {product.unit}</div>
               <div className="progress-bar"><span style={{ width }} /></div>
               {low && <small className="low-stock">هشدار موجودی کم</small>}
-              <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
+              <button className="btn sm" disabled={busy || product.showcaseStock === 0} onClick={() => changeQuantity(product.id, 1)}>افزودن به سبد</button>
               {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => startEdit(product)}>ویرایش</button>}
-              {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void purchaseProduct(product)}>ثبت خرید</button>}
+              {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void purchaseProduct(product)}>ثبت خرید به انبار</button>}
+              {canManageInventory && <button className="btn sm" disabled={busy || product.warehouseStock === 0} onClick={() => void transferToShowcase(product)}>+ انتقال به ویترین</button>}
               <div className="product-stock-actions">
                 {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button>}
-                {canManageInventory && <button className="btn sm" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out')}>− موجودی</button>}
-                {canManageInventory && <button className="btn sm danger" disabled={busy || product.stock === 0} onClick={() => void adjustStock(product, 'out', 'Waste', 'ضایعات بوفه')}>− ضایعات</button>}
+                {canManageInventory && <button className="btn sm" disabled={busy || product.warehouseStock === 0} onClick={() => void adjustStock(product, 'out')}>− انبار</button>}
+                {canManageInventory && <button className="btn sm danger" disabled={busy || product.warehouseStock === 0} onClick={() => void adjustStock(product, 'out', 'Waste', 'ضایعات انبار')}>− ضایعات انبار</button>
                 {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in', 'Return', 'مرجوعی بوفه')}>+ مرجوعی</button>}
               </div>
             </article>;
@@ -273,6 +292,27 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
       </section>
     </div>
 
+    <section className="panel-box buffet-today-sales" style={{ marginTop: 16 }}>
+      <div className="profile-section-head">
+        <div>
+          <h3>فروش امروز هر محصول</h3>
+          <small>مبنای گزارش: فروش‌های ثبت‌شده روی ویترین در Server</small>
+        </div>
+        <span>{(todaySales?.totalQuantity ?? 0).toLocaleString('fa-IR')} عدد · {money(todaySales?.totalRevenue ?? 0)} تومان</span>
+      </div>
+      <div className="customer-history-list">
+        {(todaySales?.products ?? []).map(item => (
+          <div className="customer-history-item" key={item.productId}>
+            <span className="customer-history-dot" />
+            <div>
+              <strong>{item.productName}</strong>
+              <small>فروش امروز: {item.quantity.toLocaleString('fa-IR')} {item.unit} · {money(item.revenue)} تومان</small>
+            </div>
+          </div>
+        ))}
+        {!todaySales?.products?.length && <div className="customer-ledger-empty">برای امروز هنوز کالایی ثبت نشده است.</div>}
+      </div>
+    </section>
     <section className="panel-box" style={{ marginTop: 16 }}>
       <div className="profile-section-head"><h3>گردش موجودی</h3><span>{inventoryHistory.length} رویداد</span></div>
       <div className="customer-history-list">
