@@ -775,5 +775,115 @@ public sealed class SessionSettlementTests : IDisposable
         Assert.Equal(session.Id, payment.SessionId);
     }
 
+    [Fact]
+    public async Task SettlementPreviewUsesOnlySelectedSessionBuffetWithinCustomerAccount()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type1 = new StationType { Name = "PC-PREVIEW-01" };
+        var type2 = new StationType { Name = "PC-PREVIEW-02" };
+        var tariff = new Tariff { Name = "Preview Allocation", HourlyRate = 60000m, DailyRate = 300000m };
+        var customer = new Customer { FullName = "Preview Allocation Customer", FreeTimeMinutes = 0 };
+        var user = new AppUser
+        {
+            FullName = "Preview Admin",
+            UserName = "preview-allocation-admin",
+            Email = "preview-allocation-admin@test.local",
+            PasswordHash = "hash",
+            Role = "Admin"
+        };
+        var station1 = new Station
+        {
+            Name = "PC-PREVIEW-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 60000m,
+            StationType = type1,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var station2 = new Station
+        {
+            Name = "PC-PREVIEW-02",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Occupied,
+            RatePerHour = 60000m,
+            StationType = type2,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session1 = new Session
+        {
+            Customer = customer,
+            Station = station1,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 60000m
+        };
+        var session2 = new Session
+        {
+            Customer = customer,
+            Station = station2,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 60000m
+        };
+        var product1 = new Product { Name = "Preview Cola 1", UnitPrice = 35000m, CostPrice = 10000m, StockQuantity = 10 };
+        var product2 = new Product { Name = "Preview Cola 2", UnitPrice = 45000m, CostPrice = 12000m, StockQuantity = 10 };
+
+        db.AddRange(type1, type2, tariff, customer, user, station1, station2, session1, session2, product1, product2);
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+        await service.ChargeAsync(session1.Id, 10000m, "cash", user.Id, CancellationToken.None);
+        await service.ChargeAsync(session2.Id, 5000m, "cash", user.Id, CancellationToken.None);
+
+        var account = await db.Invoices.SingleAsync(item =>
+            item.CustomerId == customer.Id
+            && item.Status == InvoiceStatus.Draft
+            && item.IsCustomerAccount);
+
+        db.InvoiceItems.AddRange(
+            new InvoiceItem
+            {
+                InvoiceId = account.Id,
+                SessionId = session1.Id,
+                ProductId = product1.Id,
+                Description = product1.Name,
+                Quantity = 1,
+                UnitPrice = product1.UnitPrice,
+                Amount = product1.UnitPrice
+            },
+            new InvoiceItem
+            {
+                InvoiceId = account.Id,
+                SessionId = session2.Id,
+                ProductId = product2.Id,
+                Description = product2.Name,
+                Quantity = 1,
+                UnitPrice = product2.UnitPrice,
+                Amount = product2.UnitPrice
+            });
+
+        await db.SaveChangesAsync();
+
+        var preview = await service.PreviewAsync(session1.Id, 0, 0m, 0m, CancellationToken.None);
+
+        Assert.Equal(product1.UnitPrice, preview.BuffetTotal);
+        Assert.NotEqual(product2.UnitPrice, preview.BuffetTotal);
+        Assert.Equal(
+            preview.TimeAmount + product1.UnitPrice,
+            preview.TotalAmount);
+    }
+
     public void Dispose() => _connection.Dispose();
 }
