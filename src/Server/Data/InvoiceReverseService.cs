@@ -123,31 +123,84 @@ public sealed class InvoiceReverseService(GameNetDbContext database)
         foreach (var item in invoice.Items.Where(item => item.ProductId.HasValue && item.Quantity > 0 && item.Product is not null))
         {
             var productId = item.ProductId!.Value;
-            var saleMovements = await database.InventoryTransactions.AsNoTracking()
+            var saleMovements = await database.InventoryTransactions
+                .AsNoTracking()
                 .Where(movement => movement.ReferenceInvoiceId == invoice.Id
                     && movement.ProductId == productId
                     && movement.Kind == "Sale"
                     && movement.Direction == TransactionDirection.Out)
+                .OrderBy(movement => movement.CreatedAt)
                 .ToListAsync(cancellationToken);
+
             var totalSoldQuantity = saleMovements.Sum(movement => movement.Quantity);
             var totalSoldCost = saleMovements.Sum(movement => movement.Quantity * movement.UnitCost);
             var restoredUnitCost = totalSoldQuantity > 0
                 ? totalSoldCost / totalSoldQuantity
                 : item.Product!.CostPrice;
-            item.Product!.StockQuantity += item.Quantity;
-            inventoryRestored += item.Quantity;
-            database.InventoryTransactions.Add(new InventoryTransaction
+
+            // Restore the same stock area from which the sale was taken.
+            // Current buffet sales use Showcase; the fallback keeps older warehouse
+            // sales reversible instead of silently moving stock between areas.
+            var remaining = item.Quantity;
+            var groupedAreas = saleMovements
+                .GroupBy(movement => movement.StockArea)
+                .OrderByDescending(group => group.Sum(movement => movement.Quantity))
+                .ToList();
+
+            foreach (var areaGroup in groupedAreas)
             {
-                ProductId = item.ProductId.Value,
-                Quantity = item.Quantity,
-                UnitPrice = item.UnitPrice,
-                UnitCost = restoredUnitCost,
-                ReferenceInvoiceId = invoice.Id,
-                Direction = TransactionDirection.In,
-                Kind = "Return",
-                AppUserId = request.AppUserId,
-                Notes = "برگشت خودکار فروش فاکتور · " + reason
-            });
+                if (remaining <= 0)
+                    break;
+
+                var availableAreaQuantity = areaGroup.Sum(movement => movement.Quantity);
+                var restoreQuantity = Math.Min(remaining, availableAreaQuantity);
+
+                if (restoreQuantity <= 0)
+                    continue;
+
+                if (areaGroup.Key == StockArea.Warehouse)
+                    item.Product!.StockQuantity += restoreQuantity;
+                else
+                    item.Product!.ShowcaseStockQuantity += restoreQuantity;
+
+                inventoryRestored += restoreQuantity;
+                remaining -= restoreQuantity;
+
+                database.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = item.ProductId.Value,
+                    Quantity = restoreQuantity,
+                    UnitPrice = item.UnitPrice,
+                    UnitCost = restoredUnitCost,
+                    ReferenceInvoiceId = invoice.Id,
+                    Direction = TransactionDirection.In,
+                    StockArea = areaGroup.Key,
+                    Kind = "Return",
+                    AppUserId = request.AppUserId,
+                    Notes = "برگشت خودکار فروش فاکتور · " + reason
+                });
+            }
+
+            // If no sale movement existed, treat the invoice as a current buffet
+            // sale and restore it to Showcase.
+            if (remaining > 0)
+            {
+                item.Product!.ShowcaseStockQuantity += remaining;
+                inventoryRestored += remaining;
+                database.InventoryTransactions.Add(new InventoryTransaction
+                {
+                    ProductId = item.ProductId.Value,
+                    Quantity = remaining,
+                    UnitPrice = item.UnitPrice,
+                    UnitCost = restoredUnitCost,
+                    ReferenceInvoiceId = invoice.Id,
+                    Direction = TransactionDirection.In,
+                    StockArea = StockArea.Showcase,
+                    Kind = "Return",
+                    AppUserId = request.AppUserId,
+                    Notes = "برگشت فروش بدون حرکت موجودی ثبت‌شده · " + reason
+                });
+            }
         }
 
         invoice.Status = InvoiceStatus.Cancelled;
