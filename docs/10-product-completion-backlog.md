@@ -1256,6 +1256,10 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - Finance Summary اکنون درآمد را از `InvoicePayment.CreatedAt` و مبلغ پرداخت‌شدهٔ واقعی محاسبه می‌کند، نه از زمان صدور و کل مبلغ Invoice.
 - Finance Transactions اکنون Payment-level است؛ هر `InvoicePayment` زمان، مبلغ و روش واقعی خود را دارد و پرداخت روی Invoice Draft نیز گم نمی‌شود.
 - Wallet Transaction در تعارض هم‌زمانی با Customer، به‌جای خطای 500 با 409 فارسی متوقف می‌شود و موجودی دوباره‌نویسی نمی‌شود.
+- صفحهٔ گزارش مالی بازهٔ انتخاب‌شده را به‌صورت Server-side به Finance Ledger می‌فرستد؛ بنابراین هفته/ماه/سال فقط روی دادهٔ امروز محدود نمی‌شود.
+- تاریخچهٔ مشتری اکنون `InvoicePayment` را با زمان، مبلغ، روش و Invoice مرجع نمایش می‌دهد.
+- Reverse مالی اکنون در زمان `InvoiceReversal.CreatedAt` یک رکورد منفی در Finance Ledger ایجاد می‌کند؛ بنابراین برگشت فاکتور فروش قبلی را به‌صورت درآمد باقی‌مانده نشان نمی‌دهد.
+
 - Session Report درآمد تاریخی را از `InvoiceItem`های متعلق به همان Session می‌گیرد و فقط برای داده‌های قدیمی بدون Ledger به `Session.TotalAmount` fallback می‌کند.
 - حساب‌های Pending با مبلغ قابل‌پرداخت صفر دیگر در Pending View نمایش داده نمی‌شوند و قابل انتقال به Debt نیستند.
 - Workspace مشتری، شارژ Session و بوفه را در یک مسیر اپراتوری یکپارچه می‌کند.
