@@ -552,7 +552,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         invoice.Property(item => item.AccountState).HasConversion<string>().HasMaxLength(20).IsRequired();
         invoice.Property(item => item.Status).HasConversion<string>().HasMaxLength(20);
         invoice.HasIndex(item => item.SessionId).IsUnique(false);
-        invoice.HasIndex(item => item.CustomerId)
+        invoice.HasIndex(item => new { item.CustomerId, item.AccountState })
             .IsUnique()
             .HasFilter("Status = 'Draft' AND IsCustomerAccount = 1");
         invoice.HasOne(item => item.Customer)
