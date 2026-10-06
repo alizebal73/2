@@ -77,7 +77,7 @@ Findingهای غیرمرتبط با نصب پایه نباید مانع اولی
 اما هر باگی که Server نصب، Client registration، Agent ارتباط، Database startup یا جریان پایه Session را متوقف کند، blocker مستقیم Setup محسوب می‌شود.
 
 ## نسخه فعلی و نکته مهم
-در کد فعلی هنوز Version Source یکپارچه نشده و مقادیر 0.7.0 / 0.7.1 / 0.1.0 دیده می‌شوند. برای First Installable Build از نسخه‌ای که قبل از build به‌صورت صریح ثبت شود استفاده می‌کنیم و بعد Versioning را یکپارچه می‌کنیم.
+برای First Installable Build نسخه پایه `0.7.0` ثبت شده است. `ProductVersion`، `MinimumClientVersion` و `RecommendedClientVersion` فعلاً با همین نسخه هماهنگ شده‌اند و `Build-Setup.ps1` نیز همین مقدار را به‌عنوان پیش‌فرض استفاده می‌کند. بعد از اولین نصب، Versioning کامل برای Updateهای بعدی جداگانه انجام می‌شود.
 
 ## Build command
 Build از روی repository root و ترجیحاً روی self-hosted Windows runner کاربر اجرا شود:
