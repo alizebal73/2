@@ -1247,6 +1247,7 @@ Game Library واقعی → Account Pool/Lease → Process Detection، بدون 
 - Dashboard Pending دکمهٔ «بدهی» دارد.
 - انتقال Pending به Debt در Server با گارد Session فعال محافظت می‌شود تا بدهی زودتر از پایان Session ایجاد نشود.
 - ثبت بدهی مستقیم نیز همین گارد Server-side را برای Customer Accountهای PendingPayment استفاده می‌کند.
+- حساب‌های Pending با مبلغ قابل‌پرداخت صفر دیگر در Pending View نمایش داده نمی‌شوند و قابل انتقال به Debt نیستند.
 - Workspace مشتری، شارژ Session و بوفه را در یک مسیر اپراتوری یکپارچه می‌کند.
 
 ### Gate
