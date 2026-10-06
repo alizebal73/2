@@ -11,6 +11,7 @@ import { SessionCenter } from '../features/session/SessionCenter';
 import { userErrorMessage } from '../utils/userError';
 import { DashboardAttentionSidebar, type SidebarAttentionItem } from '../features/attention/DashboardAttentionSidebar';
 import { ReverseDialog } from '../components/ReverseDialog';
+import { CustomerOperationsWorkspace } from '../features/customer/CustomerOperationsWorkspace';
 
 const zoneLabels: Record<ZoneKey, string> = { all: 'همه', pc: 'رایانه‌ها (۴۰)', console: 'کنسول‌ها (۱۶)', table: 'میزها (۵)' };
 const stateLabels: Record<StationState, string> = { free: 'آماده استفاده', busy: 'در حال استفاده', paused: 'متوقف', reserved: 'رزرو', off: 'خاموش / خارج از سرویس' };
@@ -64,6 +65,8 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   const [reverseRequest, setReverseRequest] = useState<SessionTimelineEvent | null>(null);
   const [reversedEventIds, setReversedEventIds] = useState<string[]>([]);
   const [flowStep, setFlowStep] = useState<1 | 2>(1);
+  const [flowCustomerId, setFlowCustomerId] = useState<string | null>(null);
+  const [flowBusy, setFlowBusy] = useState(false);
   const [extendMinutes, setExtendMinutes] = useState(30);
   const [customExtendMinutes, setCustomExtendMinutes] = useState('30');
   const [reduceMinutes, setReduceMinutes] = useState(15);
@@ -136,40 +139,42 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     setSessionTimeline(current => [{ id: crypto.randomUUID(), stationId, createdAt: new Date().toISOString(), kind, title, detail, amount, serverReferenceId }, ...current].slice(0, 300));
   }
 
-  const applyFlow = useCallback(async (action: string) => {
+  const applyFlow = useCallback(async (action: 'walletAdd' | 'debtAdd' | 'walletDeduct' | 'walletDebt') => {
     const value = number(amount);
     if (!value) { setMessage('مبلغ معتبر وارد کنید'); return; }
-    const customer = customers.find(item => item.code === customerCode || item.username === customerCode || item.mobile === customerCode || item.id === customerCode || item.name.includes(customerCode));
-    if (!customer) { setMessage('مشتری پیدا نشد'); return; }
+    const customer = flowCustomerId ? customers.find(item => item.id === flowCustomerId) : null;
+    if (!customer) { setMessage('ابتدا یک مشتری را انتخاب کنید'); return; }
+    setFlowBusy(true);
     try {
-      if (action === 'F5') {
-        const entry = await recordWalletTransaction(customer.id, { amount: value, type: 'credit', description: 'شارژ مستقیم توسط اپراتور' });
-        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['شارژ مستقیم · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+      if (action === 'walletAdd') {
+        await recordWalletTransaction(customer.id, { amount: value, type: 'credit', description: 'شارژ مستقیم توسط اپراتور' });
         setMessage('شارژ مستقیم ' + money(value) + ' تومان ثبت شد');
-      } else if (action === 'F6') {
+      } else if (action === 'debtAdd') {
         await createServerCustomerDebt(customer.id, value, 'ثبت بدهی توسط اپراتور');
-        const refreshed = await getServerCustomers();
-        setCustomers(refreshed);
         setMessage('بدهی ' + money(value) + ' تومان ثبت شد');
-      } else if (action === 'F7') {
-        const entry = await recordWalletTransaction(customer.id, { amount: value, type: 'debit', description: 'کسر مستقیم توسط اپراتور' });
-        setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: entry.balanceAfter, transactionHistory: ['کسر از کیف پول · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+      } else if (action === 'walletDeduct') {
+        await recordWalletTransaction(customer.id, { amount: value, type: 'debit', description: 'کسر مستقیم توسط اپراتور' });
         setMessage(money(value) + ' تومان از کیف پول کسر شد');
       } else {
         const deducted = Math.min(customer.wallet, value);
+        const remainder = Math.max(0, value - deducted);
         if (deducted > 0) {
-          const entry = await recordWalletTransaction(customer.id, { amount: deducted, type: 'debit', description: 'کسر کیف پول و ثبت مابه‌التفاوت' });
-          setCustomers(current => current.map(item => item.id === customer.id ? { ...item, wallet: entry.balanceAfter, debt: item.debt + value - deducted, transactionHistory: ['کسر کیف پول/بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
-        } else {
-          setCustomers(current => current.map(item => item.id === customer.id ? { ...item, debt: item.debt + value, transactionHistory: ['کسر کیف پول/بدهی · ' + money(value) + ' تومان', ...(item.transactionHistory ?? [])] } : item));
+          await recordWalletTransaction(customer.id, { amount: deducted, type: 'debit', description: 'کسر کیف پول و ثبت مابه‌التفاوت' });
         }
-        setMessage('تراکنش F8 ثبت شد؛ ' + money(Math.max(0, value - deducted)) + ' تومان مازاد به بدهی رفت');
+        if (remainder > 0) {
+          await createServerCustomerDebt(customer.id, remainder, 'باقی‌مانده عملیات کیف پول + بدهی');
+        }
+        setMessage('عملیات کیف پول + بدهی ثبت شد؛ ' + money(remainder) + ' تومان به بدهی منتقل شد');
       }
-      setModal(null);
+      const refreshed = await getServerCustomers();
+      setCustomers(refreshed);
+      setAmount('');
     } catch (error) {
-      setMessage(userErrorMessage(error, 'ثبت تراکنش کیف پول انجام نشد'));
+      setMessage(userErrorMessage(error, 'ثبت تراکنش مشتری انجام نشد'));
+    } finally {
+      setFlowBusy(false);
     }
-  }, [amount, customers, customerCode]);
+  }, [amount, customers, flowCustomerId]);
   useEffect(() => {
     void getServerCustomers()
       .then(setCustomers)
@@ -189,35 +194,89 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
   }, [message]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setModal(null); setContext(null); setSessionCenterStation(null); setSelectedStationIds([]); setSelectionAnchorId(null); setSelectionRect(null); }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((event.target as HTMLElement)?.tagName)) {
+      const pressed = event.key.toUpperCase();
+      if (event.key === 'Escape') {
+        setModal(null);
+        setContext(null);
+        setSessionCenterStation(null);
+        setSelectedStationIds([]);
+        setSelectionAnchorId(null);
+        setSelectionRect(null);
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && pressed === 'A' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((event.target as HTMLElement)?.tagName)) {
         event.preventDefault();
+        event.stopPropagation();
         setSelectedStationIds(visibleStations.map(item => item.id));
         setSelectionAnchorId(visibleStations[visibleStations.length - 1]?.id ?? null);
+        return;
       }
+
       const flowKey = (hotkeys.flow || 'F1').toUpperCase();
       const amountKey = (hotkeys.amount || 'F4').toUpperCase();
       const walletAddKey = (hotkeys.walletAdd || 'F5').toUpperCase();
       const debtAddKey = (hotkeys.debtAdd || 'F6').toUpperCase();
       const walletDeductKey = (hotkeys.walletDeduct || 'F7').toUpperCase();
       const walletDebtKey = (hotkeys.walletDebt || 'F8').toUpperCase();
-      if (event.key.toUpperCase() === flowKey) { event.preventDefault(); setFlowStep(1); setModal('flow'); }
-      if (modal === 'flow' && flowStep === 2 && [walletAddKey, debtAddKey, walletDeductKey, walletDebtKey].includes(event.key.toUpperCase())) {
+
+      if (event.repeat && [flowKey, amountKey, walletAddKey, debtAddKey, walletDeductKey, walletDebtKey].includes(pressed)) return;
+
+      if (pressed === flowKey) {
         event.preventDefault();
-        const action = event.key.toUpperCase() === walletAddKey ? 'F5' : event.key.toUpperCase() === debtAddKey ? 'F6' : event.key.toUpperCase() === walletDeductKey ? 'F7' : 'F8';
-        applyFlow(action);
+        event.stopPropagation();
+        setActiveStation(null);
+        setFlowCustomerId(null);
+        setCustomerCode('');
+        setAmount('');
+        setFlowStep(1);
+        setModal('flow');
+        return;
       }
-      if (modal === 'flow' && event.key.toUpperCase() === amountKey) document.getElementById('flow-amount')?.focus();
+
+      if (modal === 'flow' && flowStep === 2 && pressed === amountKey) {
+        event.preventDefault();
+        event.stopPropagation();
+        document.getElementById('flow-amount')?.focus();
+        return;
+      }
+
+      if (modal === 'flow' && flowStep === 2) {
+        const action = pressed === walletAddKey
+          ? 'walletAdd'
+          : pressed === debtAddKey
+            ? 'debtAdd'
+            : pressed === walletDeductKey
+              ? 'walletDeduct'
+              : pressed === walletDebtKey
+                ? 'walletDebt'
+                : null;
+        if (action) {
+          event.preventDefault();
+          event.stopPropagation();
+          void applyFlow(action);
+        }
+      }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [modal, flowStep, applyFlow, hotkeys]);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [modal, flowStep, applyFlow, hotkeys, visibleStations]);
   useEffect(() => {
     const onCommand = (event: Event) => {
       const command = (event as CustomEvent<string>).detail;
       if (command === 'start-session') open('start', stations.find(item => item.state === 'free') ?? null);
       if (command === 'quick-charge') open('charge', stations.find(item => item.state === 'busy') ?? null);
-      if (command === 'flow') { setFlowStep(1); open('flow', stations.find(item => item.state === 'busy') ?? null); }
+      if (command === 'flow') {
+        const busyStation = stations.find(item => item.state === 'busy') ?? null;
+        const busyCustomer = busyStation ? customers.find(item =>
+          item.username === busyStation.customerUsername ||
+          item.code === busyStation.customerCode ||
+          item.username === busyStation.customerCode
+        ) : null;
+        open('flow', busyStation);
+        setFlowCustomerId(busyCustomer?.id ?? null);
+        setCustomerCode(busyCustomer ? (busyCustomer.username || busyCustomer.code || '') : '');
+        setFlowStep(busyCustomer ? 2 : 1);
+      }
       if (command === 'extend-session') {
         const station = stations.find(item => item.state === 'busy');
         if (station) {
@@ -460,6 +519,30 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
     }
     setCustomerCode(found.username || found.code || customerCode.trim());
     setMessage('پروفایل ' + found.name + ' پیدا شد و آماده ورود است.');
+  }
+
+  function selectFlowCustomer(customer: CustomerRecord) {
+    setFlowCustomerId(customer.id);
+    setCustomerCode(customer.username || customer.code || customer.mobile || customer.id);
+    setAmount('');
+    setFlowStep(2);
+  }
+
+  function submitFlowSearch() {
+    const needle = customerCode.trim().toLocaleLowerCase('fa-IR');
+    if (!needle) { setMessage('شناسه مشتری را وارد کنید'); return; }
+    const exact = findCustomer(customerCode);
+    const partial = exact ?? customers.find(item =>
+      [item.code, item.username, item.mobile, item.id, item.name, item.alias]
+        .filter(Boolean)
+        .some(candidate => String(candidate).toLocaleLowerCase('fa-IR').includes(needle))
+    );
+    if (!partial) {
+      setFlowCustomerId(null);
+      setMessage('مشتری پیدا نشد؛ کد، username، موبایل یا نام را بررسی کنید.');
+      return;
+    }
+    selectFlowCustomer(partial);
   }
 
   function openCustomerProfile() {
@@ -1464,7 +1547,7 @@ export function DashboardPage({ snapshot, apiState, serverInfo, onNavigate: _onN
           <button className="btn" onClick={() => setModal(null)}>لغو</button>
         </div>
       </>}
-      {modal === 'flow' && <><h2>⚡ فلوی سرعت · F1</h2>{flowStep === 1 ? <><label>شناسه مشتری<input autoFocus value={customerCode} onChange={event => setCustomerCode(event.target.value)} onKeyDown={event => event.key === 'Enter' && setFlowStep(2)} placeholder="کد، نام، لقب یا موبایل" /></label><button className="btn primary" onClick={() => setFlowStep(2)}>نمایش پروفایل</button></> : <><p>{customers.find(item => [item.username, item.mobile, item.id, item.name].some(value => value.includes(customerCode)))?.name ?? 'مشتری مهمان'} · {activeStation?.name ?? 'بدون دستگاه'}</p><label>مبلغ (تومان)<input id="flow-amount" inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} /></label><div className="modal-actions">{[['F5', 'شارژ مستقیم'], ['F6', 'ثبت بدهی'], ['F7', 'کسر از کیف پول'], ['F8', 'کسر کیف پول + بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyFlow(key)}>{key} {label}</button>)}</div></>}</>}
+      {modal === 'flow' && <div className="customer-flow-modal"><h2>⚡ عملیات مشتری · F1</h2><CustomerOperationsWorkspace customers={customers} stations={stations} hotkeys={hotkeys} customerId={flowCustomerId} search={customerCode} amount={amount} busy={flowBusy} onSearchChange={setCustomerCode} onSearchSubmit={submitFlowSearch} onSelectCustomer={selectFlowCustomer} onAmountChange={setAmount} onAction={applyFlow} /></div>}
       {modal === 'charge' && <><h2>⚡ شارژ سریع · {activeStation?.name}</h2><label>مبلغ شارژ<input autoFocus inputMode="numeric" value={amount} onChange={event => setAmount(event.target.value)} onKeyDown={event => event.key === 'Enter' && applyCharge('cash')} /></label><label>هدف<select value={chargeTarget} onChange={event => setChargeTarget(event.target.value as 'session' | 'wallet' | 'discount')}><option value="session">شارژ زمان همین جلسه</option><option value="wallet">شارژ کیف پول</option><option value="discount">شارژ + تخفیف</option></select></label><div className="modal-actions">{[['cash', 'نقد'], ['card', 'کارت'], ['wallet', 'کیف پول'], ['debt', 'ثبت در بدهی']].map(([key, label]) => <button key={key} className="btn" onClick={() => applyCharge(key)}>{label}</button>)}</div></>}
       {modal === 'settle' && activeStation && (() => {
       const settlementCustomer = customers.find(item => item.code === activeStation.customerCode || item.username === activeStation.customerCode || item.id === activeStation.customerCode);
