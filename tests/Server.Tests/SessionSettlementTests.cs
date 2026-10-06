@@ -462,10 +462,10 @@ public sealed class SessionSettlementTests : IDisposable
             service.SettlePendingAsync(
                 invoice.Id,
                 new PendingSettlementPaymentRequest(
-                    50000m,
-                    new[] { new SettlementPart("cash", 50000m) },
+                    80000m,
+                    new[] { new SettlementPart("cash", 80000m) },
                     user.Id,
-                    50001m),
+                    20000m),
                 CancellationToken.None));
 
         var savedInvoice = await db.Invoices.SingleAsync(item => item.Id == invoice.Id);
