@@ -57,10 +57,12 @@ public sealed record UsersShiftReportPageDto(
 public sealed class UsersShiftReportService
 {
     private readonly GameNetDbContext _database;
+    private readonly SessionRevenueService _sessionRevenue;
 
-    public UsersShiftReportService(GameNetDbContext database)
+    public UsersShiftReportService(GameNetDbContext database, SessionRevenueService? sessionRevenue = null)
     {
         _database = database;
+        _sessionRevenue = sessionRevenue ?? new SessionRevenueService(database);
     }
 
     public async Task<UsersShiftReportPageDto> QueryAsync(
@@ -128,6 +130,7 @@ public sealed class UsersShiftReportService
             .Where(item => item.AppUserId.HasValue)
             .Select(item => new
             {
+                Id = item.Id,
                 AppUserId = item.AppUserId!.Value,
                 item.StartAt,
                 item.TotalAmount
@@ -138,6 +141,21 @@ public sealed class UsersShiftReportService
             sessions = sessions.Where(item => item.StartAt >= sessionFrom).ToList();
         if (query.To is { } sessionTo)
             sessions = sessions.Where(item => item.StartAt <= sessionTo).ToList();
+
+        var sessionRevenueById = await _sessionRevenue.GetLedgerRevenueBySessionAsync(
+            sessions.Select(item => item.Id).ToArray(),
+            cancellationToken);
+
+        var sessionsWithLedgerRevenue = sessions
+            .Select(item => new
+            {
+                item.AppUserId,
+                item.StartAt,
+                TotalAmount = sessionRevenueById.TryGetValue(item.Id, out var ledgerRevenue)
+                    ? ledgerRevenue
+                    : item.TotalAmount
+            })
+            .ToList();
 
         var userIds = users.Select(item => item.Id).ToList();
         var payrollRows = userIds.Count == 0
@@ -156,7 +174,7 @@ public sealed class UsersShiftReportService
 
         var profileByUser = profiles.ToDictionary(item => item.AppUserId);
         var shiftsByUser = shifts.GroupBy(item => item.AppUserId).ToDictionary(group => group.Key, group => group.ToList());
-        var sessionsByUser = sessions.GroupBy(item => item.AppUserId).ToDictionary(group => group.Key, group => group.ToList());
+        var sessionsByUser = sessionsWithLedgerRevenue.GroupBy(item => item.AppUserId).ToDictionary(group => group.Key, group => group.ToList());
         var payrollByUser = payrollRows.GroupBy(item => item.EmployeeProfile.AppUserId).ToDictionary(group => group.Key, group => group.ToList());
         var expenseByShift = expenses.GroupBy(item => item.ShiftId).ToDictionary(group => group.Key, group => group.Sum(item => item.Amount));
 
