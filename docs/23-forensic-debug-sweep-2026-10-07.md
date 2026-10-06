@@ -115,3 +115,22 @@ Required acceptance sequence on the user's Windows self-hosted runner:
 - real Server + Client install smoke.
 
 A finding is considered closed only when code + regression + real required validation all pass on the same SHA.
+
+
+## 2026-10-07 continuation
+
+### Additional confirmed issue
+- Invoice reversal returned buffet sales to Warehouse `StockQuantity` even though current buffet sales decrement Showcase stock.
+- The reversal logic now restores each recorded sale movement to its original `StockArea`; legacy/unrecorded invoice items fall back to Showcase rather than moving stock into Warehouse.
+- The existing buffet reverse regression was updated to assert Showcase restoration.
+
+### Additional Session Transfer hardening
+- Destination Station is now atomically claimed with a conditional update on `Available`.
+- A transfer whose source session has a `CustomerLoginId` now requires an active matching customer login on the destination Agent. The operation rolls back rather than silently losing login ownership.
+- Destination Agent must remain active and online.
+
+### Validation status
+- Source review completed on current `main` SHA before branch changes.
+- Branch changes are isolated in PR #54.
+- No change has been merged to `main`.
+- Code has not been truthfully declared green because the user's self-hosted Windows runner has not yet executed the new branch gate in this turn.
