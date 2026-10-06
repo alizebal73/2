@@ -111,3 +111,16 @@ CI در دوره Setup-First نباید با هر commit پروژه را دوب�
 اولویت: Setup → Install Server → Install Client → Real Test
 روش اصلاح بعدی: Bug → Reproduce → Smallest Component Fix → Regression → Local Update → Retest
 اصل معماری: component-scoped changes؛ عدم بازسازی بی‌دلیل کل برنامه
+## Checkpoint — اولین Build Setup
+تلاش اول Build نسخه 0.7.0 انجام شد.
+
+نتیجه:
+- Inno Setup 7.1.0 با موفقیت آماده شد.
+- Dashboard build سه خطای JSX داشت: یک tag بسته‌نشده در BuffetPage و یک action بسته‌نشده در DashboardPage که خطای loading/actionهای بعدی را هم ایجاد کرده بود.
+- .NET publish به دلیل restore بدون RuntimeIdentifier برای win-x64 با NETSDK1047 متوقف شد.
+- Build script به اندازه کافی fail-fast نبود و بعد از شکست npm/dotnet به Inno Setup ادامه داد و دو EXE ناقص ساخت. این EXEها Release معتبر محسوب نمی‌شوند و نباید نصب شوند.
+- اصلاحات ثبت‌شده:
+  - 9f1280d5b5a68b9c117d545d707666dc98b9d037 — Buffet JSX
+  - 32aaf9aad1245a37609680ddd7828e402117d23b — Dashboard JSX
+  - 110c783b2a085994614329b03c51b87f591b9be0 — fail-fast + runtime-aware restore
+- Build بعدی باید از origin/main با آخرین SHA اجرا شود.
