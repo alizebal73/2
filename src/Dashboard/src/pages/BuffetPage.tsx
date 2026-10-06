@@ -11,7 +11,7 @@ function money(value: number) {
 
 export function BuffetPage({ user }: { user: AppUserRecord }) {
   const canSellBuffet = hasPermission(user, 'buffet.sell');
-  const canManageInventory = hasPermission(user, 'buffet.inventory');
+  const canManageInventory = ['admin', 'owner'].includes(user.role.toLowerCase());
   const [products, setProducts] = useState<ProductRecord[]>([]);
   const [inventoryHistory, setInventoryHistory] = useState<import('../types').InventoryTransactionRecord[]>([]);
   const [todaySales, setTodaySales] = useState<import('../types').BuffetTodaySalesReport | null>(null);
