@@ -39,6 +39,15 @@ builder.Services.AddRateLimiter(options =>
                 Window = TimeSpan.FromMinutes(1),
                 QueueLimit = 0
             }));
+    options.AddPolicy("agent-register", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 6,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0
+            }));
 });
 builder.Services.AddScoped<SessionSettlementService>();
 builder.Services.AddScoped<InvoiceReverseService>();
@@ -1064,9 +1073,7 @@ app.MapPost("/api/agent/register", async (
             Encoding.UTF8.GetBytes(configuredToken),
             Encoding.UTF8.GetBytes(suppliedToken));
 
-    var pairingCodeValid = pairing.TryUse(suppliedPairingCode);
-
-    if (!legacyTokenValid && !pairingCodeValid)
+    if (!legacyTokenValid && string.IsNullOrWhiteSpace(suppliedPairingCode))
         return Results.StatusCode(StatusCodes.Status403Forbidden);
 
     var deviceId = request.DeviceId?.Trim();
@@ -1101,6 +1108,17 @@ app.MapPost("/api/agent/register", async (
     var device = await database.AgentDevices
         .Include(item => item.Station)
         .FirstOrDefaultAsync(item => item.DeviceId == deviceId, cancellationToken);
+
+    if (!legacyTokenValid)
+    {
+        // Pairing is for first-time bootstrap only. It must never rotate the
+        // bearer token of an already-registered DeviceId.
+        if (device is not null)
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+        if (!pairing.TryUse(suppliedPairingCode))
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
 
     if (device is null)
     {
@@ -1152,6 +1170,7 @@ app.MapPost("/api/agent/register", async (
         heartbeatInterval,
         offlineAfter));
 })
+.RequireRateLimiting("agent-register")
 .WithName("RegisterAgent");
 
 app.MapPut("/api/agent/devices/{deviceId:guid}/policy", async (
@@ -3592,6 +3611,17 @@ app.MapPost("/api/customer-auth/login", async (
 
     if (customer is null || string.IsNullOrWhiteSpace(customer.PasswordHash) || !VerifyPassword(request.Password, customer.PasswordHash))
         return Results.Unauthorized();
+
+    var registeredDevice = await ClientExperienceEndpoints.ResolveDeviceAsync(
+        context,
+        database,
+        cancellationToken);
+
+    if (registeredDevice is null
+        || !string.Equals(registeredDevice.DeviceId, clientKey, StringComparison.Ordinal))
+    {
+        return Results.StatusCode(StatusCodes.Status403Forbidden);
+    }
 
     try
     {
@@ -6106,10 +6136,55 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
     if (target.State != StationState.Available)
         return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد آزاد نیست." });
 
+    var targetAgent = await database.AgentDevices
+        .FirstOrDefaultAsync(
+            item => item.StationId == target.Id && item.IsActive,
+            cancellationToken);
+
+    if (targetAgent is null)
+        return Results.Conflict(new { code = "station_agent_not_ready", message = "ایستگاه مقصد Agent فعال ندارد." });
+
+    if (!targetAgent.IsOnline)
+        return Results.Conflict(new { code = "station_agent_offline", message = "Agent ایستگاه مقصد آنلاین نیست." });
+
+    var targetCustomerLogin = await database.CustomerLogins
+        .FirstOrDefaultAsync(
+            item => item.CustomerId == session.CustomerId
+                && item.ClientKey == targetAgent.DeviceId
+                && item.IsActive,
+            cancellationToken);
+
     var source = session.Station;
+    var sourceCustomerLoginId = session.CustomerLoginId;
+
     source.State = StationState.Available;
     target.State = StationState.Occupied;
     session.StationId = target.Id;
+    session.AgentDeviceId = targetAgent.Id;
+    session.CustomerLoginId = targetCustomerLogin?.Id;
+
+    if (sourceCustomerLoginId.HasValue
+        && (!session.CustomerLoginId.HasValue || sourceCustomerLoginId.Value != session.CustomerLoginId.Value))
+    {
+        var sourceLogin = await database.CustomerLogins
+            .FirstOrDefaultAsync(item =>
+                item.Id == sourceCustomerLoginId.Value
+                && item.CustomerId == session.CustomerId
+                && item.IsActive, cancellationToken);
+
+        if (sourceLogin is not null)
+        {
+            sourceLogin.IsActive = false;
+            sourceLogin.LoggedOutAt = DateTimeOffset.UtcNow;
+            database.AuditLogs.Add(new AuditLog
+            {
+                Action = "CustomerLoginReleaseOnSessionTransfer",
+                EntityName = "CustomerLogin",
+                EntityId = sourceLogin.Id.ToString(),
+                Details = "خروج خودکار مشتری از دستگاه مبدأ به دلیل انتقال جلسه"
+            });
+        }
+    }
 
     database.AuditLogs.Add(new AuditLog
     {
