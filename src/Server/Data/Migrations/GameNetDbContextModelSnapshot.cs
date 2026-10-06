@@ -1033,7 +1033,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.HasIndex("SessionId");
 
                     b.ToTable("AccountLeases");
-                    b.HasIndex("CustomerId")
+                    b.HasIndex("CustomerId");
+
+                    b.HasIndex("CustomerId", "AccountState")
                         .IsUnique()
                         .HasFilter("Status = 'Draft' AND IsCustomerAccount = 1");
 
