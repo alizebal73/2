@@ -247,7 +247,9 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         var buffetTotal = invoiceId.HasValue
             ? await database.InvoiceItems
                 .AsNoTracking()
-                .Where(item => item.InvoiceId == invoiceId.Value && item.ProductId.HasValue)
+                .Where(item => item.InvoiceId == invoiceId.Value
+                    && item.SessionId == session.Id
+                    && item.ProductId.HasValue)
                 .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m
             : 0m;
 
