@@ -6214,7 +6214,8 @@ public sealed record CustomerDebtRequest(decimal Amount, string? Description, Gu
 public sealed record CustomerHistoryItemDto(Guid Id, string Type, string Description, decimal Amount, DateTimeOffset CreatedAt, Guid? ReferenceId);
 public sealed record CreateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int InitialStock, int MinimumStock = 0, string? Unit = null, Guid? AppUserId = null);
 public sealed record UpdateBuffetProductRequest(string Name, string Category, decimal UnitPrice, decimal CostPrice, int MinimumStock = 0, string? Unit = null, bool IsActive = true, Guid? AppUserId = null);
-public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment", decimal? UnitCost = null);
+public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment", decimal? UnitCost = null, string? StockArea = null);
+public sealed record ShowcaseTransferRequest(int Quantity, string? Notes = null, Guid? AppUserId = null);
 public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
 public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId, Guid? SessionId = null);
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
