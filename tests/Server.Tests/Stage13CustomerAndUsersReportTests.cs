@@ -180,6 +180,7 @@ public sealed class Stage13CustomerAndUsersReportTests
         Assert.Equal(0m, row.ShiftDifference);
     }
 
+    [Fact]
     public async Task CustomerVipReportExcludesPendingAndSubtractsDebtPayments()
     {
         await using var connection = new SqliteConnection("Data Source=:memory:");
