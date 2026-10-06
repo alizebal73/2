@@ -2204,16 +2204,9 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasForeignKey("SessionId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("GameNetManager.Server.Data.Session", "Session")
-                        .WithMany()
-                        .HasForeignKey("SessionId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.Navigation("Invoice");
 
                     b.Navigation("Product");
-
-                    b.Navigation("Session");
 
                     b.Navigation("Session");
                 });
