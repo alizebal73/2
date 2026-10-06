@@ -19,7 +19,6 @@ public static class AuthorizationService
             ["customer.debt"] = "ثبت و تسویه بدهی",
             ["buffet.sell"] = "فروش بوفه",
             ["buffet.inventory"] = "مشاهده موجودی بوفه",
-            ["buffet.inventory.manage"] = "افزودن، کاهش و انتقال موجودی بوفه",
             ["finance.view"] = "مشاهده گزارش مالی",
             ["finance.manage"] = "ثبت و مدیریت هزینه",
             ["shift.manage"] = "باز و بسته کردن شیفت",
