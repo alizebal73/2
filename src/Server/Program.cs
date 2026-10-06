@@ -5895,6 +5895,7 @@ app.MapMethods("/api/sessions/{sessionId:guid}/details", new[] { "PATCH" }, asyn
         EntityName = "Session",
         EntityId = session.Id.ToString(),
         Details = "نرخ " + (session.HourlyRateOverride?.ToString("0.##") ?? "تعرفه") + " · نفرات " + persons,
+        AppUserId = auth.User!.Id
     });
 
     await database.SaveChangesAsync(cancellationToken);
