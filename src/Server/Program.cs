@@ -4735,7 +4735,7 @@ app.MapGet("/api/customers/{customerId:guid}/debts", async (HttpContext context,
         .Where(item => item.CustomerId == customerId
             && item.Status == InvoiceStatus.Draft
             && ((item.IsCustomerAccount && item.AccountState == CustomerAccountState.Debt)
-                || (!item.IsCustomerAccount && item.SessionId == null))
+                || (!item.IsCustomerAccount && item.SessionId == null)))
         .OrderBy(item => item.IssuedAt)
         .ToListAsync(cancellationToken);
 
