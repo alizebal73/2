@@ -348,6 +348,18 @@ public sealed class Session : BaseEntity
     public string? Notes { get; set; }
 }
 
+public sealed class SessionCharge : BaseEntity
+{
+    public Guid SessionId { get; set; }
+    public Session Session { get; set; } = default!;
+    public Guid InvoiceId { get; set; }
+    public Invoice Invoice { get; set; } = default!;
+    public Guid? AppUserId { get; set; }
+    public AppUser? AppUser { get; set; }
+    public decimal Amount { get; set; }
+    public string Method { get; set; } = "cash";
+}
+
 public sealed class Invoice : BaseEntity
 {
     public Guid CustomerId { get; set; }

@@ -4359,7 +4359,7 @@ app.MapPost("/api/buffet/sales", async (
         return Results.BadRequest(new { code = "duplicate_sale_product", message = "یک کالا بیش از یک بار در سبد فروش ثبت شده است." });
 
     var target = request.Target?.Trim().ToLowerInvariant();
-    if (target is not ("session" or "standalone"))
+    if (target is not ("session" or "pending" or "standalone"))
         return Results.BadRequest(new { code = "invalid_sale_target", message = "نوع مقصد فروش معتبر نیست." });
 
     await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
@@ -4424,6 +4424,25 @@ app.MapPost("/api/buffet/sales", async (
             database.Invoices.Add(invoice);
         }
     }
+    else if (target == "pending")
+    {
+        if (!request.InvoiceId.HasValue || request.InvoiceId.Value == Guid.Empty)
+            return Results.BadRequest(new { code = "missing_pending_invoice", message = "حساب باز مقصد مشخص نشده است." });
+
+        invoice = await database.Invoices
+            .Include(item => item.Items)
+            .Include(item => item.Session)
+            .FirstOrDefaultAsync(
+                item => item.Id == request.InvoiceId.Value
+                    && item.Status == InvoiceStatus.Draft
+                    && item.SessionId.HasValue,
+                cancellationToken);
+
+        if (invoice is null || invoice.Session is null || invoice.Session.State != SessionState.Completed)
+            return Results.Conflict(new { code = "pending_invoice_not_available", message = "حساب باز موردنظر برای فروش بوفه در دسترس نیست." });
+
+        session = invoice.Session;
+    }
 
     var ids = saleProductIds;
     var products = await database.Products.Where(item => ids.Contains(item.Id) && item.IsActive).ToListAsync(cancellationToken);
@@ -4454,7 +4473,7 @@ app.MapPost("/api/buffet/sales", async (
             StockArea = StockArea.Showcase,
             Kind = "Sale",
             AppUserId = auth.User!.Id,
-            Notes = target == "session" ? "فروش به جلسه" : "فروش مستقل"
+            Notes = target == "session" ? "فروش به جلسه" : target == "pending" ? "فروش به حساب باز" : "فروش مستقل"
         });
 
         if (invoice is not null)
@@ -5561,6 +5580,98 @@ app.MapPost("/api/sessions", async (
 })
 .WithName("StartSession");
 
+app.MapPost("/api/dashboard/pending-settlements", () => Results.BadRequest(new { code = "method_not_allowed", message = "برای دریافت، از GET استفاده کنید." }));
+app.MapGet("/api/dashboard/pending-settlements", async (
+    HttpContext context,
+    GameNetDbContext database,
+    SessionSettlementService settlement,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.settle", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    return Results.Ok(await settlement.GetPendingAsync(cancellationToken));
+})
+.WithName("GetPendingSettlements");
+
+app.MapPost("/api/sessions/{sessionId:guid}/charge", async (
+    Guid sessionId,
+    SessionChargeRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    SessionSettlementService settlement,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.manage", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    try
+    {
+        var result = await settlement.ChargeAsync(sessionId, request.Amount, request.Method, auth.User!.Id, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_session_charge", message = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "session_charge_conflict", message = exception.Message });
+    }
+})
+.WithName("ChargeSession");
+
+app.MapPost("/api/sessions/{sessionId:guid}/settle-later", async (
+    Guid sessionId,
+    SessionSettleLaterRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    SessionSettlementService settlement,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.settle", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    try
+    {
+        var result = await settlement.PreparePendingAsync(sessionId, request.FreeTimeMinutes, auth.User!.Id, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_settle_later", message = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "settle_later_conflict", message = exception.Message });
+    }
+})
+.WithName("PreparePendingSettlement");
+
+app.MapPost("/api/pending-settlements/{invoiceId:guid}/settle", async (
+    Guid invoiceId,
+    PendingSettlementPaymentRequest request,
+    HttpContext context,
+    GameNetDbContext database,
+    SessionSettlementService settlement,
+    CancellationToken cancellationToken) =>
+{
+    var auth = await AuthorizationService.RequirePermissionAsync(context, database, "session.settle", cancellationToken);
+    if (auth.Error is not null) return auth.Error;
+    request = request with { AppUserId = auth.User!.Id };
+    try
+    {
+        var result = await settlement.SettlePendingAsync(invoiceId, request, cancellationToken);
+        return Results.Ok(result);
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { code = "invalid_pending_settlement", message = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new { code = "pending_settlement_conflict", message = exception.Message });
+    }
+})
+.WithName("SettlePendingInvoice");
+
 app.MapMethods("/api/sessions/{sessionId:guid}/details", new[] { "PATCH" }, async (
     Guid sessionId,
     SessionDetailsRequest request,
@@ -6096,20 +6207,17 @@ static async Task<ShiftSnapshotDto> BuildShiftSnapshotAsync(
 
     var cashPayments = await database.InvoicePayments
         .AsNoTracking()
-        .Where(item => item.Method == "cash"
-            && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null)
+        .Where(item => item.Method == "cash")
         .Select(item => new
         {
             item.Amount,
-            item.Invoice.PaidAt
+            item.CreatedAt
         })
         .ToListAsync(cancellationToken);
 
     var cashSales = cashPayments
-        .Where(item => item.PaidAt.HasValue
-            && item.PaidAt.Value >= shift.OpenAt
-            && item.PaidAt.Value <= end)
+        .Where(item => item.CreatedAt >= shift.OpenAt
+            && item.CreatedAt <= end)
         .Sum(item => item.Amount);
 
     var expenseTotal = await database.Expenses
@@ -6224,7 +6332,7 @@ public sealed record UpdateBuffetProductRequest(string Name, string Category, de
 public sealed record StockAdjustmentRequest(int Quantity, string Direction, string? Notes, Guid? AppUserId, string Kind = "Adjustment", decimal? UnitCost = null, string? StockArea = null);
 public sealed record ShowcaseTransferRequest(int Quantity, string? Notes = null, Guid? AppUserId = null);
 public sealed record BuffetSaleItem(Guid ProductId, int Quantity);
-public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId, Guid? SessionId = null);
+public sealed record BuffetSaleRequest(IReadOnlyList<BuffetSaleItem> Items, string Target, Guid? AppUserId, Guid? SessionId = null, Guid? InvoiceId = null);
 public sealed record FreeBenefitRequestDto(decimal MoneyAmount, int Minutes, string Mode, string? Description);
 public sealed record FreeBenefitTransactionDto(Guid Id, string Type, decimal MoneyAmount, int Minutes, string Description, DateTimeOffset CreatedAt);
 public sealed record FreeBenefitsSnapshotDto(decimal FreeMoney, int FreeTimeMinutes, IReadOnlyList<FreeBenefitTransactionDto> Transactions);

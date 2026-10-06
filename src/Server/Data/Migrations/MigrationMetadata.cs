@@ -220,3 +220,9 @@ partial class ServerBackedSettings
 partial class BuffetWarehouseShowcaseFlow
 {
 }
+
+[DbContext(typeof(GameNetDbContext))]
+[Migration("20261006150000_SessionChargeLedger")]
+partial class SessionChargeLedger
+{
+}

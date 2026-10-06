@@ -25,6 +25,55 @@ public sealed record SessionSettlementPreview(
     decimal PrepaidAmount,
     decimal TotalAmount);
 
+public sealed record SessionChargeResult(
+    Guid ChargeId,
+    Guid InvoiceId,
+    decimal Amount,
+    decimal PrepaidTotal,
+    string Method,
+    decimal WalletBalanceAfter);
+
+public sealed record PendingSettlementChargeDto(
+    Guid Id,
+    decimal Amount,
+    string Method,
+    DateTimeOffset CreatedAt);
+
+public sealed record PendingSettlementBuffetItemDto(
+    Guid ProductId,
+    string ProductName,
+    int Quantity,
+    decimal Amount);
+
+public sealed record PendingSettlementDto(
+    Guid InvoiceId,
+    Guid SessionId,
+    Guid CustomerId,
+    string CustomerName,
+    string? CustomerCode,
+    string? Username,
+    string StationName,
+    DateTimeOffset ClosedAt,
+    int WaitingMinutes,
+    decimal TimeAmount,
+    decimal BuffetTotal,
+    decimal GrossAmount,
+    decimal PrepaidTotal,
+    decimal PrepaidApplied,
+    decimal PrepaidRemaining,
+    decimal CreditOrBenefitReduction,
+    decimal AmountDue,
+    IReadOnlyList<PendingSettlementChargeDto> Charges,
+    IReadOnlyList<PendingSettlementBuffetItemDto> BuffetItems);
+
+public sealed record SessionChargeRequest(decimal Amount, string Method);
+public sealed record SessionSettleLaterRequest(int FreeTimeMinutes = 0);
+public sealed record PendingSettlementPaymentRequest(
+    decimal TotalAmount,
+    IReadOnlyList<SettlementPart> Parts,
+    Guid? AppUserId,
+    decimal? DiscountAmount = null);
+
 public sealed class SessionSettlementService(GameNetDbContext database, SessionPricingService pricingService)
 {
     private static readonly HashSet<string> AllowedMethods = new(StringComparer.OrdinalIgnoreCase)
@@ -425,6 +474,486 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             invoice.Status.ToString(),
             invoice.PaidAt ?? DateTimeOffset.UtcNow);
     }
+
+    public async Task<SessionChargeResult> ChargeAsync(
+        Guid sessionId,
+        decimal amount,
+        string method,
+        Guid? appUserId,
+        CancellationToken cancellationToken)
+    {
+        if (amount <= 0)
+            throw new ArgumentException("مبلغ شارژ باید بیشتر از صفر باشد.");
+
+        var normalizedMethod = (method ?? "").Trim().ToLowerInvariant();
+        if (normalizedMethod is not ("cash" or "card" or "wallet"))
+            throw new ArgumentException("روش پرداخت شارژ معتبر نیست.");
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+        var session = await database.Sessions
+            .Include(item => item.Customer)
+            .FirstOrDefaultAsync(
+                item => item.Id == sessionId && item.State == SessionState.Active,
+                cancellationToken);
+
+        if (session is null)
+            throw new InvalidOperationException("جلسه فعال پیدا نشد.");
+
+        var invoice = await database.Invoices
+            .FirstOrDefaultAsync(
+                item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft,
+                cancellationToken);
+
+        if (invoice is null)
+        {
+            invoice = new Invoice
+            {
+                CustomerId = session.CustomerId,
+                SessionId = session.Id,
+                AppUserId = appUserId,
+                TotalAmount = 0m,
+                Status = InvoiceStatus.Draft,
+                IssuedAt = DateTimeOffset.UtcNow
+            };
+            database.Invoices.Add(invoice);
+            await database.SaveChangesAsync(cancellationToken);
+        }
+
+        if (normalizedMethod == "wallet")
+        {
+            if (session.Customer.Balance < amount)
+                throw new InvalidOperationException("موجودی کیف پول برای شارژ زمان کافی نیست.");
+
+            session.Customer.Balance -= amount;
+            database.WalletTransactions.Add(new WalletTransaction
+            {
+                CustomerId = session.CustomerId,
+                Amount = amount,
+                Type = WalletTransactionType.Debit,
+                ReferenceInvoiceId = invoice.Id,
+                Description = "شارژ زمان جلسه از کیف پول"
+            });
+        }
+
+        session.PrepaidAmount += amount;
+
+        var charge = new SessionCharge
+        {
+            SessionId = session.Id,
+            InvoiceId = invoice.Id,
+            AppUserId = appUserId,
+            Amount = amount,
+            Method = normalizedMethod
+        };
+        database.SessionCharges.Add(charge);
+        database.InvoicePayments.Add(new InvoicePayment
+        {
+            InvoiceId = invoice.Id,
+            Method = normalizedMethod,
+            Amount = amount
+        });
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "SessionCharge",
+            EntityName = "Session",
+            EntityId = session.Id.ToString(),
+            AppUserId = appUserId,
+            Details = "شارژ زمان · " + amount.ToString("0.##") + " تومان · " + normalizedMethod
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new SessionChargeResult(
+            charge.Id,
+            invoice.Id,
+            amount,
+            session.PrepaidAmount,
+            normalizedMethod,
+            session.Customer.Balance);
+    }
+
+    public async Task<PendingSettlementDto> PreparePendingAsync(
+        Guid sessionId,
+        int freeTimeMinutes,
+        Guid? appUserId,
+        CancellationToken cancellationToken)
+    {
+        if (freeTimeMinutes < 0)
+            throw new ArgumentException("اعتبار زمانی رایگان معتبر نیست.");
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+        var session = await database.Sessions
+            .Include(item => item.Customer)
+                .ThenInclude(item => item.VipPackage)
+            .Include(item => item.Station)
+            .FirstOrDefaultAsync(
+                item => item.Id == sessionId
+                    && (item.State == SessionState.Active || item.State == SessionState.Ended),
+                cancellationToken);
+
+        if (session is null)
+            throw new InvalidOperationException("جلسه فعال برای ثبت پرداخت بعداً پیدا نشد.");
+
+        var now = DateTimeOffset.UtcNow;
+        var elapsedMinutes = SessionTiming.GetBillableMinutes(session, now);
+        if (freeTimeMinutes > Math.Ceiling(elapsedMinutes))
+            throw new InvalidOperationException("دقیقه اعتبار رایگان مصرف‌شده با زمان جلسه سازگار نیست.");
+        if (freeTimeMinutes > session.Customer.FreeTimeMinutes)
+            throw new InvalidOperationException("اعتبار زمانی رایگان مشتری برای این مصرف کافی نیست.");
+
+        var pricing = await pricingService.GetPricingAsync(
+            session.CustomerId,
+            session.StationId,
+            now,
+            cancellationToken);
+
+        var hourlyRate = session.HourlyRateOverride
+            ?? session.HourlyRateSnapshot
+            ?? pricing.HourlyRate;
+
+        var timeAmount = SessionPricingService.CalculateTimeAmount(
+            session,
+            hourlyRate,
+            freeTimeMinutes,
+            now);
+
+        var invoice = await database.Invoices
+            .Include(item => item.Items)
+            .FirstOrDefaultAsync(
+                item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft,
+                cancellationToken);
+
+        if (invoice is null)
+        {
+            invoice = new Invoice
+            {
+                CustomerId = session.CustomerId,
+                SessionId = session.Id,
+                AppUserId = appUserId,
+                TotalAmount = 0m,
+                Status = InvoiceStatus.Draft,
+                IssuedAt = now
+            };
+            database.Invoices.Add(invoice);
+        }
+
+        if (!invoice.Items.Any(item => item.ProductId is null && item.Description.StartsWith("هزینه جلسه", StringComparison.Ordinal)))
+        {
+            invoice.Items.Add(new InvoiceItem
+            {
+                Description = "هزینه جلسه " + session.Station.Name,
+                Quantity = 1,
+                UnitPrice = timeAmount,
+                Amount = timeAmount
+            });
+        }
+
+        var existingBenefitLine = invoice.Items
+            .FirstOrDefault(item => item.ProductId is null && item.Description.StartsWith("اعتبار زمانی رایگان", StringComparison.Ordinal));
+
+        if (freeTimeMinutes > 0 && existingBenefitLine is null)
+        {
+            invoice.Items.Add(new InvoiceItem
+            {
+                Description = "اعتبار زمانی رایگان",
+                Quantity = 1,
+                UnitPrice = -SessionPricingService.CalculateTimeAmount(
+                    session,
+                    hourlyRate,
+                    0,
+                    now) + timeAmount,
+                Amount = -Math.Max(0m, SessionPricingService.CalculateTimeAmount(
+                    session,
+                    hourlyRate,
+                    0,
+                    now) - timeAmount)
+            });
+
+            session.Customer.FreeTimeMinutes -= freeTimeMinutes;
+            database.BenefitTransactions.Add(new BenefitTransaction
+            {
+                CustomerId = session.CustomerId,
+                Type = BenefitTransactionType.FreeTimeDebit,
+                Minutes = freeTimeMinutes,
+                MoneyAmount = 0m,
+                Description = "مصرف اعتبار زمانی رایگان در پرداخت بعداً " + session.Station.Name,
+                ReferenceInvoiceId = invoice.Id
+            });
+        }
+
+        var prepaidLine = invoice.Items
+            .FirstOrDefault(item => item.ProductId is null && item.Description == "اعتبار شارژ جلسه");
+
+        if (session.PrepaidAmount > 0 && prepaidLine is null)
+        {
+            invoice.Items.Add(new InvoiceItem
+            {
+                Description = "اعتبار شارژ جلسه",
+                Quantity = 1,
+                UnitPrice = -session.PrepaidAmount,
+                Amount = -session.PrepaidAmount
+            });
+        }
+
+        invoice.AppUserId ??= appUserId;
+        invoice.TotalAmount = Math.Max(0m, invoice.Items.Sum(item => item.Amount));
+
+        session.EndAt ??= now;
+        session.State = SessionState.Completed;
+        session.Station.State = StationState.Available;
+
+        if (session.CustomerLoginId.HasValue)
+        {
+            var login = await database.CustomerLogins
+                .FirstOrDefaultAsync(item => item.Id == session.CustomerLoginId.Value && item.IsActive, cancellationToken);
+            if (login is not null)
+            {
+                login.IsActive = false;
+                login.LoggedOutAt = now;
+            }
+        }
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "SessionPaymentPending",
+            EntityName = "Invoice",
+            EntityId = invoice.Id.ToString(),
+            AppUserId = appUserId,
+            Details = "پرداخت بعداً · مبلغ فعلی " + invoice.TotalAmount.ToString("0.##") + " تومان"
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var pending = await GetPendingAsync(cancellationToken);
+        return pending.First(item => item.InvoiceId == invoice.Id);
+    }
+
+    public async Task<SettlementResult> SettlePendingAsync(
+        Guid invoiceId,
+        PendingSettlementPaymentRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.TotalAmount < 0)
+            throw new ArgumentException("مبلغ تسویه نمی‌تواند منفی باشد.");
+
+        await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
+
+        var invoice = await database.Invoices
+            .Include(item => item.Items)
+            .Include(item => item.Session)
+                .ThenInclude(item => item.Customer)
+            .FirstOrDefaultAsync(
+                item => item.Id == invoiceId && item.Status == InvoiceStatus.Draft,
+                cancellationToken);
+
+        if (invoice is null || invoice.Session is null || invoice.Session.State != SessionState.Completed)
+            throw new InvalidOperationException("حساب پرداخت در انتظار پیدا نشد یا هنوز آماده تسویه نیست.");
+
+        var discountAmount = Math.Max(0m, request.DiscountAmount ?? 0m);
+        var currentTotal = Math.Max(0m, invoice.Items.Sum(item => item.Amount));
+        if (discountAmount > currentTotal)
+            throw new InvalidOperationException("مبلغ تخفیف نمی‌تواند از مبلغ قابل پرداخت بیشتر باشد.");
+
+        if (discountAmount > 0)
+        {
+            invoice.Items.Add(new InvoiceItem
+            {
+                Description = "تخفیف تسویه پرداخت در انتظار",
+                Quantity = 1,
+                UnitPrice = -discountAmount,
+                Amount = -discountAmount
+            });
+        }
+
+        var expectedTotal = Math.Max(0m, currentTotal - discountAmount);
+        var parts = (request.Parts ?? Array.Empty<SettlementPart>())
+            .Where(item => item.Amount > 0)
+            .Select(item => new SettlementPart(item.Method.Trim().ToLowerInvariant(), item.Amount))
+            .ToList();
+
+        if (parts.Count > 0 && parts.Any(item => !AllowedMethods.Contains(item.Method)))
+            throw new ArgumentException("روش پرداخت معتبر نیست.");
+
+        var partsTotal = parts.Sum(item => item.Amount);
+        if (expectedTotal > 0m && parts.Count == 0)
+            throw new ArgumentException("حداقل یک روش پرداخت لازم است.");
+
+        if (Math.Abs(partsTotal - expectedTotal) > 0.01m)
+            throw new ArgumentException("جمع روش‌های پرداخت باید دقیقاً برابر مبلغ تسویه باشد.");
+
+        var walletPart = parts.Where(item => item.Method == "wallet").Sum(item => item.Amount);
+        var giftPart = parts.Where(item => item.Method == "gift").Sum(item => item.Amount);
+
+        if (walletPart > invoice.Customer.Balance)
+            throw new InvalidOperationException("موجودی کیف پول برای سهم انتخاب‌شده کافی نیست.");
+        if (giftPart > invoice.Customer.FreeMoney)
+            throw new InvalidOperationException("اعتبار مالی رایگان برای سهم انتخاب‌شده کافی نیست.");
+
+        if (walletPart > 0)
+        {
+            invoice.Customer.Balance -= walletPart;
+            database.WalletTransactions.Add(new WalletTransaction
+            {
+                CustomerId = invoice.CustomerId,
+                Amount = walletPart,
+                Type = WalletTransactionType.Debit,
+                ReferenceInvoiceId = invoice.Id,
+                Description = "تسویه حساب باز از کیف پول"
+            });
+        }
+
+        if (giftPart > 0)
+        {
+            invoice.Customer.FreeMoney -= giftPart;
+            database.BenefitTransactions.Add(new BenefitTransaction
+            {
+                CustomerId = invoice.CustomerId,
+                Type = BenefitTransactionType.FreeMoneyDebit,
+                Minutes = 0,
+                MoneyAmount = giftPart,
+                Description = "مصرف اعتبار مالی رایگان در تسویه حساب باز",
+                ReferenceInvoiceId = invoice.Id
+            });
+        }
+
+        invoice.TotalAmount = expectedTotal;
+        invoice.Status = InvoiceStatus.Paid;
+        invoice.PaidAt = DateTimeOffset.UtcNow;
+        invoice.AppUserId ??= request.AppUserId;
+        invoice.Session!.TotalAmount = expectedTotal;
+
+        foreach (var part in parts)
+        {
+            database.InvoicePayments.Add(new InvoicePayment
+            {
+                InvoiceId = invoice.Id,
+                Method = part.Method,
+                Amount = part.Amount
+            });
+        }
+
+        database.AuditLogs.Add(new AuditLog
+        {
+            Action = "PendingSettlement",
+            EntityName = "Invoice",
+            EntityId = invoice.Id.ToString(),
+            AppUserId = request.AppUserId,
+            Details = string.Join(" · ", parts.Select(item => item.Method + " " + item.Amount.ToString("0.##") + " تومان"))
+        });
+
+        await database.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return new SettlementResult(
+            invoice.Id,
+            invoice.Session.Id,
+            expectedTotal,
+            parts,
+            invoice.Customer.Balance,
+            invoice.Customer.FreeMoney,
+            invoice.Customer.FreeTimeMinutes,
+            invoice.Status.ToString(),
+            invoice.PaidAt ?? DateTimeOffset.UtcNow);
+    }
+
+    public async Task<IReadOnlyList<PendingSettlementDto>> GetPendingAsync(CancellationToken cancellationToken)
+    {
+        var invoices = await database.Invoices
+            .AsNoTracking()
+            .Include(item => item.Customer)
+            .Include(item => item.Session)
+                .ThenInclude(item => item.Station)
+            .Include(item => item.Items)
+                .ThenInclude(item => item.Product)
+            .Where(item =>
+                item.Status == InvoiceStatus.Draft
+                && item.SessionId.HasValue
+                && item.Session != null
+                && item.Session.State == SessionState.Completed)
+            .OrderBy(item => item.IssuedAt)
+            .ToListAsync(cancellationToken);
+
+        var ids = invoices.Select(item => item.Id).ToList();
+        var charges = ids.Count == 0
+            ? new List<SessionCharge>()
+            : await database.SessionCharges
+                .AsNoTracking()
+                .Where(item => ids.Contains(item.InvoiceId))
+                .OrderBy(item => item.CreatedAt)
+                .ToListAsync(cancellationToken);
+
+        var chargesByInvoice = charges
+            .GroupBy(item => item.InvoiceId)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var now = DateTimeOffset.UtcNow;
+        return invoices.Select(invoice =>
+        {
+            var chargeRows = chargesByInvoice.TryGetValue(invoice.Id, out var groupedCharges)
+                ? groupedCharges
+                : new List<SessionCharge>();
+
+            var buffetItems = invoice.Items
+                .Where(item => item.ProductId.HasValue && item.Product is not null)
+                .GroupBy(item => new { item.ProductId, Name = item.Product!.Name })
+                .Select(group => new PendingSettlementBuffetItemDto(
+                    group.Key.ProductId!.Value,
+                    group.Key.Name,
+                    group.Sum(item => item.Quantity),
+                    group.Sum(item => item.Amount)))
+                .OrderBy(item => item.ProductName)
+                .ToList();
+
+            var timeAmount = invoice.Items
+                .Where(item =>
+                    item.ProductId is null
+                    && item.Amount > 0
+                    && item.Description.StartsWith("هزینه جلسه", StringComparison.Ordinal))
+                .Sum(item => item.Amount);
+
+            var reduction = Math.Abs(invoice.Items
+                .Where(item => item.ProductId is null && item.Amount < 0 && item.Description != "اعتبار شارژ جلسه")
+                .Sum(item => item.Amount));
+
+            var grossAmount = Math.Max(0m, timeAmount + buffetItems.Sum(item => item.Amount));
+            var prepaidTotal = chargeRows.Sum(item => item.Amount);
+            var prepaidApplied = Math.Min(prepaidTotal, Math.Max(0m, grossAmount - reduction));
+            var prepaidRemaining = Math.Max(0m, prepaidTotal - prepaidApplied);
+            var amountDue = Math.Max(0m, invoice.TotalAmount);
+            var closedAt = invoice.Session!.EndAt ?? invoice.PaidAt ?? invoice.CreatedAt;
+            var waitingMinutes = Math.Max(0, (int)Math.Floor((now - closedAt).TotalMinutes));
+
+            return new PendingSettlementDto(
+                invoice.Id,
+                invoice.Session.Id,
+                invoice.CustomerId,
+                invoice.Customer.FullName,
+                invoice.Customer.Code,
+                invoice.Customer.Username,
+                invoice.Session.Station.Name,
+                closedAt,
+                waitingMinutes,
+                timeAmount,
+                buffetItems.Sum(item => item.Amount),
+                grossAmount,
+                prepaidTotal,
+                prepaidApplied,
+                prepaidRemaining,
+                reduction,
+                amountDue,
+                chargeRows.Select(item => new PendingSettlementChargeDto(
+                    item.Id,
+                    item.Amount,
+                    item.Method,
+                    item.CreatedAt)).ToList(),
+                buffetItems);
+        }).ToList();
+    }
+
 }
 
 public sealed record SettlementResult(

@@ -26,6 +26,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
     public DbSet<Client> Clients => Set<Client>();
     public DbSet<Reservation> Reservations => Set<Reservation>();
     public DbSet<Session> Sessions => Set<Session>();
+    public DbSet<SessionCharge> SessionCharges => Set<SessionCharge>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
     public DbSet<InvoiceItem> InvoiceItems => Set<InvoiceItem>();
     public DbSet<InvoicePayment> InvoicePayments => Set<InvoicePayment>();
@@ -91,6 +92,7 @@ public sealed class GameNetDbContext(DbContextOptions<GameNetDbContext> options)
         ConfigureClient(modelBuilder);
         ConfigureReservation(modelBuilder);
         ConfigureSession(modelBuilder);
+        ConfigureSessionCharge(modelBuilder);
         ConfigureInvoice(modelBuilder);
         ConfigureInvoicePayment(modelBuilder);
         ConfigureInvoiceItem(modelBuilder);

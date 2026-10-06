@@ -1522,6 +1522,47 @@ namespace GameNetManager.Server.Data.Migrations
                     b.ToTable("Reservations");
                 });
 
+            modelBuilder.Entity("GameNetManager.Server.Data.SessionCharge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid?>("AppUserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Method")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppUserId");
+
+                    b.HasIndex("InvoiceId");
+
+                    b.HasIndex("SessionId", "CreatedAt");
+
+                    b.ToTable("SessionCharges");
+                });
+
             modelBuilder.Entity("GameNetManager.Server.Data.Session", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2216,6 +2257,32 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Navigation("Station");
 
                     b.Navigation("Tariff");
+                });
+
+            modelBuilder.Entity("GameNetManager.Server.Data.SessionCharge", b =>
+                {
+                    b.HasOne("GameNetManager.Server.Data.AppUser", "AppUser")
+                        .WithMany()
+                        .HasForeignKey("AppUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("GameNetManager.Server.Data.Invoice", "Invoice")
+                        .WithMany()
+                        .HasForeignKey("InvoiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GameNetManager.Server.Data.Session", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AppUser");
+
+                    b.Navigation("Invoice");
+
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.Session", b =>

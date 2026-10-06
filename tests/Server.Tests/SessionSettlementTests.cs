@@ -316,5 +316,74 @@ public sealed class SessionSettlementTests : IDisposable
         Assert.Contains(invoice.Items, item => item.ProductId == null && item.Amount == 100000m);
     }
 
+
+    [Fact]
+    public async Task PendingPaymentConsolidatesChargesAndKeepsInvoiceOpenUntilFinalSettlement()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type = new StationType { Name = "PC-Pending" };
+        var tariff = new Tariff { Name = "Pending", HourlyRate = 120000m, DailyRate = 500000m };
+        var customer = new Customer { FullName = "Pending Test", Balance = 100000m, FreeTimeMinutes = 0 };
+        var user = new AppUser
+        {
+            FullName = "Operator",
+            UserName = "pending-operator",
+            Email = "pending@test.local",
+            PasswordHash = "hash",
+            Role = "Operator"
+        };
+        var station = new Station
+        {
+            Name = "PC-PENDING-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Available,
+            RatePerHour = 120000m,
+            StationType = type,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session = new Session
+        {
+            Customer = customer,
+            Station = station,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-60),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 120000m
+        };
+
+        db.AddRange(type, tariff, customer, user, station, session);
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+        await service.ChargeAsync(session.Id, 90000m, "cash", user.Id, CancellationToken.None);
+        await service.ChargeAsync(session.Id, 20000m, "card", user.Id, CancellationToken.None);
+        await service.ChargeAsync(session.Id, 50000m, "cash", user.Id, CancellationToken.None);
+
+        var pending = await service.PreparePendingAsync(session.Id, 0, user.Id, CancellationToken.None);
+        Assert.Equal(160000m, pending.PrepaidTotal);
+        Assert.Equal(3, pending.Charges.Count);
+        Assert.Equal(SessionState.Completed, await db.Sessions.Where(item => item.Id == session.Id).Select(item => item.State).SingleAsync());
+        Assert.Equal(InvoiceStatus.Draft, await db.Invoices.Where(item => item.Id == pending.InvoiceId).Select(item => item.Status).SingleAsync());
+
+        var settled = await service.SettlePendingAsync(
+            pending.InvoiceId,
+            new PendingSettlementPaymentRequest(
+                pending.AmountDue,
+                new[] { new SettlementPart("cash", pending.AmountDue) },
+                user.Id),
+            CancellationToken.None);
+
+        Assert.Equal(InvoiceStatus.Paid.ToString(), settled.InvoiceStatus);
+        Assert.Empty(await service.GetPendingAsync(CancellationToken.None));
+    }
+
     public void Dispose() => _connection.Dispose();
 }
