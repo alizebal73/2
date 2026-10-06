@@ -4639,22 +4639,34 @@ app.MapPost("/api/customers/{customerId:guid}/debt", async (HttpContext context,
         .FirstOrDefaultAsync(
             item => item.CustomerId == customerId
                 && item.Status == InvoiceStatus.Draft
-                && item.IsCustomerAccount,
+                && item.IsCustomerAccount
+                && item.AccountState == CustomerAccountState.Debt,
             cancellationToken);
 
-    if (invoice is not null && invoice.AccountState == CustomerAccountState.PendingPayment)
+    if (invoice is null)
     {
-        try
+        invoice = await database.Invoices
+            .FirstOrDefaultAsync(
+                item => item.CustomerId == customerId
+                    && item.Status == InvoiceStatus.Draft
+                    && item.IsCustomerAccount
+                    && item.AccountState == CustomerAccountState.PendingPayment,
+                cancellationToken);
+
+        if (invoice is not null)
         {
-            await settlement.EnsurePendingAccountCanBecomeDebtAsync(customerId, cancellationToken);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return Results.Conflict(new
+            try
             {
-                code = "pending_active_session",
-                message = ex.Message
-            });
+                await settlement.EnsurePendingAccountCanBecomeDebtAsync(customerId, cancellationToken);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Conflict(new
+                {
+                    code = "pending_active_session",
+                    message = ex.Message
+                });
+            }
         }
     }
 
