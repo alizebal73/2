@@ -388,6 +388,103 @@ public sealed class SessionSettlementTests : IDisposable
 
 
     [Fact]
+    public async Task SettlingOneSessionDoesNotCloseAccountForAnotherActiveSession()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var type1 = new StationType { Name = "PC-ALLOC-01" };
+        var type2 = new StationType { Name = "PC-ALLOC-02" };
+        var tariff = new Tariff { Name = "Allocation", HourlyRate = 60000m, DailyRate = 300000m };
+        var customer = new Customer { FullName = "مشتری تخصیص پرداخت" };
+        var user = new AppUser
+        {
+            FullName = "مدیر تخصیص",
+            UserName = "allocation-admin",
+            Email = "allocation-admin@test.local",
+            PasswordHash = "hash",
+            Role = "Admin"
+        };
+        var station1 = new Station
+        {
+            Name = "PC-ALLOC-01",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Available,
+            RatePerHour = 60000m,
+            StationType = type1,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var station2 = new Station
+        {
+            Name = "PC-ALLOC-02",
+            Zone = "PC",
+            Type = "PC",
+            State = StationState.Available,
+            RatePerHour = 60000m,
+            StationType = type2,
+            Tariff = tariff,
+            IsActive = true
+        };
+        var session1 = new Session
+        {
+            Customer = customer,
+            Station = station1,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-30),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 60000m
+        };
+        var session2 = new Session
+        {
+            Customer = customer,
+            Station = station2,
+            Tariff = tariff,
+            StartAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            State = SessionState.Active,
+            HourlyRateSnapshot = 60000m
+        };
+
+        db.AddRange(type1, type2, tariff, customer, user, station1, station2, session1, session2);
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+        await service.ChargeAsync(session1.Id, 10000m, "cash", user.Id, CancellationToken.None);
+        await service.ChargeAsync(session2.Id, 5000m, "cash", user.Id, CancellationToken.None);
+
+        var preview = await service.PreviewAsync(session1.Id, 0, 0, 10000m, CancellationToken.None);
+        var result = await service.SettleAsync(
+            session1.Id,
+            new SessionSettlementRequest(
+                preview.TotalAmount,
+                new[] { new SettlementPart("cash", preview.TotalAmount) },
+                user.Id,
+                0,
+                preview.TimeAmount,
+                0,
+                10000m),
+            CancellationToken.None);
+
+        Assert.Equal("Draft", result.InvoiceStatus);
+        Assert.NotEqual(Guid.Empty, result.InvoiceId);
+
+        var account = await db.Invoices.SingleAsync(item => item.Id == result.InvoiceId);
+        Assert.True(account.IsCustomerAccount);
+        Assert.Equal(15000m, await db.InvoicePayments
+            .Where(item => item.InvoiceId == account.Id && item.SessionId == session2.Id)
+            .SumAsync(item => item.Amount));
+        Assert.Equal(1, await db.InvoicePayments
+            .Where(item => item.InvoiceId == account.Id && item.SessionId == session1.Id)
+            .Where(item => item.Amount > 10000m)
+            .CountAsync());
+    }
+
+    [Fact]
     public async Task TwoSessionsForSameCustomerCollapseIntoOnePendingAccount()
     {
         var options = new DbContextOptionsBuilder<GameNetDbContext>()
