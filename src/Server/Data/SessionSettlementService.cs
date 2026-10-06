@@ -790,6 +790,48 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             });
         }
 
+        if (request.AppUserId.HasValue && discountAmount > 0)
+        {
+            var settlementUser = await database.AppUsers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Id == request.AppUserId.Value, cancellationToken);
+
+            if (settlementUser is not null
+                && string.Equals(settlementUser.Role, "Operator", StringComparison.OrdinalIgnoreCase))
+            {
+                var operatorDiscountPercent = 10;
+                var storedSetting = await database.AppSettings
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        item => item.ScopeKey == ServerSettingsCatalog.GlobalScope
+                            && item.Key == "operatorDiscount",
+                        cancellationToken);
+
+                if (storedSetting is not null)
+                {
+                    try
+                    {
+                        using var settingJson = JsonDocument.Parse(storedSetting.ValueJson);
+                        if (settingJson.RootElement.TryGetInt32(out var configuredPercent))
+                            operatorDiscountPercent = Math.Clamp(configuredPercent, 0, 100);
+                    }
+                    catch (JsonException)
+                    {
+                        // Safe default remains 10% when the stored setting is malformed.
+                    }
+                }
+
+                var maxOperatorDiscount = Math.Round(
+                    currentTotal * operatorDiscountPercent / 100m,
+                    2,
+                    MidpointRounding.ToEven);
+
+                if (discountAmount > maxOperatorDiscount + 0.01m)
+                    throw new InvalidOperationException(
+                        $"تخفیف اپراتور بیش از سقف مجاز {operatorDiscountPercent}% است.");
+            }
+        }
+
         var expectedTotal = Math.Max(0m, currentTotal - discountAmount);
         var parts = (request.Parts ?? Array.Empty<SettlementPart>())
             .Where(item => item.Amount > 0)
