@@ -182,9 +182,6 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             }
         }
 
-        foreach (var item in account.Items)
-            item.SessionId ??= session.Id;
-
         return account;
     }
 
@@ -286,27 +283,20 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             throw new ArgumentException("روش پرداخت معتبر نیست.");
 
         var partsTotal = normalizedParts.Sum(item => item.Amount);
-        if (partsTotal != request.TotalAmount)
+        if (Math.Abs(partsTotal - request.TotalAmount) > 0.01m)
             throw new ArgumentException("جمع روش‌های پرداخت باید دقیقاً برابر مبلغ تسویه باشد.");
 
         await using var transaction = await database.Database.BeginTransactionAsync(cancellationToken);
 
-        // Serialize concurrent settlement attempts for the same Session on SQLite by
-        // upgrading this transaction to a writer before reading the terminal state.
         var lockStamp = DateTimeOffset.UtcNow;
         var locked = await database.Sessions
             .Where(item => item.Id == sessionId
                 && (item.State == SessionState.Active || item.State == SessionState.Ended))
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(item => item.UpdatedAt, lockStamp), cancellationToken);
+            .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.UpdatedAt, lockStamp), cancellationToken);
 
         if (locked != 1)
             throw new InvalidOperationException("این جلسه قبلاً بسته یا تسویه شده است.");
 
-        // ExecuteUpdate changes UpdatedAt directly in the database, so any Session
-        // entity already tracked by this scoped DbContext now carries a stale
-        // concurrency token. Clear the tracker before reloading the authoritative
-        // Session graph to make the terminal SaveChanges concurrency-safe.
         database.ChangeTracker.Clear();
 
         var session = await database.Sessions
@@ -318,22 +308,12 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         if (session is null)
             throw new KeyNotFoundException("جلسه پیدا نشد.");
 
-        if (session.State is not SessionState.Active and not SessionState.Ended)
-            throw new InvalidOperationException("این جلسه قبلاً بسته شده یا قابل تسویه نیست.");
-
-        var walletPart = normalizedParts
-            .Where(item => item.Method == "wallet")
-            .Sum(item => item.Amount);
-
-        var giftPart = normalizedParts
-            .Where(item => item.Method == "gift")
-            .Sum(item => item.Amount);
-
         var now = DateTimeOffset.UtcNow;
         var elapsedMinutes = SessionTiming.GetBillableMinutes(session, now);
         if (request.FreeTimeMinutes < 0 || request.FreeTimeMinutes > Math.Ceiling(elapsedMinutes))
             throw new InvalidOperationException("دقیقه اعتبار رایگان مصرف‌شده با زمان جلسه سازگار نیست.");
-        if (request.TimeAmount is < 0 || request.DiscountAmount is < 0 || request.PrepaidAmount is < 0)
+
+        if (request.TimeAmount is < 0 || request.DiscountAmount is < 0)
             throw new ArgumentException("جزئیات مبلغ تسویه معتبر نیست.");
 
         var pricing = await pricingService.GetPricingAsync(
@@ -341,9 +321,11 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             session.StationId,
             now,
             cancellationToken);
+
         var authoritativeHourlyRate = session.HourlyRateOverride
             ?? session.HourlyRateSnapshot
             ?? pricing.HourlyRate;
+
         var authoritativeTimeAmount = SessionPricingService.CalculateTimeAmount(
             session,
             authoritativeHourlyRate,
@@ -354,51 +336,82 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             && Math.Abs(request.TimeAmount.Value - authoritativeTimeAmount) > 0.01m)
             throw new InvalidOperationException("مبلغ زمان جلسه با محاسبهٔ سرور مطابقت ندارد.");
 
-        var invoice = await database.Invoices
-            .FirstOrDefaultAsync(item => item.SessionId == session.Id && item.Status == InvoiceStatus.Draft, cancellationToken);
+        var invoice = await GetOrCreateCustomerAccountAsync(
+            session,
+            request.AppUserId,
+            now,
+            cancellationToken);
 
-        if (invoice is null)
-        {
-            invoice = new Invoice
-            {
-                CustomerId = session.CustomerId,
-                SessionId = session.Id,
-                AppUserId = request.AppUserId,
-                TotalAmount = 0m,
-                Status = InvoiceStatus.Draft,
-                IssuedAt = DateTimeOffset.UtcNow
-            };
-            database.Invoices.Add(invoice);
-        }
-        else if (invoice.CustomerId != session.CustomerId)
-        {
-            throw new InvalidOperationException("فاکتور بوفه متعلق به این مشتری نیست.");
-        }
+        var existingTimeLine = invoice.Items.FirstOrDefault(item =>
+            item.SessionId == session.Id
+            && item.ProductId is null
+            && item.Description.StartsWith("هزینه جلسه", StringComparison.Ordinal));
 
-        var existingBuffetTotal = await database.InvoiceItems
-            .Where(item => item.InvoiceId == invoice.Id && item.ProductId.HasValue)
-            .SumAsync(item => item.Amount, cancellationToken);
-        var timeAmount = authoritativeTimeAmount;
-        if (timeAmount > 0)
+        if (existingTimeLine is null && authoritativeTimeAmount > 0)
         {
-            database.InvoiceItems.Add(new InvoiceItem
+            invoice.Items.Add(new InvoiceItem
             {
                 InvoiceId = invoice.Id,
                 SessionId = session.Id,
                 Description = "هزینه جلسه " + session.Station.Name,
                 Quantity = 1,
-                UnitPrice = timeAmount,
-                Amount = timeAmount
+                UnitPrice = authoritativeTimeAmount,
+                Amount = authoritativeTimeAmount
             });
         }
 
+        if (request.FreeTimeMinutes > 0
+            && !invoice.Items.Any(item =>
+                item.SessionId == session.Id
+                && item.Description.StartsWith("اعتبار زمانی رایگان", StringComparison.Ordinal)))
+        {
+            var rawAmount = SessionPricingService.CalculateTimeAmount(
+                session,
+                authoritativeHourlyRate,
+                0,
+                now);
+            var reduction = Math.Max(0m, rawAmount - authoritativeTimeAmount);
+
+            if (reduction > 0)
+            {
+                invoice.Items.Add(new InvoiceItem
+                {
+                    InvoiceId = invoice.Id,
+                    SessionId = session.Id,
+                    Description = "اعتبار زمانی رایگان",
+                    Quantity = 1,
+                    UnitPrice = -reduction,
+                    Amount = -reduction
+                });
+
+                session.Customer.FreeTimeMinutes -= request.FreeTimeMinutes;
+                database.BenefitTransactions.Add(new BenefitTransaction
+                {
+                    CustomerId = session.CustomerId,
+                    Type = BenefitTransactionType.FreeTimeDebit,
+                    Minutes = request.FreeTimeMinutes,
+                    MoneyAmount = 0m,
+                    Description = "مصرف اعتبار زمانی رایگان در تسویه " + session.Station.Name,
+                    ReferenceInvoiceId = invoice.Id
+                });
+            }
+        }
+
+        var currentSessionGross = invoice.Items
+            .Where(item => item.SessionId == session.Id)
+            .Sum(item => item.Amount);
+
+        var currentSessionPaid = await database.InvoicePayments
+            .Where(item => item.InvoiceId == invoice.Id && item.SessionId == session.Id)
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
         var discountAmount = Math.Max(0m, request.DiscountAmount ?? 0m);
+        var currentDueBeforeDiscount = Math.Max(0m, currentSessionGross - currentSessionPaid);
 
-        var grossBeforeDiscount = Math.Max(0m, existingBuffetTotal + timeAmount);
-        if (discountAmount > grossBeforeDiscount)
-            throw new InvalidOperationException("مبلغ تخفیف نمی‌تواند از مبلغ قبل از تخفیف بیشتر باشد.");
+        if (discountAmount > currentDueBeforeDiscount)
+            throw new InvalidOperationException("مبلغ تخفیف نمی‌تواند از مبلغ قابل پرداخت این جلسه بیشتر باشد.");
 
-        if (request.AppUserId.HasValue)
+        if (request.AppUserId.HasValue && discountAmount > 0)
         {
             var settlementUser = await database.AppUsers
                 .AsNoTracking()
@@ -425,12 +438,11 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
                     }
                     catch (JsonException)
                     {
-                        // Keep the safe default of 10% if the stored value is malformed.
                     }
                 }
 
                 var maxOperatorDiscount = Math.Round(
-                    grossBeforeDiscount * operatorDiscountPercent / 100m,
+                    currentDueBeforeDiscount * operatorDiscountPercent / 100m,
                     2,
                     MidpointRounding.ToEven);
 
@@ -438,69 +450,49 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
                     throw new InvalidOperationException(
                         $"تخفیف اپراتور بیش از سقف مجاز {operatorDiscountPercent}% است.");
             }
-        }
 
-        if (discountAmount > 0)
-        {
-            database.InvoiceItems.Add(new InvoiceItem
+            invoice.Items.Add(new InvoiceItem
             {
                 InvoiceId = invoice.Id,
+                SessionId = session.Id,
                 Description = "تخفیف تسویه جلسه",
                 Quantity = 1,
                 UnitPrice = -discountAmount,
                 Amount = -discountAmount
             });
+
+            currentSessionGross -= discountAmount;
         }
 
-        var prepaidAmount = Math.Max(0m, request.PrepaidAmount ?? 0m);
-        if (prepaidAmount > session.PrepaidAmount)
-            throw new InvalidOperationException("پیش‌پرداخت مصرف‌شده بیشتر از اعتبار ثبت‌شدهٔ جلسه است.");
+        var currentDue = Math.Max(0m, currentSessionGross - currentSessionPaid);
 
-        if (prepaidAmount > 0)
-        {
-            database.InvoiceItems.Add(new InvoiceItem
-            {
-                InvoiceId = invoice.Id,
-                Description = "اعتبار پیش‌پرداخت جلسه",
-                Quantity = 1,
-                UnitPrice = -prepaidAmount,
-                Amount = -prepaidAmount
-            });
-        }
-
-        var expectedTotal = Math.Max(
-            0m,
-            existingBuffetTotal + timeAmount - discountAmount - prepaidAmount);
-
-        if (Math.Abs(request.TotalAmount - expectedTotal) > 0.01m)
+        if (Math.Abs(request.TotalAmount - currentDue) > 0.01m)
             throw new InvalidOperationException(
-                $"مبلغ نهایی تسویه با محاسبهٔ سرور مطابقت ندارد. مبلغ معتبر: {expectedTotal:0.##}.");
+                $"مبلغ نهایی تسویه با محاسبهٔ سرور مطابقت ندارد. مبلغ معتبر: {currentDue:0.##}.");
 
-        var itemSubtotal = existingBuffetTotal + timeAmount - discountAmount - prepaidAmount;
+        var walletPart = normalizedParts
+            .Where(item => item.Method == "wallet")
+            .Sum(item => item.Amount);
+        var giftPart = normalizedParts
+            .Where(item => item.Method == "gift")
+            .Sum(item => item.Amount);
 
-        invoice.AppUserId ??= request.AppUserId;
-        invoice.TotalAmount = expectedTotal;
-        invoice.Status = InvoiceStatus.Paid;
-        invoice.PaidAt = DateTimeOffset.UtcNow;
-
-
-        if (request.FreeTimeMinutes > session.Customer.FreeTimeMinutes)
-            throw new InvalidOperationException("اعتبار زمانی رایگان مشتری برای این مصرف کافی نیست.");
+        if (walletPart > session.Customer.Balance)
+            throw new InvalidOperationException("موجودی کیف پول برای سهم انتخاب‌شده کافی نیست.");
 
         if (giftPart > session.Customer.FreeMoney)
             throw new InvalidOperationException("اعتبار مالی رایگان مشتری برای این سهم کافی نیست.");
 
-        if (request.FreeTimeMinutes > 0)
+        if (walletPart > 0)
         {
-            session.Customer.FreeTimeMinutes -= request.FreeTimeMinutes;
-            database.BenefitTransactions.Add(new BenefitTransaction
+            session.Customer.Balance -= walletPart;
+            database.WalletTransactions.Add(new WalletTransaction
             {
                 CustomerId = session.CustomerId,
-                Type = BenefitTransactionType.FreeTimeDebit,
-                Minutes = request.FreeTimeMinutes,
-                MoneyAmount = 0m,
-                Description = "مصرف اعتبار زمانی رایگان در تسویه " + session.Station.Name,
-                ReferenceInvoiceId = invoice.Id
+                Amount = walletPart,
+                Type = WalletTransactionType.Debit,
+                ReferenceInvoiceId = invoice.Id,
+                Description = "تسویه جلسه " + session.Station.Name + " از کیف پول"
             });
         }
 
@@ -518,42 +510,35 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             });
         }
 
-
-        if (walletPart > session.Customer.Balance)
-            throw new InvalidOperationException("موجودی کیف پول برای سهم انتخاب‌شده کافی نیست.");
-
-        if (walletPart > 0)
-        {
-            session.Customer.Balance -= walletPart;
-            database.WalletTransactions.Add(new WalletTransaction
-            {
-                CustomerId = session.CustomerId,
-                Amount = walletPart,
-                Type = WalletTransactionType.Debit,
-                ReferenceInvoiceId = invoice.Id,
-                Description = "تسویه جلسه " + session.Station.Name
-            });
-        }
-
-
-
         foreach (var part in normalizedParts)
         {
             database.InvoicePayments.Add(new InvoicePayment
             {
                 InvoiceId = invoice.Id,
+                SessionId = session.Id,
                 Method = part.Method,
-                Amount = part.Amount,
+                Amount = part.Amount
             });
         }
 
-        session.TotalAmount = expectedTotal;
-        session.EndAt ??= DateTimeOffset.UtcNow;
+        invoice.AppUserId ??= request.AppUserId;
+        invoice.TotalAmount = Math.Max(0m, invoice.Items.Sum(item => item.Amount));
+
+        var allPayments = await database.InvoicePayments
+            .Where(item => item.InvoiceId == invoice.Id)
+            .SumAsync(item => (decimal?)item.Amount, cancellationToken) ?? 0m;
+
+        var accountDueAfterPayment = Math.Max(0m, invoice.TotalAmount - allPayments);
+        invoice.Status = accountDueAfterPayment <= 0.01m
+            ? InvoiceStatus.Paid
+            : InvoiceStatus.Draft;
+        invoice.PaidAt = invoice.Status == InvoiceStatus.Paid
+            ? DateTimeOffset.UtcNow
+            : null;
+
+        session.TotalAmount = currentDue;
+        session.EndAt ??= now;
         session.State = SessionState.Completed;
-        // A completed Session is terminal for the Station too. Keep the
-        // Dashboard/read model derived from the same server-side invariant,
-        // regardless of whether the session arrived here through Agent EndSession
-        // or through an operator settlement path.
         session.Station.State = StationState.Available;
 
         database.AuditLogs.Add(new AuditLog
@@ -561,7 +546,8 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
             Action = "SessionSettlement",
             EntityName = "Invoice",
             EntityId = invoice.Id.ToString(),
-            Details = string.Join(" · ", normalizedParts.Select(item => item.Method + " " + item.Amount.ToString("0.##") + " تومان")),
+            Details = string.Join(" · ", normalizedParts.Select(item => item.Method + " " + item.Amount.ToString("0.##") + " تومان"))
+                + " · مانده حساب مشتری " + accountDueAfterPayment.ToString("0.##") + " تومان",
             AppUserId = request.AppUserId
         });
 
@@ -571,7 +557,7 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         return new SettlementResult(
             invoice.Id,
             session.Id,
-            invoice.TotalAmount,
+            currentDue,
             normalizedParts,
             session.Customer.Balance,
             session.Customer.FreeMoney,
@@ -607,28 +593,11 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         if (session is null)
             throw new InvalidOperationException("جلسه فعال پیدا نشد.");
 
-        var invoice = await database.Invoices
-            .FirstOrDefaultAsync(
-                item => item.SessionId == session.Id
-                    && item.Status == InvoiceStatus.Draft
-                    && !item.IsCustomerAccount,
-                cancellationToken);
-
-        if (invoice is null)
-        {
-            invoice = new Invoice
-            {
-                CustomerId = session.CustomerId,
-                SessionId = session.Id,
-                AppUserId = appUserId,
-                TotalAmount = 0m,
-                Status = InvoiceStatus.Draft,
-                IsCustomerAccount = false,
-                IssuedAt = DateTimeOffset.UtcNow
-            };
-            database.Invoices.Add(invoice);
-            await database.SaveChangesAsync(cancellationToken);
-        }
+        var invoice = await GetOrCreateCustomerAccountAsync(
+            session,
+            appUserId,
+            DateTimeOffset.UtcNow,
+            cancellationToken);
 
         if (normalizedMethod == "wallet")
         {
@@ -677,6 +646,7 @@ public sealed class SessionSettlementService(GameNetDbContext database, SessionP
         database.InvoicePayments.Add(new InvoicePayment
         {
             InvoiceId = invoice.Id,
+            SessionId = session.Id,
             Method = normalizedMethod,
             Amount = amount
         });
