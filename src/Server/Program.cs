@@ -3178,7 +3178,13 @@ app.MapGet("/api/customers", async (HttpContext context,
                         && invoice.Status == InvoiceStatus.Draft
                         && ((invoice.IsCustomerAccount && invoice.AccountState == CustomerAccountState.Debt)
                             || (!invoice.IsCustomerAccount && invoice.SessionId == null)))
-                    .Select(invoice => (decimal?)invoice.TotalAmount)
+                    .Select(invoice => (decimal?)(
+                        invoice.TotalAmount
+                        - (database.InvoicePayments
+                            .Where(payment => payment.InvoiceId == invoice.Id)
+                            .Select(payment => (decimal?)payment.Amount)
+                            .Sum() ?? 0m)))
+                    .Where(value => value > 0m)
                     .Sum() ?? 0m
                 : 0m,
             giftCredit = canReadWallet ? item.FreeMoney : 0m,
@@ -4773,8 +4779,17 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
             amount = 0m,
             method,
             debtRemaining = await database.Invoices
-                .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
-                .Select(item => (decimal?)item.TotalAmount)
+                .Where(item => item.CustomerId == customerId
+                    && item.Status == InvoiceStatus.Draft
+                    && ((item.IsCustomerAccount && item.AccountState == CustomerAccountState.Debt)
+                        || (!item.IsCustomerAccount && item.SessionId == null)))
+                .Select(item => (decimal?)(
+                    item.TotalAmount
+                    - (database.InvoicePayments
+                        .Where(payment => payment.InvoiceId == item.Id)
+                        .Select(payment => (decimal?)payment.Amount)
+                        .Sum() ?? 0m)))
+                .Where(value => value > 0m)
                 .SumAsync() ?? 0m,
             walletBalanceAfter = invoice.Customer.Balance
         });
@@ -4816,9 +4831,27 @@ app.MapPost("/api/customers/{customerId:guid}/debts/{invoiceId:guid}/settle", as
     await database.SaveChangesAsync(cancellationToken);
     await transaction.CommitAsync(cancellationToken);
 
-    var remaining = await database.Invoices
-        .Where(item => item.CustomerId == customerId && item.Status == InvoiceStatus.Draft)
-        .SumAsync(item => (decimal?)item.TotalAmount, cancellationToken) ?? 0m;
+    var debtRows = await database.Invoices
+        .Where(item => item.CustomerId == customerId
+            && item.Status == InvoiceStatus.Draft
+            && ((item.IsCustomerAccount && item.AccountState == CustomerAccountState.Debt)
+                || (!item.IsCustomerAccount && item.SessionId == null)))
+        .Select(item => new
+        {
+            item.Id,
+            item.TotalAmount
+        })
+        .ToListAsync(cancellationToken);
+
+    var debtIds = debtRows.Select(item => item.Id).ToList();
+    var debtPayments = debtIds.Count == 0
+        ? new List<InvoicePayment>()
+        : await database.InvoicePayments
+            .Where(item => debtIds.Contains(item.InvoiceId))
+            .ToListAsync(cancellationToken);
+
+    var remaining = debtRows.Sum(item =>
+        Math.Max(0m, item.TotalAmount - debtPayments.Where(payment => payment.InvoiceId == item.Id).Sum(payment => payment.Amount)));
 
     return Results.Ok(new
     {

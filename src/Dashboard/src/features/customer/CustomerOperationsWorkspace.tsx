@@ -201,7 +201,13 @@ export function CustomerOperationsWorkspace({
     activeSession ? 'session' : pendingAccount ? 'pending' : 'customer';
 
   const buffetDestinationLabel =
-    activeSession ? 'جلسه فعال' : pendingAccount ? 'حساب باز' : 'حساب جدید';
+    activeSession
+      ? 'جلسه فعال'
+      : pendingAccount
+        ? 'حساب باز'
+        : customer.debt > 0
+          ? 'بدهی موجود'
+          : 'حساب جدید';
 
   function addBuffetProduct(product: ProductRecord) {
     setBuffetCart(current => ({
@@ -230,10 +236,10 @@ export function CustomerOperationsWorkspace({
     if (!customer || !cartItems.length) return;
 
     if (buffetDestinationKind === 'customer') {
-      const confirmed = window.confirm(
-        'این مشتری جلسه یا حساب باز ندارد. ثبت بوفه یک حساب باز برای مشتری ایجاد می‌کند. ادامه می‌دهید؟',
-      );
-      if (!confirmed) return;
+      const message = customer.debt > 0
+        ? 'این مشتری بدهی باز دارد. بوفه به همان حساب بدهی اضافه می‌شود. ادامه می‌دهید؟'
+        : 'این مشتری جلسه یا حساب باز ندارد. ثبت بوفه یک حساب باز برای مشتری ایجاد می‌کند. ادامه می‌دهید؟';
+      if (!window.confirm(message)) return;
     }
 
     setBuffetNotice('');
@@ -463,8 +469,9 @@ export function CustomerOperationsWorkspace({
                 )}
 
                 <div className="customer-flow-secondary-finance">
-                  <div className="customer-flow-amount">
-                    <span>{activeSession ? 'سایر عملیات مالی مشتری' : 'مبلغ عملیات · تومان'}</span>
+                  {activeSession && <div className="customer-flow-selected">برای عملیات F5 تا F8 از همین مبلغ بالا استفاده می‌شود.</div>}
+                  {!activeSession && <label className="customer-flow-amount">
+                    <span>مبلغ عملیات · تومان</span>
                     <input
                       inputMode="numeric"
                       value={amount}
@@ -472,7 +479,7 @@ export function CustomerOperationsWorkspace({
                       placeholder="مثلاً ۱۰۰٬۰۰۰"
                       disabled={busy}
                     />
-                  </div>
+                  </label>}
                   <div className="customer-flow-actions">
                     {actions.map(action => (
                       <button
