@@ -3652,6 +3652,7 @@ app.MapGet("/api/customer-auth/state", async (
     Guid customerId,
     Guid loginId,
     string clientKey,
+    CustomerLoginService customerLoginService,
     GameNetDbContext database,
     CancellationToken cancellationToken) =>
 {
@@ -3663,14 +3664,11 @@ app.MapGet("/api/customer-auth/state", async (
         if (resolvedClientDevice is null || !string.Equals(resolvedClientDevice.DeviceId, normalizedClientKey, StringComparison.Ordinal))
             return Results.StatusCode(StatusCodes.Status403Forbidden);
 
-    var login = await database.CustomerLogins
-        .Include(item => item.Customer)
-        .FirstOrDefaultAsync(
-            item => item.Id == loginId
-                && item.CustomerId == customerId
-                && item.IsActive
-                && item.ClientKey == normalizedClientKey,
-            cancellationToken);
+    var login = await customerLoginService.ResolveActiveAsync(
+        customerId,
+        loginId,
+        normalizedClientKey,
+        cancellationToken);
 
     if (login is null)
         return Results.Ok(new
