@@ -5,9 +5,9 @@ type ProductDto = {
   name: string;
   category: string;
   price: number;
-  buyPrice: number;
+  buyPrice: number | null;
   stock: number;
-  warehouseStock: number;
+  warehouseStock: number | null;
   showcaseStock: number;
   minimumStock: number;
   unit: string;
@@ -26,9 +26,9 @@ function mapProduct(row: ProductDto): ProductRecord {
     name: row.name,
     category: row.category,
     price: row.price,
-    buyPrice: row.buyPrice,
+    buyPrice: row.buyPrice ?? 0,
     stock: row.showcaseStock ?? row.stock,
-    warehouseStock: row.warehouseStock ?? row.stock,
+    warehouseStock: row.warehouseStock ?? 0,
     showcaseStock: row.showcaseStock ?? row.stock,
     minimumStock: row.minimumStock,
     unit: row.unit,
