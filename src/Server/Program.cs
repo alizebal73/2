@@ -6116,8 +6116,23 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
     if (target is null)
         return Results.NotFound(new { code = "station_not_found", message = "ایستگاه مقصد پیدا نشد." });
 
-    if (target.State != StationState.Available)
-        return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد آزاد نیست." });
+    var claimedTarget = await database.Stations
+        .Where(item => item.Id == target.Id
+            && item.IsActive
+            && item.State == StationState.Available)
+        .ExecuteUpdateAsync(setters => setters
+            .SetProperty(item => item.State, StationState.Occupied)
+            .SetProperty(item => item.UpdatedAt, DateTimeOffset.UtcNow),
+            cancellationToken);
+
+    if (claimedTarget != 1)
+        return Results.Conflict(new
+        {
+            code = "station_not_available",
+            message = "ایستگاه مقصد دیگر آزاد نیست."
+        });
+
+    target.State = StationState.Occupied;
 
     var targetAgent = await database.AgentDevices
         .FirstOrDefaultAsync(
