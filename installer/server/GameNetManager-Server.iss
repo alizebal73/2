@@ -36,7 +36,7 @@ Name: "{group}\GameNet Manager Server Health"; Filename: "{cmd}"; Parameters: "/
 var
   DataRootPage: TInputDirWizardPage;
   AdminPasswordPage: TInputQueryWizardPage;
-  RegistrationTokenPage: TInputQueryWizardPage;
+  RegistrationToken: String;
 
 function IsValidSecret(const Value: String; MinimumLength: Integer): Boolean;
 begin
@@ -51,9 +51,6 @@ begin
 
   AdminPasswordPage := CreateInputQueryPage(DataRootPage.ID, 'رمز مدیر Server', 'رمز اولیه کاربر admin را تعیین کنید.', 'این رمز داخل فایل Setup ذخیره نمی‌شود و فقط در زمان نصب دریافت می‌شود.');
   AdminPasswordPage.Add('Admin password:', True);
-
-  RegistrationTokenPage := CreateInputQueryPage(AdminPasswordPage.ID, 'توکن ثبت Agent', 'یک توکن حداقل 16 کاراکتری برای ثبت Client Agentها وارد کنید.', 'همین مقدار را برای Client Setupهای این Server استفاده کنید.');
-  RegistrationTokenPage.Add('Agent registration token:', False);
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
@@ -75,9 +72,7 @@ begin
       Result := False;
     end;
   end else if CurPageID = AdminPasswordPage.ID then
-    if not IsValidSecret(AdminPasswordPage.Values[0], 8) then begin MsgBox('رمز admin باید حداقل 8 کاراکتر باشد.', mbError, MB_OK); Result := False; end
-  else if CurPageID = RegistrationTokenPage.ID then
-    if not IsValidSecret(RegistrationTokenPage.Values[0], 16) then begin MsgBox('توکن Agent باید حداقل 16 کاراکتر باشد.', mbError, MB_OK); Result := False; end;
+    if not IsValidSecret(AdminPasswordPage.Values[0], 8) then begin MsgBox('رمز admin باید حداقل 8 کاراکتر باشد.', mbError, MB_OK); Result := False; end;
 end;
 
 procedure ConfigureServiceEnvironment(IncludeBootstrapPassword: Boolean);
@@ -87,7 +82,7 @@ var
 begin
   Key := 'SYSTEM\CurrentControlSet\Services\GameNet Manager Server';
   Data :=
-    'Agent__RegistrationToken=' + RegistrationTokenPage.Values[0] + #0 +
+    'Agent__RegistrationToken=' + RegistrationToken + #0 +
     'GAMENET_DATA_ROOT=' + DataRootPage.Values[0] + #0;
 
   if IncludeBootstrapPassword then
@@ -95,6 +90,38 @@ begin
 
   if not RegWriteMultiStringValue(HKLM, Key, 'Environment', Data) then
     RaiseException('ثبت Environment اختصاصی Windows Service شکست خورد.');
+end;
+
+procedure GenerateRegistrationToken;
+var
+  ResultCode: Integer;
+  TokenPath: String;
+  PowerShellPath: String;
+begin
+  if RegistrationToken <> '' then
+    exit;
+
+  TokenPath := ExpandConstant('{tmp}\gamenet-registration-token.txt');
+  DeleteFile(TokenPath);
+  PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
+
+  if not Exec(
+    PowerShellPath,
+    '-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$token = [guid]::NewGuid().ToString(''N'') + [guid]::NewGuid().ToString(''N''); Set-Content -LiteralPath ''' + TokenPath + ''' -Value $token -NoNewline -Encoding ascii"',
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode) then
+    RaiseException('تولید خودکار شناسه امن ثبت Agent انجام نشد.');
+
+  if (ResultCode <> 0) or not FileExists(TokenPath) or not LoadStringFromFile(TokenPath, RegistrationToken) then
+    RaiseException('تولید خودکار شناسه امن ثبت Agent ناموفق بود.');
+
+  RegistrationToken := Trim(RegistrationToken);
+  DeleteFile(TokenPath);
+
+  if Length(RegistrationToken) < 32 then
+    RaiseException('شناسه خودکار ثبت Agent طول کافی ندارد.');
 end;
 
 procedure GrantDataRootAccess;
@@ -157,6 +184,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then begin
     ForceDirectories(DataRootPage.Values[0]);
+    GenerateRegistrationToken;
     ConfigureServiceEnvironment(True);
     GrantDataRootAccess;
     ConfigureFirewall;
