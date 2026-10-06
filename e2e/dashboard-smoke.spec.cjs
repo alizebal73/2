@@ -1429,3 +1429,105 @@ test('client experience consumes server-backed catalog and customer state', asyn
 
   await expect(page.getByText('۰۳:')).not.toBeVisible();
 });
+
+ 
+test('pending payment customer card consolidates charges and buffet with three dense views', async ({ page }) => {
+  const invoiceId = 'pending-invoice-1';
+  const pending = {
+    invoiceId,
+    sessionId: 'pending-session-1',
+    customerId: 'pending-customer-1',
+    customerName: 'علی رضایی',
+    customerCode: '1006',
+    username: 'ali123',
+    stationName: 'PC ۱۲',
+    closedAt: new Date(Date.now() - 12 * 60000).toISOString(),
+    waitingMinutes: 12,
+    timeAmount: 250000,
+    buffetTotal: 140000,
+    grossAmount: 390000,
+    prepaidTotal: 160000,
+    prepaidApplied: 160000,
+    prepaidRemaining: 0,
+    creditOrBenefitReduction: 0,
+    amountDue: 230000,
+    charges: [
+      { id: 'charge-1', amount: 90000, method: 'cash', createdAt: new Date(Date.now() - 40 * 60000).toISOString() },
+      { id: 'charge-2', amount: 20000, method: 'card', createdAt: new Date(Date.now() - 30 * 60000).toISOString() },
+      { id: 'charge-3', amount: 50000, method: 'cash', createdAt: new Date(Date.now() - 20 * 60000).toISOString() },
+    ],
+    buffetItems: [
+      { productId: 'cola', productName: 'نوشابه', quantity: 1, amount: 50000 },
+      { productId: 'cake', productName: 'کیک', quantity: 1, amount: 90000 },
+    ],
+  };
+
+  let pendingVisible = true;
+
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-pending',
+      fullName: 'مدیر پرداخت',
+      userName: 'pending_admin',
+      email: 'pending@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      permissions: ['session.settle', 'session.manage'],
+    }),
+  }));
+  await page.route('**/api/customers', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([]),
+  }));
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ totalStations: 0, generatedAt: new Date().toISOString(), stations: [] }),
+  }));
+  await page.route('**/api/dashboard/pending-settlements', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(pendingVisible ? [pending] : []),
+  }));
+  await page.route('**/api/pending-settlements/' + invoiceId + '/settle', async route => {
+    pendingVisible = false;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        invoiceId,
+        sessionId: pending.sessionId,
+        totalAmount: pending.amountDue,
+        parts: [{ method: 'cash', amount: pending.amountDue }],
+        walletBalanceAfter: 350000,
+        freeMoneyBalanceAfter: 0,
+        freeTimeMinutesAfter: 0,
+        invoiceStatus: 'Paid',
+        paidAt: new Date().toISOString(),
+      }),
+    });
+  });
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByText('علی رضایی')).toBeVisible();
+  await expect(page.getByText('۲۳۰٬۰۰۰ تومان')).toBeVisible();
+  await expect(page.getByText('شارژ ۳ مورد')).toBeVisible();
+  await expect(page.getByText('بوفه ۲ عدد / ۲ قلم')).toBeVisible();
+
+  await page.getByRole('button', { name: 'شارژ ۳ مورد' }).click();
+  await expect(page.getByText('۹۰٬۰۰۰ تومان')).toBeVisible();
+
+  await page.getByRole('button', { name: 'فشرده' }).last().click();
+  await expect(page.locator('.pending-payment-list.v-compact')).toBeVisible();
+
+  await page.getByRole('button', { name: 'لیست' }).last().click();
+  await expect(page.locator('.pending-payment-list.v-list')).toBeVisible();
+
+  await page.getByRole('button', { name: 'نقد' }).last().click();
+  await expect(page.getByText('حساب علی رضایی تسویه شد.')).toBeVisible();
+  await expect(page.getByText('علی رضایی')).toHaveCount(0);
+});
