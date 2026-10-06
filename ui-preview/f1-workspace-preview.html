@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GameNet Manager — F1 Customer Workspace Preview</title>
+<style>
+:root{
+  --bg:#070b14;--panel:#0d1526;--panel2:#101a2d;--line:#1b2842;--txt:#eef4ff;--dim:#8190ad;
+  --blue:#62b5ff;--green:#22e58a;--red:#ff5d73;--orange:#ffb454;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Tahoma,"Segoe UI",sans-serif;background:radial-gradient(circle at 20% 0%,#102142 0,#070b14 46%);color:var(--txt)}
+body{padding:22px}
+.shell{max-width:1180px;margin:auto}
+.top{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}
+.top h1{margin:0 0 5px;font-size:22px}.top p{margin:0;color:var(--dim);font-size:11px;line-height:1.8}
+.badges{display:flex;flex-wrap:wrap;gap:6px}.badge{padding:5px 8px;border:1px solid var(--line);border-radius:999px;background:#0d1526;color:var(--dim);font-size:9px}
+.workspace{display:grid;gap:10px}
+.section{padding:14px;border:1px solid var(--line);border-radius:15px;background:linear-gradient(165deg,rgba(16,26,45,.98),rgba(10,17,30,.98));box-shadow:0 18px 60px #0008}
+.search{border-color:#29578c;background:linear-gradient(165deg,rgba(40,100,160,.16),rgba(13,21,38,.98))}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.eyebrow{display:block;color:#7fa9d7;font-size:8px;font-weight:900;letter-spacing:.05em;margin-bottom:4px}
+.head strong{font-size:12px}.hint{color:var(--dim);font-size:9px;line-height:1.7}
+.searchrow{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:9px}
+label{display:grid;gap:4px;color:var(--dim);font-size:8.5px}
+input{width:100%;min-height:39px;border:1px solid var(--line);border-radius:9px;background:#09111f;color:var(--txt);padding:0 11px;font-size:11px;outline:none}
+input:focus{border-color:#3475b7}
+button{border:1px solid var(--line);border-radius:9px;background:#13213a;color:var(--txt);padding:0 14px;min-height:39px;cursor:pointer;font-weight:800}
+button.primary{border-color:#287d59;background:rgba(34,229,138,.12);color:#baf8dc}
+.result{display:none;margin-top:7px;padding:9px;border:1px solid var(--line);border-radius:9px;background:#0b1424}
+.profile-head{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.identity{display:flex;gap:10px;align-items:center;min-width:0}
+.avatar{width:50px;height:50px;border-radius:14px;display:grid;place-items:center;background:rgba(98,181,255,.13);border:1px solid rgba(98,181,255,.34);color:#b9dcff;font-size:19px;font-weight:900}
+.name{display:flex;gap:5px;align-items:center;flex-wrap:wrap}.name strong{font-size:16px}.meta{color:var(--dim);font-size:9px;margin-top:3px}
+.tag{padding:4px 7px;border:1px solid var(--line);border-radius:7px;background:#0d1526;color:var(--dim);font-size:8px}.green{color:#aef3cf;border-color:#216347;background:rgba(34,229,138,.07)}.vip{color:#f2d78e;border-color:#6b5322}
+.info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:10px}.info-grid>div,.stats>div,.live-grid>div{padding:9px;border:1px solid #19243c;border-radius:9px;background:#0d1526;min-width:0}
+.k{display:block;color:var(--dim);font-size:8px;margin-bottom:4px}.v{display:block;font-size:9.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.finance{background:rgba(34,229,138,.025)}.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:8px}.stats strong{font-size:10px}.money{color:var(--green)}.debt{color:var(--red)}
+.live{background:rgba(98,181,255,.025)}.live-grid{display:grid;grid-template-columns:1.25fr repeat(3,1fr);gap:6px;margin-top:8px}.live-main{border-color:rgba(98,181,255,.28)!important;background:rgba(98,181,255,.055)!important}.live-main .v{font-size:12px;color:#b9dcff}.wide{grid-column:1/-1}
+.actions{background:rgba(255,180,84,.025);border-color:rgba(255,180,84,.23)}.amount{margin-top:9px}.amount input{min-height:44px;font-size:16px;font-weight:900;direction:ltr;text-align:left}.action-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}.action{min-height:90px;text-align:right;display:grid;align-content:start;gap:4px}.key{justify-self:start;padding:2px 6px;border-radius:6px;background:#18233a;color:#b9dcff;font-size:8px}.action b{font-size:10px}.action small{color:var(--dim);font-size:8px;line-height:1.6}.a1{border-color:#277a55;background:rgba(34,229,138,.06)}.a2{border-color:#765528;background:rgba(255,180,84,.05)}.a3{border-color:#743242;background:rgba(255,93,115,.05)}
+.history{display:grid;gap:4px;margin-top:8px}.history>div{display:grid;grid-template-columns:12px 1fr;gap:6px;padding:7px 8px;border:1px solid #19243c;border-radius:8px;background:#0d1526;font-size:9px}
+.dot{color:var(--blue)}
+.note{margin-top:8px;color:var(--dim);font-size:8.5px;line-height:1.8}
+@media(max-width:900px){.stats{grid-template-columns:repeat(3,1fr)}.info-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:700px){body{padding:10px}.searchrow{grid-template-columns:1fr}.profile-head,.head{flex-direction:column;align-items:stretch}.live-grid,.action-grid,.stats,.info-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){.live-grid,.action-grid,.stats,.info-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="top">
+    <div>
+      <h1>پیش‌نمایش F1 · Workspace مشتری</h1>
+      <p>نسخه نمایشی مستقل — فقط برای دیدن چیدمان UI، بدون Login و بدون دیتابیس.</p>
+    </div>
+    <div class="badges"><span class="badge">F1 جستجو</span><span class="badge">F4 مبلغ</span><span class="badge">F5–F8 عملیات</span></div>
+  </div>
+
+  <div class="workspace">
+    <section class="section search">
+      <div class="head">
+        <div><span class="eyebrow">ورود سریع مشتری</span><strong>مشتری را از همین پنجره پیدا و انتخاب کن</strong></div>
+        <span class="hint">کد · username · موبایل · کد ملی · نام</span>
+      </div>
+      <div class="searchrow">
+        <label>شناسه مشتری
+          <input id="search" value="" placeholder="مثلاً 1006 یا ali123 یا 0912..." autocomplete="off">
+        </label>
+        <button class="primary" onclick="showCustomer()">نمایش مشتری</button>
+      </div>
+      <div class="result" id="result">مشتری نمونه: <b>علی رضایی</b> · @ali123 · کد 1006</div>
+    </section>
+
+    <div id="customer" style="display:none;gap:10px">
+      <section class="section">
+        <div class="profile-head">
+          <div class="identity">
+            <div class="avatar">ع</div>
+            <div>
+              <div class="name"><strong>علی رضایی</strong><span class="tag green">فعال</span><span class="tag vip">VIP طلایی</span></div>
+              <div class="meta">@ali123 · کد 1006 · موبایل 0912 123 4567</div>
+            </div>
+          </div>
+          <div class="badges"><span class="tag">پروفایل فعال</span><span class="tag">نام مستعار: Ali</span></div>
+        </div>
+        <div class="info-grid">
+          <div><span class="k">کد ملی</span><span class="v">0012345678</span></div>
+          <div><span class="k">پکیج / تعرفه</span><span class="v">VIP Gold</span></div>
+          <div><span class="k">ورود همزمان</span><span class="v">۲ دستگاه</span></div>
+          <div><span class="k">یادداشت</span><span class="v">مشتری ثابت · تسویه روزانه</span></div>
+        </div>
+      </section>
+
+      <section class="section finance">
+        <div class="head"><div><span class="eyebrow">وضعیت مالی</span><strong>اعتبار و بدهی</strong></div><span class="tag">آخرین وضعیت از Server</span></div>
+        <div class="stats">
+          <div><span class="k">کیف پول</span><strong class="money">۳۵۰٬۰۰۰ تومان</strong></div>
+          <div><span class="k">بدهی</span><strong class="debt">۱۲۰٬۰۰۰ تومان</strong></div>
+          <div><span class="k">اعتبار رایگان</span><strong>۲۰٬۰۰۰ تومان</strong></div>
+          <div><span class="k">زمان رایگان</span><strong>۳۰ دقیقه</strong></div>
+          <div><span class="k">تخفیف</span><strong>۱۰٪</strong></div>
+          <div><span class="k">مصرف امروز</span><strong>۳٫۵ ساعت</strong></div>
+        </div>
+      </section>
+
+      <section class="section live">
+        <div class="head"><div><span class="eyebrow">وضعیت لحظه‌ای</span><strong>جلسه و دستگاه</strong></div><span class="tag green">جلسه فعال</span></div>
+        <div class="live-grid">
+          <div class="live-main"><span class="k">دستگاه فعلی</span><span class="v">PC-05</span><span class="k">در حال استفاده · PC</span></div>
+          <div><span class="k">زمان باقی‌مانده</span><span class="v">۱ ساعت و ۲۴ دقیقه</span></div>
+          <div><span class="k">اینترنت</span><span class="v">اینترنت ۱</span></div>
+          <div><span class="k">بدهی روی جلسه</span><span class="v debt">۱۲۰٬۰۰۰ تومان</span></div>
+          <div class="wide"><span class="k">یادداشت جلسه</span><span class="v">درخواست انتقال به PC-08 بعد از اتمام تایم.</span></div>
+        </div>
+      </section>
+
+      <section class="section actions">
+        <div class="head"><div><span class="eyebrow">عملیات اپراتور</span><strong>عملیات مالی سریع</strong></div><span class="tag">کلیک یا میانبر صفحه‌کلید</span></div>
+        <label class="amount">مبلغ عملیات · تومان
+          <input id="amount" value="100000" inputmode="numeric">
+        </label>
+        <div class="action-grid">
+          <button class="action a1" onclick="alert('نمونه UI — شارژ کیف پول')"><span class="key">F5</span><b>شارژ کیف پول</b><small>افزایش موجودی قابل‌مصرف مشتری</small></button>
+          <button class="action a2" onclick="alert('نمونه UI — ثبت بدهی')"><span class="key">F6</span><b>ثبت بدهی</b><small>افزودن مستقیم مبلغ به بدهی مشتری</small></button>
+          <button class="action a3" onclick="alert('نمونه UI — کسر از کیف پول')"><span class="key">F7</span><b>کسر از کیف پول</b><small>برداشت از موجودی بدون ایجاد بدهی</small></button>
+          <button class="action" onclick="alert('نمونه UI — کیف پول + بدهی')"><span class="key">F8</span><b>کیف پول + بدهی</b><small>ابتدا کیف پول، باقی‌مانده به بدهی</small></button>
+        </div>
+        <div class="note">در نسخه واقعی، بعد از هر عملیات اطلاعات مشتری دوباره از Server خوانده می‌شود و صفحهٔ مرورگر نیازی به Refresh ندارد.</div>
+      </section>
+
+      <section class="section">
+        <div class="head"><div><span class="eyebrow">سابقه</span><strong>آخرین فعالیت‌های مشتری</strong></div><span class="tag">۵ مورد اخیر</span></div>
+        <div class="history">
+          <div><span class="dot">●</span><span>شارژ کیف پول · ۲۰۰٬۰۰۰ تومان</span></div>
+          <div><span class="dot">●</span><span>شروع جلسه · PC-05 · VIP Gold</span></div>
+          <div><span class="dot">●</span><span>ثبت بدهی · ۱۲۰٬۰۰۰ تومان</span></div>
+          <div><span class="dot">●</span><span>کسر کیف پول · ۸۰٬۰۰۰ تومان</span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+<script>
+function showCustomer(){
+  document.getElementById('customer').style.display='grid';
+  document.getElementById('result').style.display='block';
+}
+document.getElementById('search').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();showCustomer();}});
+</script>
+</body>
+</html>
