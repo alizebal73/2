@@ -9,6 +9,7 @@ public sealed class AgentPairingService
     private string? _code;
     private DateTimeOffset _expiresAt;
     private int _uses;
+    private int _maxUses;
 
     public AgentPairingCode Create(TimeSpan lifetime, int maxUses = 100)
     {
@@ -23,6 +24,7 @@ public sealed class AgentPairingService
                 .ToString(CultureInfo.InvariantCulture);
             _expiresAt = DateTimeOffset.UtcNow.Add(lifetime);
             _uses = 0;
+            _maxUses = maxUses;
             return new AgentPairingCode(_code, _expiresAt, maxUses);
         }
     }
@@ -38,7 +40,7 @@ public sealed class AgentPairingService
             if (_code is null || !string.Equals(_code, normalized, StringComparison.Ordinal))
                 return false;
 
-            if (_expiresAt <= DateTimeOffset.UtcNow || _uses >= 100)
+            if (_expiresAt <= DateTimeOffset.UtcNow || _uses >= _maxUses)
                 return false;
 
             _uses++;
