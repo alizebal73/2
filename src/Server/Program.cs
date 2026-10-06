@@ -5251,9 +5251,18 @@ app.MapPost("/api/customers/{customerId:guid}/wallet-transactions", async (HttpC
             customer.Balance,
             ledger.ReferenceTransactionId));
     }
+    catch (DbUpdateConcurrencyException)
+    {
+        await transaction.RollbackAsync(CancellationToken.None);
+        return Results.Conflict(new
+        {
+            code = "wallet_transaction_conflict",
+            message = "موجودی کیف پول هم‌زمان تغییر کرده است؛ عملیات بدون تغییر متوقف شد. دوباره تلاش کنید."
+        });
+    }
     catch
     {
-        await transaction.RollbackAsync(cancellationToken);
+        await transaction.RollbackAsync(CancellationToken.None);
         throw;
     }
 })
