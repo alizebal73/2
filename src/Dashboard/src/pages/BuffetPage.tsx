@@ -278,7 +278,7 @@ export function BuffetPage({ user }: { user: AppUserRecord }) {
               <div className="product-stock-actions">
                 {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in')}>+ موجودی</button>}
                 {canManageInventory && <button className="btn sm" disabled={busy || product.warehouseStock === 0} onClick={() => void adjustStock(product, 'out')}>− انبار</button>}
-                {canManageInventory && <button className="btn sm danger" disabled={busy || product.warehouseStock === 0} onClick={() => void adjustStock(product, 'out', 'Waste', 'ضایعات انبار')}>− ضایعات انبار</button>
+                {canManageInventory && <button className="btn sm danger" disabled={busy || product.warehouseStock === 0} onClick={() => void adjustStock(product, 'out', 'Waste', 'ضایعات انبار')}>− ضایعات انبار</button>}
                 {canManageInventory && <button className="btn sm" disabled={busy} onClick={() => void adjustStock(product, 'in', 'Return', 'مرجوعی بوفه')}>+ مرجوعی</button>}
               </div>
             </article>;
