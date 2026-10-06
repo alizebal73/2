@@ -154,3 +154,27 @@ Start **Stage 14.3 — Accessibility / UI / operational polish** from the certif
 ## Next
 
 ساخت Setup/Installer فقط بعد از این Software Pre-flight انجام می‌شود؛ Gate بعدی برای محصول، اجرای واقعی روی 2–3 PC است و سپس controlled 40+ PC rollout.
+
+
+## Slice 14.7 — F1 Customer Workspace + Station Right-click Completion
+
+### Delivered in main after the 2026-10-05 software pre-flight
+
+- ✅ Existing Dashboard station right-click menu preserved; it was **not** rebuilt as a parallel menu.
+- ✅ Right-click now also exposes Agent **Ping**, **Restart Client** and **Shutdown Client** where the required permission and online Agent state allow it.
+- ✅ Restart/Shutdown remain Server-authorized through the existing `client.power` permission and Agent command transport; the UI does not fake local power control.
+- ✅ Offline Agent commands are hidden from the right-click menu instead of presenting actions that cannot execute.
+- ✅ Right-click closes safely on outside click, Escape, resize or scroll and clamps to the viewport.
+- ✅ F1 keeps the existing Server-backed customer financial operations and now loads the customer's real Server history into the workspace.
+- ✅ After each F1 financial operation, the customer summary and recent history are refreshed from Server instead of falling back to the initial snapshot.
+- ✅ Browser Smoke added for F1 customer selection/history and the right-click Agent Ping path, including the new Restart/Shutdown menu visibility.
+
+### Validation gate
+
+- 🟡 Code/test changes committed to `main`.
+- 🟡 Self-hosted Windows Runner execution pending/required for Build, Dashboard lint/build and Browser Smoke certification.
+- ⬜ Main certification for Slice 14.7.
+
+### Boundary
+
+This slice is a completion/hardening pass over existing Stage 14 functionality. It does not replace the existing Session Center, Agent command transport, permission model, or Server-as-source-of-truth architecture.
