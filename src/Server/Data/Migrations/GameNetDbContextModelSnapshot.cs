@@ -1181,6 +1181,9 @@ namespace GameNetManager.Server.Data.Migrations
                     b.Property<Guid>("CustomerId")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsCustomerAccount")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("TEXT");
 
@@ -1208,8 +1211,11 @@ namespace GameNetManager.Server.Data.Migrations
 
                     b.HasIndex("CustomerId");
 
-                    b.HasIndex("SessionId")
-                        .IsUnique();
+                    b.HasIndex("CustomerId")
+                        .IsUnique()
+                        .HasFilter("Status = 'Draft' AND IsCustomerAccount = 1");
+
+                    b.HasIndex("SessionId");
 
                     b.ToTable("Invoices");
                 });
@@ -2193,9 +2199,16 @@ namespace GameNetManager.Server.Data.Migrations
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("GameNetManager.Server.Data.Session", "Session")
+                        .WithMany()
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Invoice");
 
                     b.Navigation("Product");
+
+                    b.Navigation("Session");
                 });
 
             modelBuilder.Entity("GameNetManager.Server.Data.InvoicePayment", b =>
