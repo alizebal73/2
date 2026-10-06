@@ -6114,17 +6114,69 @@ app.MapPost("/api/sessions/{sessionId:guid}/transfer", async (
     if (target.State != StationState.Available)
         return Results.Conflict(new { code = "station_not_available", message = "ایستگاه مقصد آزاد نیست." });
 
+    var targetAgent = await database.AgentDevices
+        .FirstOrDefaultAsync(
+            item => item.StationId == target.Id && item.IsActive,
+            cancellationToken);
+
+    if (session.AgentDeviceId.HasValue
+        && (targetAgent is null || !targetAgent.IsOnline))
+    {
+        return Results.Conflict(new
+        {
+            code = "target_agent_not_ready",
+            message = "ایستگاه مقصد Agent فعال و آنلاین ندارد؛ انتقال Session متوقف شد."
+        });
+    }
+
+    var targetLoginId = targetAgent is null
+        ? (Guid?)null
+        : await database.CustomerLogins
+            .Where(item => item.CustomerId == session.CustomerId
+                && item.ClientKey == targetAgent.DeviceId
+                && item.IsActive)
+            .Select(item => (Guid?)item.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    var activeLeases = await database.AccountLeases
+        .Include(item => item.AccountPoolEntry)
+        .Where(item => item.SessionId == session.Id && item.State == AccountLeaseState.Active)
+        .ToListAsync(cancellationToken);
+
+    if (activeLeases.Count > 0 && targetAgent is null)
+    {
+        return Results.Conflict(new
+        {
+            code = "target_agent_required_for_lease",
+            message = "این Session دارای Account Lease فعال است و بدون Agent مقصد قابل انتقال نیست."
+        });
+    }
+
     var source = session.Station;
     source.State = StationState.Available;
     target.State = StationState.Occupied;
     session.StationId = target.Id;
+    session.AgentDeviceId = targetAgent?.Id;
+    session.CustomerLoginId = targetLoginId;
+
+    if (targetAgent is not null)
+    {
+        foreach (var lease in activeLeases)
+        {
+            lease.AgentDeviceId = targetAgent.Id;
+            lease.AccountPoolEntry.AssignedAgentDeviceId = targetAgent.Id;
+            lease.CredentialAccessExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        }
+    }
 
     database.AuditLogs.Add(new AuditLog
     {
         Action = "SessionTransfer",
         EntityName = "Session",
         EntityId = session.Id.ToString(),
-        Details = "انتقال از " + source.Name + " به " + target.Name,
+        Details = "انتقال از " + source.Name + " به " + target.Name
+            + " · Agent=" + (targetAgent?.DeviceId ?? "بدون Agent")
+            + " · Login=" + (targetLoginId?.ToString() ?? "نیازمند ورود مجدد"),
         AppUserId = auth.User!.Id
     });
 
