@@ -95,9 +95,9 @@ export function CustomerOperationsWorkspace({
       <div className="customer-flow-kicker">
         <span>Workspace مشتری</span>
         <div className="customer-flow-shortcuts">
-          <span>F1 جستجو</span>
-          <span>F4 مبلغ</span>
-          <span>F5–F8 عملیات</span>
+          <span>{hotkeys.flow || 'F1'} جستجو</span>
+          <span>{hotkeys.amount || 'F4'} مبلغ</span>
+          <span>{hotkeys.walletAdd || 'F5'}–{hotkeys.walletDebt || 'F8'} عملیات</span>
         </div>
       </div>
 
@@ -114,7 +114,7 @@ export function CustomerOperationsWorkspace({
                   <span className={'status-pill ' + customer.status}>{customer.status === 'active' ? 'فعال' : customer.status === 'warning' ? 'هشدار' : 'مسدود'}</span>
                 </div>
               </div>
-              <button type="button" className="btn sm" onClick={() => onSelectCustomer(customer)} disabled={busy}>مشتری انتخاب‌شده</button>
+              <span className="customer-flow-selected">پروفایل فعال</span>
             </section>
 
             <div className="customer-flow-stats">
