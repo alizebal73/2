@@ -5670,20 +5670,17 @@ app.MapPost("/api/shifts/{shiftId:guid}/close", async (
     var now = DateTimeOffset.UtcNow;
     var cashPayments = await database.InvoicePayments
         .AsNoTracking()
-        .Where(item => item.Method == "cash"
-            && item.Invoice.Status == InvoiceStatus.Paid
-            && item.Invoice.PaidAt != null)
+        .Where(item => item.Method == "cash")
         .Select(item => new
         {
             item.Amount,
-            item.Invoice.PaidAt
+            item.CreatedAt
         })
         .ToListAsync(cancellationToken);
 
     var cashSales = cashPayments
-        .Where(item => item.PaidAt.HasValue
-            && item.PaidAt.Value >= shift.OpenAt
-            && item.PaidAt.Value <= now)
+        .Where(item => item.CreatedAt >= shift.OpenAt
+            && item.CreatedAt <= now)
         .Sum(item => item.Amount);
 
     var expenseTotal = await database.Expenses
