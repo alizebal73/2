@@ -1044,5 +1044,62 @@ public sealed class SessionSettlementTests : IDisposable
         Assert.Equal(product.Id, row.BuffetItems[0].ProductId);
     }
 
+    [Fact]
+    public async Task FullyPaidPendingAccountCannotBecomeDebtAndIsHiddenFromPending()
+    {
+        var options = new DbContextOptionsBuilder<GameNetDbContext>()
+            .UseSqlite(_connection)
+            .Options;
+
+        await using var db = new GameNetDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+
+        var customer = new Customer
+        {
+            FullName = "Zero Due Pending Customer",
+            FreeTimeMinutes = 0
+        };
+        var invoice = new Invoice
+        {
+            Customer = customer,
+            TotalAmount = 100000m,
+            Status = InvoiceStatus.Draft,
+            IsCustomerAccount = true,
+            AccountState = CustomerAccountState.PendingPayment,
+            IssuedAt = DateTimeOffset.UtcNow,
+            Items =
+            {
+                new InvoiceItem
+                {
+                    Description = "هزینه جلسه تسویه‌شده",
+                    Quantity = 1,
+                    UnitPrice = 100000m,
+                    Amount = 100000m
+                }
+            }
+        };
+
+        db.AddRange(customer, invoice);
+        db.InvoicePayments.Add(new InvoicePayment
+        {
+            InvoiceId = invoice.Id,
+            Method = "cash",
+            Amount = 100000m
+        });
+        await db.SaveChangesAsync();
+
+        var service = new SessionSettlementService(db, new SessionPricingService(db));
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.MarkPendingAsDebtAsync(invoice.Id, null, CancellationToken.None));
+
+        Assert.Equal("این حساب مبلغ بدهی قابل انتقال ندارد.", error.Message);
+        Assert.Equal(CustomerAccountState.PendingPayment,
+            await db.Invoices.Where(item => item.Id == invoice.Id).Select(item => item.AccountState).SingleAsync());
+
+        var pending = await service.GetPendingAsync(CancellationToken.None);
+        Assert.Empty(pending);
+    }
+
     public void Dispose() => _connection.Dispose();
 }
