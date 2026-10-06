@@ -91,6 +91,73 @@ test('dashboard interactions: selection, session center and Persian error UX', a
   await expect(page.getByText('وضعیت مالی')).toBeVisible();
 });
 
+test('dashboard station sort strip orders visible PCs by selected field', async ({ page }) => {
+  await page.route('**/api/auth/me', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      id: 'e2e-station-sort',
+      fullName: 'مدیر مرتب‌سازی',
+      userName: 'sort_admin',
+      email: 'sort@gamenet.local',
+      role: 'Admin',
+      isActive: true,
+      permissions: ['session.start']
+    })
+  }));
+
+  await page.route('**/api/customers', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify([])
+  }));
+
+  await page.route('**/api/dashboard', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      totalStations: 3,
+      generatedAt: new Date().toISOString(),
+      stations: [
+        { id: 'sort-03', name: 'PC ۰۳', zone: 'pc', type: 'PC', ratePerHour: 95000, state: 'busy', network: 1, remainingMinutes: 25, customerDebt: 90000 },
+        { id: 'sort-01', name: 'PC ۰۱', zone: 'pc', type: 'PC', ratePerHour: 95000, state: 'free', network: 1, remainingMinutes: 0, customerDebt: 0 },
+        { id: 'sort-02', name: 'PC ۰۲', zone: 'pc', type: 'PC', ratePerHour: 95000, state: 'busy', network: 2, remainingMinutes: 90, customerDebt: 20000 }
+      ]
+    })
+  }));
+
+  await page.route('**/hubs/**', route => route.abort());
+
+  await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
+  await page.locator('[data-station-id="sort-01"]').waitFor();
+
+  const strip = page.locator('.station-sort-strip');
+  await expect(strip).toBeVisible();
+  await expect(strip).toContainText('رایانه');
+  await expect(strip).toContainText('شناسه');
+  await expect(strip).toContainText('نام خانوادگی');
+  await expect(strip).toContainText('زمان باقی‌مانده');
+  await expect(strip).toContainText('بدهکاری');
+  await expect(strip).toContainText('توضیحات');
+  await expect(strip).toContainText('وضعیت رایانه');
+
+  await strip.getByRole('button', { name: /زمان باقی‌مانده/ }).click();
+  await expect(strip.getByRole('button', { name: /زمان باقی‌مانده ↑/ })).toHaveAttribute('aria-pressed', 'true');
+
+  let ids = await page.locator('[data-station-id]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-station-id')));
+  expect(ids).toEqual(['sort-01', 'sort-03', 'sort-02']);
+
+  await strip.getByRole('button', { name: /زمان باقی‌مانده ↑/ }).click();
+  await expect(strip.getByRole('button', { name: /زمان باقی‌مانده ↓/ })).toHaveAttribute('aria-pressed', 'true');
+
+  ids = await page.locator('[data-station-id]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-station-id')));
+  expect(ids).toEqual(['sort-02', 'sort-03', 'sort-01']);
+
+  await page.getByRole('button', { name: 'لیست' }).click();
+  await expect(page.locator('.station-grid.v-list')).toBeVisible();
+  await expect(page.locator('[data-station-id="sort-02"]')).toBeVisible();
+});
+
 test('F1 customer workspace and station right-click Agent controls stay wired', async ({ page }) => {
   const customerId = '11111111-1111-4111-8111-111111111111';
   const agentId = '22222222-2222-4222-8222-222222222222';
